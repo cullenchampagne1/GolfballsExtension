@@ -12,6 +12,9 @@ import {
 } from '../../lib/helpActionCore.js';
 import { FEATURE_DEFAULTS } from '../../lib/flags.js';
 import { syncHelpComposerHeight } from '../../lib/helpComposer.js';
+import {
+  createWaitingGameState, jumpWaitingGame, stepWaitingGame, WAITING_GAME_WORLD,
+} from '../../lib/helpWaitingGame.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
 
@@ -47,6 +50,7 @@ function useHelpStyles() {
     style.textContent = `
       @keyframes gb-help-orbit { to { transform: rotate(360deg); } }
       @keyframes gb-help-pulse { 0%,100% { opacity:.35; transform:scale(.78); } 50% { opacity:1; transform:scale(1); } }
+      @keyframes gb-help-runner-step { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-1px); } }
       .gb-help-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }
       .gb-help-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
       .gb-help-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -645,17 +649,133 @@ function UserMessage({ message }) {
   );
 }
 
-function ThinkingMessage({ status }) {
-  const copy = status === 'submitting' ? 'Sending your question' : status === 'queued' ? 'Queued securely' : 'Reading the toolkit knowledge';
+function PixelDino({ crashed = false }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'grid', gridTemplateColumns: '28px 1fr', gap: 9, alignItems: 'center' }}>
-      <div style={{ width: 28, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-text-on-brand)', background: 'linear-gradient(145deg, var(--gb-brand), var(--gb-brand-dark))', border: '1px solid var(--gb-brand-border)' }}><I.sparkle size={13} /></div>
-      <div style={{ width: 'fit-content', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8, borderRadius: '4px 12px 12px 12px', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)', fontSize: 10.5, fontWeight: 600 }}>
-        <span style={{ display: 'inline-flex', gap: 3 }}>
-          {[0, 1, 2].map((i) => <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--gb-brand-label)', animation: `gb-help-pulse 1.1s ease-in-out ${i * .16}s infinite` }} />)}
+    <svg aria-hidden viewBox="0 0 18 20" width="18" height="20" shapeRendering="crispEdges" style={{ display: 'block' }}>
+      <path fill="currentColor" d="M10 1h6v2h2v7h-8v2h3v2H9v2H7v3H4v-2H2v-7H0V7h3v3h2V6h2V3h3z" />
+      <path fill="var(--gb-surface-2)" d="M14 3h2v2h-2z" />
+      {!crashed && <path fill="var(--gb-surface-2)" d="M6 17h2v3H6zM11 16h2v4h-2z" />}
+      {crashed && <path fill="var(--gb-error-fg)" d="M13 3h1v1h-1zM15 5h1v1h-1z" />}
+    </svg>
+  );
+}
+
+function PixelCactus() {
+  return (
+    <svg aria-hidden viewBox="0 0 10 17" width="10" height="17" shapeRendering="crispEdges" style={{ display: 'block' }}>
+      <path fill="currentColor" d="M4 0h3v7h1V4h2v6H7v7H4v-5H1V6h2v3h1z" />
+    </svg>
+  );
+}
+
+function WaitingRunnerGame({ reduceMotion }) {
+  const [game, setGame] = useState(() => createWaitingGameState());
+  const lastTick = useRef(0);
+
+  useEffect(() => {
+    if (reduceMotion) return undefined;
+    lastTick.current = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const elapsed = Math.max(0, (now - lastTick.current) / 1000);
+      lastTick.current = now;
+      setGame((current) => stepWaitingGame(current, elapsed));
+    }, 45);
+    return () => window.clearInterval(timer);
+  }, [reduceMotion]);
+
+  const jump = useCallback(() => {
+    if (reduceMotion) return;
+    setGame((current) => jumpWaitingGame(current));
+  }, [reduceMotion]);
+
+  const score = Math.floor(game.distance);
+  const best = Math.max(game.best, score);
+  const obstacleLeft = `${(game.obstacleX / WAITING_GAME_WORLD.width) * 100}%`;
+
+  return (
+    <button
+      type="button"
+      aria-label={game.crashed ? 'Restart the waiting runner' : 'Jump in the waiting runner'}
+      onClick={jump}
+      onKeyDown={(event) => {
+        if ([' ', 'ArrowUp', 'Enter'].includes(event.key)) {
+          event.preventDefault();
+          jump();
+        }
+      }}
+      style={{
+        display: 'block', width: '100%', minWidth: 0, padding: 0, overflow: 'hidden',
+        border: 0, borderRadius: 9, background: 'transparent', color: 'inherit',
+        fontFamily: 'var(--gb-font-sans)', textAlign: 'left', cursor: reduceMotion ? 'default' : 'pointer',
+      }}
+    >
+      <span style={{ height: 22, padding: '0 7px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gb-text-muted)', fontSize: 8.5, lineHeight: 1, fontWeight: 750, letterSpacing: .12 }}>
+        <span style={{ color: game.crashed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)' }}>
+          {reduceMotion ? 'Still working' : game.crashed ? 'Bonk — tap to retry' : 'Still working — tap to jump'}
         </span>
-        {copy}
-      </div>
+        <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+        <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 8 }}>{String(score).padStart(3, '0')}{best > score ? ` · ${best}` : ''}</span>
+      </span>
+      <span style={{
+        position: 'relative', display: 'block', height: 52, overflow: 'hidden',
+        background: 'linear-gradient(180deg, var(--gb-brand-tint-soft), transparent 72%)',
+        borderTop: '1px solid var(--gb-border-subtle)',
+      }}>
+        <span aria-hidden style={{ position: 'absolute', top: 10, left: '58%', width: 17, height: 3, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .65 }} />
+        <span aria-hidden style={{ position: 'absolute', top: 17, left: '79%', width: 10, height: 2, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .45 }} />
+        <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 7, height: 1, background: 'var(--gb-border-default)' }} />
+        <span aria-hidden style={{ position: 'absolute', left: '13%', bottom: 4, width: 7, height: 1, background: 'var(--gb-border-subtle)' }} />
+        <span aria-hidden style={{ position: 'absolute', left: '46%', bottom: 3, width: 11, height: 1, background: 'var(--gb-border-subtle)' }} />
+        <span style={{
+          position: 'absolute', left: `${(WAITING_GAME_WORLD.runnerX / WAITING_GAME_WORLD.width) * 100}%`,
+          bottom: 8 + game.runnerY, color: game.crashed ? 'var(--gb-error-fg)' : 'var(--gb-text-secondary)',
+          animation: !reduceMotion && !game.crashed && game.runnerY === 0 ? 'gb-help-runner-step .22s steps(2,end) infinite' : 'none',
+          transformOrigin: 'bottom center',
+        }}><PixelDino crashed={game.crashed} /></span>
+        <span style={{ position: 'absolute', left: obstacleLeft, bottom: 8, color: 'var(--gb-brand-label)' }}><PixelCactus /></span>
+      </span>
+    </button>
+  );
+}
+
+function ThinkingMessage({ status, startedAt, onExpand }) {
+  const reduceMotion = useReducedMotion();
+  const [showGame, setShowGame] = useState(() => (
+    Date.now() - Number(startedAt || Date.now()) >= 8_000
+  ));
+  const copy = status === 'submitting' ? 'Sending your question' : status === 'queued' ? 'Queued securely' : 'Reading the toolkit knowledge';
+
+  useEffect(() => {
+    if (showGame) return undefined;
+    const remaining = Math.max(0, 8_000 - (Date.now() - Number(startedAt || Date.now())));
+    const timer = window.setTimeout(() => setShowGame(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [showGame, startedAt]);
+
+  useEffect(() => {
+    if (showGame) onExpand?.();
+  }, [showGame, onExpand]);
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ width: '100%', minWidth: 0, display: 'grid', gridTemplateColumns: '28px minmax(0,1fr)', gap: 9, alignItems: showGame ? 'start' : 'center' }}>
+      <div style={{ width: 28, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-text-on-brand)', background: 'linear-gradient(145deg, var(--gb-brand), var(--gb-brand-dark))', border: '1px solid var(--gb-brand-border)' }}><I.sparkle size={13} /></div>
+      <motion.div layout transition={{ layout: { duration: reduceMotion ? 0 : .28, ease: [.22, 1, .36, 1] } }} style={{ width: showGame ? 'min(248px, 100%)' : 'fit-content', maxWidth: '100%', minWidth: 0, padding: showGame ? 3 : '8px 10px', overflow: 'hidden', borderRadius: '4px 12px 12px 12px', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)', fontSize: 10.5, fontWeight: 600, boxSizing: 'border-box' }}>
+        <AnimatePresence initial={false} mode="wait">
+          {showGame ? (
+            <motion.div key="game" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .18 }} style={{ width: '100%', minWidth: 0 }}>
+              <WaitingRunnerGame reduceMotion={reduceMotion} />
+            </motion.div>
+          ) : (
+            <motion.div key="status" exit={{ opacity: 0, y: -3 }} style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+              <span style={{ display: 'inline-flex', gap: 3 }}>
+                {[0, 1, 2].map((i) => <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--gb-brand-label)', animation: `gb-help-pulse 1.1s ease-in-out ${i * .16}s infinite` }} />)}
+              </span>
+              {copy}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </motion.div>
   );
 }
@@ -704,6 +824,15 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
   const messages = state.messages || [];
   const active = state.active;
 
+  const revealLatest = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !stickToBottom.current) return;
+    requestAnimationFrame(() => el.scrollTo({
+      top: el.scrollHeight,
+      behavior: reduceMotion ? 'auto' : 'smooth',
+    }));
+  }, [reduceMotion]);
+
   useEffect(() => {
     if (client.loading) return undefined;
     let alive = true;
@@ -729,10 +858,8 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
   }, [state.unread]);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !stickToBottom.current) return;
-    requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' }));
-  }, [messages.length, active?.status, state.lastError?.message]);
+    revealLatest();
+  }, [messages.length, active?.status, state.lastError?.message, revealLatest]);
 
   useLayoutEffect(() => {
     syncHelpComposerHeight(textareaRef.current, draft.length > 0);
@@ -846,7 +973,13 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
               {messages.map((message, index) => message.role === 'user'
                 ? <UserMessage key={message.id || index} message={message} />
                 : <AssistantMessage key={message.id || index} message={message} isLast={index === messages.length - 1} onAction={handleAction} onDataStatus={handleDataStatus} onDataResolve={handleDataResolve} onFeedback={handleFeedback} onSuggestion={(question) => { setDraft(question); requestAnimationFrame(() => textareaRef.current?.focus()); }} actionsReady={actionsReady} />)}
-              {active && <ThinkingMessage status={active.status} />}
+              {active && (
+                <ThinkingMessage
+                  status={active.status}
+                  startedAt={active.startedAt}
+                  onExpand={revealLatest}
+                />
+              )}
               {(state.notice && !active) && <div style={{ alignSelf: 'center', padding: '4px 8px', borderRadius: 999, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)', fontSize: 9.5, fontWeight: 650 }}>{state.notice}</div>}
               {state.lastError && !active && (
                 <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} style={{ marginLeft: 37, padding: '9px 10px', borderRadius: 10, background: 'var(--gb-error-tint-soft)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>

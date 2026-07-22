@@ -144,6 +144,11 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "default": "low", "technical": "medium",
             "troubleshooting": "high", "ticket": "high",
         })
+        self.assertEqual(self.descriptor["completion_timeout_seconds"], 75)
+        self.assertEqual(
+            self.descriptor["completion_timeouts"],
+            {"claude": 75.0, "codex": 180.0},
+        )
         research = self.by_id["assistant:research-policy:1"]["text"]
         self.assertIn("Prefer a local source citation", research)
         self.assertIn("before proposing a ticket", research)
