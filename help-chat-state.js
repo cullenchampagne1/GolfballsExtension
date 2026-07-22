@@ -18,6 +18,10 @@
     'set_feature', 'set_setting', 'set_theme_preset', 'set_theme_palette',
     'share_settings', 'share_email_template', 'request_data_access', 'submit_ticket',
   ]);
+  const RECENT_ACTION_TYPES = new Set([
+    'set_feature', 'set_setting', 'set_theme_preset', 'set_theme_palette',
+    'share_settings', 'share_email_template', 'request_data_access', 'submit_ticket',
+  ]);
 
   const bounded = (value, max) => String(value == null ? '' : value).trim().slice(0, max);
   const cleanAssistantText = (value, max) => {
@@ -109,6 +113,19 @@
       references: Array.isArray(value.references)
         ? value.references.slice(0, 6).map(normalizeSourceReference).filter(Boolean)
         : [],
+    };
+  }
+
+  function recentActionReference(value) {
+    const action = normalizeAction(value);
+    const target = safeId(action?.target);
+    if (!action || !RECENT_ACTION_TYPES.has(action.type) || !target) return null;
+    return {
+      type: action.type,
+      target,
+      value: bounded(action.value, 500),
+      options: action.options.slice(0, 16),
+      label: bounded(action.label, 100),
     };
   }
 
@@ -317,7 +334,16 @@
       .filter((item) => item.role === 'user' || item.role === 'assistant')
       .slice(-MAX_HISTORY)
       .map((item) => ({ role: item.role, content: item.text.slice(0, 4_000) }));
-    return { request_id: id, message, history, context: normalizeContext(context) };
+    const recentActions = source
+      .filter((item) => item.role === 'assistant')
+      .flatMap((item) => (item.actions || []).map(recentActionReference).filter(Boolean))
+      .slice(-8);
+    return {
+      request_id: id,
+      message,
+      history,
+      context: { ...normalizeContext(context), recent_actions: recentActions },
+    };
   }
 
   function beginTurn(stateValue, { message, requestId, now = Date.now(), reuseLastUser = false } = {}) {

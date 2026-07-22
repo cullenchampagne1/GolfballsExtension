@@ -177,6 +177,55 @@ describe('Help Companion background flow', () => {
     assert.equal(bodies[1].context.feature_states.marginCalcEnabled, true);
   });
 
+  it('strips each unsupported optional context field while preserving one request id', async () => {
+    let submissions = 0;
+    const { fetchMock, requests } = createFetchMock((url) => {
+      if (!new URL(url).pathname.endsWith('/assistant/messages')) return undefined;
+      submissions += 1;
+      if (submissions <= 2) {
+        const field = submissions === 1 ? 'recent_actions' : 'automatic_state';
+        return jsonResponse({
+          detail: [{
+            type: 'extra_forbidden', loc: ['body', 'context', field],
+            msg: 'Extra inputs are not permitted',
+          }],
+        }, 422);
+      }
+      return jsonResponse({
+        run_id: 'run_compat-both1234', status: 'queued', poll_after_ms: 3000,
+      }, 202);
+    });
+    const stored = { gbApiInstallation: validInstallation() };
+    const { chrome } = createChrome({ stored });
+    const context = createContext({ chrome, fetchImpl: fetchMock });
+    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'help-chat-state.js');
+    loadScript(context, 'help-data-access.js');
+    loadScript(context, 'help-assistant.js');
+    const controller = context.GBHelpAssistant.createController({
+      setTimer: () => 1, clearTimer: () => {},
+    });
+
+    const queued = await controller.send('Turn Email Preview back on.', {
+      feature_states: { emailPreviewEnabled: false },
+      automatic_state: {
+        features: { emailPreviewEnabled: false }, developer_settings: {},
+      },
+    });
+
+    assert.equal(queued.active.runId, 'run_compat-both1234');
+    const bodies = requests
+      .filter(({ url }) => new URL(url).pathname.endsWith('/assistant/messages'))
+      .map(({ options }) => JSON.parse(options.body));
+    assert.equal(bodies.length, 3);
+    assert.ok(bodies.every((body) => body.request_id === bodies[0].request_id));
+    assert.equal(Object.hasOwn(bodies[0].context, 'recent_actions'), true);
+    assert.equal(Object.hasOwn(bodies[1].context, 'recent_actions'), false);
+    assert.equal(Object.hasOwn(bodies[1].context, 'automatic_state'), true);
+    assert.equal(Object.hasOwn(bodies[2].context, 'recent_actions'), false);
+    assert.equal(Object.hasOwn(bodies[2].context, 'automatic_state'), false);
+  });
+
   it('asks once, filters local templates, and submits only the approved projection', async () => {
     const flow = makeFlow();
     flow.stored.templates = [

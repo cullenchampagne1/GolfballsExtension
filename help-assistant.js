@@ -32,7 +32,7 @@
     let pollPromise = null;
     let mutationQueue = Promise.resolve();
     let approvalQueue = Promise.resolve();
-    let omitAutomaticStateForLegacyServer = false;
+    const omittedLegacyContextFields = new Set();
 
     function rawStorageGet(keys) {
       return new Promise((resolve, reject) => {
@@ -160,18 +160,19 @@
       return [400, 401, 403, 404, 409, 422, 429].includes(status);
     }
 
-    function isLegacyAutomaticStateError(error) {
+    function legacyOptionalContextField(error) {
       if (Number(error?.status || 0) !== 422) return false;
       const message = String(error?.message || '');
-      return /(?:^|\b)context\.automatic_state\b/i.test(message)
-        && /(?:extra inputs?|not permitted|unexpected|unknown)/i.test(message);
+      if (!/(?:extra inputs?|not permitted|unexpected|unknown)/i.test(message)) return '';
+      return ['automatic_state', 'recent_actions'].find((field) => (
+        new RegExp(`(?:^|\\b)context\\.${field}\\b`, 'i').test(message)
+      )) || '';
     }
 
-    function requestForServer(body, omitAutomaticState = false) {
-      if (!omitAutomaticState || !body?.context
-          || !Object.hasOwn(body.context, 'automatic_state')) return body;
+    function requestForServer(body, omittedFields = omittedLegacyContextFields) {
+      if (!body?.context || !omittedFields.size) return body;
       const context = { ...body.context };
-      delete context.automatic_state;
+      for (const field of omittedFields) delete context[field];
       return { ...body, context };
     }
 
@@ -181,18 +182,20 @@
         body: JSON.stringify(value),
         responseLimit: RESPONSE_LIMIT,
       });
-      const candidate = requestForServer(body, omitAutomaticStateForLegacyServer);
-      try {
-        return await submit(candidate);
-      } catch (error) {
-        // A project route can remain in memory across a source update. The old
-        // schema understands feature_states but rejects the richer state
-        // bucket before creating a run, so retrying this same request id is
-        // safe and keeps chat usable until the project is reloaded.
-        if (candidate !== body || !isLegacyAutomaticStateError(error)) throw error;
-        omitAutomaticStateForLegacyServer = true;
-        return submit(requestForServer(body, true));
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await submit(requestForServer(body));
+        } catch (error) {
+          // A project route can remain in memory across a source update. Old
+          // schemas reject newly optional context before creating a run, so a
+          // same-id retry without only that field is safe and avoids breaking
+          // chat while the project awaits its normal reload.
+          const field = legacyOptionalContextField(error);
+          if (!field || omittedLegacyContextFields.has(field)) throw error;
+          omittedLegacyContextFields.add(field);
+        }
       }
+      throw new Error('The Help Companion request schema is unavailable');
     }
 
     async function send(message, context, { retry = false, requestIdOverride = '' } = {}) {

@@ -21,7 +21,7 @@
     { key: 'taskListEnabled', name: 'Task List', icon: 'check', desc: 'Shows an integrated task list for tracking order-related todos.' },
     { key: 'crmSearchEnabled', name: 'CRM Search', icon: 'search', desc: 'Quick search bar for looking up customers and orders in the CRM.' },
     { key: 'crmQueryBuilderEnabled', name: 'CRM Query Builder', icon: 'filter', desc: 'Advanced query builder for filtering CRM data with complex conditions.' },
-    { key: 'emailPreviewEnabled', name: 'Email Preview', icon: 'mail', desc: 'Hover over any email row in the Case Email History portlet to see a popup preview — no download required.' },
+    { key: 'emailPreviewEnabled', name: 'Email Preview', icon: 'mail', desc: 'Click an email row in the Case Email History portlet to open the full thread — no download required.' },
     { key: 'imagePreviewEnabled', name: 'Image Viewer', icon: 'eye', desc: 'Shows a View Logo hover button over product logo images — preview, download, or submit proof without leaving the page.' },
     { key: 'calendarEnabled', name: 'Calendar', icon: 'calendar', desc: 'Shows order ship dates and production timeline on a visual calendar.' },
     { key: 'autoPushEnabled', name: 'Auto Push', icon: 'send', desc: 'Automatically pushes order updates to external systems when status changes.' },

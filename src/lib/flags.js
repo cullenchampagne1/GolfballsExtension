@@ -73,7 +73,7 @@ export const FEATURE_FLAGS = [
   { key: 'chargeEnabled',         section: 'Email & Templates', name: 'Charge Card',       desc: 'Charge / Refund button in the email popup.',                          icon: 'card' },
   { key: 'orderEditEnabled',      section: 'Email & Templates', name: 'Order Edit',        desc: 'Order Edit button in the email popup.',                               icon: 'edit' },
   { key: 'submitProofEnabled',    section: 'Email & Templates', name: 'Submit Proof',      desc: 'Send art proofs from the order page.',                                icon: 'send' },
-  { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Hover preview of emails in Case Email History.',                      icon: 'mail' },
+  { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Click email rows in Case Email History to open the full thread.',     icon: 'mail' },
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
   { key: 'campaignManagerEnabled', section: 'Email & Templates', name: 'Campaign Manager', desc: 'Multi-step campaign automation (from CRM Search / Tasks).',            icon: 'megaphone' },
   // Admin-only: excluded from the served (consumer) build.

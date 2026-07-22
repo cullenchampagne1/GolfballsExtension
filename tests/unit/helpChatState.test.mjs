@@ -119,6 +119,36 @@ describe('Help Companion state', () => {
     assert.equal(state.active.requestId, retryId);
   });
 
+  it('sends bounded recent typed actions so referential follow-ups keep their target', () => {
+    const State = loadState();
+    const state = {
+      ...State.emptyState(10),
+      messages: [
+        { id: 'user:one', role: 'user', text: 'Turn off Email Preview.', createdAt: 10 },
+        {
+          id: 'assistant:one', role: 'assistant', text: 'I prepared that change.', createdAt: 20,
+          actions: [{
+            type: 'set_feature', target: 'emailPreviewEnabled', value: 'false',
+            options: [], label: 'Turn off Email Preview', receipt_id: 'act_emailpreview1234',
+          }],
+        },
+      ],
+    };
+
+    const request = State.buildRequest(
+      state,
+      'It does not work while disabled, turn it back on now.',
+      { feature_states: { emailPreviewEnabled: false } },
+      'help:request-followup',
+    );
+
+    assert.equal(JSON.stringify(request.context.recent_actions), JSON.stringify([{
+      type: 'set_feature', target: 'emailPreviewEnabled', value: 'false',
+      options: [], label: 'Turn off Email Preview',
+    }]));
+    assert.equal(Object.hasOwn(request.context.recent_actions[0], 'receipt_id'), false);
+  });
+
   it('drops unsupported answer actions and bounds stored answer content', () => {
     const State = loadState();
     const answer = State.normalizeAnswer({

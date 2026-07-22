@@ -4639,7 +4639,7 @@ export const HELP_CONTENT = {
               [
                 "Email Preview",
                 "On",
-                "Hover preview of emails in Case Email History."
+                "Click email rows in Case Email History to open the full thread."
               ],
               [
                 "Text Preview",
@@ -9137,7 +9137,7 @@ export const HELP_CONTENT = {
         "emailPreviewEnabled",
         "Email & Templates"
       ],
-      "description": "Hover preview of emails in Case Email History.",
+      "description": "Click email rows in Case Email History to open the full thread.",
       "article": "feature-toggles",
       "flag": "emailPreviewEnabled"
     },

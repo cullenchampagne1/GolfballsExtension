@@ -118,6 +118,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
         self.assertIn("dark with yellow accents", knowledge)
         self.assertIn("must be command-complete", knowledge)
         self.assertIn("how-to question is not permission", knowledge)
+        self.assertIn("recent typed-action references", knowledge)
         managed_sources = {
             chunk["source"] for chunk in self.chunks
             if chunk["id"].startswith("assistant:")
@@ -166,6 +167,15 @@ class HelpAgentCorpusTests(unittest.TestCase):
             )
             self.assertIn(
                 "guide:tutorial:run-campaign", {row["id"] for row in campaign}
+            )
+            email_preview = manager.retrieve(
+                self.descriptor["id"],
+                "What feature allows me to view emails in account pages?",
+                edition="admin", limit=3,
+            )
+            self.assertIn("Email Preview", email_preview[0]["text"])
+            self.assertIn(
+                "Click email rows in Case Email History", email_preview[0]["text"]
             )
             consumer = manager.retrieve(
                 self.descriptor["id"],
@@ -221,9 +231,11 @@ class HelpAgentCorpusTests(unittest.TestCase):
         context_properties = message_schema["properties"]["context"]["properties"]
         self.assertIn("action_confirmations", context_properties)
         self.assertIn("automatic_state", context_properties)
+        self.assertIn("recent_actions", context_properties)
         routes_source = (ROOT / ".revstack" / "routes.py").read_text()
         compile(routes_source, "routes.py", "exec")
         self.assertIn("action_confirmations: List[str]", routes_source)
+        self.assertIn("recent_actions: List[AssistantRecentAction]", routes_source)
         blocks = (ROOT / ".revstack" / "blocks.py").read_text()
         compile(blocks, "blocks.py", "exec")
         self.assertIn(
