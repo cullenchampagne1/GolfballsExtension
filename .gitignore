@@ -10,6 +10,13 @@ node_modules/
 # Local test and coverage output.
 coverage/
 .nyc_output/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Ad-hoc export/submission artifacts (Power Automate flow zips, manual
+# submission bundles) — the store zip is built to dist/store/ by pack:store.
+/*.zip
 
 # Browser captures can contain authenticated request headers and customer data.
 *.har
