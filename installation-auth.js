@@ -258,7 +258,7 @@
       if (!response.ok) {
         const httpError = new Error(`Extension API request failed with HTTP ${response.status}`);
         httpError.status = response.status;
-        throw httpError;
+        throw withResponseMetadata(httpError, response);
       }
       throw error;
     }
@@ -266,9 +266,23 @@
       const detail = formatApiErrorDetail(payload);
       const error = new Error(detail || `Extension API request failed with HTTP ${response.status}`);
       error.status = response.status;
-      throw error;
+      throw withResponseMetadata(error, response);
     }
     return payload;
+  }
+
+  function withResponseMetadata(error, response) {
+    const raw = response?.headers?.get?.('retry-after');
+    if (raw) {
+      const numeric = Number(raw);
+      const seconds = Number.isFinite(numeric)
+        ? numeric
+        : (Date.parse(raw) - Date.now()) / 1000;
+      if (Number.isFinite(seconds) && seconds > 0) {
+        error.retryAfterSeconds = Math.max(1, Math.min(3600, Math.ceil(seconds)));
+      }
+    }
+    return error;
   }
 
   function formatApiErrorDetail(payload) {

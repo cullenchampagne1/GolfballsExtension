@@ -149,7 +149,12 @@
       if (status === 403) return 'Help Companion access has not been granted to this installation yet. Ask a RevStack administrator to grant assistant access.';
       if (status === 404) return 'That help response expired before it could be recovered. Please send the question again.';
       if (status === 409) return 'Another help response is already running for this installation.';
-      if (status === 429) return 'The Help Companion is receiving questions too quickly. Wait a moment, then try again.';
+      if (status === 429) {
+        const seconds = Math.max(0, Math.ceil(Number(error?.retryAfterSeconds) || 0));
+        return seconds
+          ? `The Help Companion hit its message limit. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`
+          : 'The Help Companion hit its message limit. Wait a moment, then try again.';
+      }
       if (status >= 500) return 'The Help Companion is temporarily unavailable. Your question is still here to retry.';
       const message = String(error?.message || '').trim();
       return message && message.length <= 500 ? message : fallback;

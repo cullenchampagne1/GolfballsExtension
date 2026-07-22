@@ -129,6 +129,32 @@ describe('Help Companion background flow', () => {
     assert.equal(recovered.messages.filter(({ role }) => role === 'user').length, 1);
   });
 
+  it('shows the server retry window when the message quota is reached', async () => {
+    const { fetchMock } = createFetchMock((url) => {
+      if (!new URL(url).pathname.endsWith('/assistant/messages')) return undefined;
+      return jsonResponse({
+        detail: { code: 'assistant_rate_limited', message: 'Message quota reached' },
+      }, 429, { 'Retry-After': '9' });
+    });
+    const stored = { gbApiInstallation: validInstallation() };
+    const { chrome } = createChrome({ stored });
+    const context = createContext({ chrome, fetchImpl: fetchMock });
+    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'help-chat-state.js');
+    loadScript(context, 'help-data-access.js');
+    loadScript(context, 'help-assistant.js');
+    const controller = context.GBHelpAssistant.createController({
+      setTimer: () => 1, clearTimer: () => {},
+    });
+
+    const failed = await controller.send('You didnt do it', {});
+    assert.equal(
+      failed.lastError.message,
+      'The Help Companion hit its message limit. Try again in 9 seconds.',
+    );
+    assert.equal(failed.lastError.retryMessage, 'You didnt do it');
+  });
+
   it('retries a stale server schema without automatic state and keeps the request id', async () => {
     let submissions = 0;
     const { fetchMock, requests } = createFetchMock((url) => {

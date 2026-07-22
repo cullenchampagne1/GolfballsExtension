@@ -79,6 +79,28 @@ describe('extension API guard', () => {
     );
   });
 
+  it('preserves Retry-After metadata on bounded API errors', async () => {
+    const { fetchMock } = createFetchMock(() => jsonResponse({
+      detail: { code: 'assistant_rate_limited', message: 'Message quota reached' },
+    }, 429, { 'Retry-After': '17' }));
+    const { client } = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation() },
+      fetchImpl: fetchMock,
+    });
+
+    await assert.rejects(async () => {
+      try {
+        await client.apiJson('/projects/golfballs-extension/assistant/messages', {
+          method: 'POST', body: '{}',
+        });
+      } catch (error) {
+        assert.equal(error.status, 429);
+        assert.equal(error.retryAfterSeconds, 17);
+        throw error;
+      }
+    }, /HTTP 429/);
+  });
+
   it('overrides any caller-supplied Authorization header with the installation key', async () => {
     const { client, requests } = makeSandbox();
     await client.apiFetch('/extension/ping', {
