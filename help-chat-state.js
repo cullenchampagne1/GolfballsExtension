@@ -252,6 +252,9 @@
       hidden_settings: Array.isArray(raw.hidden_settings)
         ? raw.hidden_settings.map((item) => bounded(item, 160)).filter(Boolean).slice(0, 160)
         : [],
+      action_confirmations: Array.isArray(raw.action_confirmations)
+        ? [...new Set(raw.action_confirmations.map((item) => safeId(item)).filter(Boolean))].slice(0, 20)
+        : [],
       available_resources: resources,
       resource_access: resourceAccess,
     };

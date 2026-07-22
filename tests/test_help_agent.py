@@ -37,7 +37,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
     def test_corpus_is_versioned_deterministic_and_has_unique_stable_ids(self):
         rebuilt = HELPER.build_descriptor(ROOT)
         self.assertEqual(self.descriptor["id"], "golfballs-extension-help")
-        self.assertEqual(self.descriptor["version"], "3.3.0")
+        self.assertEqual(self.descriptor["version"], "3.3.1")
         self.assertRegex(self.descriptor["revision"], r"^[a-f0-9]{64}$")
         self.assertEqual(rebuilt["revision"], self.descriptor["revision"])
         self.assertEqual(len(self.by_id), len(self.chunks))
@@ -174,7 +174,14 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "POST /shares/products/revoke",
         }
         self.assertTrue(expected_docs <= set(manifest["api_docs"]["routes"]))
-        compile((ROOT / ".revstack" / "routes.py").read_text(), "routes.py", "exec")
+        message_schema = manifest["api_docs"]["routes"]["POST /assistant/messages"][
+            "request_body"
+        ]["content"]["application/json"]["schema"]
+        context_properties = message_schema["properties"]["context"]["properties"]
+        self.assertIn("action_confirmations", context_properties)
+        routes_source = (ROOT / ".revstack" / "routes.py").read_text()
+        compile(routes_source, "routes.py", "exec")
+        self.assertIn("action_confirmations: List[str]", routes_source)
         blocks = (ROOT / ".revstack" / "blocks.py").read_text()
         compile(blocks, "blocks.py", "exec")
         self.assertIn(

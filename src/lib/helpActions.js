@@ -6,7 +6,8 @@ import {
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
 import {
   createSerialHelpActionRunner, helpActionReceiptDecision, helpActionReceiptId,
-  hasIssuedHelpActionReceipt,
+  hasIssuedHelpActionReceipt, helpActionConfirmationTypes,
+  helpActionRequiresConfirmation,
   MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute,
   seedHistoricalHelpActionReceipts,
 } from './helpActionCore.js';
@@ -72,6 +73,7 @@ export async function prepareHelpActionReceipts(receiptIds) {
 }
 
 export { helpActionReceiptId, hasIssuedHelpActionReceipt };
+export { helpActionConfirmationTypes, helpActionRequiresConfirmation };
 
 export async function helpActionContext() {
   const env = await environment();
@@ -199,6 +201,38 @@ async function executeHelpActionOnceNow(receiptId, action, { retry = false } = {
     await storageSet({ [RECEIPTS_KEY]: trimmed });
     return receipt;
   }
+}
+
+export async function readHelpActionReceipt(receiptId) {
+  const safeReceipt = String(receiptId || '').slice(0, 180);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(safeReceipt)) {
+    throw new Error('The action receipt is invalid');
+  }
+  const stored = await storageGet(RECEIPTS_KEY);
+  const receipt = stored[RECEIPTS_KEY]?.[safeReceipt];
+  return receipt && typeof receipt === 'object' ? receipt : null;
+}
+
+export async function declineHelpAction(receiptId) {
+  const safeReceipt = String(receiptId || '').slice(0, 180);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(safeReceipt)) {
+    throw new Error('The action receipt is invalid');
+  }
+  const stored = await storageGet(RECEIPTS_KEY);
+  const receipts = stored[RECEIPTS_KEY] && typeof stored[RECEIPTS_KEY] === 'object'
+    ? stored[RECEIPTS_KEY]
+    : {};
+  const existing = receipts[safeReceipt];
+  if (existing?.status === 'succeeded') return existing;
+  const receipt = {
+    status: 'declined', message: 'Not submitted.', url: '', at: Date.now(),
+  };
+  const next = { ...receipts, [safeReceipt]: receipt };
+  const trimmed = Object.fromEntries(
+    Object.entries(next).sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0)).slice(0, 400),
+  );
+  await storageSet({ [RECEIPTS_KEY]: trimmed });
+  return receipt;
 }
 
 // One queue for the whole content-script runtime. When a restored conversation

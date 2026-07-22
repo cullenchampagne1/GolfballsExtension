@@ -10,6 +10,21 @@ export const MUTATION_ACTION_TYPES = Object.freeze(new Set([
   'submit_ticket',
 ]));
 
+/** Commands that must never execute just because a receipt card mounted.
+ * The client advertises these capabilities to the backend, then presents a
+ * visible preview and waits for a click before calling the write endpoint. */
+export const CONFIRMATION_ACTION_TYPES = Object.freeze(new Set([
+  'submit_ticket',
+]));
+
+export function helpActionRequiresConfirmation(action) {
+  return CONFIRMATION_ACTION_TYPES.has(String(action?.type || ''));
+}
+
+export function helpActionConfirmationTypes() {
+  return [...CONFIRMATION_ACTION_TYPES];
+}
+
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const HEX = /^#[0-9a-f]{6}$/i;
 

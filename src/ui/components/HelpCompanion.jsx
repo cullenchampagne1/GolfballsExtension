@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import {
-  executeHelpActionOnce, hasIssuedHelpActionReceipt, helpActionContext,
-  helpActionReceiptId, isExecutableHelpAction, prepareHelpActionReceipts,
+  declineHelpAction, executeHelpActionOnce, hasIssuedHelpActionReceipt,
+  helpActionConfirmationTypes, helpActionContext, helpActionReceiptId,
+  helpActionRequiresConfirmation,
+  isExecutableHelpAction, prepareHelpActionReceipts, readHelpActionReceipt,
 } from '../../lib/helpActions.js';
 import {
   createSerialHelpActionRunner, orderHelpActions,
@@ -50,6 +52,7 @@ function useHelpStyles() {
       .gb-help-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 999px !important; }
       .gb-help-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
       .gb-help-composer::placeholder { color: var(--gb-text-muted); opacity: 1; }
+      .gb-help-composer { display: block; box-sizing: border-box; margin: 0; vertical-align: middle; }
       .gb-help-composer::-webkit-scrollbar { width: 5px; }
       .gb-help-composer::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 999px; }
       @media (prefers-reduced-motion: reduce) {
@@ -106,6 +109,7 @@ async function helpContext(page) {
     page_type: pageType,
     feature_states: safeFeatureStates(),
     hidden_settings: actionContext.hidden_settings || [],
+    action_confirmations: helpActionConfirmationTypes(),
     available_resources: actionContext.available_resources || [],
     page_url: actionContext.page_url || undefined,
   };
@@ -347,22 +351,41 @@ async function copyText(text) {
 }
 
 function ExecutableActionCard({ action, receiptId, historical = false, onAction, ready }) {
+  const confirmation = helpActionRequiresConfirmation(action);
   const [receipt, setReceipt] = useState(historical
     ? { status: 'succeeded', message: 'Historical action was not replayed.', url: '' }
     : { status: 'running', message: 'Checking action history…', url: '' });
   const [attempt, setAttempt] = useState(0);
+  const [authorized, setAuthorized] = useState(false);
   useEffect(() => {
     if (!ready || historical) return undefined;
     let alive = true;
+    if (confirmation && !authorized) {
+      readHelpActionReceipt(receiptId).then((existing) => {
+        if (!alive) return;
+        setReceipt(existing || {
+          status: 'pending',
+          message: action.target === 'feature'
+            ? 'Review this feature request before sending it.'
+            : 'Review this bug report before sending it.',
+          url: '',
+        });
+      }).catch((error) => {
+        if (alive) setReceipt({ status: 'failed', message: error?.message || 'Could not validate this action.', url: '' });
+      });
+      return () => { alive = false; };
+    }
     setReceipt({ status: 'running', message: 'Validating this action…', url: '' });
-    onAction(action, receiptId, { retry: attempt > 0 }).then((result) => {
+    onAction(action, receiptId, { retry: attempt > 0 || confirmation }).then((result) => {
       if (alive) setReceipt(result || { status: 'failed', message: 'The action did not return a receipt.', url: '' });
     });
     return () => { alive = false; };
-  }, [ready, historical, receiptId, attempt]);
+  }, [ready, historical, receiptId, attempt, authorized, confirmation]);
 
   const succeeded = receipt.status === 'succeeded';
   const failed = receipt.status === 'failed';
+  const pending = receipt.status === 'pending';
+  const declined = receipt.status === 'declined';
   const summary = action.type === 'set_theme_palette'
     ? (action.value || 'Custom brand palette')
     : action.options?.length
@@ -371,7 +394,7 @@ function ExecutableActionCard({ action, receiptId, historical = false, onAction,
   return (
     <motion.div
       initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-      style={{ width: '100%', padding: '9px 10px', display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 8, alignItems: 'center', borderRadius: 10, background: succeeded ? 'var(--gb-success-tint-soft)' : failed ? 'var(--gb-error-tint-soft)' : 'var(--gb-brand-tint-soft)', border: `1px solid ${succeeded ? 'var(--gb-success-tint-border)' : failed ? 'var(--gb-error-tint-border)' : 'var(--gb-brand-tint-border)'}` }}
+      style={{ width: '100%', padding: '9px 10px', display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 8, alignItems: 'center', borderRadius: 10, background: succeeded ? 'var(--gb-success-tint-soft)' : failed ? 'var(--gb-error-tint-soft)' : declined ? 'var(--gb-fill-subtle)' : 'var(--gb-brand-tint-soft)', border: `1px solid ${succeeded ? 'var(--gb-success-tint-border)' : failed ? 'var(--gb-error-tint-border)' : declined ? 'var(--gb-border-default)' : 'var(--gb-brand-tint-border)'}` }}
     >
       <span style={{ width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: succeeded ? 'var(--gb-success-tint-medium)' : failed ? 'var(--gb-error-tint-medium)' : 'var(--gb-brand-tint-medium)', color: succeeded ? 'var(--gb-success-fg)' : failed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)' }}>
         {action.type === 'submit_ticket' ? (action.target === 'feature' ? <I.sparkle size={12} /> : <I.alert size={12} />) : action.type.startsWith('share_') ? <I.link size={12} /> : action.type.startsWith('set_theme') ? <I.sparkle size={12} /> : <I.cog size={12} />}
@@ -387,6 +410,8 @@ function ExecutableActionCard({ action, receiptId, historical = false, onAction,
             <strong style={{ padding: '2px 5px', borderRadius: 5, color: 'var(--gb-success-fg)', background: 'var(--gb-success-tint-medium)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.5, letterSpacing: '.25px' }}>{receipt.reference.id}</strong>
             <span style={{ color: 'var(--gb-text-muted)', fontSize: 8.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receipt.reference.title}</span>
           </span>
+        ) : !failed && action.type === 'submit_ticket' ? (
+          <span style={{ display: 'block', marginTop: 4, color: 'var(--gb-text-tertiary)', fontSize: 9, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{action.value}</span>
         ) : !failed && summary && <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.target} → {summary}</span>}
         {action.type === 'set_theme_palette' && action.options?.length === 4 && (
           <span style={{ display: 'flex', gap: 3, marginTop: 5 }}>{action.options.map((color) => <span key={color} title={color} style={{ width: 15, height: 5, borderRadius: 999, background: color, border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }} />)}</span>
@@ -394,8 +419,15 @@ function ExecutableActionCard({ action, receiptId, historical = false, onAction,
       </span>
       {receipt.status === 'running' ? (
         <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-help-orbit .8s linear infinite' }} />
+      ) : pending ? (
+        <span style={{ display: 'flex', gap: 5 }}>
+          <button type="button" onClick={async () => setReceipt(await declineHelpAction(receiptId))} style={{ height: 25, padding: '0 7px', borderRadius: 7, background: 'transparent', color: 'var(--gb-text-muted)', border: '1px solid var(--gb-border-default)', fontSize: 8.75, fontWeight: 700, cursor: 'pointer' }}>Not now</button>
+          <button type="button" onClick={() => setAuthorized(true)} style={{ height: 25, padding: '0 8px', borderRadius: 7, background: 'linear-gradient(145deg, var(--gb-brand), var(--gb-brand-dark))', color: 'var(--gb-text-on-brand)', border: '1px solid var(--gb-brand-border)', fontSize: 8.75, fontWeight: 750, cursor: 'pointer' }}>{action.target === 'feature' ? 'Submit request' : 'Submit report'}</button>
+        </span>
+      ) : declined ? (
+        <button type="button" onClick={() => setAuthorized(true)} style={{ height: 24, padding: '0 7px', borderRadius: 7, background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', fontSize: 9, fontWeight: 750, cursor: 'pointer' }}>Submit</button>
       ) : failed ? (
-        <button type="button" onClick={() => setAttempt((value) => value + 1)} style={{ height: 24, padding: '0 7px', borderRadius: 7, background: 'var(--gb-error-tint-medium)', color: 'var(--gb-error-fg)', border: '1px solid var(--gb-error-tint-border)', fontSize: 9, fontWeight: 750, cursor: 'pointer' }}>Retry</button>
+        <button type="button" onClick={() => { if (confirmation) setAuthorized(true); setAttempt((value) => value + 1); }} style={{ height: 24, padding: '0 7px', borderRadius: 7, background: 'var(--gb-error-tint-medium)', color: 'var(--gb-error-fg)', border: '1px solid var(--gb-error-tint-border)', fontSize: 9, fontWeight: 750, cursor: 'pointer' }}>Retry</button>
       ) : receipt.url ? (
         <button type="button" title="Copy generated link" onClick={async () => { const copied = await copyText(receipt.url); window.__gbToast?.[copied ? 'success' : 'error']?.(copied ? 'Link copied' : 'Could not copy link', { duration: 1700 }); }} style={{ width: 27, height: 25, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-success-tint-medium)', color: 'var(--gb-success-fg)', border: '1px solid var(--gb-success-tint-border)', cursor: 'pointer' }}><I.copy size={10} /></button>
       ) : <I.check size={12} style={{ color: 'var(--gb-success-fg)' }} />}
@@ -824,7 +856,7 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
                 submit();
               }
             }}
-            style={{ flex: 1, minWidth: 0, height: 20, maxHeight: 104, resize: 'none', overflowY: 'auto', overflowX: 'hidden', padding: 0, background: 'transparent', color: 'var(--gb-text-primary)', border: 0, outline: 0, fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 520, lineHeight: '20px', opacity: active ? .62 : 1 }}
+            style={{ flex: 1, alignSelf: 'center', minWidth: 0, height: 20, maxHeight: 104, resize: 'none', overflowY: 'auto', overflowX: 'hidden', padding: '1px 0', background: 'transparent', color: 'var(--gb-text-primary)', border: 0, outline: 0, fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 520, lineHeight: '18px', opacity: active ? .62 : 1 }}
           />
           <motion.button
             type="button"

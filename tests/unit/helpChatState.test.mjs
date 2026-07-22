@@ -22,12 +22,13 @@ describe('Help Companion state', () => {
       { ...State.emptyState(1), messages },
       'Where is the theme setting?',
       {
-        extension_version: '3.3.0',
+        extension_version: '3.3.1',
         edition: 'admin',
         surface: 'actions-shelf',
         page_type: 'contact',
         feature_states: { actionsShelfEnabled: true, invalid: 'yes' },
         page_url: 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*',
+        action_confirmations: ['submit_ticket', 'submit_ticket', '../unsafe'],
         available_resources: [{ kind: 'email_template', id: 'tpl-follow-up', label: 'Follow up' }],
         unexpected: 'must not cross the contract',
       },
@@ -43,6 +44,7 @@ describe('Help Companion state', () => {
     assert.equal(request.context.page_url, 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*');
     assert.equal(request.context.available_resources[0].id, 'tpl-follow-up');
     assert.equal(JSON.stringify(request.context.feature_states), JSON.stringify({ actionsShelfEnabled: true }));
+    assert.equal(JSON.stringify(request.context.action_confirmations), JSON.stringify(['submit_ticket']));
     assert.equal(Object.hasOwn(request.context, 'unexpected'), false);
   });
 

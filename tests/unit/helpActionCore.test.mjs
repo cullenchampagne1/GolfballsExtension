@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createSerialHelpActionRunner, hasIssuedHelpActionReceipt, helpActionReceiptDecision,
-  helpActionReceiptId, orderHelpActions, planHelpAction, sanitizePageRoute,
+  helpActionConfirmationTypes, helpActionReceiptId, helpActionRequiresConfirmation,
+  orderHelpActions, planHelpAction, sanitizePageRoute,
   seedHistoricalHelpActionReceipts,
 } from '../../src/lib/helpActionCore.js';
 
@@ -113,6 +114,17 @@ describe('Help Companion action policy', () => {
     assert.equal(helpActionReceiptDecision(receipts, 'failed', { retry: true }).execute, true);
     assert.equal(helpActionReceiptDecision(receipts, 'done', { retry: true }).execute, false);
     assert.equal(helpActionReceiptDecision(receipts, 'new').execute, true);
+  });
+
+  it('advertises ticket confirmation and keeps declined tickets inert until a user retries', () => {
+    assert.deepEqual(helpActionConfirmationTypes(), ['submit_ticket']);
+    assert.equal(helpActionRequiresConfirmation({ type: 'submit_ticket' }), true);
+    assert.equal(helpActionRequiresConfirmation({ type: 'set_feature' }), false);
+    const receipts = {
+      declined: { status: 'declined', message: 'Not submitted.' },
+    };
+    assert.equal(helpActionReceiptDecision(receipts, 'declined').execute, false);
+    assert.equal(helpActionReceiptDecision(receipts, 'declined', { retry: true }).execute, true);
   });
 
   it('rejects invented, hidden, out-of-range, and malformed model operations', () => {
