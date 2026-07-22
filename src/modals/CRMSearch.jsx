@@ -137,12 +137,11 @@ const rowToCampaignContact = (row, useMock) => {
 export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   const toast = useToast();
   const draggable = useDevSetting('crmSearch.draggable') ?? true;
-  /* One global force-mock switch now (playground.forceMock) instead of a
-     per-modal flag. The useMock prop still wins when set — playground
-     passes useMock={true} so the demo loop doesn't need a dev setting
-     flipped first. Otherwise: the global switch, or no extension context
-     at all (standalone preview). */
-  const forceMock = useDevSetting('playground.forceMock') ?? false;
+  /* One global force-mock switch now (forceMockData) instead of a
+     per-modal flag. The useMock prop still wins when set, so a caller can
+     force the demo loop without a dev setting flipped first. Otherwise:
+     the global switch, or no extension context at all (standalone preview). */
+  const forceMock = useDevSetting('forceMockData') ?? false;
   const useMock   = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [query, setQuery]       = useState('');

@@ -12,8 +12,7 @@ import { DEV_SETTINGS } from '../lib/settings-live.jsx';
    reference tables, cardgrids, docnotes, and a themed changelog
    timeline. Content is transcribed from the verified articles in
    src/lib/helpContent.js (ts-* / faq / code-variables /
-   hidden-settings / modal-playground /
-   debug-storage / whats-new).
+   hidden-settings / debug-storage / whats-new).
 ─────────────────────────────────────────────────────────────── */
 
 /* ════════════════════════════════════════════════════════════════
@@ -396,7 +395,7 @@ export function PowerUserPage() {
       <p className="lede">
         The deepest reference in the guide. Sandboxed JavaScript variables and the <code>h.*</code> helper API,
         the authenticated administrator policy that manages settings, the full feature-flag / dev-setting
-        map, the modal playground, and where the extension keeps its state. <strong>Advanced</strong>, but every
+        map, and where the extension keeps its state. <strong>Advanced</strong>, but every
         piece is documented exactly as shipped.
       </p>
 
@@ -450,23 +449,6 @@ export function PowerUserPage() {
         <thead><tr><th style={{ width: 200 }}>Map</th><th style={{ width: 150 }}>Storage key</th><th>What it holds</th></tr></thead>
         <tbody>{PU_FLAG_ROWS.map((r) => <tr key={r[1]}><td><b>{r[0]}</b></td><td><code>{r[1]}</code></td><td>{r[2]}</td></tr>)}</tbody>
       </table>
-
-      <h2 className="sec">The modal playground</h2>
-      <p>
-        <strong>Developer Settings &rarr; “Modal playground: Open”</strong> launches a standalone page where every modal
-        renders with mock data — no CRM page, no live endpoints. Use it to explore a feature safely, demo the
-        extension, or check how a theme variant looks across every surface. The companion switch
-        <strong> “Force mock data (all sources)”</strong> makes every data source return canned values and turns email
-        sends into a dry-run, even on a live page.
-      </p>
-
-      <div className="docnote info">
-        <span className="dn-ico"><I.bolt size={15} /></span>
-        <div className="dn-b">
-          <div className="dn-t">Playground layout ≠ CRM layout</div>
-          <p style={{ margin: 0 }}>The playground has its own CSS reset, so a layout that’s fine there can still be off inside the CRM — host-page styles bleed into real modals. Always verify a real layout on a real CRM page.</p>
-        </div>
-      </div>
 
       <h2 className="sec">Debug storage keys</h2>
       <p>

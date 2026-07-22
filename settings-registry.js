@@ -339,7 +339,7 @@
       "min": 0,
       "max": 50
     },
-    "playground.forceMock": {
+    "forceMockData": {
       "type": "bool",
       "default": false
     },

@@ -339,9 +339,6 @@ export const HELP_CONTENT = {
           "article": "code-variables"
         },
         {
-          "article": "modal-playground"
-        },
-        {
           "article": "hidden-settings"
         },
         {
@@ -4394,43 +4391,6 @@ export const HELP_CONTENT = {
       "sectionLabel": "Power User Corner"
     },
     {
-      "slug": "modal-playground",
-      "title": "The Modal Playground",
-      "icon": "bolt",
-      "tiers": [
-        "advanced"
-      ],
-      "keywords": [
-        "playground",
-        "mock",
-        "test",
-        "demo",
-        "sandbox page"
-      ],
-      "summary": "Every modal rendered with mock data outside the CRM — for trying features, demos, and design checks.",
-      "covers": [
-        "playground"
-      ],
-      "body": {
-        "advanced": [
-          {
-            "type": "p",
-            "text": "Developer Settings → 'Modal playground: Open' launches a standalone page where every modal renders with mock data — no CRM page, no live endpoints. Use it to explore a feature safely, demo the extension, or check how a theme variant looks across every surface."
-          },
-          {
-            "type": "callout",
-            "kind": "info",
-            "text": "The playground has its own CSS reset, so a layout that's fine there can still be off inside the CRM (host-page styles bleed into real modals). Verify real layouts on a real CRM page."
-          }
-        ]
-      },
-      "related": [
-        "developer-settings",
-        "theme-appearance"
-      ],
-      "sectionLabel": "Power User Corner"
-    },
-    {
       "slug": "hidden-settings",
       "title": "Hidden Settings",
       "icon": "eye",
@@ -4569,7 +4529,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Each surface has its own zoom slider (50–150%): modals, popovers, toasts, the shelf, the popup, the editor, and the playground. Scale just the things you find small without blowing up the whole browser."
+            "text": "Each surface has its own zoom slider (50–150%): modals, popovers, toasts, the shelf, the popup, and the editor. Scale just the things you find small without blowing up the whole browser."
           }
         ]
       },
@@ -5061,7 +5021,6 @@ export const HELP_CONTENT = {
       ],
       "summary": "Every fine-tuning knob in one generated table: animation timing, draggable modals, catalog cache, 3D viewer tuning, and snapshot poses.",
       "covers": [
-        "playground",
         "sandbox"
       ],
       "coversAllDevSettings": true,
@@ -5498,7 +5457,7 @@ export const HELP_CONTENT = {
                 "bool",
                 "Off",
                 "",
-                "Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for playground previews or when the API is down. The modal auto-mocks when not in an extension context."
+                "Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for local previews or when the API is down. The modal auto-mocks when not in an extension context."
               ],
               [
                 "CRM New Contact: require account",
@@ -5886,7 +5845,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
-            "text": "Playground"
+            "text": "forceMockData"
           },
           {
             "type": "table",
@@ -5899,16 +5858,16 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Playground: force mock data (all sources)",
+                "Force mock data",
                 "bool",
                 "Off",
                 "",
-                "One switch: every data source returns canned data and email sends become a dry-run (nothing is actually sent). Replaces the old per-modal mock flags. The extension also auto-mocks when running outside an extension context (e.g. the playground tab), so this is mainly for previewing mock data on a live page."
+                "When on, modals read mock fixtures instead of live CRM data. The extension also auto-mocks when running outside an extension context (e.g. tests), so this is mainly for previewing mock data on a live page."
               ]
             ],
             "meta": {
               "settingKeys": [
-                "playground.forceMock"
+                "forceMockData"
               ]
             }
           },
@@ -6495,8 +6454,7 @@ export const HELP_CONTENT = {
         ]
       },
       "related": [
-        "hidden-settings",
-        "modal-playground"
+        "hidden-settings"
       ],
       "sectionLabel": "Settings Reference"
     },
@@ -8588,22 +8546,6 @@ export const HELP_CONTENT = {
       "flag": null
     },
     {
-      "id": "article:modal-playground",
-      "category": "Articles",
-      "title": "The Modal Playground",
-      "keywords": [
-        "playground",
-        "mock",
-        "test",
-        "demo",
-        "sandbox page"
-      ],
-      "description": "Every modal rendered with mock data outside the CRM — for trying features, demos, and design checks.",
-      "article": "modal-playground",
-      "shortcut": null,
-      "flag": null
-    },
-    {
       "id": "article:hidden-settings",
       "category": "Articles",
       "title": "Hidden Settings",
@@ -9550,7 +9492,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "crmCreateContact.useMock"
       ],
-      "description": "Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for playground previews or when the API is down. The modal auto-mocks when not in an extension context.",
+      "description": "Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for local previews or when the API is down. The modal auto-mocks when not in an extension context.",
       "article": "developer-settings"
     },
     {
@@ -9804,13 +9746,13 @@ export const HELP_CONTENT = {
       "article": "developer-settings"
     },
     {
-      "id": "devSetting:playground.forceMock",
+      "id": "devSetting:forceMockData",
       "category": "Settings",
-      "title": "Playground: force mock data (all sources)",
+      "title": "Force mock data",
       "keywords": [
-        "playground.forceMock"
+        "forceMockData"
       ],
-      "description": "One switch: every data source returns canned data and email sends become a dry-run (nothing is actually sent). Replaces the old per-modal mock flags. The extension also auto-mocks when running outside an extension context (e.g. the playground tab), so this is mainly for previewing mock data on a live page.",
+      "description": "When on, modals read mock fixtures instead of live CRM data. The extension also auto-mocks when running outside an extension context (e.g. tests), so this is mainly for previewing mock data on a live page.",
       "article": "developer-settings"
     },
     {

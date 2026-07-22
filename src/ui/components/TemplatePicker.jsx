@@ -418,7 +418,7 @@ function ListBody({
      leaves them null, so derive the match-set from the parent's
      prop list directly. Without this guard, the flat path
      crashed on the first render after the ListBody refactor —
-     the playground TypeError the user surfaced. */
+     the TypeError the user surfaced in mock mode. */
   const matchedArr = matched || [];
   const matchedSet = new Set(matchedArr.map((t) => t.id));
   const renderRow = (tpl, idx, isMatched) => (

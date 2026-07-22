@@ -151,7 +151,6 @@ const DEV_GROUP_LABELS = {
   textPreview: 'Text Preview',
   giftCatalog: 'Gift Catalog',
   email: 'Email',
-  playground: 'Playground',
 };
 
 function devGroupOf(key) {

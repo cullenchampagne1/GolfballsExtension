@@ -41,3 +41,6 @@ dist/store/
 .revstack/
 revstack.project.json
 golfballs
+
+# Admin/consumer strip config — builds run on the server, not from the shared source.
+admin-only.json

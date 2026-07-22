@@ -9,7 +9,6 @@
     "build": "node --max-old-space-size=8192 build.js",
     "watch": "node --max-old-space-size=8192 build.js --watch",
     "audit": "node scripts/audit-source.mjs",
-    "audit:mappings": "node scripts/audit-mappings.mjs",
     "help-content": "node scripts/build-help-content.mjs",
     "remote-config": "node scripts/build-remote-settings-config.mjs",
     "pack:store": "GB_ADMIN=0 node --max-old-space-size=4096 scripts/package-store.mjs",

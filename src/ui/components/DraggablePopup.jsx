@@ -10,7 +10,7 @@ import { I } from '../icons.jsx';
    frame and animate toward it — so the child visibly LAGS behind the
    popup instead of moving rigidly with it. Descendants read this and turn
    `layout` off while dragging. Defaults false (e.g. rendered standalone in
-   the playground), so layout animations stay on outside a drag. */
+   tests), so layout animations stay on outside a drag. */
 export const PopupDragContext = createContext(false);
 
 /* ───────────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ export function DraggablePopup({
   className,
   enterFrom = 'right',  // 'right' | 'bottom'
   /* Custom inline styles passed to the panel root. Useful for
-     test fixtures / playground demos. */
+     test fixtures. */
   style,
   children,
 }) {

@@ -247,7 +247,7 @@ export const DEV_SETTINGS = [
   {
     key:     'crmCreateContact.useMock',
     label:   'CRM New Contact: force mock mode',
-    desc:    'Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for playground previews or when the API is down. The modal auto-mocks when not in an extension context.',
+    desc:    'Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for local previews or when the API is down. The modal auto-mocks when not in an extension context.',
     type:    'bool',
     default: false,
   },
@@ -494,14 +494,13 @@ export const DEV_SETTINGS = [
     step:    1,
   },
 
-  /* ── Modal playground ─────────────────────────────────────────
-     An `action` row renders just a button instead of a persisted
-     value. `runner` fires on click and gets `{ notify }` so it can
-     surface success/failure inline via the notification system. */
+  /* ── Force mock data ──────────────────────────────────────────
+     A global switch that flips every data source to its mock()
+     fixtures, for previewing modals without live CRM data. */
   {
-    key:     'playground.forceMock',
-    label:   'Playground: force mock data (all sources)',
-    desc:    'One switch: every data source returns canned data and email sends become a dry-run (nothing is actually sent). Replaces the old per-modal mock flags. The extension also auto-mocks when running outside an extension context (e.g. the playground tab), so this is mainly for previewing mock data on a live page.',
+    key:     'forceMockData',
+    label:   'Force mock data',
+    desc:    'When on, modals read mock fixtures instead of live CRM data. The extension also auto-mocks when running outside an extension context (e.g. tests), so this is mainly for previewing mock data on a live page.',
     type:    'bool',
     default: false,
   },

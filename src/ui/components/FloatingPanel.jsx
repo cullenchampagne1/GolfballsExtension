@@ -218,11 +218,11 @@ export function FloatingPanel({
   const isDraggable = draggable && !isContained;
   const posFixed = isContained ? 'absolute' : 'fixed';
 
-  // Portal to <body> so any ancestor `transform` (e.g. the playground's
-  // 0.74x scale wrapper) doesn't reframe our position:fixed coordinates.
+  // Portal to <body> so any ancestor `transform` (e.g. a UI-scale
+  // wrapper) doesn't reframe our position:fixed coordinates.
   // A position:fixed child of a transformed ancestor anchors to that
   // ancestor — which means drag deltas come in viewport-scaled space and
-  // the modal renders at a scaled size on the playground. Portaling
+  // the modal renders at a scaled size. Portaling
   // escapes both problems in one move.
   const portalTarget = resolvedPortal || (typeof document !== 'undefined' ? document.body : null);
   if (!portalTarget) return null;

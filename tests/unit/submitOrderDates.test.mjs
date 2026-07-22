@@ -99,7 +99,7 @@ describe('submitOrderDates — real iframe-bridge path', () => {
   });
 });
 
-describe('submitOrderDates — playground simulation (no calendarUrl)', () => {
+describe('submitOrderDates — mock simulation (no calendarUrl)', () => {
   it('walks all three steps on a timer and then completes', async () => {
     installChrome();
     const steps = [];

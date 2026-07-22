@@ -45,22 +45,6 @@
       "related": ["email-templates-popup", "campaign-conditions"]
     },
     {
-      "slug": "modal-playground",
-      "title": "The Modal Playground",
-      "icon": "bolt",
-      "tiers": ["advanced"],
-      "keywords": ["playground", "mock", "test", "demo", "sandbox page"],
-      "summary": "Every modal rendered with mock data outside the CRM — for trying features, demos, and design checks.",
-      "covers": ["playground"],
-      "body": {
-        "advanced": [
-          { "type": "p", "text": "Developer Settings → 'Modal playground: Open' launches a standalone page where every modal renders with mock data — no CRM page, no live endpoints. Use it to explore a feature safely, demo the extension, or check how a theme variant looks across every surface." },
-          { "type": "callout", "kind": "info", "text": "The playground has its own CSS reset, so a layout that's fine there can still be off inside the CRM (host-page styles bleed into real modals). Verify real layouts on a real CRM page." }
-        ]
-      },
-      "related": ["developer-settings", "theme-appearance"]
-    },
-    {
       "slug": "hidden-settings",
       "title": "Hidden Settings",
       "icon": "eye",

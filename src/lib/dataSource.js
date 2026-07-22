@@ -22,14 +22,14 @@ import { useToast } from '../ui/components/ToastHost.jsx';
    data. Where empty genuinely IS a failure (e.g. blank required
    dropdowns), the source's fetch() should THROW rather than return empty.
 
-   One global "force mock" knob (devSettings 'playground.forceMock') plus
+   One global "force mock" knob (devSettings 'forceMockData') plus
    the existing outside-the-extension auto-mock flips every source to its
    mock() — this replaces the old per-modal useMock flags.
 ─────────────────────────────────────────────────────────────── */
 
 /* True when we're running inside the extension (so a real call is even
-   possible). False in the playground tab / a bare browser context, where
-   we auto-mock. Mirrors the check the modals used to inline. */
+   possible). False in a non-extension context (e.g. tests / a bare browser),
+   where we auto-mock. Mirrors the check the modals used to inline. */
 export function hasExtensionContext() {
   try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; }
   catch { return false; }
@@ -41,7 +41,7 @@ export async function shouldForceMock() {
   if (!hasExtensionContext()) return true;
   try {
     const settings = await loadDevSettings();
-    return settings['playground.forceMock'] === true;
+    return settings['forceMockData'] === true;
   } catch { return false; }
 }
 
@@ -136,7 +136,7 @@ export async function callSource(source, input, opts = {}) {
  * @returns { data, loading, state, source, error, reload }
  */
 export function useSource(source, input, deps = []) {
-  const forceSetting = useDevSetting('playground.forceMock');
+  const forceSetting = useDevSetting('forceMockData');
   const toast = useToast();
   const [result, setResult] = useState({ data: undefined, loading: true, state: 'ok', source: 'live', error: null });
   const [reloadN, setReloadN] = useState(0);

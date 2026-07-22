@@ -27,15 +27,6 @@
       "relatedFeatures": ["email-templates", "note-templates", "settings", "presets", "theme"]
     },
     {
-      "id": "playground",
-      "name": "Modal Playground",
-      "entryPoint": "playground.html (opened from Settings → Developer Settings → 'Modal playground: Open')",
-      "purpose": "Design/dev sandbox: every modal renders with mock data outside the CRM, with theme switcher and dev-settings sidebar.",
-      "mainSections": ["Component playgrounds per modal", "Theme switcher", "Dev-settings sidebar"],
-      "relatedFeatures": ["developer-tools"],
-      "audience": "internal/advanced"
-    },
-    {
       "id": "sandbox",
       "name": "Code Sandbox (hidden)",
       "entryPoint": "sandbox.html (invisible iframe; MV3 sandboxed page)",
@@ -163,7 +154,7 @@
     "storageKey": "devSettings (chrome.storage.local; flat object merged over registry defaults)",
     "panelSections": ["Theme", "UI Scales", "Features", "Keyboard Shortcuts", "Custom Pages (policy-managed globally and per scope)", "Developer Settings (hideable)", "Shared Settings Templates"],
     "theme": { "variants": ["dark", "midnight", "light", "cream", "nord", "dracula", "rose", "tokyo"], "colorPickers": ["brand", "action button", "button deep", "button border", "error", "warning", "success", "info"], "storage": ["gbTheme", "themeColors"] },
-    "uiScales": { "surfaces": ["modals", "popovers", "toasts", "shelf", "popup", "editor", "playground"], "range": "50–150%", "storage": "uiScales" },
+    "uiScales": { "surfaces": ["modals", "popovers", "toasts", "shelf", "popup", "editor"], "range": "50–150%", "storage": "uiScales" },
     "keyboardShortcuts": { "configurable": ["taskList (X)", "marginCalc (M)", "crmSearch (K)", "crmNewContact (Q)"], "storage": "keyboardShortcuts" },
     "customPages": { "what": "Per-scope switches that enable supported extension page takeovers", "scopes": ["crm"], "implementedPages": ["contact_details", "account_details", "opportunity_details"], "storage": "customPages page-id arrays retained as the engine contract" },
     "developerSettings": [
@@ -213,8 +204,7 @@
       { "key": "golfballViewer.spinSpeed", "type": "number", "default": 0.01, "label": "Auto-spin speed" },
       { "key": "golfballViewer.snapPreview", "type": "boolean", "default": false, "label": "Preview export pose" },
       { "key": "golfballViewer.snap.ball.x/y/z/scale/rotX/rotY/rotZ", "type": "number", "label": "Snapshot export pose tuning" },
-      { "key": "playground.forceMock", "type": "boolean", "default": false, "label": "Playground: force mock data" },
-      { "key": "playground.open", "type": "action", "label": "Open Modal Playground" }
+      { "key": "forceMockData", "type": "boolean", "default": false, "label": "Force mock data" }
     ]
   },
 

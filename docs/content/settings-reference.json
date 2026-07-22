@@ -15,7 +15,7 @@
           { "type": "p", "text": "Settings → Theme offers Dark (default), Slate, Light, Cream, Nord, Dracula, Rosé, and Tokyo Night. Switching applies live to every surface — modals, popup, editor, shelf — no reload needed." },
           { "type": "p", "text": "Color pickers let you override the brand accent, action-button colors, and the four status colors (error, warning, success, info). All tinted backgrounds and borders derive from these automatically." },
           { "type": "heading", "text": "UI Scales" },
-          { "type": "p", "text": "Each surface has its own zoom slider (50–150%): modals, popovers, toasts, the shelf, the popup, the editor, and the playground. Scale just the things you find small without blowing up the whole browser." }
+          { "type": "p", "text": "Each surface has its own zoom slider (50–150%): modals, popovers, toasts, the shelf, the popup, and the editor. Scale just the things you find small without blowing up the whole browser." }
         ]
       },
       "related": ["initial-configuration", "developer-settings"]
@@ -109,7 +109,7 @@
       "tiers": ["advanced"],
       "keywords": ["dev settings", "draggable", "cache hours", "debug", "tuning", "advanced settings"],
       "summary": "Every fine-tuning knob in one generated table: animation timing, draggable modals, catalog cache, 3D viewer tuning, and snapshot poses.",
-      "covers": ["playground", "sandbox"],
+      "covers": ["sandbox"],
       "coversAllDevSettings": true,
       "body": {
         "advanced": [
@@ -118,7 +118,7 @@
           { "type": "generated", "source": "devSettings" }
         ]
       },
-      "related": ["hidden-settings", "modal-playground"]
+      "related": ["hidden-settings"]
     },
     {
       "slug": "presets",

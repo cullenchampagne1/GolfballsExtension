@@ -276,13 +276,13 @@ async function apiGetTaskContactId(id) {
 export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   const toast      = useToast();
   const draggable  = useDevSetting('taskList.draggable') ?? false;
-  /* One global force-mock switch now (playground.forceMock) instead of a
-     per-modal flag. Playground passes useMock={true} explicitly so the rep
-     can drive the email-blast animation without an extension context; that
-     prop still wins. Otherwise: the global switch, or no extension context
-     at all (standalone tab). Drives both the fetch (passed to callSource)
-     and the offline/mock UI affordances below. */
-  const forceMock  = useDevSetting('playground.forceMock') ?? false;
+  /* One global force-mock switch now (forceMockData) instead of a
+     per-modal flag. A useMock prop still wins when passed explicitly (e.g.
+     to drive the email-blast animation without an extension context).
+     Otherwise: the global switch, or no extension context at all (standalone
+     tab). Drives both the fetch (passed to callSource) and the offline/mock
+     UI affordances below. */
+  const forceMock  = useDevSetting('forceMockData') ?? false;
   const useMock    = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [tasks, setTasks]         = useState([]);

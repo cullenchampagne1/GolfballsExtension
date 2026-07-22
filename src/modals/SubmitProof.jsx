@@ -191,9 +191,9 @@ const gallerySource = defineSource({
 export function SubmitProof({ image, orderId: orderIdProp, customerId: customerIdProp, onClosed, bindClose, onSubmitted }) {
   const toast = useToast();
   const draggable = useDevSetting('submitProof.draggable') ?? true;
-  /* One global force-mock switch now (playground.forceMock) in place of the
+  /* One global force-mock switch now (forceMockData) in place of the
      per-modal flag; auto-mock outside an extension context still applies. */
-  const forceMock = useDevSetting('playground.forceMock') ?? false;
+  const forceMock = useDevSetting('forceMockData') ?? false;
   const useMock   = forceMock || !hasExtensionContext();
 
   // Stage drives the footer button + results panel. We open straight
