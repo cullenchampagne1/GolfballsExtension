@@ -1,9 +1,9 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.1",
+  "version": "3.4.2",
   "type": "module",
-  "description": "Golfballs.com Sales Toolkit — Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
+  "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
     "prebuild": "npm run help-content",
     "build": "node --max-old-space-size=8192 build.js",
@@ -31,79 +31,350 @@
     "check": "npm run audit && npm test && npm run build"
   },
   "tests": [
-    { "name": "email · MIME/EML parsing → renderable HTML", "file": "tests/unit/emailParse.test.mjs" },
-    { "name": "email · composer slash-command templates", "file": "tests/unit/emailComposerCommands.test.mjs" },
-    { "name": "email · contact-page composer transport", "file": "tests/unit/contactEmail.test.mjs" },
-    { "name": "email · clicked-thread reply routing", "file": "tests/unit/emailReply.test.mjs" },
-    { "name": "email · signature, plain-text & mailto/PA payloads", "file": "tests/unit/emailSender.test.mjs" },
-    { "name": "email · HTML sanitizer strips scripts & bypasses", "file": "tests/unit/sanitizeHtml.test.mjs" },
-    { "name": "email · proposal email rows & cart links", "file": "tests/unit/proposalEmailSource.test.mjs" },
-    { "name": "email · template import validation", "file": "tests/unit/templateImport.test.mjs" },
-    { "name": "email · legacy template migration", "file": "tests/unit/templateMigration.test.mjs" },
-    { "name": "modal · charge amounts, payloads & approval loop", "file": "tests/unit/chargeModal.test.mjs" },
-    { "name": "modal · order-edit math & cart iframe", "file": "tests/unit/orderEditModal.test.mjs" },
-    { "name": "modal · call-log submit contract", "file": "tests/unit/submitCallLog.test.mjs" },
-    { "name": "modal · quick-task create payload", "file": "tests/unit/submitQuickTask.test.mjs" },
-    { "name": "modal · quick order-note templates & last-note action", "file": "tests/unit/quickOrderNote.test.mjs" },
-    { "name": "modal · order-date calendar relay", "file": "tests/unit/submitOrderDates.test.mjs" },
-    { "name": "modal · case category read-merge-write", "file": "tests/unit/submitCaseCategory.test.mjs" },
-    { "name": "crm · task list parse & complete write-back", "file": "tests/unit/crmTasks.test.mjs" },
-    { "name": "crm · indexed search ranking", "file": "tests/unit/crmIndex.test.mjs" },
-    { "name": "crm · case rule matching & recommendations", "file": "tests/unit/caseMatch.test.mjs" },
-    { "name": "crm · match-engine operators & trees", "file": "tests/unit/matchEngine.test.mjs" },
-    { "name": "crm · template variables & conditionals", "file": "tests/unit/variableResolution.test.mjs" },
-    { "name": "email · full variable editing and attachments", "file": "tests/unit/templateVariableEditing.test.mjs" },
-    { "name": "crm · chat transcript parsing", "file": "tests/unit/parseChat.test.mjs" },
-    { "name": "crm · phone extraction from orders", "file": "tests/unit/findPhone.test.mjs" },
-    { "name": "crm · call categories & templates", "file": "tests/unit/callLog.test.mjs" },
-    { "name": "crm · task priorities & due labels", "file": "tests/unit/quickTask.test.mjs" },
-    { "name": "crm · task category labels", "file": "tests/unit/taskCategories.test.mjs" },
-    { "name": "crm · recent-orders scan contract", "file": "tests/unit/recentOrdersScan.test.mjs" },
-    { "name": "money · catalog pricing & usd formatting", "file": "tests/unit/giftCatalogMath.test.mjs" },
-    { "name": "money · bundle packing & ball costs", "file": "tests/unit/bundleCost.test.mjs" },
-    { "name": "money · margin math & cost basis", "file": "tests/unit/marginReport.test.mjs" },
-    { "name": "money · cart & preview URL serialization", "file": "tests/unit/cartSerializer.test.mjs" },
-    { "name": "ui · display scales clamp & persist", "file": "tests/unit/scales.test.mjs" },
-    { "name": "ui · Actions Shelf panel motion", "file": "tests/unit/shelfMotion.test.mjs" },
-    { "name": "ui · Help Companion conversation state", "file": "tests/unit/helpChatState.test.mjs" },
-    { "name": "ui · Help Companion composer sizing", "file": "tests/unit/helpComposer.test.mjs" },
-    { "name": "ui · Help Companion waiting games", "file": "tests/unit/helpWaitingGame.test.mjs" },
-    { "name": "ui · Help Companion guarded actions", "file": "tests/unit/helpActionCore.test.mjs" },
-    { "name": "ui · Help Companion automatic settings context", "file": "tests/unit/helpActions.test.mjs" },
-    { "name": "guard · Help Companion approved local data", "file": "tests/unit/helpDataAccess.test.mjs" },
-    { "name": "guard · project runtime lifecycle", "file": "tests/unit/runtimeBootstrap.test.mjs" },
-    { "name": "guard · database-backed installation access", "id": "guard-installation-access", "command": ["../.venv/bin/python", "tests/test_extension_client_api.py"] },
-    { "name": "guard · database-backed settings policy", "id": "guard-settings-policy", "command": ["../.venv/bin/python", "tests/test_settings_policy.py"] },
-    { "name": "ui · managed Settings section visibility", "file": "tests/unit/manageSections.test.mjs" },
-    { "name": "ui · ASP date offsets & calendar cells", "file": "tests/unit/dateUtils.test.mjs" },
-    { "name": "ui · admin page-context routing", "file": "tests/unit/pageContext.test.mjs" },
-    { "name": "guard · operator-guide content coverage", "file": "tests/unit/helpContent.test.mjs" },
-    { "name": "guard · AI help knowledge corpus", "id": "guard-help-agent", "command": ["../.venv/bin/python", "tests/test_help_agent.py"] },
-    { "name": "flow · ASP.NET calendar form-state reconstruction", "file": "tests/unit/calendarFormState.test.mjs" },
-    { "name": "flow · install enrollment lifecycle", "file": "tests/integration/enrollment-lifecycle.test.mjs" },
-    { "name": "ui · one-time installation identity confirmation", "file": "tests/unit/installationIdentityNotice.test.mjs" },
-    { "name": "flow · api fetch guard & bearer auth", "file": "tests/integration/api-guard-flow.test.mjs" },
-    { "name": "flow · Help Companion background recovery", "file": "tests/integration/help-assistant-flow.test.mjs" },
-    { "name": "flow · assistant support ticket lifecycle", "file": "tests/integration/support-ticket-lifecycle.test.mjs" },
-    { "name": "flow · settings share create→import→revoke", "file": "tests/integration/settings-share-lifecycle.test.mjs" },
-    { "name": "flow · email template share links", "file": "tests/integration/template-share-import.test.mjs" },
-    { "name": "flow · remote settings policy sync", "file": "tests/integration/remote-policy-sync.test.mjs" },
-    { "name": "flow · eml → sanitize → send pipeline", "file": "tests/integration/email-pipeline.test.mjs" },
-    { "name": "flow · charge endpoint security guard", "file": "tests/integration/charge-guard.test.mjs" },
-    { "name": "flow · order-note modal → authenticated iframe", "file": "tests/integration/order-note-relay.test.mjs" },
-    { "name": "flow · encrypted crm index roundtrip", "file": "tests/integration/crm-index-roundtrip.test.mjs" },
-    { "name": "flow · chrome update channel chain", "file": "tests/integration/update-channel.test.mjs" },
-    { "name": "guard · browser-store ZIP safety and determinism", "file": "tests/integration/store-packaging.test.mjs" },
-    { "name": "guard · security policy allowlists", "id": "guard-security", "command": ["node", "scripts/test-security.mjs"] },
-    { "name": "guard · auth session broker", "id": "guard-auth-broker", "command": ["node", "scripts/test-auth-session-broker.mjs"] },
-    { "name": "guard · crm index encryption", "id": "guard-crm-index", "command": ["node", "scripts/test-crm-index-encryption.mjs"] },
-    { "name": "guard · installation enrollment", "id": "guard-installation", "command": ["node", "scripts/test-installation-auth.mjs"] },
-    { "name": "guard · remote settings policy", "id": "guard-remote-policy", "command": ["node", "scripts/test-remote-settings-policy.mjs"] },
-    { "name": "guard · contact import", "id": "guard-contact-import", "command": ["node", "scripts/test-contact-import.mjs"] },
-    { "name": "guard · employee identity", "id": "guard-employee-identity", "command": ["node", "scripts/test-employee-identity.mjs"] },
-    { "name": "guard · sharing fallback", "id": "guard-sharing-fallback", "command": ["node", "scripts/test-sharing-fallback.mjs"] },
-    { "name": "remote · update-channel integrity", "id": "remote-integrity", "command": ["node", "scripts/test-remote-integrity.mjs"] },
-    { "name": "remote · backend api contract", "id": "backend-contract", "command": ["node", "scripts/test-backend-integration.mjs"] }
+    {
+      "name": "email \u00b7 MIME/EML parsing \u2192 renderable HTML",
+      "file": "tests/unit/emailParse.test.mjs"
+    },
+    {
+      "name": "email \u00b7 composer slash-command templates",
+      "file": "tests/unit/emailComposerCommands.test.mjs"
+    },
+    {
+      "name": "email \u00b7 contact-page composer transport",
+      "file": "tests/unit/contactEmail.test.mjs"
+    },
+    {
+      "name": "email \u00b7 clicked-thread reply routing",
+      "file": "tests/unit/emailReply.test.mjs"
+    },
+    {
+      "name": "email \u00b7 signature, plain-text & mailto/PA payloads",
+      "file": "tests/unit/emailSender.test.mjs"
+    },
+    {
+      "name": "email \u00b7 HTML sanitizer strips scripts & bypasses",
+      "file": "tests/unit/sanitizeHtml.test.mjs"
+    },
+    {
+      "name": "email \u00b7 proposal email rows & cart links",
+      "file": "tests/unit/proposalEmailSource.test.mjs"
+    },
+    {
+      "name": "email \u00b7 template import validation",
+      "file": "tests/unit/templateImport.test.mjs"
+    },
+    {
+      "name": "email \u00b7 legacy template migration",
+      "file": "tests/unit/templateMigration.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 charge amounts, payloads & approval loop",
+      "file": "tests/unit/chargeModal.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 order-edit math & cart iframe",
+      "file": "tests/unit/orderEditModal.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 call-log submit contract",
+      "file": "tests/unit/submitCallLog.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 quick-task create payload",
+      "file": "tests/unit/submitQuickTask.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 quick order-note templates & last-note action",
+      "file": "tests/unit/quickOrderNote.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 order-date calendar relay",
+      "file": "tests/unit/submitOrderDates.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 case category read-merge-write",
+      "file": "tests/unit/submitCaseCategory.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 task list parse & complete write-back",
+      "file": "tests/unit/crmTasks.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 indexed search ranking",
+      "file": "tests/unit/crmIndex.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 case rule matching & recommendations",
+      "file": "tests/unit/caseMatch.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 match-engine operators & trees",
+      "file": "tests/unit/matchEngine.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 template variables & conditionals",
+      "file": "tests/unit/variableResolution.test.mjs"
+    },
+    {
+      "name": "email \u00b7 full variable editing and attachments",
+      "file": "tests/unit/templateVariableEditing.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 chat transcript parsing",
+      "file": "tests/unit/parseChat.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 phone extraction from orders",
+      "file": "tests/unit/findPhone.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 call categories & templates",
+      "file": "tests/unit/callLog.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 task priorities & due labels",
+      "file": "tests/unit/quickTask.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 task category labels",
+      "file": "tests/unit/taskCategories.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 recent-orders scan contract",
+      "file": "tests/unit/recentOrdersScan.test.mjs"
+    },
+    {
+      "name": "money \u00b7 catalog pricing & usd formatting",
+      "file": "tests/unit/giftCatalogMath.test.mjs"
+    },
+    {
+      "name": "money \u00b7 bundle packing & ball costs",
+      "file": "tests/unit/bundleCost.test.mjs"
+    },
+    {
+      "name": "money \u00b7 margin math & cost basis",
+      "file": "tests/unit/marginReport.test.mjs"
+    },
+    {
+      "name": "money \u00b7 cart & preview URL serialization",
+      "file": "tests/unit/cartSerializer.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 display scales clamp & persist",
+      "file": "tests/unit/scales.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 Actions Shelf panel motion",
+      "file": "tests/unit/shelfMotion.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 Help Companion conversation state",
+      "file": "tests/unit/helpChatState.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 Help Companion composer sizing",
+      "file": "tests/unit/helpComposer.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 Help Companion waiting games",
+      "file": "tests/unit/helpWaitingGame.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 Help Companion guarded actions",
+      "file": "tests/unit/helpActionCore.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 Help Companion automatic settings context",
+      "file": "tests/unit/helpActions.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 Help Companion approved local data",
+      "file": "tests/unit/helpDataAccess.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 project runtime lifecycle",
+      "file": "tests/unit/runtimeBootstrap.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 database-backed installation access",
+      "id": "guard-installation-access",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_extension_client_api.py"
+      ]
+    },
+    {
+      "name": "guard \u00b7 database-backed settings policy",
+      "id": "guard-settings-policy",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_settings_policy.py"
+      ]
+    },
+    {
+      "name": "ui \u00b7 managed Settings section visibility",
+      "file": "tests/unit/manageSections.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 ASP date offsets & calendar cells",
+      "file": "tests/unit/dateUtils.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 admin page-context routing",
+      "file": "tests/unit/pageContext.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 operator-guide content coverage",
+      "file": "tests/unit/helpContent.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 AI help knowledge corpus",
+      "id": "guard-help-agent",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_help_agent.py"
+      ]
+    },
+    {
+      "name": "flow \u00b7 ASP.NET calendar form-state reconstruction",
+      "file": "tests/unit/calendarFormState.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 install enrollment lifecycle",
+      "file": "tests/integration/enrollment-lifecycle.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 one-time installation identity confirmation",
+      "file": "tests/unit/installationIdentityNotice.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 api fetch guard & bearer auth",
+      "file": "tests/integration/api-guard-flow.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 Help Companion background recovery",
+      "file": "tests/integration/help-assistant-flow.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 assistant support ticket lifecycle",
+      "file": "tests/integration/support-ticket-lifecycle.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 settings share create\u2192import\u2192revoke",
+      "file": "tests/integration/settings-share-lifecycle.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 email template share links",
+      "file": "tests/integration/template-share-import.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 remote settings policy sync",
+      "file": "tests/integration/remote-policy-sync.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 eml \u2192 sanitize \u2192 send pipeline",
+      "file": "tests/integration/email-pipeline.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 charge endpoint security guard",
+      "file": "tests/integration/charge-guard.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 order-note modal \u2192 authenticated iframe",
+      "file": "tests/integration/order-note-relay.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 encrypted crm index roundtrip",
+      "file": "tests/integration/crm-index-roundtrip.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 chrome update channel chain",
+      "file": "tests/integration/update-channel.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 browser-store ZIP safety and determinism",
+      "file": "tests/integration/store-packaging.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 security policy allowlists",
+      "id": "guard-security",
+      "command": [
+        "node",
+        "scripts/test-security.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 auth session broker",
+      "id": "guard-auth-broker",
+      "command": [
+        "node",
+        "scripts/test-auth-session-broker.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 crm index encryption",
+      "id": "guard-crm-index",
+      "command": [
+        "node",
+        "scripts/test-crm-index-encryption.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 installation enrollment",
+      "id": "guard-installation",
+      "command": [
+        "node",
+        "scripts/test-installation-auth.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 remote settings policy",
+      "id": "guard-remote-policy",
+      "command": [
+        "node",
+        "scripts/test-remote-settings-policy.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 contact import",
+      "id": "guard-contact-import",
+      "command": [
+        "node",
+        "scripts/test-contact-import.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 employee identity",
+      "id": "guard-employee-identity",
+      "command": [
+        "node",
+        "scripts/test-employee-identity.mjs"
+      ]
+    },
+    {
+      "name": "guard \u00b7 sharing fallback",
+      "id": "guard-sharing-fallback",
+      "command": [
+        "node",
+        "scripts/test-sharing-fallback.mjs"
+      ]
+    },
+    {
+      "name": "remote \u00b7 update-channel integrity",
+      "id": "remote-integrity",
+      "command": [
+        "node",
+        "scripts/test-remote-integrity.mjs"
+      ]
+    },
+    {
+      "name": "remote \u00b7 backend api contract",
+      "id": "backend-contract",
+      "command": [
+        "node",
+        "scripts/test-backend-integration.mjs"
+      ]
+    }
   ],
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
