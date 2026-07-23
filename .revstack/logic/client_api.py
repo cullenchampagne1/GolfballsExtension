@@ -8,7 +8,6 @@ temporary compatibility shim and then be deleted without relocating logic.
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import re
@@ -96,14 +95,14 @@ def _json_size(value) -> int:
 
 class ExtensionClientApi:
     def __init__(
-        self, *, auth_manager, models, config_access_manager, config_error,
+        self, *, auth_manager, models, settings_policy_store, settings_policy_error,
         client_scope: str, project_dir: Path, public_origin: str,
         service_manager_factory=None,
     ):
         self.auth_manager = auth_manager
         self.models = models
-        self.config_access_manager = config_access_manager
-        self.config_error = config_error
+        self.settings_policy = settings_policy_store
+        self.settings_policy_error = settings_policy_error
         self.client_scope = client_scope
         self.project_dir = Path(project_dir)
         self.public_origin = public_origin.rstrip("/")
@@ -192,17 +191,15 @@ class ExtensionClientApi:
     # ----- configuration + identity -------------------------------------
 
     def configuration(self, request: Request) -> JSONResponse:
-        self.principal(request)
+        principal = self.principal(request)
         try:
-            _, source, document = self.config_access_manager.read(
-                "golfballs-extension-configuration"
+            document, revision = self.settings_policy.resolve(
+                principal.credential_id
             )
-        except self.config_error as exc:
+        except self.settings_policy_error as exc:
             raise HTTPException(
                 status_code=503, detail="Extension configuration unavailable"
             ) from exc
-        if not isinstance(document, dict) or document.get("schema_version") != 1:
-            raise HTTPException(status_code=503, detail="Extension configuration is invalid")
         dashboard = self.auth_manager.authenticate_session_cookie(request)
         bypass = bool(dashboard and dashboard.is_admin)
         return JSONResponse({
@@ -211,7 +208,7 @@ class ExtensionClientApi:
             "configuration_reason": (
                 "dashboard_admin_bypass" if bypass else "extension_policy"
             ),
-            "revision": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            "revision": revision,
             "configuration": None if bypass else jsonable_encoder(document),
         }, headers={"Cache-Control": "no-store"})
 

@@ -18,7 +18,7 @@ import json
 import re
 import uuid
 from datetime import datetime
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,17 +71,29 @@ ExtensionEmailTemplateShare = _models.ExtensionEmailTemplateShare
 ExtensionProductStore = _models.ExtensionProductStore
 ExtensionInstallationIdentity = _models.ExtensionInstallationIdentity
 ExtensionInstallationAccess = _models.ExtensionInstallationAccess
+ExtensionSettingsPolicy = _models.ExtensionSettingsPolicy
+ExtensionSettingOverride = _models.ExtensionSettingOverride
 ExtensionSupportTicket = _models.ExtensionSupportTicket
 ExtensionSupportTicketReply = _models.ExtensionSupportTicketReply
 AuthApiKey = _models.AuthApiKey
 
 _client_api_module = project_logic("client_api")
+_settings_policy_module = project_logic("settings_policy")
+SettingsPolicyError = _settings_policy_module.SettingsPolicyError
+SettingsPolicyConflict = _settings_policy_module.SettingsPolicyConflict
+settings_policy = _settings_policy_module.SettingsPolicyStore(
+    engine=auth_manager.engine,
+    models=_models,
+    config_access_manager=config_access_manager,
+    config_error=ConfigAccessError,
+    project_dir=project_dir,
+)
 _service_manager = backend_logic("ServiceManager")
 client_api = _client_api_module.ExtensionClientApi(
     auth_manager=auth_manager,
     models=_models,
-    config_access_manager=config_access_manager,
-    config_error=ConfigAccessError,
+    settings_policy_store=settings_policy,
+    settings_policy_error=SettingsPolicyError,
     client_scope=EXTENSION_CLIENT_SCOPE,
     project_dir=project_dir,
     public_origin=(
@@ -244,6 +256,31 @@ class BulkInstallationAccessRequest(BaseModel):
 
     enabled: bool
     confirm: Literal["update all extension installations"]
+
+
+class GlobalSettingUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: List[str] = Field(min_length=1, max_length=4)
+    value: Any = None
+    hidden: Optional[bool] = None
+    managed: Optional[bool] = None
+
+
+class SettingOverrideUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: List[str] = Field(min_length=1, max_length=4)
+    value_mode: Literal["inherit", "override"] = "inherit"
+    value: Any = None
+    hidden_mode: Literal["inherit", "hidden", "shown"] = "inherit"
+    managed_mode: Literal["inherit", "managed", "unmanaged"] = "inherit"
+
+
+class SettingOverrideClearRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: List[str] = Field(min_length=1, max_length=4)
 
 
 class TicketReplyRequest(BaseModel):
@@ -443,34 +480,21 @@ def _product_store_url(store_id: str) -> str:
     return f"{_public_origin()}{_PROJECT_SCOPE_PREFIX}client/product-stores/{store_id}"
 
 
-def _read_policy() -> tuple[str, dict]:
-    """Read and validate the one policy document this project is allowed to edit."""
+def _read_policy(credential_id: str | None = None) -> tuple[str, dict]:
+    """Read the database policy, optionally resolved for one installation."""
     try:
-        _, source, config_doc = config_access_manager.read(_CONFIG_NAME)
-    except ConfigAccessError as exc:
+        if credential_id:
+            config_doc, revision = settings_policy.resolve(credential_id)
+        else:
+            config_doc = settings_policy.global_document()
+            revision = settings_policy.revision(config_doc)
+    except SettingsPolicyError as exc:
         raise HTTPException(status_code=503, detail="Extension configuration unavailable") from exc
-    if not isinstance(config_doc, dict) or config_doc.get("schema_version") != 1:
-        raise HTTPException(status_code=503, detail="Extension configuration is invalid")
-    return source, config_doc
+    return revision, config_doc
 
 
 def _policy_entries(document: dict) -> list[dict]:
-    """Flatten every settings object carrying a `value`, including nested scopes."""
-    entries = []
-
-    def visit(node, path):
-        if not isinstance(node, dict):
-            return
-        if "value" in node and path:
-            entries.append({"path": list(path), "setting": node})
-        for key, child in node.items():
-            if key in {"value", "hidden", "managed", "label"}:
-                continue
-            if isinstance(child, dict):
-                visit(child, [*path, str(key)])
-
-    visit(document, [])
-    return entries
+    return settings_policy.entries(document)
 
 
 def _toggle_policy_action(path: list[str], hidden: bool) -> dict:
@@ -484,6 +508,157 @@ def _toggle_policy_action(path: list[str], hidden: bool) -> dict:
             "idle": {"label": next_label, "variant": "ghost"},
             "loading": {"label": "Saving", "variant": "ghost", "spinner": True},
             "done": {"label": "Saved", "variant": "ok"},
+        },
+    }}
+
+
+def _modal_value_field(entry: dict, value, *, key="value") -> dict:
+    spec = entry["spec"]
+    kind = spec.get("type")
+    field = {"key": key, "label": "Value", "required": kind != "string"}
+    if kind == "bool":
+        field.update({"type": "checkbox", "default": value is True})
+    elif kind == "number":
+        field.update({"type": "number", "default": value})
+        if "min" in spec:
+            field["min"] = spec["min"]
+        if "max" in spec:
+            field["max"] = spec["max"]
+    elif kind == "select":
+        field.update({
+            "type": "select", "default": value,
+            "options": [
+                {"value": option, "label": option}
+                for option in spec.get("options") or ()
+            ],
+        })
+    else:
+        field.update({"type": "text", "default": value or "", "max_length": 10_000})
+    return field
+
+
+def _global_policy_action(entry: dict) -> dict:
+    fields = []
+    if entry["spec"].get("type") != "section":
+        fields.append(_modal_value_field(entry, entry["value"]))
+    fields.append({
+        "key": "hidden", "type": "checkbox", "label": "Hide this setting",
+        "default": entry["hidden"],
+    })
+    if entry["spec"].get("type") != "section":
+        fields.append({
+            "key": "managed", "type": "checkbox", "label": "Manage this value",
+            "default": entry["managed"],
+            "hint": "Managed values replace the installation's local value.",
+        })
+    return {"action": {
+        "endpoint": f"{_PROJECT_SCOPE_PREFIX}configuration-values/update",
+        "method": "POST", "body": {"path": entry["path"]},
+        "modal": {
+            "title": f"Edit {entry['label']}",
+            "subtitle": "Global extension policy",
+            "description": "Applies to every installation unless that user has an override.",
+            "submit_label": "Save global policy", "fields": fields,
+        },
+        "return_criteria": {"path": "updated", "equals": True},
+        "states": {
+            "idle": {"label": "Edit", "variant": "ghost"},
+            "done": {"label": "Saved", "variant": "ok"},
+            "error": {"label": "Retry", "variant": "bad"},
+        },
+    }}
+
+
+def _override_modes(override: dict | None) -> tuple[str, str, str]:
+    if not override:
+        return "inherit", "inherit", "inherit"
+    value_mode = "override" if override["has_value_override"] else "inherit"
+    hidden_mode = (
+        "inherit" if override["hidden_override"] is None
+        else "hidden" if override["hidden_override"] else "shown"
+    )
+    managed_mode = (
+        "inherit" if override["managed_override"] is None
+        else "managed" if override["managed_override"] else "unmanaged"
+    )
+    return value_mode, hidden_mode, managed_mode
+
+
+def _override_edit_action(key_id: str, entry: dict, override: dict | None) -> dict:
+    value_mode, hidden_mode, managed_mode = _override_modes(override)
+    fields = []
+    if entry["spec"].get("type") != "section":
+        fields.extend([
+            {"key": "value_mode", "type": "select", "label": "Value source",
+             "default": value_mode, "options": [
+                 {"value": "inherit", "label": "Inherit global value"},
+                 {"value": "override", "label": "Override for this user"},
+             ]},
+            _modal_value_field(
+                entry,
+                override["value_override"]
+                if override and override["has_value_override"] else entry["value"],
+            ),
+        ])
+    fields.append({
+        "key": "hidden_mode", "type": "select", "label": "Visibility",
+        "default": hidden_mode, "options": [
+            {"value": "inherit", "label": "Inherit global visibility"},
+            {"value": "hidden", "label": "Hidden for this user"},
+            {"value": "shown", "label": "Shown for this user"},
+        ],
+    })
+    if entry["spec"].get("type") != "section":
+        fields.append({
+            "key": "managed_mode", "type": "select", "label": "Management",
+            "default": managed_mode, "options": [
+                {"value": "inherit", "label": "Inherit global management"},
+                {"value": "managed", "label": "Managed for this user"},
+                {"value": "unmanaged", "label": "User controls their value"},
+            ],
+        })
+    return {"action": {
+        "endpoint": f"{_PROJECT_SCOPE_PREFIX}keys/{key_id}/configuration-overrides",
+        "method": "POST", "body": {"path": entry["path"]},
+        "modal": {
+            "title": f"Override {entry['label']}",
+            "subtitle": "Installation-specific policy",
+            "description": "Choose inherit everywhere to remove the override.",
+            "submit_label": "Save override", "fields": fields,
+        },
+        "return_criteria": {"path": "updated", "equals": True},
+        "states": {
+            "idle": {"label": "Edit", "variant": "ghost"},
+            "done": {"label": "Saved", "variant": "ok"},
+            "error": {"label": "Retry", "variant": "bad"},
+        },
+    }}
+
+
+def _settings_modal_action(key_id: str, name: str) -> dict:
+    return {"action": {
+        "modal": {
+            "kind": "remote_table",
+            "title": f"Settings · {name}",
+            "subtitle": "Per-user overrides",
+            "description": "Only explicit differences from global policy are stored.",
+            "endpoint": f"{_PROJECT_SCOPE_PREFIX}keys/{key_id}/configuration-overrides",
+            "max_width": 1180,
+        },
+        "states": {"idle": {"label": "Settings", "variant": "ghost"}},
+    }}
+
+
+def _clear_override_action(key_id: str, path: list[str]) -> dict:
+    return {"action": {
+        "endpoint": f"{_PROJECT_SCOPE_PREFIX}keys/{key_id}/configuration-overrides/clear",
+        "method": "POST", "body": {"path": path},
+        "confirm": "Remove this user override and inherit global policy?",
+        "return_criteria": {"path": "cleared", "equals": True},
+        "states": {
+            "idle": {"label": "Clear", "variant": "bad"},
+            "confirm": {"label": "Confirm", "variant": "warn"},
+            "done": {"label": "Cleared", "variant": "ok"},
         },
     }}
 
@@ -1058,12 +1233,7 @@ async def client_email_relay_pending(
 
 @router.get("/configuration")
 async def configuration(request: Request):
-    """Return the golfballs policy for an installation, or signal admin bypass.
-
-    Moved from core /extension/configuration (which stays as a deprecated
-    forwarder). Auth: an extension client key (client:extension scope) or an
-    admin dashboard session; an admin session gets bypass instead of the doc.
-    """
+    """Return the resolved database policy, or signal dashboard admin bypass."""
     principal = getattr(request.state, "principal", None)
     if principal is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -1073,14 +1243,16 @@ async def configuration(request: Request):
     )
     if not is_extension and not principal.is_admin:
         raise HTTPException(status_code=403, detail="Extension client or administrator required")
-    source, config_doc = _read_policy()
+    revision, config_doc = _read_policy(
+        principal.credential_id if is_extension else None
+    )
     dashboard_principal = auth_manager.authenticate_session_cookie(request)
     admin_bypass = bool(dashboard_principal and dashboard_principal.is_admin)
     payload = {
         "schema_version": 1,
         "admin_bypass": admin_bypass,
         "configuration_reason": "dashboard_admin_bypass" if admin_bypass else "extension_policy",
-        "revision": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "revision": revision,
         "configuration": None if admin_bypass else jsonable_encoder(config_doc),
     }
     return JSONResponse(payload, headers={"Cache-Control": "no-store"})
@@ -1088,40 +1260,21 @@ async def configuration(request: Request):
 
 @router.get("/configuration-values")
 async def configuration_values(_: Principal = Depends(require_admin)):
-    """Admin table data for every policy value.
-
-    Every row can be hidden/shown. Hiding also turns off a boolean value that is
-    currently on; showing never turns it back on. The action marks the setting
-    managed so the policy metadata stays authoritative.
-    """
+    """Global database policy with broad value/visibility/management editing."""
     _, config_doc = _read_policy()
     rows = []
     for entry in _policy_entries(config_doc):
-        path = entry["path"]
-        setting = entry["setting"]
-        value = setting.get("value")
-        hidden = setting.get("hidden") is True
-        path_key = json.dumps(path, ensure_ascii=False, separators=(",", ":"))
-        label = str(setting.get("label") or path[-1])
-        section = str(path[0]).replace("_", " ").title()
-        setting_path = " › ".join(path[1:]) if len(path) > 1 else path[0]
-        if type(value) is bool:
-            shown_value = {"text": "On" if value else "Off",
-                           "color": "ok" if value else "bad"}
-        elif value is None:
-            shown_value = "null"
-        elif isinstance(value, (str, int, float)):
-            shown_value = str(value)
-        else:
-            shown_value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:160]
         rows.append({
-            "path_key": path_key,
-            "section": section,
-            "setting": {"text": label, "sub": setting_path},
-            "value": shown_value,
-            "hidden": "Yes" if hidden else "No",
-            "managed": "Yes" if setting.get("managed") is True else "No",
-            "act": _toggle_policy_action(path, hidden),
+            "path_key": entry["path_key"],
+            "section": entry["section"],
+            "setting": {"text": entry["label"], "sub": entry["setting_path"]},
+            "value": _policy_value_cell(entry["value"]),
+            "hidden": "Yes" if entry["hidden"] else "No",
+            "managed": (
+                "—" if entry["managed"] is None
+                else "Yes" if entry["managed"] else "No"
+            ),
+            "act": _global_policy_action(entry),
         })
     rows.sort(key=lambda row: (row["section"].lower(), row["setting"]["text"].lower()))
     payload = {
@@ -1139,12 +1292,35 @@ async def configuration_values(_: Principal = Depends(require_admin)):
     return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
 
+@router.post("/configuration-values/update")
+async def update_configuration_value(
+    body: GlobalSettingUpdateRequest,
+    _: Principal = Depends(require_admin),
+):
+    """Update global value, hidden, and managed fields in database storage."""
+    fields = body.model_fields_set
+    try:
+        entry = settings_policy.update_global(
+            body.path,
+            value_marker="value" in fields, value=body.value,
+            hidden_marker="hidden" in fields, hidden=body.hidden,
+            managed_marker="managed" in fields, managed=body.managed,
+        )
+    except SettingsPolicyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return JSONResponse({
+        "updated": True, "path": entry["path"],
+        "value": jsonable_encoder(entry["value"]),
+        "hidden": entry["hidden"], "managed": entry["managed"],
+    }, headers={"Cache-Control": "no-store"})
+
+
 @router.post("/configuration-values/toggle")
 async def toggle_configuration_value(
     request: Request,
     _: Principal = Depends(require_admin),
 ):
-    """Hide/show one setting; hiding also disables a boolean that is currently on."""
+    """Deprecated Hide/Show action backed by the database policy store."""
     try:
         body = await request.json()
     except Exception:
@@ -1156,33 +1332,178 @@ async def toggle_configuration_value(
             or type(expected_hidden) is not bool):
         raise HTTPException(status_code=422, detail="A path and expected hidden state are required")
 
-    _, current_doc = _read_policy()
-    setting_paths = {
-        tuple(entry["path"])
-        for entry in _policy_entries(current_doc)
-    }
-    if tuple(requested_path) not in setting_paths:
-        raise HTTPException(status_code=404, detail="Configuration setting not found")
     try:
-        _, updated_doc, previous, current = config_access_manager.toggle_visibility(
-            _CONFIG_NAME, requested_path, expected_hidden=expected_hidden,
+        current = settings_policy.entry_for_path(requested_path)
+        if current["hidden"] is not expected_hidden:
+            raise SettingsPolicyConflict("Setting visibility changed; refresh and try again")
+        updated = settings_policy.update_global(
+            requested_path, hidden_marker=True, hidden=not expected_hidden,
         )
-    except ConfigConflictError as exc:
+    except SettingsPolicyConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ConfigValueError as exc:
+    except (SettingsPolicyError, StopIteration) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ConfigAccessError as exc:
-        raise HTTPException(status_code=503, detail="Extension configuration update failed") from exc
-    updated_setting = updated_doc
-    for segment in requested_path:
-        updated_setting = updated_setting[segment]
     return JSONResponse({
         "updated": True,
         "path": requested_path,
-        "previous_hidden": previous["hidden"],
-        "hidden": current["hidden"],
-        "managed": current["managed"],
-        "value": jsonable_encoder(updated_setting.get("value")),
+        "previous_hidden": current["hidden"],
+        "hidden": updated["hidden"],
+        "managed": updated["managed"],
+        "value": jsonable_encoder(updated["value"]),
+    }, headers={"Cache-Control": "no-store"})
+
+
+def _policy_value_cell(value):
+    if type(value) is bool:
+        return {"text": "On" if value else "Off", "color": "ok" if value else "bad"}
+    if value is None:
+        return "—"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:160]
+
+
+def _golfballs_key_model(key_id: str):
+    with Session(auth_manager.engine) as session:
+        key = session.get(AuthApiKey, key_id)
+        if key is None or not _is_golfballs_key({
+            "name": key.name, "scopes": list(key.scopes or ()),
+        }):
+            raise HTTPException(status_code=404, detail="Golfballs extension API key not found")
+        session.expunge(key)
+        return key
+
+
+@router.get("/keys/{key_id}/configuration-overrides")
+async def key_configuration_overrides(
+    key_id: str, _: Principal = Depends(require_admin),
+):
+    """All resolved settings for one API-key modal, with override actions."""
+    key = _golfballs_key_model(key_id)
+    global_doc = settings_policy.global_document()
+    resolved_doc, _ = settings_policy.resolve(key_id)
+    resolved = {row["path_key"]: row for row in settings_policy.entries(resolved_doc)}
+    overrides = {
+        row["path_key"]: row for row in settings_policy.overrides(key_id)
+    }
+    rows = []
+    for entry in settings_policy.entries(global_doc):
+        override = overrides.get(entry["path_key"])
+        effective = resolved[entry["path_key"]]
+        value_mode, hidden_mode, managed_mode = _override_modes(override)
+        rows.append({
+            "path_key": entry["path_key"],
+            "setting": {"text": entry["label"], "sub": entry["setting_path"]},
+            "global": _policy_value_cell(entry["value"]),
+            "effective": _policy_value_cell(effective["value"]),
+            "visibility": hidden_mode.replace("inherit", "Inherit").title(),
+            "management": (
+                "—" if entry["spec"].get("type") == "section"
+                else managed_mode.replace("inherit", "Inherit").title()
+            ),
+            "act": _override_edit_action(key_id, effective, override),
+            "clear": _clear_override_action(key_id, entry["path"]) if override else "",
+        })
+    return JSONResponse({
+        "primary_key": "path_key",
+        "columns": [
+            {"key": "setting", "label": "Setting", "grow": True},
+            {"key": "global", "label": "Global"},
+            {"key": "effective", "label": "Effective"},
+            {"key": "visibility", "label": "Visibility"},
+            {"key": "management", "label": "Managed"},
+            {"key": "act", "label": "", "type": "action", "align": "right"},
+            {"key": "clear", "label": "", "type": "action", "align": "right"},
+        ],
+        "rows": rows,
+        "meta": {"key_id": key_id, "name": key.name},
+    }, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/keys/{key_id}/configuration-overrides")
+async def update_key_configuration_override(
+    key_id: str, body: SettingOverrideUpdateRequest,
+    _: Principal = Depends(require_admin),
+):
+    _golfballs_key_model(key_id)
+    try:
+        payload = settings_policy.set_override(
+            key_id, body.path, value_mode=body.value_mode, value=body.value,
+            hidden_mode=body.hidden_mode, managed_mode=body.managed_mode,
+        )
+    except SettingsPolicyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/keys/{key_id}/configuration-overrides/clear")
+async def clear_key_configuration_override(
+    key_id: str, body: SettingOverrideClearRequest,
+    _: Principal = Depends(require_admin),
+):
+    _golfballs_key_model(key_id)
+    try:
+        cleared = settings_policy.clear_override(key_id, body.path)
+    except SettingsPolicyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not cleared:
+        raise HTTPException(status_code=404, detail="Setting override not found")
+    return JSONResponse({"cleared": True, "path": body.path}, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/configuration-overrides")
+async def configuration_overrides(_: Principal = Depends(require_admin)):
+    """All explicit per-user overrides for the dedicated dashboard table."""
+    overrides = settings_policy.overrides()
+    key_ids = {row["credential_id"] for row in overrides}
+    with Session(auth_manager.engine) as session:
+        owners = _installation_owners(session, key_ids)
+        keys = {
+            row.id: row for row in session.scalars(select(AuthApiKey).where(
+                AuthApiKey.id.in_(key_ids)
+            )).all()
+        } if key_ids else {}
+    global_entries = {
+        row["path_key"]: row for row in settings_policy.entries()
+    }
+    rows = []
+    for override in overrides:
+        entry = global_entries.get(override["path_key"])
+        if not entry:
+            continue
+        key_id = override["credential_id"]
+        key = keys.get(key_id)
+        rows.append({
+            "id": f"{key_id}:{override['path_key']}",
+            "user": _owner_cell(owners.get(key_id)),
+            "setting": {"text": entry["label"], "sub": entry["setting_path"]},
+            "value": (
+                _policy_value_cell(override["value_override"])
+                if override["has_value_override"] else "Inherit"
+            ),
+            "hidden": (
+                "Inherit" if override["hidden_override"] is None
+                else "Hidden" if override["hidden_override"] else "Shown"
+            ),
+            "managed": (
+                "Inherit" if override["managed_override"] is None
+                else "Managed" if override["managed_override"] else "User controlled"
+            ),
+            "settings": _settings_modal_action(key_id, key.name if key else key_id),
+            "clear": _clear_override_action(key_id, entry["path"]),
+        })
+    return JSONResponse({
+        "primary_key": "id",
+        "columns": [
+            {"key": "user", "label": "User"},
+            {"key": "setting", "label": "Setting", "grow": True},
+            {"key": "value", "label": "Value"},
+            {"key": "hidden", "label": "Visibility"},
+            {"key": "managed", "label": "Managed"},
+            {"key": "settings", "label": "", "type": "action", "align": "right"},
+            {"key": "clear", "label": "", "type": "action", "align": "right"},
+        ],
+        "rows": rows,
     }, headers={"Cache-Control": "no-store"})
 
 
@@ -1437,6 +1758,7 @@ async def list_keys(_: Principal = Depends(require_admin)):
         {"key": "expires", "label": "Expires", "align": "right"},
         {"key": "access", "label": "Toolkit", "type": "action", "align": "right"},
         {"key": "chat", "label": "Help chat", "type": "action", "align": "right"},
+        {"key": "settings", "label": "Settings", "type": "action", "align": "right"},
         {"key": "act", "label": "", "type": "action", "align": "right"},
     ]
     rows = [{
@@ -1448,6 +1770,7 @@ async def list_keys(_: Principal = Depends(require_admin)):
         "expires": "—",
         "access": _bulk_access_action(global_enabled),
         "chat": "Per installation",
+        "settings": "Global policy",
         "act": "",
     }]
     for k in keys:
@@ -1483,8 +1806,13 @@ async def list_keys(_: Principal = Depends(require_admin)):
             "expires": str(k.get("expires_at") or "never")[:10],
             "access": toolkit,
             "chat": chat,
+            "settings": (
+                _settings_modal_action(k.get("id"), name)
+                if st == "active" else {"text": "Unavailable"}
+            ),
             "act": (_revoke_action(f"{_PROJECT_SCOPE_PREFIX}keys/revoke",
-                                   {"key_id": k.get("id")}, "Revoke this API key?")
+                                   {"key_id": k.get("id")},
+                                   "Permanently revoke this API key? Use Toolkit Disable for reversible access.")
                     if st == "active" else ""),
         }
         rows.append(row)

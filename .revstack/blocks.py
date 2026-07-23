@@ -8,9 +8,9 @@ Data comes from this project's own routes (.revstack/routes.py), mounted at
   links, email links, product stores) carry a per-row Revoke **action column** and poll so they
   self-refresh after a revoke.
 - The update channel is a native staged `action` block for production publish.
-- The feature-policy table exposes admin-only Hide/Show actions from the fixed
-  Golfballs YAML document. Values have no direct action; Hide fail-closes an
-  enabled boolean to false, while Show never re-enables it.
+- The feature-policy table edits the database-owned global policy. A separate
+  table lists explicit per-installation overrides; the legacy YAML is only a
+  bootstrap seed for an empty database.
 - An `overview` v2 block gives at-a-glance counts.
 
 Key CREATION stays in the `api-key` terminal CLI — the Button/action primitives
@@ -118,6 +118,8 @@ _table("keys", "API keys", "key", "keys",
        {"w": 3, "h": 3, "minW": 2, "minH": 2}, poll=15)
 _table("configuration", "Feature policy", "toggle-left", "configuration-values",
        {"w": 4, "h": 4, "minW": 2, "minH": 2}, poll=30)
+_table("configuration-overrides", "User setting overrides", "users", "configuration-overrides",
+       {"w": 4, "h": 3, "minW": 2, "minH": 2}, poll=20)
 _table("settings-shares", "Shared settings", "sliders", "shares/settings",
        {"w": 3, "h": 2, "minW": 2, "minH": 2}, poll=20, row_details=True)
 _table("email-links", "Temp email links", "mail", "shares/email",

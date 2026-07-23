@@ -77,15 +77,23 @@
         "auth": "mixed",
         "preferred_auth": "api-key",
         "summary": "Canonical extension policy envelope for installations or dashboard administrators.",
-        "description": "Returns the managed Golfballs settings policy to an extension installation key. An accompanying administrator dashboard cookie intentionally returns admin_bypass=true, configuration_reason=dashboard_admin_bypass, and configuration=null so the extension restores unrestricted local settings."
+        "description": "Returns the database-owned global Golfballs settings policy resolved with any explicit per-installation overrides. An accompanying administrator dashboard cookie intentionally returns admin_bypass=true, configuration_reason=dashboard_admin_bypass, and configuration=null so the extension restores unrestricted local settings. The legacy YAML is consulted only when seeding an empty policy database."
       },
       "GET /configuration-values": {
-        "summary": "List every managed extension policy value.",
-        "description": "Returns an administrator table of section, setting path, current value, hidden state, and managed state with a visibility action for every entry."
+        "summary": "List and edit the global extension settings policy.",
+        "description": "Returns an administrator table of every registered value, hidden state, and managed state with declarative edit actions. The database is authoritative; installation-specific differences are layered separately."
+      },
+      "POST /configuration-values/update": {
+        "summary": "Update one global extension setting policy entry.",
+        "description": "Validates a registered setting path and updates any explicitly supplied value, hidden, or managed fields in the database-owned global policy.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["path"], "properties": {"path": {"type": "array", "items": {"type": "string"}}, "value": {}, "hidden": {"type": "boolean"}, "managed": {"type": "boolean"}}}}}
+        }
       },
       "POST /configuration-values/toggle": {
-        "summary": "Hide or show one extension policy setting.",
-        "description": "Applies an optimistic visibility update to one validated nested setting path. Hiding a true boolean also disables it; conflicts return 409 and invalid paths return 404 or 422.",
+        "summary": "Deprecated compatibility action to hide or show one global setting.",
+        "description": "Applies an optimistic database visibility update to one validated nested setting path. It no longer changes the setting value or writes the legacy YAML; new clients should use POST /configuration-values/update.",
         "request_body": {
           "required": true,
           "content": {
@@ -102,6 +110,25 @@
           }
         }
       },
+      "GET /configuration-overrides": {
+        "summary": "List explicit per-user extension settings overrides.",
+        "description": "Returns the dedicated administrator table of value, visibility, and management differences stored for Golfballs installation credentials, with edit and clear actions."
+      },
+      "GET /keys/{key_id}/configuration-overrides": {
+        "summary": "Read resolved settings and overrides for one installation.",
+        "description": "Returns the remote table used by an API-key row's Settings modal. Every registered entry includes global and effective values plus nullable override modes.",
+        "params": [{"name": "key_id", "in": "path", "required": true, "schema": {"type": "string"}}]
+      },
+      "POST /keys/{key_id}/configuration-overrides": {
+        "summary": "Set or inherit one installation-specific setting override.",
+        "description": "Validates the setting against the extension registry and independently applies value, visibility, and management modes. Choosing inherit for every mode removes the stored row.",
+        "params": [{"name": "key_id", "in": "path", "required": true, "schema": {"type": "string"}}]
+      },
+      "POST /keys/{key_id}/configuration-overrides/clear": {
+        "summary": "Clear one installation-specific setting override.",
+        "description": "Deletes the explicit override for the registered setting path so the installation immediately inherits global policy again.",
+        "params": [{"name": "key_id", "in": "path", "required": true, "schema": {"type": "string"}}]
+      },
       "GET /client/health": {
         "auth": "api-key",
         "summary": "Validate an extension installation session.",
@@ -110,7 +137,7 @@
       "GET /client/configuration": {
         "auth": "api-key",
         "summary": "Read managed extension policy.",
-        "description": "Project-owned replacement for the deprecated core extension configuration route. The compatibility file remains the policy source during migration, while access decisions are database-backed."
+        "description": "Project-owned replacement for the deprecated core extension configuration route. Returns the database global policy resolved with the authenticated installation's overrides; the compatibility YAML is only a one-time seed."
       },
       "GET /client/identity": {
         "auth": "api-key",
@@ -302,7 +329,7 @@
       },
       "GET /keys": {
         "summary": "List extension installation credentials.",
-        "description": "Returns only Golfballs-owned credential metadata and lifecycle state, the registered extension user (or an explicit unregistered state), and separate Help Companion grant and revocation controls. Secret API-key values are never returned."
+        "description": "Returns only Golfballs-owned credential metadata and lifecycle state, the registered extension user (or an explicit unregistered state), reversible access/chat controls, and a remote per-user Settings modal. Secret API-key values are never returned."
       },
       "POST /keys/revoke": {
         "summary": "Revoke one extension installation credential.",

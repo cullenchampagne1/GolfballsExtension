@@ -6,309 +6,441 @@
   "features": {
     "copyIdsEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Copy IDs",
+      "managedDefault": true
     },
     "chargeEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Charge Card",
+      "managedDefault": true
     },
     "orderEditEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Order Edit",
+      "managedDefault": true
     },
     "emailPreviewEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Email Preview",
+      "managedDefault": true
     },
     "imagePreviewEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Image Viewer",
+      "managedDefault": true
     },
     "calendarEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Order Dates",
+      "managedDefault": true
     },
     "watchListEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Watchlist",
+      "managedDefault": true
     },
     "autoPushEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Auto Push",
+      "managedDefault": true
     },
     "signifydGlowEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Signifyd Glow",
+      "managedDefault": true
     },
     "submitProofEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Submit Proof",
+      "managedDefault": true
     },
     "taskListEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Task List",
+      "managedDefault": true
     },
     "marginCalcEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Margin Calculator",
+      "managedDefault": true
     },
     "crmSearchEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "CRM Search",
+      "managedDefault": true
     },
     "phoneFinderEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Phone Finder",
+      "managedDefault": true
     },
     "emailTemplatesEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Email Templates",
+      "managedDefault": true
     },
     "powerAutomateEnabled": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "powerAutomateEnabled",
+      "managedDefault": true
     },
     "actionsShelfEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Quick Actions Shelf",
+      "managedDefault": true
     },
     "giftCatalogEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Gifting Catalog",
+      "managedDefault": true
     },
     "callLogEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Call Log",
+      "managedDefault": true
     },
     "quickTaskEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Quick Task",
+      "managedDefault": true
     },
     "crmNewContactEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "New Contact",
+      "managedDefault": true
     },
     "textPreviewEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Text Preview",
+      "managedDefault": true
     },
     "campaignManagerEnabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Campaign Manager",
+      "managedDefault": true
     }
   },
   "developerSettings": {
     "numberDisplay.enabled": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Animated number displays",
+      "managedDefault": true
     },
     "numberDisplay.durationMs": {
       "type": "number",
       "default": 400,
+      "label": "Number display duration",
+      "managedDefault": true,
       "min": 0,
       "max": 5000
     },
     "popup.ignorePageContext": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Popup: ignore page context",
+      "managedDefault": true
     },
     "proposalDebug.enabled": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Proposal Debug: intercept submit requests",
+      "managedDefault": true
     },
     "golfballViewer.showDebugHud": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Golfball viewer: camera debug HUD",
+      "managedDefault": true
     },
     "golfballViewer.renderDebug": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Golfball viewer: render diagnostics",
+      "managedDefault": true
     },
     "imageViewer.ballChipOnly": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Image Viewer: ball & chip only",
+      "managedDefault": true
     },
     "email.localPart": {
       "type": "string",
-      "default": ""
+      "default": "",
+      "label": "Email account host",
+      "managedDefault": false
     },
     "golfballViewer.ballScale": {
       "type": "number",
       "default": 1,
+      "label": "Golfball viewer: default ball scale",
+      "managedDefault": true,
       "min": 0.4,
       "max": 2.5
     },
     "golfballViewer.giftSetScale": {
       "type": "number",
       "default": 0.9,
+      "label": "Golfball viewer: default gift-set scale",
+      "managedDefault": true,
       "min": 0.3,
       "max": 2.5
     },
     "golfballViewer.ballRotX": {
       "type": "number",
       "default": 0,
+      "label": "Golfball viewer: default ball rotation X (deg)",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.ballRotY": {
       "type": "number",
       "default": 0,
+      "label": "Golfball viewer: default ball rotation Y (deg)",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.ballRotZ": {
       "type": "number",
       "default": 0,
+      "label": "Golfball viewer: default ball rotation Z (deg)",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.printAreaScale": {
       "type": "number",
       "default": 0.7,
+      "label": "Golfball viewer: print area scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 1.5
     },
     "golfballViewer.spinSpeed": {
       "type": "number",
       "default": 0.01,
+      "label": "Golfball viewer: auto-spin speed",
+      "managedDefault": true,
       "min": 0,
       "max": 0.1
     },
     "golfballViewer.snapPreview": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Golfball viewer: preview export pose",
+      "managedDefault": true
     },
     "marginCalc.draggable": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Margin Calculator: draggable mode",
+      "managedDefault": true
     },
     "imageViewer.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Image Viewer: draggable mode",
+      "managedDefault": true
     },
     "watchList.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Watch List: draggable mode",
+      "managedDefault": true
     },
     "crmCreateContact.draggable": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "CRM New Contact: draggable mode",
+      "managedDefault": true
     },
     "crmCreateContact.useMock": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "CRM New Contact: force mock mode",
+      "managedDefault": true
     },
     "crmSearch.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "CRM Search: draggable mode",
+      "managedDefault": true
     },
     "taskList.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Task List: draggable mode",
+      "managedDefault": true
     },
     "submitProof.draggable": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "Submit Proof: draggable mode",
+      "managedDefault": true
     },
     "calendar.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Order Dates: draggable mode",
+      "managedDefault": true
     },
     "callLog.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Call Log: draggable mode",
+      "managedDefault": true
     },
     "emailPreview.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Email Preview: draggable mode",
+      "managedDefault": true
     },
     "quickTask.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Quick Task: draggable mode",
+      "managedDefault": true
     },
     "textPreview.draggable": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Text Preview: draggable mode",
+      "managedDefault": true
     },
     "crmCreateContact.requireAccount": {
       "type": "bool",
-      "default": true
+      "default": true,
+      "label": "CRM New Contact: require account",
+      "managedDefault": true
     },
     "watchList.autoDeleteCompletedDays": {
       "type": "number",
       "default": 5,
+      "label": "Watch list: auto-delete completed items after (days)",
+      "managedDefault": true,
       "min": 0,
       "max": 365
     },
     "marginCalc.minAllowedMargin": {
       "type": "number",
       "default": 30,
+      "label": "Margin calculator: minimum allowed margin",
+      "managedDefault": true,
       "min": 0,
       "max": 100
     },
     "giftCatalog.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Gifting Catalog: zoom scale",
+      "managedDefault": true,
       "min": 1,
       "max": 3
     },
     "campaignManager.scale": {
       "type": "number",
       "default": 1.2,
+      "label": "Campaign Manager: zoom scale",
+      "managedDefault": true,
       "min": 1,
       "max": 2
     },
     "giftCatalog.previewScale": {
       "type": "number",
       "default": 2,
+      "label": "Gifting Catalog: live preview ball scale",
+      "managedDefault": true,
       "min": 0.5,
       "max": 5
     },
     "giftCatalog.chipPreviewScale": {
       "type": "number",
       "default": 1.58,
+      "label": "Gifting Catalog: live preview poker-chip scale",
+      "managedDefault": true,
       "min": 0.5,
       "max": 5
     },
     "giftCatalog.divotPreviewScale": {
       "type": "number",
       "default": 1,
+      "label": "Gifting Catalog: live preview divot-tool scale",
+      "managedDefault": true,
       "min": 0.3,
       "max": 5
     },
     "giftCatalog.bartenderPreviewScale": {
       "type": "number",
       "default": 1.1,
+      "label": "Gifting Catalog: live preview bartender-tool scale",
+      "managedDefault": true,
       "min": 0.3,
       "max": 5
     },
     "giftCatalog.giftSetPreviewScale": {
       "type": "number",
       "default": 1,
+      "label": "Gifting Catalog: live preview gift-set scale",
+      "managedDefault": true,
       "min": 0.3,
       "max": 5
     },
     "giftCatalog.giftSetPreviewRotX": {
       "type": "number",
       "default": -22,
+      "label": "Gifting Catalog: gift-set view tilt (X)",
+      "managedDefault": true,
       "min": -80,
       "max": 20
     },
     "giftCatalog.giftSetPreviewRotY": {
       "type": "number",
       "default": 0,
+      "label": "Gifting Catalog: gift-set view tilt (Y)",
+      "managedDefault": true,
       "min": -45,
       "max": 45
     },
     "giftCatalog.cacheHours": {
       "type": "number",
       "default": 24,
+      "label": "Gifting Catalog: re-index interval (hours)",
+      "managedDefault": true,
       "min": 0,
       "max": 168
     },
     "giftCatalog.defaultSort": {
       "type": "select",
       "default": "popular",
+      "label": "Gifting Catalog: default sort",
+      "managedDefault": true,
       "options": [
         "popular",
         "priceLow",
@@ -319,6 +451,8 @@
     "giftCatalog.density": {
       "type": "select",
       "default": "comfortable",
+      "label": "Gifting Catalog: card density",
+      "managedDefault": true,
       "options": [
         "comfortable",
         "compact"
@@ -327,6 +461,8 @@
     "submitProof.defaultOrderType": {
       "type": "select",
       "default": "Live Order",
+      "label": "Submit Proof: default order type",
+      "managedDefault": true,
       "options": [
         "Live Order",
         "Potential Order",
@@ -336,446 +472,598 @@
     "popup.forceMatchedCount": {
       "type": "number",
       "default": 0,
+      "label": "Popup: force matched count",
+      "managedDefault": true,
       "min": 0,
       "max": 50
     },
     "forceMockData": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Force mock data",
+      "managedDefault": true
     },
     "popup.ignoreContext.charge": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Popup: ignore context — Charge Card",
+      "managedDefault": true
     },
     "popup.ignoreContext.orderEdit": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Popup: ignore context — Order Edit",
+      "managedDefault": true
     },
     "popup.ignoreContext.watch": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Popup: ignore context — Watch Order",
+      "managedDefault": true
     },
     "popup.ignoreContext.submitProof": {
       "type": "bool",
-      "default": false
+      "default": false,
+      "label": "Popup: ignore context — Submit Proof",
+      "managedDefault": true
     },
     "golfballViewer.snap.ball.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.ball.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.ball.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.ball.scale": {
       "type": "number",
       "default": 1.7,
+      "label": "Snapshot Ball: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.ball.rotX": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.ball.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.ball.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.chip.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Poker chip: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.chip.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Poker chip: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.chip.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Poker chip: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.chip.scale": {
       "type": "number",
       "default": 1.65,
+      "label": "Snapshot Poker chip: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.chip.rotX": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Poker chip: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.chip.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Poker chip: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.chip.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Poker chip: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.divot.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Divot tool: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.divot.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Divot tool: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.divot.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Divot tool: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.divot.scale": {
       "type": "number",
       "default": 1.6,
+      "label": "Snapshot Divot tool: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.divot.rotX": {
       "type": "number",
       "default": -10,
+      "label": "Snapshot Divot tool: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.divot.rotY": {
       "type": "number",
       "default": 20,
+      "label": "Snapshot Divot tool: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.divot.rotZ": {
       "type": "number",
       "default": 30,
+      "label": "Snapshot Divot tool: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.bartender.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Bartender tool: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.bartender.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Bartender tool: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.bartender.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Bartender tool: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.bartender.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Snapshot Bartender tool: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.bartender.rotX": {
       "type": "number",
       "default": -10,
+      "label": "Snapshot Bartender tool: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.bartender.rotY": {
       "type": "number",
       "default": 20,
+      "label": "Snapshot Bartender tool: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.bartender.rotZ": {
       "type": "number",
       "default": 30,
+      "label": "Snapshot Bartender tool: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.marker.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball marker: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.marker.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball marker: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.marker.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball marker: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.marker.scale": {
       "type": "number",
       "default": 1.65,
+      "label": "Snapshot Ball marker: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.marker.rotX": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball marker: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.marker.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball marker: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.marker.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Ball marker: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftbox.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — poker chip: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftbox.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — poker chip: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftbox.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — poker chip: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftbox.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Snapshot Gift set — poker chip: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.giftset.giftbox.rotX": {
       "type": "number",
       "default": 22,
+      "label": "Snapshot Gift set — poker chip: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftbox.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — poker chip: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftbox.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — poker chip: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxLever.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — lever: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxLever.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — lever: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxLever.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — lever: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxLever.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Snapshot Gift set — lever: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.giftset.giftboxLever.rotX": {
       "type": "number",
       "default": 22,
+      "label": "Snapshot Gift set — lever: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxLever.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — lever: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxLever.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — lever: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxBartender.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — bartender: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxBartender.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — bartender: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxBartender.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — bartender: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxBartender.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Snapshot Gift set — bartender: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.giftset.giftboxBartender.rotX": {
       "type": "number",
       "default": 22,
+      "label": "Snapshot Gift set — bartender: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxBartender.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — bartender: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxBartender.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — bartender: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood poker: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood poker: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood poker: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Snapshot Gift set — wood poker: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.rotX": {
       "type": "number",
       "default": 22,
+      "label": "Snapshot Gift set — wood poker: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood poker: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxWoodPoker.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood poker: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.x": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood lever: position X",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.y": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood lever: position Y",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.z": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood lever: position Z",
+      "managedDefault": true,
       "min": -300,
       "max": 300
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.scale": {
       "type": "number",
       "default": 1.8,
+      "label": "Snapshot Gift set — wood lever: scale",
+      "managedDefault": true,
       "min": 0.2,
       "max": 12
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.rotX": {
       "type": "number",
       "default": 22,
+      "label": "Snapshot Gift set — wood lever: rotation X",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.rotY": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood lever: rotation Y",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     },
     "golfballViewer.snap.giftset.giftboxWoodLever.rotZ": {
       "type": "number",
       "default": 0,
+      "label": "Snapshot Gift set — wood lever: rotation Z",
+      "managedDefault": true,
       "min": -180,
       "max": 180
     }
@@ -784,6 +1072,8 @@
     "crm": {
       "type": "bool",
       "default": false,
+      "label": "CRM",
+      "managedDefault": true,
       "pageIds": [
         "dashboard",
         "search",
@@ -807,7 +1097,9 @@
   },
   "customPages": {
     "type": "bool",
-    "default": true
+    "default": true,
+    "label": "Custom pages",
+    "managedDefault": true
   }
 });
 })(globalThis);

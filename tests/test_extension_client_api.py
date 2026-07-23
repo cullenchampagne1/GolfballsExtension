@@ -40,6 +40,14 @@ class FakeSession:
         return self.rows.get(subject_id)
 
 
+class FakeSettingsPolicy:
+    def resolve(self, credential_id):
+        return ({
+            "schema_version": 1,
+            "credential_id": credential_id,
+        }, "database-revision")
+
+
 class ExtensionClientAccessTests(unittest.TestCase):
     def setUp(self):
         FakeSession.rows = {}
@@ -48,8 +56,8 @@ class ExtensionClientAccessTests(unittest.TestCase):
         self.api = client_api_module.ExtensionClientApi(
             auth_manager=auth,
             models=models,
-            config_access_manager=object(),
-            config_error=RuntimeError,
+            settings_policy_store=FakeSettingsPolicy(),
+            settings_policy_error=RuntimeError,
             client_scope="client:extension",
             project_dir=ROOT,
             public_origin="https://api.cullenchampagne.com",
@@ -112,6 +120,14 @@ class ExtensionClientAccessTests(unittest.TestCase):
         self.assertTrue(payload["session_valid"])
         self.assertTrue(payload["extension_enabled"])
         self.assertTrue(payload["assistant_enabled"])
+
+    def test_configuration_is_resolved_for_the_authenticated_installation(self):
+        self.api.auth_manager.authenticate_session_cookie = lambda _request: None
+        response = self.api.configuration(self.request())
+        payload = json.loads(response.body)
+        self.assertEqual(payload["revision"], "database-revision")
+        self.assertEqual(payload["configuration"]["credential_id"], "install-1")
+        self.assertFalse(payload["admin_bypass"])
 
 
 if __name__ == "__main__":
