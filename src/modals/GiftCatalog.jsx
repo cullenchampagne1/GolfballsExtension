@@ -771,9 +771,6 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, 
         {/* No "All Items" row — the catalog defaults to the full golfballs.com
             set, and a plain search spans everything. Pick a department to browse
             one (click it again to clear); /category scopes a search. ── */}
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '3px 11px 4px', flexShrink: 0 }}>My catalog</div>
-        <SavedNavRow label="Favorites" icon={<StarI size={13} />} count={favoriteCount || 0}
-          active={view === 'catalog' && sel === 'favorites'} onClick={() => onSelect('favorites')} />
         {/* ── Departments — custom-logo items are folded into their depts; use
             the /Commissionable filter to scope to commissionable products. ── */}
         {depts.length > 0 && (
@@ -795,6 +792,8 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, 
         {/* ── Saved — lives inside the scroll list, anchored to the categories
             so it never shifts when the proposal dock animates in/out below. ── */}
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '12px 11px 4px', flexShrink: 0 }}>Saved</div>
+        <SavedNavRow label="Favorites" icon={<StarI size={13} />} count={favoriteCount || 0}
+          active={view === 'catalog' && sel === 'favorites'} onClick={() => onSelect('favorites')} />
         <SavedNavRow label="Saved Proposals" icon={<I.bookmark size={14} />} count={savedCount}
           active={view === 'proposals'} onClick={() => onSetView('proposals')} />
         {/* Live proposals already attached to the account's opportunities (pulled
