@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CATALOG_ACCOUNT_CONTEXT_NOTICE,
   CATALOG_CARD_WIDTH,
   CATALOG_MOUNT_SCALE_CATEGORY,
   CATALOG_PROPOSAL_WIDTH,
@@ -27,6 +28,13 @@ describe('catalog presentation', () => {
   it('shortens Promotional Products only for the sidebar presentation', () => {
     assert.equal(catalogSidebarLabel('Promotional Products'), 'Promotional');
     assert.equal(catalogSidebarLabel('Golf Balls'), 'Golf Balls');
+  });
+
+  it('presents missing CRM context as concise title and supporting copy', () => {
+    assert.deepEqual(CATALOG_ACCOUNT_CONTEXT_NOTICE, {
+      title: 'No account in context',
+      message: 'Open the catalog from a Golfballs.com CRM account or opportunity page to view its active proposals.',
+    });
   });
 
   it('normalizes the saved preference and never magnifies past it while fitting', () => {

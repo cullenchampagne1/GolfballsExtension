@@ -8,6 +8,10 @@ export const CATALOG_CARD_HEIGHT = 760;
 export const CATALOG_PROPOSAL_WIDTH = 416;
 export const CATALOG_VIEWPORT_GUTTER = 48;
 export const CATALOG_MOUNT_SCALE_CATEGORY = null;
+export const CATALOG_ACCOUNT_CONTEXT_NOTICE = Object.freeze({
+  title: 'No account in context',
+  message: 'Open the catalog from a Golfballs.com CRM account or opportunity page to view its active proposals.',
+});
 
 export function normalizeCatalogScale(value) {
   const numeric = Number(value);

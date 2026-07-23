@@ -22,6 +22,7 @@ import { ballish, supportsLogo, decoImprints, canApplyImprint, mergeImprint } fr
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
 import {
+  CATALOG_ACCOUNT_CONTEXT_NOTICE,
   CATALOG_CARD_HEIGHT,
   CATALOG_CARD_WIDTH,
   CATALOG_PROPOSAL_WIDTH,
@@ -1826,8 +1827,34 @@ function CurrentProposalCard({ entries, onOpen }) {
   );
 }
 
+function GalleryNotice({ icon, title, message }) {
+  return (
+    <div style={{ minHeight: 150, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 12px' }}>
+      <div role="status" style={{
+        width: '100%', maxWidth: 430, display: 'flex', alignItems: 'center', gap: 12,
+        padding: '13px 14px', borderRadius: 'var(--gb-r-lg)',
+        background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,.035)',
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flex: '0 0 auto',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)',
+          color: 'var(--gb-brand-label)',
+        }}>
+          {icon || <I.alert size={15} />}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 12.5, lineHeight: 1.25, fontWeight: 700, letterSpacing: -.08, color: 'var(--gb-text-primary)' }}>{title}</div>
+          <div style={{ marginTop: 3, fontSize: 11.25, lineHeight: 1.45, fontWeight: 500, color: 'var(--gb-text-muted)' }}>{message}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail,
-  title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, error, onRefresh, emptyTitle, emptyText, subtitleOf,
+  title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, notice, error, onRefresh, emptyTitle, emptyText, subtitleOf,
   selectedIds, onToggleSelect, onOpenMulti, onClearSelection }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -1883,6 +1910,8 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 0' }}>
             <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading proposals…
           </div>
+        ) : notice ? (
+          <GalleryNotice icon={notice.icon} title={notice.title} message={notice.message} />
         ) : error ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '40px 16px' }}>
             <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', textAlign: 'center' }}><I.alert size={14} style={{ color: 'var(--gb-error-fg, var(--gb-error))', verticalAlign: 'middle', marginRight: 6 }} />{error}</div>
@@ -3749,7 +3778,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <SavedGallery items={currentProposals} loadedId={loadedId} hideCurrent readOnly
               title="Current Proposals" headerIcon={<I.card size={16} />}
               subtitleText={pageContext.accountId ? <>Live from the CRM{pageContext.accountName ? ` · ${pageContext.accountName}` : ''} · click a card for its breakdown</> : 'Open from a CRM account to see its proposals'}
-              loading={currentLoading} error={pageContext.accountId ? currentError : 'No account in context — open the catalog from a golfballs.com CRM account or opportunity page.'}
+              loading={currentLoading}
+              notice={!pageContext.accountId ? { ...CATALOG_ACCOUNT_CONTEXT_NOTICE, icon: <I.user size={15} /> } : undefined}
+              error={pageContext.accountId ? currentError : undefined}
               onRefresh={pageContext.accountId ? loadCurrentProposals : undefined}
               emptyTitle="No active proposals" emptyText="This account’s open opportunities have no saved proposals yet."
               subtitleOf={(it) => it.opportunitySubject || (it.contactName) || ''}
