@@ -66,11 +66,24 @@ function main() {
     '--force',
   ];
 
+  // Locate the converter. If `xcode-select` still points at Command Line Tools
+  // (common right after installing Xcode), fall back to a full Xcode.app via
+  // DEVELOPER_DIR — no `sudo xcode-select` needed.
+  const convertEnv = { ...process.env };
   let converterFound = true;
   try {
     execFileSync('xcrun', ['--find', 'safari-web-extension-converter'], { stdio: 'ignore' });
   } catch {
     converterFound = false;
+    for (const app of ['/Applications/Xcode.app', '/Applications/Xcode-beta.app']) {
+      const dev = `${app}/Contents/Developer`;
+      if (existsSync(`${dev}/usr/bin/safari-web-extension-converter`)) {
+        convertEnv.DEVELOPER_DIR = dev;
+        converterFound = true;
+        console.log(`› using Xcode at ${app} (active dir is Command Line Tools)`);
+        break;
+      }
+    }
   }
 
   if (!converterFound) {
@@ -84,7 +97,7 @@ function main() {
 
   console.log('› converting to a Safari Xcode project…');
   rmSync(PROJECT, { recursive: true, force: true });
-  execFileSync('xcrun', convertArgs, { cwd: ROOT, stdio: 'inherit' });
+  execFileSync('xcrun', convertArgs, { cwd: ROOT, stdio: 'inherit', env: convertEnv });
   console.log(`\n✓ Safari project → ${PROJECT}`);
   console.log('  Open it in Xcode, Run, then enable via Safari ▸ Develop ▸ Allow Unsigned Extensions.');
 }
