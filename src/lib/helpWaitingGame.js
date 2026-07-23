@@ -7,8 +7,11 @@ const RUNNER_HEIGHT = 18;
 const OBSTACLE_WIDTH = 8;
 const OBSTACLE_HEIGHT = 15;
 const RUN_SPEED = 96;
-const JUMP_SPEED = 125;
-const RUNNER_GRAVITY = 500;
+// A fast launch plus firm gravity produces a ~23.6 px apex and ~0.54 s
+// airtime. That fits the 24 px scene headroom while leaving about 0.34 s
+// above cactus height—longer than the obstacle's horizontal contact window.
+const JUMP_SPEED = 175;
+const RUNNER_GRAVITY = 650;
 
 const FLAPPY_HEIGHT = 48;
 const BIRD_X = 28;

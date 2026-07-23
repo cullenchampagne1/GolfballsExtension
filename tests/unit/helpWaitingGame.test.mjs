@@ -21,16 +21,38 @@ describe('Help Companion waiting games', () => {
     assert.equal(pickWaitingGame(() => { throw new Error('no entropy'); }), WAITING_GAME_KINDS.runner);
   });
 
-  it('gives the runner a short, bounded jump arc', () => {
+  it('gives the runner a high, brisk jump arc with a useful clearance window', () => {
     let state = jumpWaitingGame(createWaitingGameState());
     assert.ok(state.velocityY > 0);
-    state = stepWaitingGame(state, 0.05);
-    assert.ok(state.runnerY > 0);
-    for (let index = 0; index < 11; index += 1) {
-      state = stepWaitingGame(state, 0.05);
+    let apex = 0;
+    let airtime = 0;
+    let clearanceTime = 0;
+    const frameSeconds = 1 / 60;
+    for (let index = 0; index < 120; index += 1) {
+      state = stepWaitingGame(state, frameSeconds);
+      apex = Math.max(apex, state.runnerY);
+      if (state.runnerY > 0) airtime += frameSeconds;
+      if (state.runnerY >= WAITING_GAME_WORLD.obstacleHeight - 1) {
+        clearanceTime += frameSeconds;
+      }
+      if (state.runnerY === 0) break;
     }
+    assert.ok(apex >= 22 && apex <= 24, `expected a 22–24 px apex, received ${apex}`);
+    assert.ok(airtime >= 0.5 && airtime <= 0.6, `expected brisk airtime, received ${airtime}`);
+    assert.ok(clearanceTime >= 0.3, `expected a playable clearance window, received ${clearanceTime}`);
     assert.equal(state.runnerY, 0);
     assert.equal(state.velocityY, 0);
+  });
+
+  it('clears a cactus when the jump starts about 100 ms before contact', () => {
+    let state = {
+      ...jumpWaitingGame(createWaitingGameState()),
+      obstacleX: WAITING_GAME_WORLD.runnerX + WAITING_GAME_WORLD.runnerWidth + 9,
+    };
+    for (let index = 0; index < 8; index += 1) {
+      state = stepWaitingGame(state, 0.05);
+    }
+    assert.equal(state.crashed, false);
   });
 
   it('detects a grounded collision and preserves the best score on restart', () => {
