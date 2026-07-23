@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
+import { getAssetURL } from '../lib/assetStore.js';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -77,7 +78,7 @@ const MODEL_VERSION = '20250607-15-markerflat';
 // smaller than the 3D-view ball whenever the OBJ's native radius != this value.
 const BALL_NORMALIZE_RADIUS = 100;
 
-async function loadThreeAndModel(shape = 'ball') {
+async function loadThreeAndModel(shape = 'ball', makeProgress) {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
   // whichever is slowest, not the sum. cannon-es is pulled in here too so throw
   // mode has zero extra wait when toggled.
@@ -94,14 +95,13 @@ async function loadThreeAndModel(shape = 'ball') {
   }
   const { OBJLoader } = cache.three;
 
-  // Kick off the model fetch+parse exactly once per shape. The OBJ is web-
-  // accessible so chrome.runtime.getURL gives a load-anywhere URL.
+  // Kick off the model fetch+parse exactly once per shape. The heavy OBJ is
+  // no longer bundled — assetStore downloads it from the backend on first use,
+  // caches it in the Cache API, and hands back a local blob: URL (already
+  // unique per download, so no ?v= cache-bust is needed).
   if (!cache.models[shape]) {
     const rel = MODEL_URLS[shape] || MODEL_URLS.ball;
-    const base = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-      ? chrome.runtime.getURL(rel)
-      : rel;
-    const url = `${base}?v=${MODEL_VERSION}`;   // defeat stale .obj caching
+    const url = await getAssetURL(rel, makeProgress?.(rel));
     cache.models[shape] = new Promise((resolve, reject) => {
       const loader = new OBJLoader();
       loader.load(
@@ -151,15 +151,19 @@ async function loadThreeAndModel(shape = 'ball') {
    three.js' BUILT-IN roughnessMap + normalMap (robust, no custom sampling GLSL)
    to scuff the steel. Cached once + kept alive (small, shared across mounts). */
 let _metalMapsPromise = null;
-function loadMetalMaps(THREE) {
+function loadMetalMaps(THREE, makeProgress) {
   if (_metalMapsPromise) return _metalMapsPromise;
-  const u = (rel) => `${(typeof chrome !== 'undefined' && chrome.runtime?.getURL) ? chrome.runtime.getURL(rel) : rel}?v=${MODEL_VERSION}`;
   const tl = new THREE.TextureLoader();
-  const load1 = (rel) => new Promise((res) => tl.load(u(rel), (t) => {
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.colorSpace = THREE.NoColorSpace;   // roughness/normal are linear data, not sRGB
-    res(t);
-  }, undefined, () => res(null)));
+  // Resolve each texture's blob: URL from the backend (assetStore) first, then
+  // feed it to three's TextureLoader. Blob URLs are unique per download, so no
+  // ?v= cache-bust; a fetch failure resolves null (same graceful fallback).
+  const load1 = (rel) => getAssetURL(rel, makeProgress?.(rel))
+    .then((url) => new Promise((res) => tl.load(url, (t) => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.colorSpace = THREE.NoColorSpace;   // roughness/normal are linear data, not sRGB
+      res(t);
+    }, undefined, () => res(null))))
+    .catch(() => null);
   _metalMapsPromise = Promise.all([
     load1('assets/metal_texture/worn_metal_rough.jpg'),
     load1('assets/metal_texture/worn_metal_normal.png'),
@@ -287,12 +291,13 @@ let _snapEnvTex = null, _snapEnvPromise = null;
 function loadSnapEnv(THREE, EXRLoader) {
   if (_snapEnvTex) return Promise.resolve(_snapEnvTex);
   if (_snapEnvPromise) return _snapEnvPromise;
-  const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL) ? chrome.runtime.getURL(SNAP_ENV_FILE) : SNAP_ENV_FILE;
-  _snapEnvPromise = new Promise((resolve) => {
+  // Background preload of the export-photo HDRI — pulled on demand from the
+  // backend (assetStore) as a blob: URL, no progress surfaced (silent).
+  _snapEnvPromise = getAssetURL(SNAP_ENV_FILE).then((url) => new Promise((resolve) => {
     try {
       new EXRLoader().load(url, (tex) => { tex.mapping = THREE.EquirectangularReflectionMapping; _snapEnvTex = tex; resolve(tex); }, undefined, () => resolve(null));
     } catch (e) { resolve(null); }
-  });
+  })).catch(() => null);
   return _snapEnvPromise;
 }
 
@@ -444,6 +449,33 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
+  // Live download progress for the on-demand assets (assetStore streams them
+  // from the backend on first mount). `dl` drives the download screen:
+  //   { received, total, label }  (bytes)  — null once everything is ready.
+  const [dl, setDl] = useState(null);
+  // Per-asset byte progress, keyed by the old bundled rel path. Summed across
+  // every in-flight asset so the bar reflects the whole download, not one file.
+  const dlMapRef = useRef(new Map());
+  // Friendly label inferred from the asset path (models / environment / textures).
+  const dlLabel = (rel) => {
+    if (/\.obj$/i.test(rel)) return 'Loading 3D models…';
+    if (/\.exr$/i.test(rel)) return 'Loading environment / HDRI…';
+    if (/metal_texture|wood_diff|\.(png|jpe?g)$/i.test(rel)) return 'Loading textures…';
+    return 'Loading assets…';
+  };
+  // Factory: hand each asset its own onProgress(received,total) — it records the
+  // asset's bytes and republishes the summed total + a friendly label.
+  const makeProgressCb = React.useCallback((rel) => (received, total) => {
+    dlMapRef.current.set(rel, { received: received || 0, total: total || 0 });
+    let sumR = 0, sumT = 0;
+    for (const v of dlMapRef.current.values()) { sumR += v.received; sumT += v.total; }
+    setDl({ received: sumR, total: sumT, label: dlLabel(rel) });
+  }, []);
+  // Clear the download screen state once the scene is ready (or errored) so a
+  // later remount that hits the Cache API doesn't flash stale byte counts.
+  useEffect(() => {
+    if (status !== 'loading') { dlMapRef.current.clear(); setDl(null); }
+  }, [status]);
   // (Underwater tint is now a real WebGL pass — see the underwaterQuad
   // in the scene setup below. The old React state + DOM-overlayed div
   // for clipping a blue gradient at waterLineTop has been removed.)
@@ -648,7 +680,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
     (async () => {
       try {
-        const { THREE, DecalGeometry, EXRLoader, RoomEnvironment, CANNON, model } = await loadThreeAndModel(shape);
+        const { THREE, DecalGeometry, EXRLoader, RoomEnvironment, CANNON, model } = await loadThreeAndModel(shape, makeProgressCb);
         loadSnapEnv(THREE, EXRLoader);   // preload the scene-3 HDRI used to light export photos
         const isChip = shape === 'chip';
         // Divot + bartender are the same in the viewer: steel body + white marker
@@ -1152,10 +1184,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (envInFlight.has(key)) return envInFlight.get(key);
           const scene = SCENES.find((s) => s.key === key);
           if (!scene) return Promise.reject(new Error(`Unknown scene: ${key}`));
-          const p = new Promise((resolve, reject) => {
-            const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-              ? chrome.runtime.getURL(scene.file)
-              : scene.file;
+          // The HDRI .exr is downloaded on demand from the backend (assetStore)
+          // as a blob: URL and cached; progress feeds the download screen.
+          const p = getAssetURL(scene.file, makeProgressCb(scene.file)).then((url) => new Promise((resolve, reject) => {
             new EXRLoader().load(
               url,
               (tex) => {
@@ -1172,7 +1203,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               undefined,
               (err) => { envInFlight.delete(key); reject(err); },
             );
-          });
+          })).catch((err) => { envInFlight.delete(key); throw err; });
           envInFlight.set(key, p);
           return p;
         };
@@ -1301,10 +1332,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // map and stay pure vertex-color.
           let woodTex = null;
           if ((giftSet.boxModel || '').startsWith('giftboxWood')) {
-            const wbase = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-              ? chrome.runtime.getURL('assets/giftbox_model/wood_diff.jpg') : 'assets/giftbox_model/wood_diff.jpg';
+            const wurl = await getAssetURL('assets/giftbox_model/wood_diff.jpg', makeProgressCb('assets/giftbox_model/wood_diff.jpg')).catch(() => null);
             const tl = new THREE.TextureLoader();
-            woodTex = await new Promise((res) => tl.load(`${wbase}?v=${MODEL_VERSION}`, res, undefined, () => res(null)));
+            woodTex = wurl ? await new Promise((res) => tl.load(wurl, res, undefined, () => res(null))) : null;
             if (disposed) return;
             if (woodTex) {
               woodTex.colorSpace = THREE.SRGBColorSpace;
@@ -1398,7 +1428,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               // divot / bartender — steel + marker-mask + worn-metal maps (same
               // recipe as the single tool, via makeDivotOBC).
               mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, metalness: 0.5, roughness: 0.5, emissive: 0x15171b, emissiveIntensity: 0.3 });
-              const mm = await loadMetalMaps(THREE);
+              const mm = await loadMetalMaps(THREE, makeProgressCb);
               if (disposed) return;
               recordTex('metal_rough', mm.rough, 'assets/metal_texture/worn_metal_rough.jpg');
               recordTex('metal_normal', mm.normal, 'assets/metal_texture/worn_metal_normal.png');
@@ -1611,7 +1641,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Paint the metal a brushed-steel color (disc forced non-metallic white so
           // the logo reads) + scuff the steel with the user's worn-metal maps.
           const steel = new THREE.Color('#c2c6cc');
-          const mm = await loadMetalMaps(THREE);
+          const mm = await loadMetalMaps(THREE, makeProgressCb);
           if (disposed) return;
           recordTex('metal_rough', mm.rough, 'assets/metal_texture/worn_metal_rough.jpg');
           recordTex('metal_normal', mm.normal, 'assets/metal_texture/worn_metal_normal.png');
@@ -4093,7 +4123,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
             style={{ position: 'absolute', inset: 0, zIndex: 4 }}
           >
-            <LoadingBall />
+            <LoadingBall dl={dl} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -4615,13 +4645,19 @@ function LightColorChip({ color, onChange, onReset }) {
    uses stroke-dasharray to draw 25% of the circumference, then
    spins via Motion. Nested smaller ring counter-rotates for a tiny
    bit of visual interest. */
-function LoadingBall() {
+function LoadingBall({ dl }) {
+  // Determinate only once we know a byte total; otherwise an indeterminate
+  // shimmer sweeps the track (no fake percentage).
+  const hasTotal = !!(dl && dl.total > 0);
+  const pct = hasTotal ? Math.min(1, dl.received / dl.total) : 0;
+  const toMB = (n) => (n / 1048576).toFixed(1);
+  const subtitle = dl?.label || 'loading model + engine';
   return (
     <div style={{
       position: 'absolute', inset: 0,
       background: 'var(--gb-surface-canvas)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 16,
+      gap: 18,
     }}>
       <div style={{ position: 'relative', width: 52, height: 52 }}>
         {/* Static track ring — sits behind the spinning arc so the
@@ -4657,17 +4693,64 @@ function LoadingBall() {
             strokeDasharray="18 70" opacity="0.7" />
         </motion.svg>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+      {/* Frosted card — title, live subtitle, a determinate/indeterminate
+          progress bar, and a byte readout. Matches the viewer's glass chips
+          (surface-1 tint + blur + subtle border) so it reads as one system. */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+        padding: '15px 22px 16px', minWidth: 232, maxWidth: '84%',
+        background: 'color-mix(in srgb, var(--gb-surface-1) 72%, transparent)',
+        backdropFilter: 'blur(10px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(10px) saturate(1.2)',
+        border: '1px solid color-mix(in srgb, var(--gb-border-default) 60%, transparent)',
+        borderRadius: 12,
+        boxShadow: '0 10px 30px -14px rgba(0,0,0,0.55)',
+      }}>
         <span style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: 0.7,
-          textTransform: 'uppercase', color: 'var(--gb-text-secondary)',
-          fontFamily: 'var(--gb-font-sans)',
-        }}>Preparing 3D view</span>
+          fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5,
+          color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)',
+        }}>Preparing the 3D preview</span>
         <span style={{
           fontSize: 10, color: 'var(--gb-text-muted)',
           fontFamily: 'var(--gb-font-mono)', letterSpacing: 0.3,
+          minHeight: 13, textAlign: 'center',
+        }}>{subtitle}</span>
+        {/* Progress track */}
+        <div style={{
+          position: 'relative', width: 200, height: 5, marginTop: 1,
+          borderRadius: 999, overflow: 'hidden',
+          background: 'color-mix(in srgb, var(--gb-border-default) 55%, transparent)',
         }}>
-          loading model + engine
+          {hasTotal ? (
+            <motion.div
+              style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0,
+                borderRadius: 999, background: 'var(--gb-brand-label)',
+              }}
+              initial={false}
+              animate={{ width: `${(pct * 100).toFixed(1)}%` }}
+              transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+            />
+          ) : (
+            // Unknown total → indeterminate shimmer instead of a fake bar.
+            <motion.div
+              style={{
+                position: 'absolute', top: 0, bottom: 0, width: '42%',
+                borderRadius: 999,
+                background: 'linear-gradient(90deg, transparent, var(--gb-brand-label), transparent)',
+              }}
+              animate={{ left: ['-42%', '100%'] }}
+              transition={{ duration: 1.15, ease: 'easeInOut', repeat: Infinity }}
+            />
+          )}
+        </div>
+        {/* Byte readout — only meaningful when a total is known. */}
+        <span style={{
+          fontSize: 9.5, color: 'var(--gb-text-tertiary)',
+          fontFamily: 'var(--gb-font-mono)', letterSpacing: 0.3,
+          minHeight: 12,
+        }}>
+          {hasTotal ? `${toMB(dl.received)} / ${toMB(dl.total)} MB` : ''}
         </span>
       </div>
     </div>

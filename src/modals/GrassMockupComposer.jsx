@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { getAssetURL } from '../lib/assetStore.js';
 
 /* ───────────────────────────────────────────────────────────────
    GrassMockupComposer — photoreal product mockup of the ball
@@ -100,9 +101,9 @@ export const GrassMockupComposer = React.forwardRef(function GrassMockupComposer
 
     (async () => {
       try {
-        const bakeUrl = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-          ? chrome.runtime.getURL(BAKE_PATH)
-          : BAKE_PATH;
+        // The baked mockup PNG is no longer bundled — assetStore downloads it
+        // from the backend on first use (cached thereafter) and returns a blob: URL.
+        const bakeUrl = await getAssetURL(BAKE_PATH);
         const [baseImg, logoImg] = await Promise.all([
           loadImage(bakeUrl),
           loadImage(decalDataUrl),

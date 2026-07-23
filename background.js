@@ -846,6 +846,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      that page/other-extension senders are not trusted. */
   if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return;
 
+  // ── Backend origin ─────────────────────────────────────────────────────
+  // config.js owns the origin in the worker global; the 3D viewer (content
+  // script) reads it here to fetch on-demand assets. Synchronous reply.
+  if (msg.action === 'gbBackendOrigin') {
+    sendResponse({ origin: globalThis.GB_BACKEND_ORIGIN });
+    return true;
+  }
+
   // ── Installation user identity ─────────────────────────────────────────
   // The settings UI never sees the API key. It can read/update only the
   // human profile bound by the backend to this worker's existing credential.
