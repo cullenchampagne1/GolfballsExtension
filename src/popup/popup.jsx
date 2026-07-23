@@ -71,6 +71,25 @@ const sendMessage = (tabId, msg) =>
 // popup can be opened over any of them, so guard before touching them.
 const isInjectableTab = (tab) => !!(tab && tab.url && /^https?:\/\//i.test(tab.url));
 
+// Client-side access gate (FAIL-OPEN). The service worker writes
+// gbRuntimeState.{o,s} from the /client/health check: o=0 means access was
+// explicitly revoked, and a verify stamp (s) older than 48h means we couldn't
+// re-confirm within the grace window. Either closes the popup with a notice.
+// Missing/unreadable state → ALLOW, so this can never hard-lock the popup the
+// way the old gate bricked the whole extension. A determined reverse-engineer
+// can strip this check; it exists to stop the ~90% of revoked users who won't.
+const ACCESS_GRACE_MS = 48 * 60 * 60 * 1000;
+const accessAllowed = (st, now = Date.now()) => {
+  if (!st || typeof st !== 'object') return true;      // no state yet → optimistic
+  if (!(st.o === 1 || st.o === true)) return false;    // explicitly revoked
+  const stamp = Number(st.s) || 0;
+  return !stamp || (now - stamp) < ACCESS_GRACE_MS;    // 48h offline grace
+};
+const readAccessState = () => new Promise((resolve) => {
+  try { chrome.storage.local.get('gbRuntimeState', (d) => resolve((d && d.gbRuntimeState) || null)); }
+  catch { resolve(null); }
+});
+
 /* ============================================================
    TEMPLATE RENDERING HELPERS — preserved 1:1 from popup.js
 ============================================================ */
@@ -201,6 +220,10 @@ function PopupApp() {
     (async () => {
       const currentTab = await tabsQueryActive();
       if (cancelled || !currentTab) return;
+      // Access gate: if this installation is revoked / past the 48h grace, show
+      // the paused notice instead of the toolkit. Fail-open (accessAllowed
+      // returns true on any missing/unreadable state).
+      if (!accessAllowed(await readAccessState())) { if (!cancelled) setStage('revoked'); return; }
       await new Promise((res) => {
         try { chrome.storage.local.set({ orderTabId: currentTab.id }, res); }
         catch { res(); }
@@ -481,6 +504,7 @@ function PopupApp() {
   const shellMinHeight = emailTemplatesOn ? 340 : 0;
   if (stage === 'loading') return <Shell templateCount={templateCount} minHeight={shellMinHeight}><LoadingState /></Shell>;
   if (stage === 'empty')   return <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
+  if (stage === 'revoked') return <Shell templateCount={0} minHeight={shellMinHeight}><RevokedNotice /></Shell>;
 
   const tpl = visibleTemplates.find((t) => t.id === selectedId);
 
@@ -673,6 +697,31 @@ function LoadingState() {
       color: 'var(--gb-text-muted)', fontSize: 12, fontWeight: 500, padding: '8px 0',
     }}>
       <Spinner size={12} /> Scanning page…
+    </div>
+  );
+}
+
+/* ============================================================
+   STAGE — REVOKED (access paused)
+============================================================ */
+
+function RevokedNotice() {
+  return (
+    <div style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--gb-text-muted)', fontSize: 12, lineHeight: 1.7 }}>
+      <div style={{
+        width: 38, height: 38, margin: '0 auto 10px',
+        borderRadius: 'var(--gb-r-md)',
+        background: 'var(--gb-fill-subtle)',
+        border: '1px solid var(--gb-border-default)',
+        color: 'var(--gb-text-tertiary)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <I.cog size={17} />
+      </div>
+      <div style={{ color: 'var(--gb-text-primary)', fontSize: 12.5, fontWeight: 700, marginBottom: 3 }}>
+        Access paused
+      </div>
+      <div>This installation isn’t currently authorized.<br />Contact your administrator if this is unexpected.</div>
     </div>
   );
 }

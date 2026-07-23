@@ -13,6 +13,20 @@
 if (!window.__gbContentReady) {
 window.__gbContentReady = true;
 
+// Client-side access gate (FAIL-OPEN). The service worker writes
+// gbRuntimeState.{o,s} from the /client/health check: o=0 means revoked, a
+// verify stamp (s) older than 48h means the offline grace expired. Either one
+// disables every on-page feature (see the featureFlags load below). Missing/
+// unreadable state → ALLOW, so this can never brick the page the way the old
+// gate did. A determined reverse-engineer can strip it; it's here to disable
+// the toolkit for the ~90% of revoked users who won't.
+function __gbAccessAllowed(st, now) {
+  if (!st || typeof st !== 'object') return true;
+  if (!(st.o === 1 || st.o === true)) return false;
+  const stamp = Number(st.s) || 0;
+  return !stamp || (now - stamp) < 48 * 60 * 60 * 1000;
+}
+
 // ── Authenticated runtime bridge from iframe ────────────────────────────────
   /* showGbNotification (the old vanilla toast) is gone — relay to the
      page-wide React toast (window.__gbToast, installed by the actions-
@@ -546,8 +560,16 @@ window.__gbContentReady = true;
   __gbApplySignifydGlow();
 
   // Load feature flags then conditionally add the copy button and email preview
-  chrome.storage.local.get('featureFlags', (data) => {
-    window.__gbFeatureFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, textPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, actionsShelfEnabled: true, giftCatalogEnabled: true, callLogEnabled: true, quickTaskEnabled: true, crmNewContactEnabled: true, ...(data.featureFlags || {}) };
+  const __gbDefaultFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, textPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, actionsShelfEnabled: true, giftCatalogEnabled: true, callLogEnabled: true, quickTaskEnabled: true, crmNewContactEnabled: true };
+  chrome.storage.local.get(['featureFlags', 'gbRuntimeState'], (data) => {
+    if (!__gbAccessAllowed(data.gbRuntimeState, Date.now())) {
+      // Revoked / grace expired: force every feature off. Shelf actions and
+      // page scans read window.__gbFeatureFlags at click/scan time, so all-false
+      // neutralizes the on-page toolkit without touching the shelf's mount.
+      window.__gbFeatureFlags = Object.fromEntries(Object.keys(__gbDefaultFlags).map((k) => [k, false]));
+      return;
+    }
+    window.__gbFeatureFlags = { ...__gbDefaultFlags, ...(data.featureFlags || {}) };
     // copyIdsEnabled now powers the actions-shelf "Copy order IDs"
     // action on the Orders index page — the legacy page-injected
     // button (__gbAddCopyIdsButton) was removed in favor of that path.
