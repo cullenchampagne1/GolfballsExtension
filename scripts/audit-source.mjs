@@ -26,10 +26,9 @@ const textExtensions = new Set([
 const executableExtensions = new Set(['.cjs', '.html', '.js', '.jsx', '.mjs']);
 const generatedPrefixes = ['react-dist/', 'src/lib/helpContent.js'];
 const vendorPrefixes = ['node_modules/'];
-const runtimePrefixes = ['iframe/', 'help/', 'src/content/', 'src/lib/', 'src/modals/', 'src/ui/', 'src/vanilla/'];
+const runtimePrefixes = ['iframe/', 'help/', 'lib/', 'src/content/', 'src/lib/', 'src/modals/', 'src/ui/', 'src/vanilla/'];
 const runtimeRootFiles = new Set([
-  'background.js', 'installation-auth.js',
-  'remote-settings-policy.js', 'email-relay-poll.js', 'notifications-store.js',
+  'background.js',
 ]);
 const errors = [];
 const warnings = [];

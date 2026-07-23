@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
-await import('../security-policy.js');
+await import('../lib/security-policy.js');
 const policy = globalThis.GBSecurity;
 assert.ok(policy, 'security policy must install');
 

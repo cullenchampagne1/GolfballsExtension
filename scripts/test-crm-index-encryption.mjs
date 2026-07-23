@@ -59,7 +59,7 @@ globalThis.chrome = {
   runtime: { id: 'annoeoeiijgdgmlpefllibcilcamnjek' },
 };
 
-await import(`../crm-index-store.js?test=${Date.now()}`);
+await import(`../lib/crm-index-store.js?test=${Date.now()}`);
 
 const rows = [
   {
@@ -106,7 +106,7 @@ assert.equal(otherEmployee.total, 0);
 assert.deepEqual(otherEmployee.rows, []);
 
 // A service-worker restart must reopen the same non-extractable keys without setup.
-await import(`../crm-index-store.js?restart=${Date.now()}`);
+await import(`../lib/crm-index-store.js?restart=${Date.now()}`);
 const afterRestart = await globalThis.GBCrmIndex.search({ query: 'grace', limit: 8, employeeId: '123' });
 assert.equal(afterRestart.rows[0].emails_tps[0], 'grace@example.test');
 
@@ -120,7 +120,7 @@ assert.equal(afterLegacy.cleared, 1);
 assert.equal(records.has('legacy-record'), false, 'old schema records must be cleared automatically');
 
 keys.clear();
-await import(`../crm-index-store.js?missing-key=${Date.now()}`);
+await import(`../lib/crm-index-store.js?missing-key=${Date.now()}`);
 const afterMissingKey = await globalThis.GBCrmIndex.search({ query: '', limit: 8, employeeId: '123' });
 assert.deepEqual(afterMissingKey.rows, []);
 assert.equal(records.size, 0, 'ciphertext must be cleared when its local key is missing');

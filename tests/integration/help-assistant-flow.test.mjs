@@ -36,7 +36,7 @@ function makeFlow() {
   const stored = { gbApiInstallation: validInstallation() };
   const parts = createChrome({ stored });
   const context = createContext({ chrome: parts.chrome, fetchImpl: fetchMock });
-  loadScript(context, 'installation-auth.js');
+  loadScript(context, 'lib/installation-auth.js');
   loadScript(context, 'help/help-chat-state.js');
   loadScript(context, 'help/help-data-access.js');
   loadScript(context, 'help/help-assistant.js');
@@ -110,7 +110,7 @@ describe('Help Companion background flow', () => {
     const stored = { gbApiInstallation: validInstallation() };
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
-    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'lib/installation-auth.js');
     loadScript(context, 'help/help-chat-state.js');
     loadScript(context, 'help/help-data-access.js');
     loadScript(context, 'help/help-assistant.js');
@@ -139,7 +139,7 @@ describe('Help Companion background flow', () => {
     const stored = { gbApiInstallation: validInstallation() };
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
-    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'lib/installation-auth.js');
     loadScript(context, 'help/help-chat-state.js');
     loadScript(context, 'help/help-data-access.js');
     loadScript(context, 'help/help-assistant.js');
@@ -176,7 +176,7 @@ describe('Help Companion background flow', () => {
     const stored = { gbApiInstallation: validInstallation() };
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
-    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'lib/installation-auth.js');
     loadScript(context, 'help/help-chat-state.js');
     loadScript(context, 'help/help-data-access.js');
     loadScript(context, 'help/help-assistant.js');
@@ -224,7 +224,7 @@ describe('Help Companion background flow', () => {
     const stored = { gbApiInstallation: validInstallation() };
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
-    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'lib/installation-auth.js');
     loadScript(context, 'help/help-chat-state.js');
     loadScript(context, 'help/help-data-access.js');
     loadScript(context, 'help/help-assistant.js');

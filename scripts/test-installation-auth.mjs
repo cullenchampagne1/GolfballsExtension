@@ -6,7 +6,7 @@ import vm from 'node:vm';
 
 const root = new URL('../', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('manifest.json', root), 'utf8'));
-const source = await readFile(new URL('installation-auth.js', root), 'utf8');
+const source = await readFile(new URL('lib/installation-auth.js', root), 'utf8');
 const expectedId = createHash('sha256')
   .update(Buffer.from(manifest.key, 'base64'))
   .digest('hex')

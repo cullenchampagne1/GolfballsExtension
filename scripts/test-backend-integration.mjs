@@ -15,9 +15,9 @@ import { existsSync } from 'node:fs';
 const root = new URL('../', import.meta.url);
 const read = (rel, base = root) => readFile(new URL(rel, base), 'utf8');
 
-const installationAuth = await read('installation-auth.js');
+const installationAuth = await read('lib/installation-auth.js');
 const background = await read('background.js');
-const remotePolicy = await read('remote-settings-policy.js');
+const remotePolicy = await read('lib/remote-settings-policy.js');
 const sources = { 'installation-auth.js': installationAuth, 'background.js': background };
 
 // Backend sibling is optional (standalone extension checkouts skip its half).

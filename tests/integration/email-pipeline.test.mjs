@@ -119,7 +119,7 @@ describe('email pipeline', () => {
 
     // The URL this pipeline builds must pass the background's mailto guard.
     const security = createContext({});
-    loadScript(security, 'security-policy.js');
+    loadScript(security, 'lib/security-policy.js');
     assert.equal(security.GBSecurity.isMailtoUrl(url), true);
   });
 

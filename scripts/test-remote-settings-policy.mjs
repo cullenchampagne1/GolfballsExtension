@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const root = new URL('../', import.meta.url);
 const registrySource = await readFile(new URL('settings-registry.js', root), 'utf8');
-const policySource = await readFile(new URL('remote-settings-policy.js', root), 'utf8');
+const policySource = await readFile(new URL('lib/remote-settings-policy.js', root), 'utf8');
 const stored = {
   featureFlags: { copyIdsEnabled: false, personalUnknownFlag: true },
   devSettings: { 'numberDisplay.durationMs': 777, 'email.localPart': 'local.user' },

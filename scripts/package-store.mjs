@@ -26,19 +26,11 @@ const DEFAULT_ROOT = resolve(SCRIPT_DIR, '..');
 // opt-in instead of silently shipping them to every extension user.
 export const RUNTIME_ROOT_FILES = Object.freeze([
   'background.js',
-  'config.js',
   'calendar-form-state.js',
-  'crm-index-store.js',
-  'defaults.js',
   'editor.html',
-  'email-relay-poll.js',
   'guide.html',
-  'installation-auth.js',
-  'notifications-store.js',
   'popup.html',
-  'remote-settings-policy.js',
   'sandbox.html',
-  'security-policy.js',
   'settings-registry.js',
   'theme-init.js',
   'theme.css',
@@ -50,6 +42,7 @@ export const RUNTIME_DIRECTORIES = Object.freeze([
   'help',
   'icons',
   'iframe',
+  'lib',
   'react-dist',
   'src/vanilla',
 ]);
@@ -227,7 +220,7 @@ export function collectStoreEntries(root, manifest, { stageRoot = null } = {}) {
     .filter((path) => existsSync(sourceFor(path)));
   const dirPaths = RUNTIME_DIRECTORIES.flatMap((directory) => (
     directory === 'react-dist' && consumer ? walkFiles(stageRoot, directory) : walkFiles(root, directory)
-  ));
+  )).filter((path) => !(consumer && isAdminRootFile(path)));
   const uniquePaths = [...new Set([...rootFilePaths, ...dirPaths])].sort((a, b) => a.localeCompare(b, 'en'));
   const entries = uniquePaths.map((path) => {
     let bytes = readFileSync(sourceFor(path));

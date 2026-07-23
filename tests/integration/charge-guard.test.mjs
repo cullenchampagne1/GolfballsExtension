@@ -15,7 +15,7 @@ let GBSecurity;
 
 before(() => {
   const context = createContext({});
-  loadScript(context, 'security-policy.js');
+  loadScript(context, 'lib/security-policy.js');
   GBSecurity = context.GBSecurity;
 });
 

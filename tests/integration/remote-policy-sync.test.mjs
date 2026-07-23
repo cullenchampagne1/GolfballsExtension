@@ -61,7 +61,7 @@ before(async () => {
   requests = mock.requests;
 
   context = createContext({ chrome: chromeParts.chrome, fetchImpl: mock.fetchMock });
-  loadScript(context, 'installation-auth.js');
+  loadScript(context, 'lib/installation-auth.js');
   loadScript(context, 'settings-registry.js');
   registry = JSON.parse(JSON.stringify(context.GB_SETTINGS_REGISTRY));
 
@@ -73,7 +73,7 @@ before(async () => {
     schema_version: 1, admin_bypass: false, revision: 'a'.repeat(64), configuration,
   };
 
-  loadScript(context, 'remote-settings-policy.js'); // fires its own quiet sync
+  loadScript(context, 'lib/remote-settings-policy.js'); // fires its own quiet sync
   await settle();
 });
 

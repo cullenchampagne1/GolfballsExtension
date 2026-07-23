@@ -1,7 +1,7 @@
 // background.js
-importScripts('config.js', 'security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/installation-auth.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js');
 /* @admin:start */
-importScripts('notifications-store.js', 'email-relay-poll.js');
+importScripts('lib/notifications-store.js', 'lib/email-relay-poll.js');
 /* @admin:end */
 
 const GB_SECURITY = globalThis.GBSecurity;

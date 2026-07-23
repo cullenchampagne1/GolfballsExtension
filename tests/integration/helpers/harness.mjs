@@ -134,7 +134,7 @@ export async function settle(rounds = 12) {
 export function loadInstallationAuth({ stored = {}, fetchImpl } = {}) {
   const parts = createChrome({ stored });
   const context = createContext({ chrome: parts.chrome, fetchImpl });
-  loadScript(context, 'installation-auth.js');
+  loadScript(context, 'lib/installation-auth.js');
   return { ...parts, context, client: context.GBInstallationAuth };
 }
 

@@ -58,8 +58,8 @@ function createFixture() {
       matches: ['https://example.com/*'],
     }],
   }));
-  writeFixture(root, 'background.js', "importScripts('security-policy.js');");
-  writeFixture(root, 'security-policy.js', 'globalThis.fixturePolicy = true;');
+  writeFixture(root, 'background.js', "importScripts('lib/security-policy.js');");
+  writeFixture(root, 'lib/security-policy.js', 'globalThis.fixturePolicy = true;');
   writeFixture(root, 'popup.html', '<script src="react-dist/popup/popup.js"></script>');
   writeFixture(root, 'react-dist/popup/popup.js', 'globalThis.fixturePopup = true;');
   writeFixture(root, 'src/vanilla/runtime.js', 'globalThis.fixtureRuntime = true;');

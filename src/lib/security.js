@@ -2,7 +2,7 @@
  * ESM facade over the classic security-policy.js runtime.
  * Background code consumes the same policy through importScripts().
  */
-import '../../security-policy.js';
+import '../../lib/security-policy.js';
 
 const policy = globalThis.GBSecurity;
 
