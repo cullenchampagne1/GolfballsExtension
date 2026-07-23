@@ -1,3 +1,15 @@
+/* ───────────────────────────────────────────────────────────────
+   shelfMotion — height + easing math for the Actions Shelf panel.
+
+   resolveShelfPanelHeight() picks the animated panel height per view
+   (full height in 'chat' mode, else the measured actions height
+   clamped to the max, or 'auto'). measureShelfSections() sums the
+   sections' natural scroll heights from a detached wrapper so the
+   height:100% animated panel never feeds its own frame back as the
+   next target. shelfPanelTransition() returns the motion/react
+   transition (separate open-chat vs return easing curves).
+─────────────────────────────────────────────────────────────── */
+
 const ENTER_EASE = Object.freeze([0.22, 1, 0.36, 1]);
 const RETURN_EASE = Object.freeze([0.4, 0, 0.2, 1]);
 

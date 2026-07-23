@@ -8,6 +8,17 @@ import {
   buildCustomOrderNote, loadOrderNoteTemplates, subscribeToOrderNoteTemplates,
 } from '../lib/quickOrderNote.js';
 
+/* ───────────────────────────────────────────────────────────────
+   QuickOrderNote — keyboard-first modal for applying an order note.
+
+   The same shared KeyboardComposer the Quick Task / Call Log modals
+   use, wired to the rep's saved order-note templates: filter and fire
+   a saved note, or press / to compose one with Audience and "Push
+   order dates" chips (see buildNoteSchema) over an explicit
+   Subject + Note. onSubmit(template) hands the note to the caller
+   (ultimately lib/submitOrderNote.js → the order iframe).
+─────────────────────────────────────────────────────────────── */
+
 function buildNoteSchema(templates) {
   const audiences = [...new Set(templates.map((t) => String(t.audienceVal || '').trim()).filter(Boolean))];
   const dayValues = [...new Set([1, 2, 3, 5, 7, 14, ...templates.map((t) => t.daysOut).filter((n) => n != null)])]

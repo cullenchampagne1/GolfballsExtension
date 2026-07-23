@@ -1,3 +1,15 @@
+/* ───────────────────────────────────────────────────────────────
+   helpWaitingGame — pure physics for the runner/jumper "waiting
+   game" the Help Companion shows while a turn is loading.
+
+   A tiny endless-runner over a fixed WORLD (see WAITING_GAME_WORLD):
+   createWaitingGameState() seeds a run, stepWaitingGame(state, dt)
+   advances one frame (gravity, obstacle scroll, collision → crashed,
+   best-distance tracking), and jumpWaitingGame() launches a jump or
+   restarts after a crash. All functions are pure and null-safe — the
+   caller owns the animation loop and rendering.
+─────────────────────────────────────────────────────────────── */
+
 const WORLD_WIDTH = 220;
 const RUNNER_X = 24;
 const RUNNER_WIDTH = 14;

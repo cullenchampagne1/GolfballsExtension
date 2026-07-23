@@ -6,6 +6,17 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 
+/* ───────────────────────────────────────────────────────────────
+   QueryBuilder — CRM match-rule query builder modal.
+
+   Reps assemble grouped AND/OR conditions (with quick presets and
+   saved queries) which compile to a Solr filter query — compileGroups
+   ToSolr() produces the `fq` string and compileGroupsToLabel() a
+   human summary. onApply receives the compiled query; initialState /
+   initialConditions rehydrate an existing search. Port of the legacy
+   content/crm-query-builder.js onto the src/ui design system.
+─────────────────────────────────────────────────────────────── */
+
 /* ── Saved-queries storage ───────────────────────────────────────
    Mirrors the legacy content/crm-query-builder.js storage at
    `chrome.storage.local.crmSavedQueries`. Outside an extension

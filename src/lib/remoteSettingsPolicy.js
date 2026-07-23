@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react';
 
+/* ───────────────────────────────────────────────────────────────
+   remoteSettingsPolicy — React view of the server-pushed settings
+   policy that hides features / developer settings / custom pages.
+
+   useRemoteSettingsPolicy() reads the last policy written to
+   chrome.storage.local[gbRemoteSettingsPolicy] and re-renders on
+   chrome.storage.onChanged. normalize() drops anything that isn't
+   schemaVersion 1, so components always get the frozen EMPTY_POLICY
+   shape (never a partial object). Outside an extension context the
+   hook simply stays on EMPTY_POLICY.
+─────────────────────────────────────────────────────────────── */
+
 export const REMOTE_POLICY_KEY = 'gbRemoteSettingsPolicy';
 const EMPTY_POLICY = Object.freeze({
   adminBypass: false,

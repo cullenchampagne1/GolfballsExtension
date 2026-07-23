@@ -1,5 +1,17 @@
 import { normalizeOrderNote, saveLastOrderNoteId } from './quickOrderNote.js';
 
+/* ───────────────────────────────────────────────────────────────
+   submitOrderNote — normalize a quick-note template and apply it to
+   the live order frame.
+
+   submitOrderNote(template, { timeoutMs }) normalizes the note,
+   rejects an empty subject+body, then broadcasts GB_APPLY_QUICK_NOTE
+   to the order iframe and resolves { ok, error? } when the frame
+   replies (GB_QUICK_NOTE_DONE/_ERROR) or the timeout fires. A single
+   shared runtime.onMessage listener correlates replies by requestId;
+   a successful non-custom note records its id as last-used.
+─────────────────────────────────────────────────────────────── */
+
 const pending = new Map();
 let listenerInstalled = false;
 

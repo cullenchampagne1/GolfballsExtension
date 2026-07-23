@@ -13,6 +13,21 @@ import {
   seedHistoricalHelpActionReceipts,
 } from './helpActionCore.js';
 
+/* ───────────────────────────────────────────────────────────────
+   helpActions — executable, feature-flag-guarded actions the Help
+   Companion can run on the rep's behalf (toggle a feature/setting,
+   apply a theme preset/palette, share settings or an email template,
+   file a support ticket).
+
+   helpActionContext() reports which settings are visible/hidden
+   (honouring the remote settings policy) plus the current automatic
+   state, deliberately withholding local resource names. Execution is
+   idempotent via a receipt ledger in chrome.storage.local
+   (gbHelpActionReceiptsV1): executeHelpActionOnce() runs through a
+   single serial queue so replays return the stored receipt instead of
+   re-firing. planHelpAction()/validation live in helpActionCore.js.
+─────────────────────────────────────────────────────────────── */
+
 const RECEIPTS_KEY = 'gbHelpActionReceiptsV1';
 const COLOR_KEYS = ['--gb-brand-label', '--gb-brand', '--gb-brand-dark', '--gb-brand-border'];
 

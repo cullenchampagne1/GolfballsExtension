@@ -1,3 +1,14 @@
+/* ───────────────────────────────────────────────────────────────
+   helpComposer — auto-grow height resolver for the Help Companion
+   composer textarea.
+
+   resolveHelpComposerHeight() is the pure math: clamp a measured
+   scrollHeight between MIN (20px, also the empty height) and MAX
+   (104px). syncHelpComposerHeight() applies it to a live element —
+   it collapses the textarea to height:0 first so scrollHeight
+   reflects the content, not the previous explicit height.
+─────────────────────────────────────────────────────────────── */
+
 export const HELP_COMPOSER_MIN_HEIGHT = 20;
 export const HELP_COMPOSER_MAX_HEIGHT = 104;
 
