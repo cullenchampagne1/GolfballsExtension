@@ -351,10 +351,10 @@ export const DEV_SETTINGS = [
   {
     key:     'campaignManager.scale',
     label:   'Campaign Manager: zoom scale',
-    desc:    'Magnification of the Campaign Manager modal (1 = 100%). Default 1.2; lower it if the modal overflows on a smaller screen.',
+    desc:    'Independent magnification of the Campaign Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale.',
     type:    'number',
     default: 1.2,
-    min:     1,
+    min:     0.5,
     max:     2,
     step:    0.05,
     unit:    '×',

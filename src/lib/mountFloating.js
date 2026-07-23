@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { applyFloatingHostScale } from './floatingHost.js';
 
 /**
  * Mount (or toggle) a FloatingPanel-based modal as a content-script overlay.
@@ -9,8 +10,10 @@ import { createRoot } from 'react-dom/client';
  *
  * @param {string} id  host element id — also the open/closed guard
  * @param {(hooks: { onClosed: () => void, bindClose: (close: () => void) => void }) => import('react').ReactElement} render
+ * @param {{ scaleCategory?: string | null }} options  null when the mounted
+ *        surface owns its own independent scale
  */
-export function mountFloating(id, render) {
+export function mountFloating(id, render, { scaleCategory = 'modals' } = {}) {
   const existing = document.getElementById(id);
   if (existing) {
     existing.__gbClose?.();
@@ -18,8 +21,9 @@ export function mountFloating(id, render) {
   }
   const host = document.createElement('div');
   host.id = id;
-  // Modal mount roots opt in to the "modals" UI-scale slider.
-  host.setAttribute('data-gb-scale', 'modals');
+  // Most roots use the shared Modals slider. Large purpose-built surfaces may
+  // opt out so their own dev setting is not multiplied by an async root zoom.
+  applyFloatingHostScale(host, scaleCategory);
   document.body.appendChild(host);
 
   const root = createRoot(host);

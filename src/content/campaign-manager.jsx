@@ -31,6 +31,6 @@ if (!window.__gbCampaignManagerLoaded) {
       <ToastHost installGlobal={false}>
         <CampaignManager onClose={onClosed} contacts={Array.isArray(contacts) ? contacts : []} />
       </ToastHost>
-    ));
+    ), { scaleCategory: null });
   };
 }

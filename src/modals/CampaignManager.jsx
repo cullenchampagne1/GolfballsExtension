@@ -18,6 +18,12 @@ import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImpo
 import { readEmailConfig } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
 import { useDevSettings } from '../lib/devSettings.js';
+import {
+  CAMPAIGN_MANAGER_HEIGHT,
+  CAMPAIGN_MANAGER_WIDTH,
+  fitCampaignManagerScale,
+  normalizeCampaignManagerScale,
+} from '../lib/campaign/presentation.js';
 
 /* ───────────────────────────────────────────────────────────────
    CampaignManager — full-page campaign editor.
@@ -1101,9 +1107,28 @@ export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignKeyframes();
   const toast = useToast();
   // Modal zoom is a dev setting (mirrors the Gifting Catalog), live-updating
-  // from Settings without a reload. Falls back to the long-standing 1.2.
+  // from Settings without a reload. The final scale also fits the full editor
+  // into the current CSS viewport, which compensates for per-site browser zoom.
   const [devSettings] = useDevSettings();
-  const scale = Number(devSettings['campaignManager.scale']) || 1.2;
+  const preferredScale = normalizeCampaignManagerScale(devSettings['campaignManager.scale']);
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === 'undefined' ? 0 : window.innerWidth,
+    height: typeof window === 'undefined' ? 0 : window.innerHeight,
+  }));
+  useEffect(() => {
+    const read = () => setViewport({
+      width: window.visualViewport?.width || window.innerWidth,
+      height: window.visualViewport?.height || window.innerHeight,
+    });
+    read();
+    window.addEventListener('resize', read);
+    window.visualViewport?.addEventListener('resize', read);
+    return () => {
+      window.removeEventListener('resize', read);
+      window.visualViewport?.removeEventListener('resize', read);
+    };
+  }, []);
+  const scale = fitCampaignManagerScale(preferredScale, viewport.width, viewport.height);
   // Drive an exit animation: requestClose flips `open` false, the
   // AnimatePresence plays the fade/scale-out, then onExitComplete unmounts.
   const [open, setOpen] = useState(true);
@@ -1315,13 +1340,12 @@ export function CampaignManager({ onClose, contacts = [] }) {
       style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 'var(--gb-z-max)' }}>
       {/* The shared ModalShell (non-draggable card) keeps chrome + the
           bounce-in consistent with every other modal. Fixed-pixel size (not
-          vw/vh) so the modal-scale `zoom` on the mount host scales it
-          cleanly; the inline 1.2 zoom is the default size bump and composes
-          on top of whatever the modal scaler is set to. The motion wrapper
+          vw/vh) lets this surface own one deterministic zoom value; its mount
+          root deliberately opts out of the shared Modals scale. The wrapper
           (initial=false ⇒ no entrance, ModalShell owns the bounce-in) plays
           the scale/fade exit on close. */}
       <motion.div initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
-      <ModalShell width={1280} height={760} style={{ maxWidth: `calc(94vw / ${scale})`, maxHeight: `calc(90vh / ${scale})`, zoom: scale, color: 'var(--gb-text-secondary)' }}>
+      <ModalShell width={CAMPAIGN_MANAGER_WIDTH} height={CAMPAIGN_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
