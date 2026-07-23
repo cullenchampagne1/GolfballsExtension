@@ -105,7 +105,7 @@
       "GET /client/health": {
         "auth": "api-key",
         "summary": "Validate an extension installation session.",
-        "description": "Fails closed unless the API key is active, belongs to the Golfballs extension, and both the global and per-installation product settings allow access. Successful responses are never cached."
+        "description": "Authoritatively validates that the API key is active, belongs to the Golfballs extension, and both the global and per-installation product settings allow access. Successful responses are never HTTP-cached; the client may privately retain its last successful authorization for bounded outage continuity."
       },
       "GET /client/configuration": {
         "auth": "api-key",

@@ -138,6 +138,26 @@ describe('extension API guard', () => {
     assert.deepEqual(disabled, []);
   });
 
+  it('confirms an ordinary client 403 against health instead of directly bricking', async () => {
+    const { fetchMock } = createFetchMock(() => jsonResponse({ detail: 'Share is not owned by this installation' }, 403));
+    const loaded = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation() },
+      fetchImpl: fetchMock,
+    });
+    const disabled = [];
+    let healthChecks = 0;
+    loaded.context.GBExtensionAccessGateController = {
+      disable: async (...args) => { disabled.push(args); },
+      check: async () => { healthChecks += 1; },
+    };
+
+    await loaded.client.apiFetch(`${CLIENT_BASE}/settings-shares/not-owned`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.deepEqual(disabled, []);
+    assert.equal(healthChecks, 1);
+  });
+
   it('overrides any caller-supplied Authorization header with the installation key', async () => {
     const { client, requests } = makeSandbox();
     await client.apiFetch(`${CLIENT_BASE}/ping`, {

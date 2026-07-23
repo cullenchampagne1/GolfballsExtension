@@ -99,6 +99,7 @@ class ExtensionClientAccessTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             self.api.health(self.request())
         self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(raised.exception.detail["code"], "extension_disabled")
 
     def test_healthy_installation_returns_session_and_access_state(self):
         FakeSession.rows["install-1"] = Access(

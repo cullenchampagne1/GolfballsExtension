@@ -15,8 +15,9 @@ if (!GB_EXTENSION_ACCESS) throw new Error('Extension access gate failed to initi
 globalThis.GBExtensionAccessGateController = GB_EXTENSION_ACCESS;
 
 // Product scripts, popup access, and Help recovery start only after the
-// credential-backed health check succeeds. Failed enrollment, revocation,
-// disablement, and network failure all leave the extension inert.
+// credential-backed health check succeeds or a prior successful decision is
+// still inside its silent outage grace window. Failed first enrollment,
+// revocation, and explicit disablement always leave the extension inert.
 GB_EXTENSION_ACCESS.start().then((allowed) => {
   if (!allowed) return;
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});

@@ -114,17 +114,26 @@ class ExtensionClientApi:
     def principal(self, request: Request, *, require_enabled: bool = True):
         principal = getattr(request.state, "principal", None)
         if principal is None:
-            raise HTTPException(status_code=401, detail="Not authenticated")
+            raise HTTPException(status_code=401, detail={
+                "code": "credential_invalid",
+                "message": "Not authenticated",
+            })
         if (
             principal.auth_type != "api_key"
             or self.client_scope not in set(principal.scopes or ())
             or not principal.credential_id
         ):
             raise HTTPException(
-                status_code=403, detail="Extension installation credential required"
+                status_code=403, detail={
+                    "code": "credential_not_extension",
+                    "message": "Extension installation credential required",
+                },
             )
         if require_enabled and not self.access(principal)["extension_enabled"]:
-            raise HTTPException(status_code=403, detail="Extension access is disabled")
+            raise HTTPException(status_code=403, detail={
+                "code": "extension_disabled",
+                "message": "Extension access is disabled",
+            })
         return principal
 
     @staticmethod
@@ -170,7 +179,10 @@ class ExtensionClientApi:
         principal = self.principal(request, require_enabled=False)
         state = self.access(principal)
         if not state["extension_enabled"]:
-            raise HTTPException(status_code=403, detail="Extension access is disabled")
+            raise HTTPException(status_code=403, detail={
+                "code": "extension_disabled",
+                "message": "Extension access is disabled",
+            })
         return JSONResponse({
             "ok": True,
             "session_valid": True,
