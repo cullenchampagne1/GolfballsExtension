@@ -41,3 +41,10 @@ dist/store/
 # material remain isolated above in .golfballs-extension-production/.
 dist/safari/
 dist/safari-stage/
+
+# RevStack backend integration is LOCAL-ONLY. The backend loads .revstack/ and
+# revstack.project.json from disk to mount this project, but they are not part
+# of the public consumer extension repo and must never be pushed. Untracked via
+# `git rm --cached` (files remain on disk, so the backend keeps working).
+.revstack/
+/revstack.project.json
