@@ -45,7 +45,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["editor.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js", "assets/photo_ball.jpg"],
+      "resources": ["editor.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js"],
       "matches": [
         "https://www.golfballs.com/*",
         "https://api.golfballs.com/*",

@@ -26,11 +26,10 @@ import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
    Public contract:
      <ImagePreview url={...} itemLink={...} onClosed={...} bindClose={...} />
 
-   `url` is OPTIONAL. When omitted the modal opens against a bundled
-   fallback (assets/photo_ball.jpg) so the design + interactions are
-   testable in the playground without a real logo URL to extract.
-   The decode-error Callout only renders when a `url` WAS passed AND
-   the image failed to load — the fallback path is its own thing.
+   `url` is OPTIONAL. When omitted the modal opens on its empty drop-zone
+   view — paste a URL or drop a file. There is no bundled fallback image.
+   The decode-error Callout only renders when a `url` WAS passed AND the
+   image failed to load.
 
    Inner state machine:
      loading  → spinner shown, image hidden
@@ -65,19 +64,6 @@ const ZOOM_MAX = 8;
 // adjustments instead of jumps. Was 0.35 / 0.12.
 const ZOOM_STEP_BTN = 0.12;
 const ZOOM_STEP_WHEEL = 0.05;
-
-/** Fallback image when no URL is provided. Resolves to a runtime-
- *  qualified URL inside the extension (web_accessible_resources
- *  exposes it so content-script callers also resolve correctly). */
-function resolveFallbackUrl() {
-  try {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-      return chrome.runtime.getURL('assets/photo_ball.jpg');
-    }
-  } catch { /* not in an extension context */ }
-  // Last-resort relative path — works for standalone preview pages.
-  return 'assets/photo_ball.jpg';
-}
 
 /** Image-tile icon used in the header. Inlined because the design-
  *  system icon registry doesn't yet ship a generic photo glyph; if

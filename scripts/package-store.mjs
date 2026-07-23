@@ -38,7 +38,6 @@ export const RUNTIME_ROOT_FILES = Object.freeze([
 ]);
 
 export const RUNTIME_DIRECTORIES = Object.freeze([
-  'assets',
   'help',
   'icons',
   'iframe',
