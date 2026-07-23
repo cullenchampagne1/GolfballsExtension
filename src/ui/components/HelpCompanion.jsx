@@ -13,7 +13,9 @@ import {
 import { FEATURE_DEFAULTS } from '../../lib/flags.js';
 import { syncHelpComposerHeight } from '../../lib/helpComposer.js';
 import {
-  createWaitingGameState, jumpWaitingGame, stepWaitingGame, WAITING_GAME_WORLD,
+  createFlappyGameState, createWaitingGameState, flapWaitingBird,
+  FLAPPY_GAME_WORLD, jumpWaitingGame, pickWaitingGame, stepFlappyGame,
+  stepWaitingGame, WAITING_GAME_KINDS, WAITING_GAME_WORLD,
 } from '../../lib/helpWaitingGame.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
@@ -51,6 +53,7 @@ function useHelpStyles() {
       @keyframes gb-help-orbit { to { transform: rotate(360deg); } }
       @keyframes gb-help-pulse { 0%,100% { opacity:.35; transform:scale(.78); } 50% { opacity:1; transform:scale(1); } }
       @keyframes gb-help-runner-step { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-1px); } }
+      @keyframes gb-help-bird-flap { 0%,100% { transform:translateY(0); } 50% { transform:translateY(1px); } }
       .gb-help-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }
       .gb-help-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
       .gb-help-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -675,21 +678,91 @@ function PixelCactus() {
   );
 }
 
-function WaitingRunnerGame({ reduceMotion }) {
-  const [game, setGame] = useState(() => createWaitingGameState());
+function PixelBird({ crashed = false }) {
+  return (
+    <svg aria-hidden viewBox="0 0 18 12" width="18" height="12" shapeRendering="crispEdges" style={{ display: 'block' }}>
+      <path fill="currentColor" d="M3 2h9v2h3v2h3v3h-6v2H4V9H1V5h2z" />
+      <path fill="var(--gb-surface-2)" d="M4 6h6v4H6V8H4zM11 3h2v2h-2z" />
+      <path fill="var(--gb-warning-fg)" d="M15 6h3v2h-3z" />
+      {crashed && <path fill="var(--gb-error-fg)" d="M11 3h1v1h-1zM12 4h1v1h-1z" />}
+    </svg>
+  );
+}
+
+function useWaitingGameLoop(createState, stepState, reduceMotion) {
+  const [game, setGame] = useState(createState);
+  const frame = useRef(0);
   const lastTick = useRef(0);
 
   useEffect(() => {
-    if (reduceMotion) return undefined;
+    if (reduceMotion || game.crashed) return undefined;
     lastTick.current = performance.now();
-    const timer = window.setInterval(() => {
-      const now = performance.now();
+    const tick = (now) => {
       const elapsed = Math.max(0, (now - lastTick.current) / 1000);
       lastTick.current = now;
-      setGame((current) => stepWaitingGame(current, elapsed));
-    }, 45);
-    return () => window.clearInterval(timer);
-  }, [reduceMotion]);
+      setGame((current) => stepState(current, elapsed));
+      frame.current = window.requestAnimationFrame(tick);
+    };
+    frame.current = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame.current);
+  }, [game.crashed, reduceMotion, stepState]);
+
+  return [game, setGame];
+}
+
+function WaitingGameFrame({
+  children,
+  crashed,
+  reduceMotion,
+  onPlay,
+  score,
+  best,
+  activeCopy,
+  crashCopy,
+  sceneStyle,
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={crashed ? 'Restart the waiting game' : activeCopy}
+      onClick={onPlay}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          onPlay();
+        }
+      }}
+      style={{
+        display: 'block', width: '100%', minWidth: 0, padding: 0, overflow: 'hidden',
+        border: 0, borderRadius: 9, background: 'transparent', color: 'inherit',
+        fontFamily: 'var(--gb-font-sans)', textAlign: 'left', cursor: reduceMotion ? 'default' : 'pointer',
+      }}
+    >
+      <span style={{ height: 22, padding: '0 7px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gb-text-muted)', fontSize: 8.5, lineHeight: 1, fontWeight: 750, letterSpacing: .12 }}>
+        <span style={{ color: crashed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)' }}>
+          {reduceMotion ? 'Still working' : crashed ? crashCopy : activeCopy}
+        </span>
+        <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+        <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 8 }}>{String(score).padStart(3, '0')}{best > score ? ` · ${best}` : ''}</span>
+      </span>
+      <span style={{
+        position: 'relative', display: 'block', height: 52, overflow: 'hidden',
+        background: 'linear-gradient(180deg, var(--gb-brand-tint-soft), transparent 72%)',
+        borderTop: '1px solid var(--gb-border-subtle)',
+        ...sceneStyle,
+      }}>
+        {children}
+      </span>
+    </button>
+  );
+}
+
+function WaitingRunnerGame({ reduceMotion }) {
+  const [game, setGame] = useWaitingGameLoop(
+    createWaitingGameState,
+    stepWaitingGame,
+    reduceMotion,
+  );
 
   const jump = useCallback(() => {
     if (reduceMotion) return;
@@ -701,53 +774,105 @@ function WaitingRunnerGame({ reduceMotion }) {
   const obstacleLeft = `${(game.obstacleX / WAITING_GAME_WORLD.width) * 100}%`;
 
   return (
-    <button
-      type="button"
-      aria-label={game.crashed ? 'Restart the waiting runner' : 'Jump in the waiting runner'}
-      onClick={jump}
-      onKeyDown={(event) => {
-        if ([' ', 'ArrowUp', 'Enter'].includes(event.key)) {
-          event.preventDefault();
-          jump();
-        }
-      }}
-      style={{
-        display: 'block', width: '100%', minWidth: 0, padding: 0, overflow: 'hidden',
-        border: 0, borderRadius: 9, background: 'transparent', color: 'inherit',
-        fontFamily: 'var(--gb-font-sans)', textAlign: 'left', cursor: reduceMotion ? 'default' : 'pointer',
-      }}
+    <WaitingGameFrame
+      crashed={game.crashed}
+      reduceMotion={reduceMotion}
+      onPlay={jump}
+      score={score}
+      best={best}
+      activeCopy="Still working — tap to jump"
+      crashCopy="Bonk — tap to retry"
     >
-      <span style={{ height: 22, padding: '0 7px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gb-text-muted)', fontSize: 8.5, lineHeight: 1, fontWeight: 750, letterSpacing: .12 }}>
-        <span style={{ color: game.crashed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)' }}>
-          {reduceMotion ? 'Still working' : game.crashed ? 'Bonk — tap to retry' : 'Still working — tap to jump'}
-        </span>
-        <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-        <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 8 }}>{String(score).padStart(3, '0')}{best > score ? ` · ${best}` : ''}</span>
-      </span>
+      <span aria-hidden style={{ position: 'absolute', top: 10, left: '58%', width: 17, height: 3, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .65 }} />
+      <span aria-hidden style={{ position: 'absolute', top: 17, left: '79%', width: 10, height: 2, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .45 }} />
+      <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 7, height: 1, background: 'var(--gb-border-default)' }} />
+      <span aria-hidden style={{ position: 'absolute', left: '13%', bottom: 4, width: 7, height: 1, background: 'var(--gb-border-subtle)' }} />
+      <span aria-hidden style={{ position: 'absolute', left: '46%', bottom: 3, width: 11, height: 1, background: 'var(--gb-border-subtle)' }} />
       <span style={{
-        position: 'relative', display: 'block', height: 52, overflow: 'hidden',
-        background: 'linear-gradient(180deg, var(--gb-brand-tint-soft), transparent 72%)',
-        borderTop: '1px solid var(--gb-border-subtle)',
+        position: 'absolute', left: `${(WAITING_GAME_WORLD.runnerX / WAITING_GAME_WORLD.width) * 100}%`,
+        bottom: 8, color: game.crashed ? 'var(--gb-error-fg)' : 'var(--gb-text-secondary)',
+        transform: `translate3d(0, ${-game.runnerY}px, 0)`, willChange: 'transform',
       }}>
-        <span aria-hidden style={{ position: 'absolute', top: 10, left: '58%', width: 17, height: 3, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .65 }} />
-        <span aria-hidden style={{ position: 'absolute', top: 17, left: '79%', width: 10, height: 2, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .45 }} />
-        <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 7, height: 1, background: 'var(--gb-border-default)' }} />
-        <span aria-hidden style={{ position: 'absolute', left: '13%', bottom: 4, width: 7, height: 1, background: 'var(--gb-border-subtle)' }} />
-        <span aria-hidden style={{ position: 'absolute', left: '46%', bottom: 3, width: 11, height: 1, background: 'var(--gb-border-subtle)' }} />
         <span style={{
-          position: 'absolute', left: `${(WAITING_GAME_WORLD.runnerX / WAITING_GAME_WORLD.width) * 100}%`,
-          bottom: 8 + game.runnerY, color: game.crashed ? 'var(--gb-error-fg)' : 'var(--gb-text-secondary)',
-          animation: !reduceMotion && !game.crashed && game.runnerY === 0 ? 'gb-help-runner-step .22s steps(2,end) infinite' : 'none',
+          display: 'block',
+          animation: !reduceMotion && !game.crashed && game.runnerY === 0 ? 'gb-help-runner-step .16s steps(2,end) infinite' : 'none',
           transformOrigin: 'bottom center',
         }}><PixelDino crashed={game.crashed} /></span>
-        <span style={{ position: 'absolute', left: obstacleLeft, bottom: 8, color: 'var(--gb-brand-label)' }}><PixelCactus /></span>
       </span>
-    </button>
+      <span style={{ position: 'absolute', left: obstacleLeft, bottom: 8, color: 'var(--gb-brand-label)', willChange: 'left' }}><PixelCactus /></span>
+    </WaitingGameFrame>
+  );
+}
+
+function WaitingFlappyGame({ reduceMotion }) {
+  const [game, setGame] = useWaitingGameLoop(
+    createFlappyGameState,
+    stepFlappyGame,
+    reduceMotion,
+  );
+  const flap = useCallback(() => {
+    if (reduceMotion) return;
+    setGame((current) => flapWaitingBird(current));
+  }, [reduceMotion, setGame]);
+
+  const pipeLeft = `${(game.pipeX / FLAPPY_GAME_WORLD.width) * 100}%`;
+  const birdTop = `${(game.birdY / FLAPPY_GAME_WORLD.height) * 100}%`;
+  const gapTop = `${(game.gapY / FLAPPY_GAME_WORLD.height) * 100}%`;
+  const gapBottom = `${((game.gapY + FLAPPY_GAME_WORLD.pipeGap) / FLAPPY_GAME_WORLD.height) * 100}%`;
+  const tilt = Math.max(-18, Math.min(58, game.velocityY * 0.5));
+
+  return (
+    <WaitingGameFrame
+      crashed={game.crashed}
+      reduceMotion={reduceMotion}
+      onPlay={flap}
+      score={game.score}
+      best={Math.max(game.best, game.score)}
+      activeCopy="Still working — tap to flap"
+      crashCopy="Plop — tap to retry"
+      sceneStyle={{ background: 'linear-gradient(180deg, var(--gb-brand-tint-soft), transparent 88%)' }}
+    >
+      <span aria-hidden style={{ position: 'absolute', top: 8, left: '16%', width: 18, height: 3, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .58 }} />
+      <span aria-hidden style={{ position: 'absolute', top: 16, left: '68%', width: 12, height: 2, borderRadius: 999, background: 'var(--gb-border-subtle)', opacity: .42 }} />
+      <span style={{
+        position: 'absolute', zIndex: 2,
+        left: `${(FLAPPY_GAME_WORLD.birdX / FLAPPY_GAME_WORLD.width) * 100}%`,
+        top: birdTop, color: game.crashed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)',
+        transform: `rotate(${tilt}deg)`, transformOrigin: '45% 55%',
+        transition: game.crashed ? 'transform 120ms ease-out' : 'none',
+        willChange: 'top, transform',
+      }}>
+        <span style={{
+          display: 'block',
+          animation: !reduceMotion && !game.crashed ? 'gb-help-bird-flap .18s steps(2,end) infinite' : 'none',
+        }}><PixelBird crashed={game.crashed} /></span>
+      </span>
+      <span style={{
+        position: 'absolute', left: pipeLeft, top: 0, width: FLAPPY_GAME_WORLD.pipeWidth,
+        height: gapTop, minHeight: 3, color: 'var(--gb-brand-label)',
+        background: 'color-mix(in srgb, currentColor 52%, var(--gb-surface-2))',
+        border: '1px solid var(--gb-brand-tint-border)', borderTop: 0,
+        willChange: 'left',
+      }}>
+        <span aria-hidden style={{ position: 'absolute', left: -2, right: -2, bottom: -2, height: 4, background: 'currentColor', borderRadius: 2 }} />
+      </span>
+      <span style={{
+        position: 'absolute', left: pipeLeft, top: gapBottom, bottom: 0,
+        width: FLAPPY_GAME_WORLD.pipeWidth, minHeight: 3, color: 'var(--gb-brand-label)',
+        background: 'color-mix(in srgb, currentColor 52%, var(--gb-surface-2))',
+        border: '1px solid var(--gb-brand-tint-border)', borderBottom: 0,
+        willChange: 'left',
+      }}>
+        <span aria-hidden style={{ position: 'absolute', left: -2, right: -2, top: -2, height: 4, background: 'currentColor', borderRadius: 2 }} />
+      </span>
+      <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, background: 'var(--gb-border-subtle)', opacity: .7 }} />
+    </WaitingGameFrame>
   );
 }
 
 function ThinkingMessage({ status, startedAt, onExpand }) {
   const reduceMotion = useReducedMotion();
+  const [gameKind] = useState(() => pickWaitingGame());
   const [showGame, setShowGame] = useState(() => (
     Date.now() - Number(startedAt || Date.now()) >= 8_000
   ));
@@ -771,7 +896,9 @@ function ThinkingMessage({ status, startedAt, onExpand }) {
         <AnimatePresence initial={false} mode="wait">
           {showGame ? (
             <motion.div key="game" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .18 }} style={{ width: '100%', minWidth: 0 }}>
-              <WaitingRunnerGame reduceMotion={reduceMotion} />
+              {gameKind === WAITING_GAME_KINDS.flappy
+                ? <WaitingFlappyGame reduceMotion={reduceMotion} />
+                : <WaitingRunnerGame reduceMotion={reduceMotion} />}
             </motion.div>
           ) : (
             <motion.div key="status" exit={{ opacity: 0, y: -3 }} style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
