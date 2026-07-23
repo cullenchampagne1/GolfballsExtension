@@ -35,6 +35,10 @@ RELEASES_DIR = PUBLIC / "releases"
 UPDATES_XML = PUBLIC / "updates.xml"
 LEDGER_PATH = BASE / "releases.json"
 LOGS = BASE / "logs"
+# Direct-download Chrome Web Store ZIP lives in the repo's dist/store (served by
+# GET /projects/golfballs-extension/store-package). Publish refreshes it here so
+# one publish updates both channels.
+STORE_DIR = ROOT / "dist" / "store"
 
 DEFAULT_CONFIG = {
     "repo_url": "https://github.com/cullenchampagne1/GolfballsExtension.git",
@@ -564,8 +568,38 @@ def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
     prune_releases(config, ledger, ui)
     save_ledger(ledger)
 
+    # Refresh BOTH distribution channels from this one publish: the signed
+    # self-hosted CRX above (updates.xml auto-update) AND the direct-download
+    # Chrome Web Store ZIP (consumer build — admin code + signing key +
+    # update_url stripped). Built from the SAME production checkout so both ship
+    # the same version. Non-fatal: the signed channel is already published, so a
+    # store-pack failure only warns.
+    # The store packager (scripts/package-store.mjs) ships in the dev tree, not
+    # the stripped production branch, so build it from ROOT (the repo the CLI
+    # runs in). It writes directly to STORE_DIR (= ROOT/dist/store), which the
+    # backend serves at GET .../store-package. It reads ROOT's package.json
+    # version, so both channels only line up when ROOT is at the published
+    # version (i.e. publish from main); otherwise the versioned zip is absent
+    # and we warn rather than serve a mismatched build.
+    store_zip = None
+    try:
+        ui.step("Packaging Chrome Web Store ZIP (pack:store)")
+        run(["npm", "run", "pack:store"], cwd=ROOT, log=log)
+        candidate = STORE_DIR / f"{config['slug']}-{version}.zip"
+        if candidate.is_file():
+            store_zip = candidate
+        else:
+            ui.warn(f"Web Store ZIP for v{version} not found after pack:store — "
+                    f"{ROOT.name} source is a different version than the published "
+                    f"branch; align them (publish from main) for both channels to match")
+    except Exception as exc:  # noqa: BLE001
+        ui.warn(f"Web Store ZIP not refreshed ({exc}); the signed CRX channel is published")
+
     if args.json:
-        print(json.dumps(ledger["releases"][0] | {"codebase": codebase}, indent=2))
+        payload = ledger["releases"][0] | {"codebase": codebase}
+        if store_zip:
+            payload["store_zip"] = store_zip.name
+        print(json.dumps(payload, indent=2))
         return
     print_box(ui, f"Published v{version}", [
         ("Version", version),
@@ -574,6 +608,7 @@ def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
         ("Package", f"{file_name} · {len(crx):,} bytes"),
         ("SHA-256", short_hash(digest)),
         ("Serves at", codebase),
+        ("Store ZIP", store_zip.name if store_zip else "not refreshed"),
     ], footer="Chrome polls every ~5h; force via chrome://extensions → Update")
     state, text = probe_backend(config)
     if state != "serving":
