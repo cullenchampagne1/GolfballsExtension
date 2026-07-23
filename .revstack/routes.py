@@ -34,6 +34,14 @@ _LEDGER = _PRODUCTION / "releases.json"
 _CONFIG_NAME = "golfballs-extension-configuration"
 _KEY_NAME_PREFIX = "golfballs-extension-"
 _PROJECT_SCOPE_PREFIX = "/projects/golfballs-extension/"
+# The generic core enrollment endpoint (/auth/extension-installation) mints
+# installation keys named "client-extension-<hex>" scoped to client:extension
+# (plus the legacy /extension/* ceiling). ProjectManager's client-route registry
+# is what actually authorizes these keys against this project's routes, so an
+# enrolled installation is a real golfballs key even though its name/scopes carry
+# no golfballs marker — recognize it here so it appears in the admin key table.
+_ENROLLMENT_KEY_PREFIX = "client-extension-"
+_KEY_NAME_PREFIXES = (_KEY_NAME_PREFIX, _ENROLLMENT_KEY_PREFIX)
 _PUBLISH_LOCK = asyncio.Lock()
 _BUILD_LOCK = asyncio.Lock()
 _GIT_LOCK = asyncio.Lock()
@@ -682,7 +690,7 @@ def _is_golfballs_key(row: dict) -> bool:
     return (
         EXTENSION_CLIENT_SCOPE in scopes
         and (
-            str(row.get("name") or "").startswith(_KEY_NAME_PREFIX)
+            str(row.get("name") or "").startswith(_KEY_NAME_PREFIXES)
             or any(_PROJECT_SCOPE_PREFIX in scope for scope in scopes)
         )
     )
@@ -851,7 +859,7 @@ def _assistant_grant_status() -> dict:
             if EXTENSION_CLIENT_SCOPE not in scopes:
                 continue
             if not (
-                str(key.name or "").startswith(_KEY_NAME_PREFIX)
+                str(key.name or "").startswith(_KEY_NAME_PREFIXES)
                 or any(_PROJECT_SCOPE_PREFIX in scope for scope in scopes)
             ):
                 continue
@@ -1715,7 +1723,7 @@ async def grant_assistant_access(
             if EXTENSION_CLIENT_SCOPE not in scopes:
                 continue
             if not (
-                str(key.name or "").startswith(_KEY_NAME_PREFIX)
+                str(key.name or "").startswith(_KEY_NAME_PREFIXES)
                 or any(_PROJECT_SCOPE_PREFIX in scope for scope in scopes)
             ):
                 continue
