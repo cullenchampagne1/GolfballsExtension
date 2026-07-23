@@ -21,6 +21,15 @@ import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, supportsLogo, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
+import {
+  CATALOG_CARD_HEIGHT,
+  CATALOG_CARD_WIDTH,
+  CATALOG_PROPOSAL_WIDTH,
+  catalogDealBadge,
+  catalogSidebarLabel,
+  fitCatalogScale,
+  normalizeCatalogScale,
+} from '../lib/catalogPresentation.js';
 
 /* The boxed gift-set preview for a line (sleeve render with the ball's print +
    sleeve overlay; static photo for 6-ball / wooden), or null when not a gift set. */
@@ -112,11 +121,6 @@ const SPECIAL_CMDS = [
   // badge). Replaces the old Custom Logo rail group as the way to scope to them.
   { type: 'special', id: 'commission', label: 'Commissionable only', match: (p) => !!p.customLogo },
 ];
-
-/* Base card dimensions; on-screen size is this × the "Gifting Catalog:
-   zoom scale" dev setting (default 1.8×, in Settings → Developer Settings). */
-const CARD_W = 1180;
-const CARD_H = 760;
 
 /* One representative glyph per "Shop by Type" category (sidebar + the
    "/" command palette), replacing the generic colored dots. */
@@ -374,6 +378,7 @@ function AddButton({ inProposal, compact, onAdd }) {
 
 function ProductCard({ p, compact, showRating, active, inProposal, favorite = false, onToggleFavorite, onAdd, onClick }) {
   const [hover, setHover] = useState(false);
+  const dealBadge = catalogDealBadge(p);
   const ring = active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : '';
   return (
     <div onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -390,30 +395,25 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
       }}>
       <div style={{ position: 'relative' }}>
         <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} h={compact ? 132 : 156} />
-        {(onSale(p) || onToggleFavorite) && (
-          <div style={{ position: 'absolute', top: 7, right: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
-            {onSale(p) && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', minHeight: 22, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 3px rgba(0,0,0,.14)' }}>Sale</span>
-            )}
-            {onToggleFavorite && (
-              <button type="button" title={favorite ? 'Remove from favorites' : 'Add to favorites'}
-                aria-label={favorite ? `Remove ${p.title} from favorites` : `Add ${p.title} to favorites`}
-                aria-pressed={favorite}
-                onClick={(event) => { event.stopPropagation(); onToggleFavorite(p); }}
-                style={{ width: 22, height: 22, borderRadius: '50%', padding: 0, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: favorite ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-                  background: 'color-mix(in srgb, var(--gb-surface-modal) 88%, transparent)',
-                  border: '1px solid var(--gb-border-default)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,.08)',
-                  transition: 'color var(--gb-anim), background-color var(--gb-anim), border-color var(--gb-anim)' }}>
-                <Icon size={11.5} fill={favorite ? 'currentColor' : 'none'} strokeWidth={2}><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></Icon>
-              </button>
-            )}
-          </div>
+        {dealBadge && (
+          <span title={dealBadge.label} style={{ position: 'absolute', top: 7, left: 7, zIndex: 2, display: 'inline-flex', alignItems: 'center', minHeight: 22, maxWidth: onToggleFavorite ? 'calc(100% - 48px)' : 'calc(100% - 14px)', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: dealBadge.kind === 'promo' ? .3 : .5, textTransform: 'uppercase', color: '#fff', background: dealBadge.kind === 'promo' ? 'var(--gb-success-solid, #2e9e5b)' : 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 3px rgba(0,0,0,.14)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {dealBadge.label}
+          </span>
         )}
-        {hasPromo(p) && (
-          <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>
+        {onToggleFavorite && (
+          <button type="button" title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+            aria-label={favorite ? `Remove ${p.title} from favorites` : `Add ${p.title} to favorites`}
+            aria-pressed={favorite}
+            onClick={(event) => { event.stopPropagation(); onToggleFavorite(p); }}
+            style={{ position: 'absolute', top: 7, right: 7, zIndex: 3, width: 22, height: 22, borderRadius: '50%', padding: 0, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: favorite ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+              background: 'color-mix(in srgb, var(--gb-surface-modal) 88%, transparent)',
+              border: '1px solid var(--gb-border-default)',
+              boxShadow: '0 1px 3px rgba(0,0,0,.08)',
+              transition: 'color var(--gb-anim), background-color var(--gb-anim), border-color var(--gb-anim)' }}>
+            <Icon size={11.5} fill={favorite ? 'currentColor' : 'none'} strokeWidth={2}><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></Icon>
+          </button>
         )}
         {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>
@@ -781,7 +781,7 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, 
           <>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '10px 11px 4px', flexShrink: 0 }}>Departments</div>
             {depts.map((d) => (
-              <CatRow key={'dept:' + d} glyph={d} label={d} count={deptCounts[d] || 0}
+              <CatRow key={'dept:' + d} glyph={d} label={catalogSidebarLabel(d)} count={deptCounts[d] || 0}
                 active={view === 'catalog' && sel === 'dept:' + d} onClick={() => onSelect('dept:' + d)} />
             ))}
           </>
@@ -2233,13 +2233,59 @@ function useCatalogScale() {
   const [scale, setScale] = useState(_catalogScale);
   useEffect(() => {
     let alive = true;
-    const apply = (v) => { const n = Number(v) || 1.8; _catalogScale = n; if (alive) setScale(n); };
+    const apply = (v) => {
+      const next = normalizeCatalogScale(v);
+      _catalogScale = next;
+      if (alive) setScale(next);
+    };
     loadDevSettings().then((d) => apply(d['giftCatalog.scale']));
     const onCh = (changes) => { if (changes && changes[DEV_STORAGE_KEY]) apply((changes[DEV_STORAGE_KEY].newValue || {})['giftCatalog.scale']); };
     try { chrome.storage.onChanged.addListener(onCh); } catch { /* no storage */ }
     return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
   }, []);
   return scale;
+}
+
+/* Hidden tabs can briefly report stale/zero visualViewport dimensions while
+   Chrome throttles and restores them. Ignore those measurements and refresh
+   once the tab is visible so returning to the catalog cannot inflate it. */
+function useCatalogViewport() {
+  const readNow = () => ({
+    width: typeof window === 'undefined' ? 0 : (window.visualViewport?.width || window.innerWidth),
+    height: typeof window === 'undefined' ? 0 : (window.visualViewport?.height || window.innerHeight),
+  });
+  const [viewport, setViewport] = useState(readNow);
+  useEffect(() => {
+    let frame = 0;
+    const read = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const next = readNow();
+      if (!Number.isFinite(next.width) || !Number.isFinite(next.height) || next.width <= 0 || next.height <= 0) return;
+      setViewport((current) => (
+        Math.abs(current.width - next.width) < 0.5 && Math.abs(current.height - next.height) < 0.5
+          ? current
+          : next
+      ));
+    };
+    const readAfterVisibility = () => {
+      if (document.hidden) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(read);
+    };
+    read();
+    window.addEventListener('resize', read);
+    window.visualViewport?.addEventListener('resize', read);
+    document.addEventListener('visibilitychange', readAfterVisibility);
+    window.addEventListener('pageshow', readAfterVisibility);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', read);
+      window.visualViewport?.removeEventListener('resize', read);
+      document.removeEventListener('visibilitychange', readAfterVisibility);
+      window.removeEventListener('pageshow', readAfterVisibility);
+    };
+  }, []);
+  return viewport;
 }
 
 /* ── Custom Items view ───────────────────────────────────────────────────────
@@ -2897,7 +2943,8 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
 
 export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail', pageContext = {} }) {
   ensureCatalogKeyframes();
-  const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
+  const preferredScale = useCatalogScale(); // loaded before first paint to avoid a resize snap
+  const viewport = useCatalogViewport();
   const toast = useToast();
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
   // Index the catalog for bundle-cost resolution (Double Dozen → single dozen's
@@ -3008,6 +3055,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   useEffect(() => { if (proposalFreeLines.length && loadedFree.length) setLoadedFree([]); }, [proposalFreeLines.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const proposalWithFree = effectiveFreeLines.length ? [...proposal, ...effectiveFreeLines] : proposal;
   const [proposalOpen, setProposalOpen] = useState(false);
+  const catalogWidth = CATALOG_CARD_WIDTH + (proposalOpen ? CATALOG_PROPOSAL_WIDTH : 0);
+  const scale = preferredScale == null
+    ? null
+    : fitCatalogScale(preferredScale, viewport.width, viewport.height, catalogWidth);
   const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current'|'crm'|'multi', item? items? }
   // Multi-select across the Saved / Current galleries → a combined overview + one
   // email with every proposal stacked.
@@ -3630,15 +3681,15 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           stay fine). transform lays the grid out at natural size and only
           scales the paint; transform-origin center + margin auto keep it
           centered. */}
-      <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+      <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center', transition: 'transform .28s cubic-bezier(.4,0,.2,1)' }}>
         {/* Flex row: catalog card + proposal side column. The row WIDENS when
-            the proposal opens (CARD_W → CARD_W+416), so the centered catalog
+            the proposal opens, so the centered catalog
             slides left and the proposal emerges beside it — both visible. */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: CARD_H, width: proposalOpen ? CARD_W + 416 : CARD_W, transition: 'width .42s cubic-bezier(.4,0,.2,1)' }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: CATALOG_CARD_HEIGHT, width: catalogWidth, transition: 'width .42s cubic-bezier(.4,0,.2,1)' }}>
         <motion.div
           initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 6 }}
           transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-          style={{ width: CARD_W, height: '100%', flex: '0 0 auto', zIndex: 2, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column' }}>
+          style={{ width: CATALOG_CARD_WIDTH, height: '100%', flex: '0 0 auto', zIndex: 2, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3875,7 +3926,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             zIndex:2): the column's flex-basis grows 0 → 416 in lockstep with
             the row widening, and the absolute panel (anchored right:0) rides
             out from under the catalog's right edge. */}
-        <div style={{ flex: proposalOpen ? '0 0 416px' : '0 0 0px', height: '100%', position: 'relative', overflow: 'visible', transition: 'flex-basis .42s cubic-bezier(.4,0,.2,1)' }}>
+        <div style={{ flex: proposalOpen ? `0 0 ${CATALOG_PROPOSAL_WIDTH}px` : '0 0 0px', height: '100%', position: 'relative', overflow: 'visible', transition: 'flex-basis .42s cubic-bezier(.4,0,.2,1)' }}>
           <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 400, opacity: proposalOpen ? 1 : 0, pointerEvents: proposalOpen ? 'auto' : 'none', transition: 'opacity .24s ease' }}>
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}

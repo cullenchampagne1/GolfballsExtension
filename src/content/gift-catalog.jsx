@@ -5,6 +5,7 @@ import { ensureScales } from '../lib/scales.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { GiftCatalog } from '../modals/GiftCatalog.jsx';
 import { runEngine } from '../lib/page-engine/index.js';
+import { CATALOG_MOUNT_SCALE_CATEGORY } from '../lib/catalogPresentation.js';
 
 /* Resolve the CRM page context (account/contact/order ids + opportunities) so a
    proposal can be saved straight to the right account/opportunity. The catalog
@@ -54,6 +55,6 @@ if (!window.__gbGiftCatalogLoaded) {
       <ToastHost installGlobal={false}>
         <GiftCatalog onClose={onClosed} pageContext={pageContext} />
       </ToastHost>
-    ));
+    ), { scaleCategory: CATALOG_MOUNT_SCALE_CATEGORY });
   };
 }

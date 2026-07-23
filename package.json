@@ -142,6 +142,10 @@
       "file": "tests/unit/customItems.test.mjs"
     },
     {
+      "name": "catalog \u00b7 badges, labels & stable presentation scale",
+      "file": "tests/unit/catalogPresentation.test.mjs"
+    },
+    {
       "name": "money \u00b7 bundle packing & ball costs",
       "file": "tests/unit/bundleCost.test.mjs"
     },
