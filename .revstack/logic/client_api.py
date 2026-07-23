@@ -802,9 +802,15 @@ class ExtensionClientApi:
         wait = max(0, min(int(wait or 0), 30))
         empty = {"messages": [], "count": 0, "cursor": since}
         try:
-            service = (getattr(self.service_manager_factory(), "_services", {}) or {}).get(
-                "email-relay-service"
-            ) if self.service_manager_factory else None
+            # Reach the email-relay service through the sanctioned public
+            # accessor, not the private _services dict. The service is a
+            # standalone system service (revstack-system-services/
+            # revstack-email-relay) that also exposes this at
+            # GET /services/email-relay-service/messages/pending for
+            # out-of-process consumers; the golfballs project bridges it here
+            # because the extension key can't reach /services/* directly.
+            manager = self.service_manager_factory() if self.service_manager_factory else None
+            service = manager.get_service_by_id("email-relay-service") if manager else None
             if service is None or not hasattr(service, "messages_pending"):
                 result = empty
             elif wait and hasattr(service, "wait_for_pending"):
