@@ -32,7 +32,15 @@ const STAGE = resolve(ROOT, 'dist/safari-stage/extension');
 const PROJECT = resolve(ROOT, 'dist/safari');
 
 const APP_NAME = process.env.GB_SAFARI_APP_NAME || 'Golfballs Toolkit';
-const BUNDLE_ID = process.env.GB_SAFARI_BUNDLE_ID || 'com.cullenchampagne.golfballs-toolkit';
+// The converter derives the APP's bundle id from the app name (rfc1034: spaces
+// → hyphens, case preserved) and only applies --bundle-identifier to the
+// EXTENSION (as `<id>.Extension`). For the extension id to be prefixed by the
+// app id (Xcode requires it), the bundle id's last segment must equal the
+// app-name derivation — so we compute it from APP_NAME instead of hardcoding a
+// mismatched-case value.
+const APP_ORG = process.env.GB_SAFARI_ORG || 'com.cullenchampagne';
+const APP_SLUG = APP_NAME.trim().replace(/[^A-Za-z0-9.-]+/g, '-').replace(/^-+|-+$/g, '');
+const BUNDLE_ID = process.env.GB_SAFARI_BUNDLE_ID || `${APP_ORG}.${APP_SLUG}`;
 
 function main() {
   // 1. Fresh build (prebuild regenerates help content; build.js emits react-dist).
