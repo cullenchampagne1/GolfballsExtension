@@ -53,9 +53,23 @@ const tabsQueryActive = () =>
   });
 const sendMessage = (tabId, msg) =>
   new Promise((resolve) => {
-    try { chrome.tabs.sendMessage(tabId, msg, (resp) => resolve(resp)); }
-    catch { resolve(null); }
+    if (tabId == null) { resolve(null); return; }
+    try {
+      chrome.tabs.sendMessage(tabId, msg, (resp) => {
+        // Read lastError so Chrome doesn't log "Unchecked runtime.lastError:
+        // Could not establish connection. Receiving end does not exist." when
+        // the tab has no content script (restricted page, blank tab, or the
+        // script hasn't loaded yet).
+        void chrome.runtime.lastError;
+        resolve(resp);
+      });
+    } catch { resolve(null); }
   });
+
+// A tab we can inject into / message. Content scripts can't run on chrome://,
+// edge://, extension pages, the Web Store, view-source, blank tabs, etc.; the
+// popup can be opened over any of them, so guard before touching them.
+const isInjectableTab = (tab) => !!(tab && tab.url && /^https?:\/\//i.test(tab.url));
 
 /* ============================================================
    TEMPLATE RENDERING HELPERS — preserved 1:1 from popup.js
@@ -224,6 +238,13 @@ function PopupApp() {
       // order/account templates when ignoreCtx is on.
       if (ignoreCtx) { renderMain({ pageType: '__all__' }, tpls); return; }
 
+      // Opened over a non-web tab (chrome://extensions where it's tested, a
+      // blank tab, the Web Store…): content scripts can't run there, so don't
+      // probe/inject/message it. Render without page context instead of hanging
+      // on the loading stage — this also silences the "Cannot access chrome://
+      // and edge:// URLs" scripting errors.
+      if (!isInjectableTab(currentTab)) { renderMain({ pageType: 'other' }, tpls); return; }
+
       // Probe whether all content scripts are fully live in this tab.
       // Checks both the ready flag (set by main.js) AND the existence of the
       // watchlist function (from watchlist-modal.js) to catch any partial-load
@@ -233,7 +254,7 @@ function PopupApp() {
           chrome.scripting.executeScript(
             { target: { tabId: currentTab.id },
               func: () => !!window.__gbContentReady && typeof __gbShowWatchListModal === 'function' },
-            res,
+            (r) => { void chrome.runtime.lastError; res(r); },
           );
         } catch { res(null); }
       });
@@ -272,11 +293,16 @@ function PopupApp() {
                 'react-dist/content/actions-shelf.js', 'react-dist/content/calendar.js',
                 'src/vanilla/main.js',
               ] },
-            askForPageInfo,
+            () => { void chrome.runtime.lastError; askForPageInfo(); },
           );
         } catch { askForPageInfo(); }
       }
-    })();
+    })().catch(() => {
+      // Never leave the popup stuck on the blank 'loading' stage: if init throws
+      // (storage, credentials, messaging…), fall back to a rendered state so the
+      // UI and the Manage button are always usable.
+      if (!cancelled) { try { renderMain({ pageType: 'other' }); } catch { setStage('empty'); } }
+    });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -440,7 +466,7 @@ function PopupApp() {
   }, []);
 
   /* ── header openers ── */
-  const openManager = () => { try { chrome.runtime.sendMessage({ action: 'openEditor' }); } catch {} };
+  const openManager = () => { try { chrome.runtime.sendMessage({ action: 'openEditor' }, () => void chrome.runtime.lastError); } catch {} };
 
   /* ── stage routes ── */
   // templateCount in the header reflects the user's total enabled templates
@@ -503,7 +529,7 @@ function PopupApp() {
             // Fire-and-forget: the content-script handler returns true
             // without sendResponse, so awaiting hangs the popup. Closing
             // immediately lets the modal mount unobstructed on the host page.
-            chrome.tabs.sendMessage(tab.id, { action: 'showImagePreview', orderId, customerId });
+            chrome.tabs.sendMessage(tab.id, { action: 'showImagePreview', orderId, customerId }, () => void chrome.runtime.lastError);
             window.close();
           }}
         />
