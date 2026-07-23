@@ -148,6 +148,10 @@
       "file": "tests/unit/giftCatalogMath.test.mjs"
     },
     {
+      "name": "catalog \u00b7 favorites & portable custom-item stores",
+      "file": "tests/unit/customItems.test.mjs"
+    },
+    {
       "name": "money \u00b7 bundle packing & ball costs",
       "file": "tests/unit/bundleCost.test.mjs"
     },

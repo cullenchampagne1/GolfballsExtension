@@ -9,7 +9,8 @@ import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
+import { CATALOG_FAVORITES_STORAGE_KEY, loadCatalogFavorites, setCatalogFavorite } from '../lib/catalogFavorites.js';
 // The built-in supplier ingesters are admin-only and loaded lazily (see REPO_RUN
 // below) so the served build never bundles them.
 import { getInventory, peekInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
@@ -371,7 +372,7 @@ function AddButton({ inProposal, compact, onAdd }) {
   );
 }
 
-function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClick }) {
+function ProductCard({ p, compact, showRating, active, inProposal, favorite = false, onToggleFavorite, onAdd, onClick }) {
   const [hover, setHover] = useState(false);
   const ring = active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : '';
   return (
@@ -389,11 +390,26 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
       }}>
       <div style={{ position: 'relative' }}>
         <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} h={compact ? 132 : 156} />
+        {onToggleFavorite && (
+          <button type="button" title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+            aria-label={favorite ? `Remove ${p.title} from favorites` : `Add ${p.title} to favorites`}
+            aria-pressed={favorite}
+            onClick={(event) => { event.stopPropagation(); onToggleFavorite(p); }}
+            style={{ position: 'absolute', top: 7, right: 7, width: 25, height: 25, borderRadius: '50%', padding: 0, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: favorite ? 'var(--gb-warning)' : 'var(--gb-text-muted)',
+              background: favorite ? 'color-mix(in srgb, var(--gb-warning) 14%, var(--gb-surface-modal))' : 'color-mix(in srgb, var(--gb-surface-modal) 90%, transparent)',
+              border: '1px solid ' + (favorite ? 'color-mix(in srgb, var(--gb-warning) 45%, var(--gb-border-default))' : 'var(--gb-border-default)'),
+              boxShadow: '0 2px 7px rgba(0,0,0,.12)', backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)',
+              transform: favorite ? 'scale(1.04)' : 'none', transition: 'all var(--gb-anim)' }}>
+            <Icon size={12.5} fill={favorite ? 'currentColor' : 'none'} strokeWidth={2.1}><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></Icon>
+          </button>
+        )}
         {hasPromo(p) && (
           <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>
         )}
         {onSale(p) && (
-          <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>
+          <span style={{ position: 'absolute', top: onToggleFavorite ? 38 : 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 4px rgba(0,0,0,.18)', transition: 'top var(--gb-anim)' }}>Sale</span>
         )}
         {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>
@@ -746,7 +762,7 @@ function SavedNavRow({ label, icon, count, active, onClick }) {
   );
 }
 
-function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onSetView, savedCount, customCount, currentCount }) {
+function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, dock, view, onSetView, savedCount, customCount, currentCount }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
@@ -755,6 +771,9 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
         {/* No "All Items" row — the catalog defaults to the full golfballs.com
             set, and a plain search spans everything. Pick a department to browse
             one (click it again to clear); /category scopes a search. ── */}
+        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '3px 11px 4px', flexShrink: 0 }}>My catalog</div>
+        <SavedNavRow label="Favorites" icon={<StarI size={13} />} count={favoriteCount || 0}
+          active={view === 'catalog' && sel === 'favorites'} onClick={() => onSelect('favorites')} />
         {/* ── Departments — custom-logo items are folded into their depts; use
             the /Commissionable filter to scope to commissionable products. ── */}
         {depts.length > 0 && (
@@ -2382,77 +2401,157 @@ function RepoImportModal({ onClose, onImported }) {
   );
 }
 
-/* Share the selected custom items as a persistent store and surface the link.
-   Two steps: name the store, then copy the generated link. */
-function CreateStoreModal({ items, onClose, onCreated }) {
-  const [name, setName] = useState('');
+/* Product-store transfer lives inside the Custom Items view instead of hiding
+   the catalog behind another modal. A link is the convenient path; the same
+   versioned JSON envelope is always available and becomes the automatic
+   fallback when the backend cannot create a link. */
+function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, onShared }) {
+  const [name, setName] = useState('My custom item store');
+  const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState(null);   // backend store { url, name, item_count }
+  const [created, setCreated] = useState(null);
   const [copied, setCopied] = useState(false);
+  const fileRef = useRef(null);
   const toast = useToast();
   const count = items.length;
 
-  const create = () => {
-    const nm = name.trim();
-    if (!nm || busy) return;
-    setBusy(true);
-    createProductStore(nm, items)
-      .then((store) => setCreated(store))
-      .catch((e) => { toast?.error?.((e && e.message) || 'Could not create store'); setBusy(false); });
+  const safeFilename = (value) => {
+    const base = String(value || 'golfballs-product-store').trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+    return `${base || 'golfballs-product-store'}.json`;
   };
-  const copy = () => {
-    if (!created) return;
-    try { navigator.clipboard.writeText(created.url); setCopied(true); setTimeout(() => setCopied(false), 1400); toast?.success?.('Store link copied'); } catch { /* */ }
+  const downloadFile = () => {
+    try {
+      const file = buildProductStoreFile(name, items);
+      const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = safeFilename(name);
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      return true;
+    } catch (error) {
+      toast?.error?.(error?.message || 'Could not export the product store');
+      return false;
+    }
+  };
+  const create = async () => {
+    if (!name.trim() || !count || busy) return;
+    setBusy(true);
+    try {
+      const store = await createProductStore(name, items);
+      setCreated(store);
+      onShared?.();
+    } catch (error) {
+      if (downloadFile()) {
+        toast?.success?.('Server unavailable — downloaded a JSON product store instead');
+        onShared?.();
+      } else {
+        toast?.error?.(error?.message || 'Could not create the product store');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = async () => {
+    if (!created?.url) return;
+    try {
+      await navigator.clipboard.writeText(created.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+      toast?.success?.('Store link copied');
+    } catch { toast?.error?.('Could not copy the store link'); }
+  };
+  const importLink = async () => {
+    if (!link.trim() || busy) return;
+    setBusy(true);
+    try {
+      const result = await importProductStore(link);
+      onImported?.(result);
+      setLink('');
+    } catch (error) {
+      toast?.error?.(error?.message || 'Could not import the product store');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const importFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || busy) return;
+    setBusy(true);
+    try {
+      const result = await importProductStoreFile(await file.text());
+      onImported?.(result);
+    } catch (error) {
+      toast?.error?.(error?.message || 'Could not import the JSON product store');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <motion.div onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }}
-      style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)' }}>
-      <motion.div initial={{ opacity: 0, scale: .96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        style={{ width: 420, maxWidth: '92%', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden' }}>
-        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.link size={16} /></div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{created ? 'Store ready' : 'Share as a store'}</div>
-            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>{count} custom item{count === 1 ? '' : 's'} — anyone with the link imports them</div>
+    <motion.div initial={{ height: 0, opacity: 0, y: -8 }} animate={{ height: 'auto', opacity: 1, y: 0 }}
+      exit={{ height: 0, opacity: 0, y: -8 }} transition={{ type: 'spring', stiffness: 420, damping: 36 }}
+      style={{ flexShrink: 0, overflow: 'hidden', borderBottom: '1px solid var(--gb-border-subtle)', background: 'linear-gradient(135deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 42%, var(--gb-fill-inverse-strong))' }}>
+      <div style={{ margin: '12px 16px 14px', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', background: 'color-mix(in srgb, var(--gb-surface-modal) 92%, transparent)', boxShadow: '0 8px 24px -18px rgba(0,0,0,.42)', overflow: 'hidden' }}>
+        <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <div style={{ width: 29, height: 29, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)' }}>
+            {mode === 'share' ? <I.link size={15} /> : <I.download size={15} />}
           </div>
-          {!busy && <IconBtn size="sm" icon={<I.close />} onClick={onClose} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 750, color: 'var(--gb-text-primary)' }}>Move custom items</div>
+            <div style={{ marginTop: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Share with a revocable link or a durable JSON file.</div>
+          </div>
+          <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+            {[['share', 'Share'], ['import', 'Import']].map(([id, label]) => (
+              <button key={id} type="button" onClick={() => onMode(id)} disabled={id === 'share' && !count}
+                style={{ minWidth: 66, padding: '5px 10px', border: 0, borderRadius: 6, cursor: id === 'share' && !count ? 'not-allowed' : 'pointer', font: 'inherit', fontSize: 10.5, fontWeight: 750,
+                  opacity: id === 'share' && !count ? .42 : 1, color: mode === id ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+                  background: mode === id ? 'var(--gb-surface-modal)' : 'transparent', boxShadow: mode === id ? '0 1px 3px rgba(0,0,0,.12)' : 'none', transition: 'all var(--gb-anim)' }}>{label}</button>
+            ))}
+          </div>
+          <IconBtn size="sm" variant="ghost" icon={<I.close />} onClick={onClose} title="Close transfer panel" />
         </div>
 
-        {created ? (
-          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Store link</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <Input size="sm" value={created.url} onChange={() => {}} readOnly onFocus={(e) => e.target.select()} style={{ flex: 1 }} />
-                <IconBtn size="md" variant="secondary" active={copied} icon={copied ? <I.check size={14} /> : <I.copy size={14} />} onClick={copy} title="Copy store link" />
+        <AnimatePresence mode="wait" initial={false}>
+          {mode === 'share' ? (
+            <motion.div key="share" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={{ duration: .16 }}
+              style={{ padding: 12, display: 'grid', gridTemplateColumns: created ? 'minmax(220px, .8fr) minmax(320px, 1.2fr)' : 'minmax(240px, 1fr) auto', gap: 12, alignItems: 'end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Store name · {count} selected</label>
+                <Input size="sm" value={name} onChange={setName} placeholder="e.g. Fall gift picks" />
               </div>
-              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>The link works until you revoke it under Settings → Product Stores.</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Btn variant="primary" size="md" onClick={() => onCreated?.()}>Done</Btn>
-            </div>
-          </div>
-        ) : busy ? (
-          <div style={{ padding: '28px 22px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--gb-brand-tint-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
-            <div style={{ fontSize: 12, color: 'var(--gb-text-muted)' }}>Creating store…</div>
-          </div>
-        ) : (
-          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Store name</label>
-              <Input size="sm" value={name} onChange={setName} placeholder="e.g. Fall gift picks" onKeyDown={(e) => { if (e.key === 'Enter') create(); }} autoFocus />
-              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>{count} custom item{count === 1 ? '' : 's'} will be shared. The link persists until you revoke it.</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
-              <Btn variant="primary" size="md" icon={<I.link />} onClick={create} disabled={!name.trim()}>Create link</Btn>
-            </div>
-          </div>
-        )}
-      </motion.div>
+              {created ? (
+                <div style={{ display: 'flex', gap: 6, minWidth: 0 }}>
+                  <Input size="sm" value={created.url} onChange={() => {}} readOnly onFocus={(event) => event.target.select()} style={{ flex: 1 }} />
+                  <Btn variant="primary" size="sm" icon={copied ? <I.check /> : <I.copy />} onClick={copy}>{copied ? 'Copied' : 'Copy link'}</Btn>
+                  <Btn variant="secondary" size="sm" icon={<I.download />} onClick={downloadFile}>JSON</Btn>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 7, justifyContent: 'flex-end' }}>
+                  <Btn variant="secondary" size="sm" icon={<I.download />} onClick={downloadFile} disabled={!name.trim() || !count}>Download JSON</Btn>
+                  <Btn variant="primary" size="sm" icon={<I.link />} onClick={create} disabled={!name.trim() || !count || busy}>{busy ? 'Creating…' : 'Create link'}</Btn>
+                </div>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div key="import" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: .16 }}
+              style={{ padding: 12, display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) auto', gap: 10, alignItems: 'end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Shared store link</label>
+                <Input size="sm" value={link} onChange={setLink} placeholder="Paste a product-store link…" onKeyDown={(event) => { if (event.key === 'Enter') importLink(); }} />
+              </div>
+              <div style={{ display: 'flex', gap: 7 }}>
+                <input ref={fileRef} type="file" accept=".json,application/json" onChange={importFile} style={{ display: 'none' }} />
+                <Btn variant="secondary" size="sm" icon={<I.upload />} onClick={() => fileRef.current?.click()} disabled={busy}>Import JSON</Btn>
+                <Btn variant="primary" size="sm" icon={<I.download />} onClick={importLink} disabled={!link.trim() || busy}>{busy ? 'Importing…' : 'Import link'}</Btn>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 }
@@ -2464,7 +2563,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
   const [selectMode, setSelectMode] = useState(false);
   const [sel, setSel] = useState(() => new Set());
   const [repoOpen, setRepoOpen] = useState(false);
-  const [storeItems, setStoreItems] = useState(null);   // records staged for a new store (opens CreateStoreModal)
+  const [transfer, setTransfer] = useState(null); // { mode: share|import, items }
   const toast = useToast();
   const lastIdx = useRef(null);
   const scrollRef = useRef(null);
@@ -2473,6 +2572,11 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
     if (onReload) onReload();
     const label = (res && res.name) || REPOS[repoId]?.name || repoId;
     toast?.success?.(`Imported ${res.added} new + ${res.updated} updated from ${label}`, { duration: 4000 });
+  };
+  const onTransferImported = (res) => {
+    if (onReload) onReload();
+    toast?.success?.(`Imported ${res.added} new + ${res.updated} updated from ${res.name || 'product store'}`, { duration: 4000 });
+    setTransfer(null);
   };
   // Driven by the shared catalog search bar — a leading "/" is a catalog command,
   // so it filters nothing here.
@@ -2533,9 +2637,18 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         ) : (
           items.length > 0 && <IconBtn size="sm" variant="secondary" title="Select items" icon={<I.check />} onClick={() => setSelectMode(true)} />
         )}
-        {!selectMode && <IconBtn size="sm" variant="secondary" title="Import from a repo" icon={<I.download size={14} />} onClick={() => setRepoOpen(true)} />}
+        {!selectMode && __ADMIN__ && <IconBtn size="sm" variant="secondary" title="Import a supplier catalog" icon={<I.cube size={14} />} onClick={() => setRepoOpen(true)} />}
+        {!selectMode && <IconBtn size="sm" variant="secondary" title="Import or share custom items" icon={<I.upload size={14} />} onClick={() => setTransfer((current) => current ? null : { mode: 'import', items: [] })} />}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
+      <AnimatePresence initial={false}>
+        {transfer && (
+          <CustomItemsTransferPanel key="custom-items-transfer" mode={transfer.mode} items={transfer.items}
+            onMode={(mode) => setTransfer((current) => ({ mode, items: current?.items || [] }))}
+            onClose={() => setTransfer(null)} onImported={onTransferImported}
+            onShared={() => { if (selectMode) exitSelect(); }} />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {repoOpen && <RepoImportModal key="repo-import" onClose={() => setRepoOpen(false)} onImported={onRepoImported} />}
       </AnimatePresence>
@@ -2582,8 +2695,8 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         {selectMode && sel.size > 0 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: .16 }}
             style={{ position: 'absolute', right: 18, bottom: 18, zIndex: 6, display: 'flex', gap: 8 }}>
-            <Btn variant="primary" size="md" icon={<I.link />} onClick={() => { const recs = items.filter((ci) => sel.has(ci.id)); if (recs.length) setStoreItems(recs); }}
-              style={{ boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Create store</Btn>
+            <Btn variant="primary" size="md" icon={<I.link />} onClick={() => { const recs = items.filter((ci) => sel.has(ci.id)); if (recs.length) setTransfer({ mode: 'share', items: recs }); }}
+              style={{ boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Share {nfmt(sel.size)}</Btn>
             {/* variant=primary so its hover is a brightness filter (keeps the solid
                 fill) — the `danger` variant's hover animates backgroundColor to a
                 tint, which made the button go transparent on hover. */}
@@ -2591,9 +2704,6 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
               style={{ background: 'var(--gb-error-fg, var(--gb-error))', color: '#fff', border: '1px solid var(--gb-error-fg, var(--gb-error))', boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Delete {nfmt(sel.size)}</Btn>
           </motion.div>
         )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {storeItems && <CreateStoreModal key="create-store" items={storeItems} onClose={() => setStoreItems(null)} onCreated={() => { setStoreItems(null); exitSelect(); }} />}
       </AnimatePresence>
     </div>
   );
@@ -2799,7 +2909,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [query, setQuery] = useState('');
   const [selBrands, setSelBrands] = useState(() => new Set()); // empty = all brands
   const toggleBrand = (b) => setSelBrands((s) => { const n = new Set(s); n.has(b) ? n.delete(b) : n.add(b); return n; });
-  // Sidebar selection: 'all' | 'cl' (all custom-logo) | 'cl:<category>' | 'dept:<department>'.
+  // Sidebar selection: 'all' | 'favorites' | 'dept:<department>'.
   const [sel, setSel] = useState('all');
   // Whether the active department scope came from a "/category" command rather
   // than a sidebar click. A plain-text search spans the WHOLE catalog and ignores
@@ -2967,15 +3077,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Custom items (SERVICEITEM) — rep-defined products in chrome.storage; editingCustom
   // holds the record being created/edited in the form ({} = new, null = closed).
   const [customItems, setCustomItems] = useState([]);
+  const [favoriteIds, setFavoriteIds] = useState([]);
   const [editingCustom, setEditingCustom] = useState(null);
   useEffect(() => {
     let alive = true;
     loadSavedProposals().then((l) => { if (alive) setSavedProposals(l); });
     loadCustomItems().then((l) => { if (alive) setCustomItems(l); });
+    loadCatalogFavorites().then((ids) => { if (alive) setFavoriteIds(ids); });
     primeCostCache().catch(() => {});      // hydrate per-SKU inventory costs for margin math
     const onCh = (changes) => {
       if (changes && changes.gbSavedProposals) setSavedProposals(changes.gbSavedProposals.newValue || []);
       if (changes && changes.gbCustomItems) setCustomItems(changes.gbCustomItems.newValue || []);
+      if (changes && changes[CATALOG_FAVORITES_STORAGE_KEY]) setFavoriteIds(changes[CATALOG_FAVORITES_STORAGE_KEY].newValue || []);
     };
     try { chrome.storage.onChanged.addListener(onCh); } catch { /* */ }
     return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
@@ -2987,6 +3100,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const doClose = () => setOpen(false);
 
   const compact = (dsDensity || density) === 'compact';
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const toggleFavorite = useCallback((product) => {
+    const id = product?.id == null ? '' : String(product.id);
+    if (!id) return;
+    setFavoriteIds((current) => {
+      const next = new Set(current);
+      const shouldFavorite = !next.has(id);
+      if (shouldFavorite) next.add(id); else next.delete(id);
+      setCatalogFavorite(current, id, shouldFavorite);
+      return [...next];
+    });
+  }, []);
 
   // `productId` (not the line id) drives the "added" hint on cards, since a
   // product can now appear on multiple lines (e.g. different customizations).
@@ -3375,16 +3500,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     const extra = [...present].filter((d) => !DEPT_ORDER.includes(d)).sort();
     return [...ordered, ...extra];
   }, [catalog]);
+  const favoriteCount = useMemo(() => catalog.reduce((count, product) => count + (favoriteSet.has(String(product.id)) ? 1 : 0), 0), [catalog, favoriteSet]);
 
   // Readable label for the current selection (footer + "in <x>" text).
-  const selLabel = sel === 'all' ? '' : sel.startsWith('dept:') ? sel.slice(5) : sel;
+  const selLabel = sel === 'all' ? '' : sel === 'favorites' ? 'Favorites' : sel.startsWith('dept:') ? sel.slice(5) : sel;
 
   // Products in the current sidebar selection.
   const inCat = useMemo(() => {
     if (sel === 'all') return catalog;
+    if (sel === 'favorites') return catalog.filter((product) => favoriteSet.has(String(product.id)));
     if (sel.startsWith('dept:')) { const d = sel.slice(5); return catalog.filter((p) => p.dept === d); }
     return catalog;
-  }, [sel, catalog]);
+  }, [sel, catalog, favoriteSet]);
   const brands = useMemo(() => {
     const m = {}; inCat.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
     // "Shop by Brand" order; brands outside the canonical list trail by count.
@@ -3430,7 +3557,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   // A plain-text search spans every item in the catalog UNLESS the scope was set
   // by a /category command — sidebar department selection is for browsing only.
-  const searchingAll = !!(query.trim() && !query.startsWith('/') && !selFromCmd);
+  const searchingAll = !!(query.trim() && !query.startsWith('/') && !selFromCmd && sel !== 'favorites');
   const results = useMemo(() => {
     let r = searchingAll ? catalog : inCat;
     if (selBrands.size > 0) r = r.filter((p) => selBrands.has(p.brand));
@@ -3549,8 +3676,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {/* Body — also the positioning context for the slide-over panels,
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
-          <CategoryRail sel={sel} onSelect={(s) => { setView('catalog'); setSelFromCmd(false); setSel((cur) => (cur === s ? 'all' : s)); }} total={catalog.length}
-            depts={depts} deptCounts={deptCounts}
+          <CategoryRail sel={sel} onSelect={(s) => { const alreadyBrowsing = view === 'catalog'; setView('catalog'); setSelFromCmd(false); setSel((cur) => (alreadyBrowsing && cur === s ? 'all' : s)); }} total={catalog.length}
+            depts={depts} deptCounts={deptCounts} favoriteCount={favoriteCount}
             view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length} currentCount={currentProposals.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <AnimatePresence mode="wait" initial={false}>
@@ -3609,14 +3736,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                       {shown.map((p) => (
                         <motion.div key={p.id} initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .95 }} transition={{ duration: .17, ease: [0.32, 0.72, 0, 1] }}>
                           <ProductCard p={p} compact={compact} showRating={showRating}
-                            active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onAdd={addToProposal} onClick={() => setSelected(p)} />
+                            active={selected && selected.id === p.id} inProposal={inProposal(p.id)}
+                            favorite={favoriteSet.has(String(p.id))} onToggleFavorite={toggleFavorite}
+                            onAdd={addToProposal} onClick={() => setSelected(p)} />
                         </motion.div>
                       ))}
                     </AnimatePresence>
                   ) : (
                     shown.map((p) => (
                       <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
-                        active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onAdd={addToProposal} onClick={() => setSelected(p)} />
+                        active={selected && selected.id === p.id} inProposal={inProposal(p.id)}
+                        favorite={favoriteSet.has(String(p.id))} onToggleFavorite={toggleFavorite}
+                        onAdd={addToProposal} onClick={() => setSelected(p)} />
                     ))
                   )}
                 </div>

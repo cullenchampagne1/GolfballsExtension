@@ -16,6 +16,9 @@
 
 import seed from './giftCatalogSeed.json';
 import { loadDevSettings } from './devSettings.js';
+import { decodeEntities } from './htmlEntities.js';
+
+export { decodeEntities } from './htmlEntities.js';
 
 export const GIFT_CATALOG_SEED = seed;
 
@@ -89,18 +92,6 @@ function parsePromo(tags) {
    catalog item is decorated. */
 /* Decode HTML entities the Solr feed leaves in titles/brands (&amp;, &#39;,
    &quot;, numeric, even double-encoded) so a product never reads "Tees &amp; …". */
-export function decodeEntities(s) {
-  let t = String(s || '');
-  for (let i = 0; i < 3 && /&[#a-z0-9]+;/i.test(t); i++) {
-    t = t
-      .replace(/&#x([0-9a-f]+);/gi, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
-      .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
-      .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
-      .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&');
-  }
-  return t;
-}
 const cleanTitle = (t) => decodeEntities(String(t || '')).replace(/\s*[({](?:decorat(?:ion|ed)|custom logo)[)}]/ig, '').replace(/\s{2,}/g, ' ').trim();
 
 /* Bucket a Solr doc into a canonical "Shop by Type" category by its

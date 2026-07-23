@@ -11,10 +11,14 @@
    cartSerializer.buildCustomItemLine).
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { decodeEntities } from './giftCatalog.js';
+import { decodeEntities } from './htmlEntities.js';
 import { sendBackgroundMessage } from './backgroundMessage.js';
 
-const STORAGE_KEY = 'gbCustomItems';
+export const STORAGE_KEY = 'gbCustomItems';
+export const PRODUCT_STORE_FILE_KIND = 'golfballs-product-store';
+export const PRODUCT_STORE_FILE_VERSION = 1;
+export const PRODUCT_STORE_FILE_MAX_BYTES = 4 * 1024 * 1024;
+export const PRODUCT_STORE_FILE_MAX_ITEMS = 5000;
 
 /* Supplier "repos" a custom item can be imported from. `label` is the short tag
    shown on the card; `host` lets us recover the source from an item's link for
@@ -34,6 +38,7 @@ export function repoOf(rec) {
 }
 const _rid = () => Math.random().toString(36).slice(2, 9);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const str = (v) => (v == null ? '' : String(v)).trim();
 
 /* Upload a custom-item thumbnail to the icustomize S3 bucket (same flow as logo
    uploads) and return a stable public URL so the image persists across sessions
@@ -121,25 +126,25 @@ function normStyleOptions(styleOptions, legacyStyle) {
    working. `qty` is no longer a field (the ladder's first tier is the min qty). */
 export function normalizeCustomItem(rec = {}) {
   return {
-    id: rec.id || 'ci-' + _rid(),
-    name: decodeEntities((rec.name || '').trim()),
-    extraDetails: decodeEntities((rec.extraDetails || '').trim()),
-    itemID: (rec.itemID || '').trim(),
+    id: str(rec.id) || 'ci-' + _rid(),
+    name: decodeEntities(str(rec.name)),
+    extraDetails: decodeEntities(str(rec.extraDetails)),
+    itemID: str(rec.itemID),
     // Source product link (e.g. the hpgbrands.com page) — a button surfaces it
     // later. `source` tags where the item came from (e.g. 'hpg'); `sku` is the
     // supplier SKU (used to dedupe imports).
-    link: (rec.link || '').trim(),
-    sku: (rec.sku || '').trim(),
-    source: (rec.source || '').trim(),
+    link: str(rec.link),
+    sku: str(rec.sku),
+    source: str(rec.source),
     // Never persist a raw data: URL (would bloat storage + won't load in the
     // cart) — only keep an uploaded/pasted http(s) thumbnail.
-    thumbnail: /^data:/i.test(rec.thumbnail || '') ? '' : (rec.thumbnail || '').trim(),
-    description: (rec.description || '').trim(),
+    thumbnail: /^data:/i.test(str(rec.thumbnail)) ? '' : str(rec.thumbnail),
+    description: str(rec.description),
     styleOptions: normStyleOptions(rec.styleOptions, rec.style),
     breaks: normBreaks(rec.breaks, rec.price, rec.qty),
     costBreaks: normCostBreaks(rec.costBreaks),
     cost: num(rec.cost),
-    leadTime: (rec.leadTime || '').toString().trim(),
+    leadTime: str(rec.leadTime),
     setup: num(rec.setup),
     weight: num(rec.weight),
     dropship: !!rec.dropship,
@@ -239,6 +244,65 @@ export async function importProductStore(linkOrId) {
   if (!items.length) return { added: 0, updated: 0, name: store.name || '' };
   const { added, updated } = await addCustomItems(items);
   return { added, updated, name: store.name || '' };
+}
+
+/* Build the durable, server-independent equivalent of a product-store link.
+   The envelope is deliberately versioned and allowlists fields by normalizing
+   every item, matching settings/email share files instead of depending on an
+   undocumented dump of chrome.storage. */
+export function buildProductStoreFile(name, items) {
+  const safeName = str(name).slice(0, 120);
+  if (!safeName) throw new Error('A product store name is required');
+  if (!Array.isArray(items) || !items.length) throw new Error('Select at least one custom item');
+  if (items.length > PRODUCT_STORE_FILE_MAX_ITEMS) {
+    throw new Error(`Product stores can contain at most ${PRODUCT_STORE_FILE_MAX_ITEMS.toLocaleString('en-US')} items`);
+  }
+  return {
+    schemaVersion: PRODUCT_STORE_FILE_VERSION,
+    kind: PRODUCT_STORE_FILE_KIND,
+    name: safeName,
+    createdAt: new Date().toISOString(),
+    items: items.map(normalizeCustomItem),
+  };
+}
+
+/* Parse only the documented, versioned envelope. Raw arrays and backend
+   responses are intentionally rejected so future migrations remain explicit. */
+export function parseProductStoreFile(text) {
+  const source = String(text || '');
+  if (new TextEncoder().encode(source).byteLength > PRODUCT_STORE_FILE_MAX_BYTES) {
+    throw new Error('Product store files must be 4 MB or smaller');
+  }
+  let raw;
+  try { raw = JSON.parse(source); }
+  catch (error) { throw new Error(`Not valid JSON — ${error.message}`); }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.kind !== PRODUCT_STORE_FILE_KIND) {
+    throw new Error('This is not a versioned Golfballs product store file');
+  }
+  if (raw.schemaVersion !== PRODUCT_STORE_FILE_VERSION) {
+    throw new Error('This product store file version is not supported');
+  }
+  const name = str(raw.name).slice(0, 120);
+  if (!name) throw new Error('The product store file is missing its name');
+  if (!Array.isArray(raw.items) || !raw.items.length) throw new Error('The product store file has no custom items');
+  if (raw.items.length > PRODUCT_STORE_FILE_MAX_ITEMS) {
+    throw new Error(`Product stores can contain at most ${PRODUCT_STORE_FILE_MAX_ITEMS.toLocaleString('en-US')} items`);
+  }
+  return {
+    schemaVersion: PRODUCT_STORE_FILE_VERSION,
+    kind: PRODUCT_STORE_FILE_KIND,
+    name,
+    createdAt: str(raw.createdAt),
+    items: raw.items.map(normalizeCustomItem),
+    transport: 'json',
+  };
+}
+
+/* Import a JSON store into the same local library used by link imports. */
+export async function importProductStoreFile(text) {
+  const store = parseProductStoreFile(text);
+  const { added, updated } = await addCustomItems(store.items);
+  return { added, updated, name: store.name, transport: 'json' };
 }
 
 /* Map a stored custom item → a synthetic catalog product the modal's ProductCard
