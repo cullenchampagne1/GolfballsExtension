@@ -1025,17 +1025,26 @@ async def release_list():
         {"key": "published", "label": "Published"},
         {"key": "commit", "label": "Commit"},
         {"key": "size", "label": "Size", "align": "right"},
+        {"key": "download", "label": "Download", "mono": True},
     ]
     current = ledger.get("current")
+    releases_base = f"{_public_origin()}{_PROJECT_SCOPE_PREFIX}releases"
     rows = []
     for r in ledger.get("releases", []):
         is_current = r.get("version") == current
+        # The ledger records the packed CRX filename; surface both the name and
+        # a ready-to-fetch URL so a version can actually be downloaded (the
+        # /releases/{file_name} endpoint takes the filename, not the version).
+        file_name = r.get("file") or ""
+        download_url = f"{releases_base}/{file_name}" if file_name else ""
         rows.append({
             "version": {"text": f"v{r.get('version', '?')}",
                         "color": "run" if is_current else None},
             "published": str(r.get("published_at", ""))[:10],
             "commit": r.get("commit", ""),
             "size": f"{(r.get('size', 0) / 1_048_576):.1f} MB",
+            "file": file_name,
+            "download": download_url,
         })
     return {"primary_key": "version", "columns": columns, "rows": rows}
 
