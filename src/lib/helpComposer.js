@@ -12,6 +12,25 @@
 export const HELP_COMPOSER_MIN_HEIGHT = 20;
 export const HELP_COMPOSER_MAX_HEIGHT = 104;
 
+export function resolveHelpComposerPrompt({ active = false, submitting = false } = {}) {
+  if (active) {
+    return {
+      placeholder: '',
+      overlay: 'Waiting for the current answer…',
+    };
+  }
+  if (submitting) {
+    return {
+      placeholder: '',
+      overlay: 'Sending your question…',
+    };
+  }
+  return {
+    placeholder: 'Ask about the Golfballs Toolkit…',
+    overlay: '',
+  };
+}
+
 export function resolveHelpComposerHeight(scrollHeight, hasContent = true) {
   if (!hasContent) return HELP_COMPOSER_MIN_HEIGHT;
   const measured = Number(scrollHeight);

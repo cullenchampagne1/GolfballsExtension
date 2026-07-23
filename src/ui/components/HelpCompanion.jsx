@@ -11,7 +11,7 @@ import {
   createSerialHelpActionRunner, orderHelpActions, shouldNotifyHelpActionReceipt,
 } from '../../lib/helpActionCore.js';
 import { FEATURE_DEFAULTS } from '../../lib/flags.js';
-import { syncHelpComposerHeight } from '../../lib/helpComposer.js';
+import { resolveHelpComposerPrompt, syncHelpComposerHeight } from '../../lib/helpComposer.js';
 import {
   createFlappyGameState, createWaitingGameState, flapWaitingBird,
   FLAPPY_GAME_WORLD, jumpWaitingGame, pickWaitingGame, stepFlappyGame,
@@ -60,9 +60,10 @@ function useHelpStyles() {
       .gb-help-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 999px !important; }
       .gb-help-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
       .gb-help-composer::placeholder { color: var(--gb-text-muted); -webkit-text-fill-color: var(--gb-text-muted); opacity: 1; }
-      .gb-help-composer { display: block; box-sizing: border-box; margin: 0; vertical-align: middle; transition: height 170ms cubic-bezier(.22,1,.36,1); }
-      .gb-help-composer:read-only { color: var(--gb-text-primary); -webkit-text-fill-color: var(--gb-text-primary); opacity: 1; cursor: default; }
+      .gb-help-composer { display: block; box-sizing: border-box; margin: 0; vertical-align: middle; appearance: none; -webkit-appearance: none; background: transparent !important; background-image: none !important; transition: height 170ms cubic-bezier(.22,1,.36,1); }
+      .gb-help-composer:read-only { color: var(--gb-text-primary); -webkit-text-fill-color: var(--gb-text-primary); opacity: 1; cursor: default; caret-color: transparent; }
       .gb-help-composer:read-only::placeholder { color: var(--gb-text-muted); -webkit-text-fill-color: var(--gb-text-muted); opacity: 1; }
+      .gb-help-composer-waiting { position: absolute; z-index: 1; left: 10px; right: 43px; top: 50%; transform: translateY(-50%); overflow: hidden; color: var(--gb-text-muted); background: transparent; font-family: var(--gb-font-sans); font-size: 11.5px; font-weight: 520; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
       .gb-help-composer::-webkit-scrollbar { width: 5px; }
       .gb-help-composer::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 999px; }
       @media (prefers-reduced-motion: reduce) {
@@ -1059,6 +1060,11 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     : client.service.phase === 'checking' ? 'Checking'
       : client.service.phase === 'ready' ? 'Ready'
         : client.service.phase === 'unavailable' ? 'Unavailable' : 'Help assistant';
+  const composerPrompt = resolveHelpComposerPrompt({
+    active: !!active,
+    submitting: localBusy && !active,
+  });
+  const composerFocused = focus && !composerPrompt.overlay;
 
   return (
     <div className="gb-help-motion" style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'linear-gradient(155deg, var(--gb-surface-modal), var(--gb-surface-1))' }}>
@@ -1129,7 +1135,12 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
 
       <footer style={{ padding: '8px 9px 9px', flexShrink: 0, borderTop: '1px solid var(--gb-border-subtle)', background: 'color-mix(in srgb, var(--gb-surface-modal) 92%, transparent)', backdropFilter: 'var(--gb-blur-medium)', WebkitBackdropFilter: 'var(--gb-blur-medium)' }}>
         {active && <div style={{ margin: '0 3px 6px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gb-text-muted)', fontSize: 9.25, fontWeight: 600 }}><I.sparkle size={9} style={{ color: 'var(--gb-brand-label)' }} />You can return to Actions — the reply will keep running and show as unread.</div>}
-        <div style={{ minHeight: 42, padding: '7px 7px 7px 10px', display: 'flex', alignItems: 'flex-end', gap: 7, borderRadius: 12, background: 'var(--gb-fill-subtle)', border: `1px solid ${focus ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`, boxShadow: focus ? '0 0 0 3px var(--gb-brand-tint-soft), inset 0 1px 0 var(--gb-fill-faint)' : 'inset 0 1px 0 var(--gb-fill-faint)', transition: 'border-color var(--gb-anim-fast), box-shadow var(--gb-anim-fast)' }}>
+        <div style={{ position: 'relative', minHeight: 42, padding: '7px 7px 7px 10px', display: 'flex', alignItems: 'flex-end', gap: 7, borderRadius: 12, background: 'var(--gb-fill-subtle)', border: `1px solid ${composerFocused ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`, boxShadow: composerFocused ? '0 0 0 3px var(--gb-brand-tint-soft), inset 0 1px 0 var(--gb-fill-faint)' : 'inset 0 1px 0 var(--gb-fill-faint)', transition: 'border-color var(--gb-anim-fast), box-shadow var(--gb-anim-fast)' }}>
+          {composerPrompt.overlay && (
+            <span className="gb-help-composer-waiting" aria-hidden="true">
+              {composerPrompt.overlay}
+            </span>
+          )}
           <textarea
             ref={textareaRef}
             className="gb-help-composer"
@@ -1138,7 +1149,8 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
             maxLength={4000}
             readOnly={!!active || localBusy}
             aria-busy={!!active || localBusy}
-            placeholder={active ? 'Waiting for the current answer…' : 'Ask about the Golfballs Toolkit…'}
+            placeholder={composerPrompt.placeholder}
+            aria-label={composerPrompt.overlay || composerPrompt.placeholder}
             onFocus={() => setFocus(true)}
             onBlur={() => setFocus(false)}
             onChange={(event) => setDraft(event.target.value)}
