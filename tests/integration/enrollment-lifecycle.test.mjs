@@ -11,7 +11,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   API_KEY, API_ORIGIN, EXTENSION_ID, INSTALLATION_ID, MANIFEST,
-  createFetchMock, jsonResponse, loadInstallationAuth, settle, validInstallation,
+  createFetchMock, jsonResponse, loadBackground, loadInstallationAuth, settle,
+  validInstallation,
 } from './helpers/harness.mjs';
 
 const ENROLLMENT_URL = `${API_ORIGIN}/auth/extension-installation`;
@@ -38,6 +39,23 @@ function makeSandbox(stored = {}) {
 const enrollments = (requests) => requests.filter(({ url }) => url === ENROLLMENT_URL);
 
 describe('enrollment lifecycle', () => {
+  it('continues a fresh enrollment through runtime verification and page-script activation', async () => {
+    const { fetchMock, requests } = createFetchMock(enrollmentRouter);
+    const background = await loadBackground({ stored: {}, fetchImpl: fetchMock });
+
+    assert.equal(enrollments(requests).length, 1);
+    assert.equal(background.healthRequests.length, 1);
+    assert.equal(background.healthRequests[0].method, 'GET');
+    assert.equal(
+      background.healthRequests[0].options.headers.get('Authorization'),
+      `Bearer ${API_KEY}`,
+    );
+    assert.equal(background.actionState.enabled, true);
+    assert.equal(background.registeredContentScripts.length, 6);
+    assert.equal(background.stored.gbRuntimeState.o, 1);
+    assert.equal(background.context.GBRuntimeCoordinator.isOpen(), true);
+  });
+
   it('enrolls exactly once on fresh install and persists the credential', async () => {
     const { client, stored, listeners, requests } = makeSandbox();
     assert.equal(listeners.installed.length, 0, 'the runtime coordinator owns installation startup');

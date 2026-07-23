@@ -100,23 +100,21 @@ export function createChrome({ stored = {}, extensionId = EXTENSION_ID, version 
       onRemoved: { addListener: (fn) => listeners.tabRemoved.push(fn) },
     },
     scripting: {
-      unregisterContentScripts({ ids } = {}, callback) {
+      async unregisterContentScripts({ ids } = {}) {
         const selected = new Set(ids || []);
         for (let index = registeredContentScripts.length - 1; index >= 0; index -= 1) {
           if (!ids || selected.has(registeredContentScripts[index].id)) {
             registeredContentScripts.splice(index, 1);
           }
         }
-        callback?.();
       },
-      registerContentScripts(scripts, callback) {
+      async registerContentScripts(scripts) {
         registeredContentScripts.push(...structuredClone(scripts));
-        callback?.();
       },
     },
     action: {
-      enable(callback) { actionState.enabled = true; callback?.(); },
-      disable(callback) { actionState.enabled = false; callback?.(); },
+      async enable() { actionState.enabled = true; },
+      async disable() { actionState.enabled = false; },
     },
     windows: {
       onRemoved: { addListener: (fn) => listeners.windowRemoved.push(fn) },
@@ -222,8 +220,14 @@ export function makeFakeIndexedDb() {
  */
 export async function loadBackground({ stored = {}, fetchImpl, indexedDb } = {}) {
   const parts = createChrome({ stored });
+  const healthRequests = [];
   const gatedFetch = (url, options) => {
     if (new URL(String(url)).pathname === '/projects/golfballs-extension/client/health') {
+      healthRequests.push({
+        url: String(url),
+        method: String(options?.method || 'GET').toUpperCase(),
+        options,
+      });
       return Promise.resolve(jsonResponse({
         ok: true, session_valid: true, extension_enabled: true,
         assistant_enabled: true,
@@ -250,5 +254,5 @@ export async function loadBackground({ stored = {}, fetchImpl, indexedDb } = {})
     );
     if (keepOpen !== true) respond(undefined);
   });
-  return { ...parts, context, sendMessage };
+  return { ...parts, context, healthRequests, sendMessage };
 }

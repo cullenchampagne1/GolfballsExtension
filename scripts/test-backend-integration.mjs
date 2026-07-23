@@ -36,8 +36,16 @@ const backendRoot = new URL('../revstack-backend/', root);
 const hasBackend = existsSync(backendRoot);
 const extensionPy = hasBackend ? await read('routes/extension.py', backendRoot) : '';
 const authPy = hasBackend ? await read('routes/auth.py', backendRoot) : '';
+const relayRoot = new URL('../revstack-system-services/revstack-email-relay/', root);
+const hasRelayService = existsSync(relayRoot);
+const relayServicePy = hasRelayService
+  ? await read('services/email_relay_service.py', relayRoot)
+  : '';
 if (!hasBackend) {
   console.log('  (skip) backend sibling absent — server-side route checks skipped');
+}
+if (!hasRelayService) {
+  console.log('  (skip) email-relay service sibling absent — service route check skipped');
 }
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
@@ -78,7 +86,6 @@ const RUNTIME = [
   { name: 'product-store:get',      in: 'background.js',        literal: '/product-stores/${',                   method: 'get',  route: '/client/product-stores/{store_id}' },
   { name: 'product-store:revoke',   in: 'background.js',        literal: '/revoke',                              method: 'post', route: '/client/product-stores/{store_id}/revoke' },
   { name: 'email-exchange-flow',    in: 'background.js',        literal: '/email-exchange-flow',                 method: 'get',  route: '/client/email-exchange-flow' },
-  { name: 'email-relay:pending',    in: 'email-relay-poll.js',  literal: '/email-relay/pending',                 method: 'get',  route: '/client/email-relay/pending' },
   { name: 'assistant:health',       in: 'help-assistant.js',     literal: '/health',                              method: 'get',  route: '/assistant/health' },
 ];
 
@@ -93,6 +100,24 @@ for (const ep of RUNTIME) {
   assert.ok(
     backendServes(projectRoutes, ep.method, route),
     `.revstack/routes.py must serve ${ep.method.toUpperCase()} ${route} (${ep.name})`,
+  );
+}
+
+// --- Scoped standalone-service call -----------------------------------------
+const RELAY_PENDING = '/services/email-relay-service/messages/pending';
+assert.ok(
+  relayPoll.includes(RELAY_PENDING),
+  `extension email-relay-poll.js must call ${RELAY_PENDING}`,
+);
+assert.ok(
+  installationAuth.includes(RELAY_PENDING),
+  'installation API guard must explicitly allow the scoped email-relay poll',
+);
+if (hasRelayService) {
+  assert.match(
+    relayServicePy,
+    /\(\s*["']GET["']\s*,\s*["']\/messages\/pending["']\s*\)/,
+    'email-relay service must expose GET /messages/pending to scoped clients',
   );
 }
 
@@ -159,6 +184,7 @@ if (hasBackend) {
 }
 
 console.log(
-  `backend-integration OK — 1 enrollment + ${RUNTIME.length} project-client endpoints bound, ` +
+  `backend-integration OK — 1 enrollment + ${RUNTIME.length} project-client endpoints + ` +
+    `1 scoped service endpoint bound, ` +
     `guard + enrollment + envelope shapes verified (backend ${hasBackend ? 'present' : 'absent'})`,
 );

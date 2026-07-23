@@ -18,11 +18,11 @@ GB_RUNTIME.start().then((allowed) => {
   if (!allowed) return;
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
   GB_HELP_ASSISTANT.resume().catch(() => {});
-}).catch(() => {});
+}).catch(GB_RUNTIME.report);
 chrome.runtime.onStartup?.addListener(() => {
   GB_RUNTIME.sync().then((allowed) => {
     if (allowed) GB_HELP_ASSISTANT.resume().catch(() => {});
-  }).catch(() => {});
+  }).catch(GB_RUNTIME.report);
 });
 chrome.alarms?.onAlarm?.addListener((alarm) => {
   if (alarm?.name === GB_HELP_ASSISTANT.ALARM_NAME) GB_HELP_ASSISTANT.poll({ force: true }).catch(() => {});

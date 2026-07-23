@@ -31,28 +31,40 @@ function harness() {
       remove: (key, callback) => { delete stored[key]; callback?.(); },
     } },
     scripting: {
-      unregisterContentScripts({ ids }, callback) {
+      async unregisterContentScripts({ ids }) {
+        assert.equal(arguments.length, 1, 'MV3 scripting APIs do not accept callbacks');
         const selected = new Set(ids);
         for (let i = registered.length - 1; i >= 0; i -= 1) {
           if (selected.has(registered[i].id)) registered.splice(i, 1);
         }
-        callback();
       },
-      registerContentScripts(scripts, callback) {
+      async registerContentScripts(scripts) {
+        assert.equal(arguments.length, 1, 'MV3 scripting APIs do not accept callbacks');
         registered.push(...structuredClone(scripts));
-        callback();
       },
     },
     action: {
-      enable(callback) { action.enabled = true; callback(); },
-      disable(callback) { action.enabled = false; callback(); },
+      async enable() {
+        assert.equal(arguments.length, 0, 'MV3 action APIs do not accept callbacks');
+        action.enabled = true;
+      },
+      async disable() {
+        assert.equal(arguments.length, 0, 'MV3 action APIs do not accept callbacks');
+        action.enabled = false;
+      },
     },
     tabs: {
-      query(query, callback) {
-        callback(query.url ? [{ id: 41, url: 'https://www.golfballs.com/admin/order' }] : []);
+      async query(query) {
+        assert.equal(arguments.length, 1, 'MV3 tabs APIs use their Promise result');
+        return query.url ? [{ id: 41, url: 'https://www.golfballs.com/admin/order' }] : [];
       },
-      remove(_ids, callback) { callback(); },
-      reload(id, callback) { reloaded.push(id); callback(); },
+      async remove(_ids) {
+        assert.equal(arguments.length, 1);
+      },
+      async reload(id) {
+        assert.equal(arguments.length, 1);
+        reloaded.push(id);
+      },
     },
     alarms: {
       create() {}, onAlarm: { addListener: (fn) => listeners.alarm.push(fn) },
@@ -99,6 +111,11 @@ describe('project runtime lifecycle', () => {
     assert.equal(test.action.enabled, true);
     assert.equal(test.registered.length, 6);
     assert.equal(new Set(test.registered.map((item) => item.id)).size, 6);
+    assert.deepEqual(
+      test.reloaded,
+      [41],
+      'a newly activated runtime reloads an already-open product tab once',
+    );
     assert.equal(
       test.registered.every((item) => item.persistAcrossSessions === false),
       true,
@@ -170,6 +187,7 @@ describe('project runtime lifecycle', () => {
   it('unregisters scripts, disables UI, and reloads instrumented tabs after revocation', async () => {
     const test = harness();
     await test.controller.start();
+    test.reloaded.length = 0;
     test.fail();
     const allowed = await test.controller.sync();
     assert.equal(allowed, false);

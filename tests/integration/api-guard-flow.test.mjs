@@ -15,11 +15,13 @@ import {
 } from './helpers/harness.mjs';
 
 const CLIENT_BASE = '/projects/golfballs-extension/client';
+const EMAIL_RELAY_PENDING = '/services/email-relay-service/messages/pending';
 
 function makeSandbox() {
   const { fetchMock, requests } = createFetchMock((url) => {
     if (url.startsWith(`${API_ORIGIN}${CLIENT_BASE}/`)
-        || url.startsWith(`${API_ORIGIN}/projects/golfballs-extension/assistant/`)) {
+        || url.startsWith(`${API_ORIGIN}/projects/golfballs-extension/assistant/`)
+        || url.startsWith(`${API_ORIGIN}${EMAIL_RELAY_PENDING}`)) {
       return jsonResponse({ ok: true, path: new URL(url).pathname });
     }
     return undefined;
@@ -190,6 +192,35 @@ describe('extension API guard', () => {
     await assert.rejects(client.apiFetch('/projects/revstack-backend/assistant/status'), /Blocked non-extension API path/);
     await assert.rejects(client.apiFetch('/projects/golfballs-extension/assistant/status?admin=1'), /Blocked non-extension API path/);
     assert.equal(requests.length, 5, 'rejected project paths must not reach fetch');
+  });
+
+  it('allows only the scoped email-relay polling route and bounded numeric filters', async () => {
+    const { client, requests } = makeSandbox();
+    const path = `${EMAIL_RELAY_PENDING}?since=1721680000&limit=25&wait=6`;
+
+    const response = await client.apiFetch(path);
+
+    assert.equal(response.status, 200);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, `${API_ORIGIN}${path}`);
+    assert.equal(requests[0].options.headers.get('Authorization'), `Bearer ${API_KEY}`);
+    await assert.rejects(
+      client.apiFetch('/services/email-relay-service/messages'),
+      /Blocked non-extension API path/,
+    );
+    await assert.rejects(
+      client.apiFetch(`${EMAIL_RELAY_PENDING}?direction=inbound`),
+      /Blocked non-extension API path/,
+    );
+    await assert.rejects(
+      client.apiFetch(`${EMAIL_RELAY_PENDING}?since=1&since=2`),
+      /Blocked non-extension API path/,
+    );
+    await assert.rejects(
+      client.apiFetch(EMAIL_RELAY_PENDING, { method: 'POST', body: '{}' }),
+      /Blocked non-extension API path/,
+    );
+    assert.equal(requests.length, 1, 'rejected service routes must not reach fetch');
   });
 
   it('rejects non-project-client paths and foreign origins without touching the network', async () => {
