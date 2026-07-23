@@ -321,7 +321,7 @@
       },
       "POST /keys/access": {
         "summary": "Enable or disable one extension installation.",
-        "description": "Writes a reversible database setting for one Golfballs credential without revoking its API key. Disabled installations fail health checks and do not load page scripts."
+        "description": "Writes a reversible database setting for one Golfballs credential without revoking its API key. Disabled installations are rejected and do not load page scripts."
       },
       "POST /keys/access/bulk": {
         "summary": "Enable or disable every extension installation.",

@@ -103,23 +103,25 @@ describe('extension API guard', () => {
     }, /HTTP 429/);
   });
 
-  it('bricks the product runtime on revoked credentials or disabled client access', async () => {
+  it('closes the product runtime on rejected installation credentials', async () => {
     for (const status of [401, 403]) {
       const { fetchMock } = createFetchMock(() => jsonResponse({ detail: 'Denied' }, status));
       const loaded = loadInstallationAuth({
         stored: { gbApiInstallation: validInstallation() },
         fetchImpl: fetchMock,
       });
-      const disabled = [];
-      loaded.context.GBExtensionAccessGateController = {
-        disable: async (...args) => { disabled.push(args); },
+      const closed = [];
+      loaded.context.GBRuntimeBootstrap = {
+        isDecisionPath: (path) => path === `${CLIENT_BASE}/health`,
+      };
+      loaded.context.GBRuntimeCoordinator = {
+        close: async (...args) => { closed.push(args); },
       };
 
       await loaded.client.apiFetch(`${CLIENT_BASE}/health`);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      assert.equal(disabled.length, 1);
-      assert.equal(disabled[0][0], 'credential-or-access-disabled');
-      assert.equal(disabled[0][1]?.reload, true);
+      assert.equal(closed.length, 1);
+      assert.equal(closed[0][0]?.reload, true);
     }
   });
 
@@ -129,13 +131,13 @@ describe('extension API guard', () => {
       stored: { gbApiInstallation: validInstallation() },
       fetchImpl: fetchMock,
     });
-    const disabled = [];
-    loaded.context.GBExtensionAccessGateController = {
-      disable: async (...args) => { disabled.push(args); },
+    const closed = [];
+    loaded.context.GBRuntimeCoordinator = {
+      close: async (...args) => { closed.push(args); },
     };
     await loaded.client.apiFetch('/projects/golfballs-extension/assistant/health');
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.deepEqual(disabled, []);
+    assert.deepEqual(closed, []);
   });
 
   it('confirms an ordinary client 403 against health instead of directly bricking', async () => {
@@ -144,18 +146,18 @@ describe('extension API guard', () => {
       stored: { gbApiInstallation: validInstallation() },
       fetchImpl: fetchMock,
     });
-    const disabled = [];
-    let healthChecks = 0;
-    loaded.context.GBExtensionAccessGateController = {
-      disable: async (...args) => { disabled.push(args); },
-      check: async () => { healthChecks += 1; },
+    const closed = [];
+    let synchronizations = 0;
+    loaded.context.GBRuntimeCoordinator = {
+      close: async (...args) => { closed.push(args); },
+      sync: async () => { synchronizations += 1; },
     };
 
     await loaded.client.apiFetch(`${CLIENT_BASE}/settings-shares/not-owned`);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.deepEqual(disabled, []);
-    assert.equal(healthChecks, 1);
+    assert.deepEqual(closed, []);
+    assert.equal(synchronizations, 1);
   });
 
   it('overrides any caller-supplied Authorization header with the installation key', async () => {

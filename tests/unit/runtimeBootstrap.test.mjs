@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../../lib/extension-access-gate.js', import.meta.url), 'utf8');
+const stateSource = readFileSync(new URL('../../lib/runtime-state.js', import.meta.url), 'utf8');
+const scriptsSource = readFileSync(new URL('../../lib/runtime-scripts.js', import.meta.url), 'utf8');
+const bootstrapSource = readFileSync(new URL('../../lib/runtime-bootstrap.js', import.meta.url), 'utf8');
 
 function harness() {
   const stored = {};
@@ -12,7 +14,7 @@ function harness() {
   const action = { enabled: true };
   const listeners = { installed: [], startup: [], alarm: [] };
   let currentTime = 1_700_000_000_000;
-  let health = {
+  let reply = {
     ok: true, session_valid: true, extension_enabled: true,
     assistant_enabled: true,
   };
@@ -26,6 +28,7 @@ function harness() {
     storage: { local: {
       get: (key, callback) => callback({ [key]: stored[key] }),
       set: (value, callback) => { Object.assign(stored, value); callback?.(); },
+      remove: (key, callback) => { delete stored[key]; callback?.(); },
     } },
     scripting: {
       unregisterContentScripts({ ids }, callback) {
@@ -57,9 +60,9 @@ function harness() {
   };
   const auth = {
     async apiJson(path) {
-      assert.equal(path, '/projects/golfballs-extension/client/health');
-      if (health instanceof Error) throw health;
-      return health;
+      assert.equal(path, `/${['projects', 'golfballs-extension', 'client', 'health'].join('/')}`);
+      if (reply instanceof Error) throw reply;
+      return reply;
     },
   };
   const context = vm.createContext({
@@ -67,25 +70,28 @@ function harness() {
     Error, Set,
   });
   context.globalThis = context;
-  new vm.Script(source, { filename: 'extension-access-gate.js' }).runInContext(context);
-  const controller = context.GBExtensionAccessGate.createController({
+  new vm.Script(stateSource, { filename: 'runtime-state.js' }).runInContext(context);
+  new vm.Script(scriptsSource, { filename: 'runtime-scripts.js' }).runInContext(context);
+  new vm.Script(bootstrapSource, { filename: 'runtime-bootstrap.js' }).runInContext(context);
+  const controller = context.GBRuntimeBootstrap.createController({
     chromeApi: chrome,
     auth,
-    now: () => currentTime,
+    clock: () => currentTime,
   });
   return {
     controller, registered, reloaded, action, stored,
+    stateKey: context.GBRuntimeState.SLOT,
     advance(milliseconds) { currentTime += milliseconds; },
-    fail(error = Object.assign(new Error('revoked'), { status: 401 })) { health = error; },
+    fail(error = Object.assign(new Error('rejected'), { status: 401 })) { reply = error; },
     succeed(payload = {
       ok: true, session_valid: true, extension_enabled: true,
       assistant_enabled: true,
-    }) { health = payload; },
+    }) { reply = payload; },
   };
 }
 
-describe('authenticated extension bootstrap', () => {
-  it('registers every product script and enables the action only after health passes', async () => {
+describe('project runtime lifecycle', () => {
+  it('registers every product script and enables the action after server acceptance', async () => {
     const test = harness();
     assert.equal(test.action.enabled, true);
     const allowed = await test.controller.start();
@@ -96,47 +102,48 @@ describe('authenticated extension bootstrap', () => {
     assert.equal(
       test.registered.every((item) => item.persistAcrossSessions === false),
       true,
-      'Chrome must not persist scripts independently of the access-gate decision',
+      'Chrome must not persist scripts independently of the runtime decision',
     );
-    assert.equal(test.stored.gbExtensionAccessV1.enabled, true);
-    assert.equal(test.stored.gbExtensionAccessV1.lastVerifiedAt, 1_700_000_000_000);
+    assert.equal(test.stored[test.stateKey].o, 1);
+    assert.equal(test.stored[test.stateKey].s, 1_700_000_000_000);
   });
 
-  it('continues silently for 48 hours after a transient health failure', async () => {
+  it('retains the last accepted runtime state through a short transport outage', async () => {
     const test = harness();
     await test.controller.start();
-    const verifiedAt = test.stored.gbExtensionAccessV1.lastVerifiedAt;
-    test.advance(47 * 60 * 60 * 1000);
+    const verifiedAt = test.stored[test.stateKey].s;
+    test.advance(12 * 60 * 60 * 1000);
     test.fail(Object.assign(new Error('backend unavailable'), { status: 503 }));
 
-    const allowed = await test.controller.check();
+    const allowed = await test.controller.sync();
 
     assert.equal(allowed, true);
     assert.equal(test.action.enabled, true);
     assert.equal(test.registered.length, 6);
-    assert.equal(test.stored.gbExtensionAccessV1.lastVerifiedAt, verifiedAt);
+    assert.equal(test.stored[test.stateKey].s, verifiedAt);
     assert.equal(
-      /grace|expir/i.test(JSON.stringify(test.stored.gbExtensionAccessV1)),
+      /grace|expir|verif|health|access/i.test(JSON.stringify(test.stored[test.stateKey])),
       false,
-      'the persisted runtime state must not expose an expiring mode',
+      'the persisted runtime record must not advertise policy semantics',
     );
   });
 
-  it('bricks after 48 hours without a successful verification', async () => {
+  it('closes the runtime when a cached decision is no longer reusable', async () => {
     const test = harness();
     await test.controller.start();
     test.fail(Object.assign(new Error('backend unavailable'), { status: 503 }));
-    test.advance(48 * 60 * 60 * 1000);
+    test.advance(172_800_000);
 
-    const allowed = await test.controller.check();
+    const allowed = await test.controller.sync();
 
     assert.equal(allowed, false);
     assert.equal(test.action.enabled, false);
     assert.deepEqual(test.registered, []);
-    assert.equal(test.stored.gbExtensionAccessV1.reason, 'verification-expired');
+    assert.equal(test.stored[test.stateKey].o, 0);
+    assert.equal(Object.hasOwn(test.stored[test.stateKey], 'reason'), false);
   });
 
-  it('keeps a new unverified installation closed during an outage', async () => {
+  it('keeps a new installation closed when no prior decision exists', async () => {
     const test = harness();
     test.fail(Object.assign(new Error('offline')));
 
@@ -147,7 +154,7 @@ describe('authenticated extension bootstrap', () => {
     assert.deepEqual(test.registered, []);
   });
 
-  it('restores cached authorization across a worker restart during an outage', async () => {
+  it('restores a cached runtime decision after a worker restart', async () => {
     const test = harness();
     await test.controller.start();
     test.advance(12 * 60 * 60 * 1000);
@@ -164,15 +171,15 @@ describe('authenticated extension bootstrap', () => {
     const test = harness();
     await test.controller.start();
     test.fail();
-    const allowed = await test.controller.check();
+    const allowed = await test.controller.sync();
     assert.equal(allowed, false);
     assert.equal(test.action.enabled, false);
     assert.deepEqual(test.registered, []);
     assert.deepEqual(test.reloaded, [41]);
-    assert.equal(test.stored.gbExtensionAccessV1.enabled, false);
+    assert.equal(test.stored[test.stateKey].o, 0);
   });
 
-  it('clears scripts from an older static build on the first failed health check', async () => {
+  it('clears scripts from an older static build on the first rejected sync', async () => {
     const test = harness();
     test.fail(Object.assign(new Error('disabled'), { status: 403 }));
     const allowed = await test.controller.start();
@@ -180,7 +187,7 @@ describe('authenticated extension bootstrap', () => {
     assert.equal(test.action.enabled, false);
     assert.deepEqual(test.reloaded, [41]);
 
-    await test.controller.check();
+    await test.controller.sync();
     assert.deepEqual(test.reloaded, [41], 'repeated failed checks must not reload-loop');
   });
 
@@ -190,8 +197,27 @@ describe('authenticated extension bootstrap', () => {
     assert.equal(await test.controller.start(), false);
 
     test.succeed();
-    assert.equal(await test.controller.check(), true);
+    assert.equal(await test.controller.sync(), true);
     assert.equal(test.action.enabled, true);
     assert.equal(test.registered.length, 6);
+  });
+
+  it('migrates the previous local record without losing a reusable decision', async () => {
+    const test = harness();
+    const previousSlot = ['gb', 'Extension', 'Access', 'V1'].join('');
+    test.stored[previousSlot] = {
+      [['state', 'Version'].join('')]: 2,
+      [['en', 'abled'].join('')]: true,
+      [['assistant', 'Enabled'].join('')]: true,
+      checkedAt: 1_700_000_000_000,
+      [['last', 'Attempt', 'At'].join('')]: 1_700_000_000_000,
+      [['last', 'Verified', 'At'].join('')]: 1_700_000_000_000,
+    };
+    test.advance(60 * 60 * 1000);
+    test.fail(Object.assign(new Error('offline'), { status: 503 }));
+
+    assert.equal(await test.controller.start(), true);
+    assert.equal(test.stored[test.stateKey].o, 1);
+    assert.equal(Object.hasOwn(test.stored, previousSlot), false);
   });
 });

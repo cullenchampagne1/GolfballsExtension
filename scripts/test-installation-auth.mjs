@@ -80,8 +80,8 @@ const context = vm.createContext({
 context.globalThis = context;
 new vm.Script(source, { filename: 'installation-auth.js' }).runInContext(context);
 
-assert.equal(installedListeners.length, 0, 'the fail-closed access gate owns install bootstrapping');
-assert.equal(startupListeners.length, 0, 'installation auth must not enroll before health bootstrap');
+assert.equal(installedListeners.length, 0, 'the runtime coordinator owns install bootstrapping');
+assert.equal(startupListeners.length, 0, 'installation auth does not own worker startup');
 await context.GBInstallationAuth.ensureInstallation();
 for (let attempt = 0; attempt < 10 && !stored.gbApiInstallation; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 0));

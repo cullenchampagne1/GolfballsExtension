@@ -71,7 +71,7 @@
     { "name": "ui · Help Companion guarded actions", "file": "tests/unit/helpActionCore.test.mjs" },
     { "name": "ui · Help Companion automatic settings context", "file": "tests/unit/helpActions.test.mjs" },
     { "name": "guard · Help Companion approved local data", "file": "tests/unit/helpDataAccess.test.mjs" },
-    { "name": "guard · authenticated extension bootstrap", "file": "tests/unit/extensionAccessGate.test.mjs" },
+    { "name": "guard · project runtime lifecycle", "file": "tests/unit/runtimeBootstrap.test.mjs" },
     { "name": "guard · database-backed installation access", "id": "guard-installation-access", "command": ["../.venv/bin/python", "tests/test_extension_client_api.py"] },
     { "name": "guard · database-backed settings policy", "id": "guard-settings-policy", "command": ["../.venv/bin/python", "tests/test_settings_policy.py"] },
     { "name": "ui · managed Settings section visibility", "file": "tests/unit/manageSections.test.mjs" },

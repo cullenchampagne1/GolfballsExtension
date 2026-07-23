@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/installation-auth.js', 'lib/extension-access-gate.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/runtime-bootstrap.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js');
 /* @admin:start */
 importScripts('lib/notifications-store.js', 'lib/email-relay-poll.js');
 /* @admin:end */
@@ -10,21 +10,17 @@ const GB_CALENDAR_FORM = globalThis.GBCalendarForm;
 if (!GB_CALENDAR_FORM) throw new Error('Calendar form-state helper failed to initialize');
 const GB_HELP_ASSISTANT = globalThis.GBHelpAssistant?.createController();
 if (!GB_HELP_ASSISTANT) throw new Error('Help assistant failed to initialize');
-const GB_EXTENSION_ACCESS = globalThis.GBExtensionAccessGate?.createController();
-if (!GB_EXTENSION_ACCESS) throw new Error('Extension access gate failed to initialize');
-globalThis.GBExtensionAccessGateController = GB_EXTENSION_ACCESS;
+const GB_RUNTIME = globalThis.GBRuntimeBootstrap?.createController();
+if (!GB_RUNTIME) throw new Error('Runtime bootstrap failed to initialize');
+globalThis.GBRuntimeCoordinator = GB_RUNTIME;
 
-// Product scripts, popup access, and Help recovery start only after the
-// credential-backed health check succeeds or a prior successful decision is
-// still inside its silent outage grace window. Failed first enrollment,
-// revocation, and explicit disablement always leave the extension inert.
-GB_EXTENSION_ACCESS.start().then((allowed) => {
+GB_RUNTIME.start().then((allowed) => {
   if (!allowed) return;
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
   GB_HELP_ASSISTANT.resume().catch(() => {});
 }).catch(() => {});
 chrome.runtime.onStartup?.addListener(() => {
-  GB_EXTENSION_ACCESS.check().then((allowed) => {
+  GB_RUNTIME.sync().then((allowed) => {
     if (allowed) GB_HELP_ASSISTANT.resume().catch(() => {});
   }).catch(() => {});
 });
@@ -857,7 +853,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      is defense-in-depth: it fails safe if that ever changes and documents
      that page/other-extension senders are not trusted. */
   if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return;
-  if (!GB_EXTENSION_ACCESS.isEnabled()) {
+  if (!GB_RUNTIME.isOpen()) {
     sendResponse({ ok: false, error: 'This Golfballs Toolkit installation is not authorized.' });
     return true;
   }

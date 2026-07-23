@@ -40,7 +40,7 @@ const enrollments = (requests) => requests.filter(({ url }) => url === ENROLLMEN
 describe('enrollment lifecycle', () => {
   it('enrolls exactly once on fresh install and persists the credential', async () => {
     const { client, stored, listeners, requests } = makeSandbox();
-    assert.equal(listeners.installed.length, 0, 'the access gate owns installation startup');
+    assert.equal(listeners.installed.length, 0, 'the runtime coordinator owns installation startup');
     await client.ensureInstallation();
     await settle();
 
@@ -62,7 +62,7 @@ describe('enrollment lifecycle', () => {
 
     const first = await client.ensureInstallation();
     assert.equal(first.apiKey, API_KEY);
-    assert.equal(listeners.startup.length, 0, 'installation auth does not run before health');
+    assert.equal(listeners.startup.length, 0, 'installation auth does not own worker startup');
     await client.ensureInstallation();
     await settle();
 

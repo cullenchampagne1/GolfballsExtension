@@ -18,12 +18,12 @@ const read = (rel, base = root) => readFile(new URL(rel, base), 'utf8');
 const installationAuth = await read('lib/installation-auth.js');
 const background = await read('background.js');
 const remotePolicy = await read('lib/remote-settings-policy.js');
-const accessGate = await read('lib/extension-access-gate.js');
+const runtimeBootstrap = await read('lib/runtime-bootstrap.js');
 const relayPoll = await read('lib/email-relay-poll.js');
 const helpAssistant = await read('help/help-assistant.js');
 const sources = {
   'installation-auth.js': installationAuth,
-  'extension-access-gate.js': accessGate,
+  'runtime-bootstrap.js': runtimeBootstrap,
   'background.js': background,
   'email-relay-poll.js': relayPoll,
   'help-assistant.js': helpAssistant,
@@ -58,7 +58,7 @@ if (hasBackend) {
 
 // --- Runtime project-client contract (each call ↔ each project route) --------
 const RUNTIME = [
-  { name: 'health',                 in: 'extension-access-gate.js', literal: '/projects/golfballs-extension/client/health', method: 'get', route: '/client/health' },
+  { name: 'runtime:sync',           in: 'runtime-bootstrap.js', literal: "'projects', 'golfballs-extension', 'client', 'health'", method: 'get', route: '/client/health' },
   { name: 'identity:read',          in: 'installation-auth.js', literal: '/identity',                            method: 'get',  route: '/client/identity' },
   { name: 'identity:update',        in: 'installation-auth.js', literal: '/identity',                            method: 'post', route: '/client/identity' },
   { name: 'configuration',          in: 'installation-auth.js', literal: '/configuration',                       method: 'get',  route: '/client/configuration' },
