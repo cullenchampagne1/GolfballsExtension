@@ -15,17 +15,7 @@
     "pack:store": "GB_ADMIN=0 node --max-old-space-size=4096 scripts/package-store.mjs",
     "pack:safari": "node --max-old-space-size=4096 scripts/pack-safari.mjs",
     "pretest": "npm run help-content",
-    "test": "npm run test:security && npm run test:auth-broker && npm run test:crm-index && npm run test:installation && npm run test:remote-policy && npm run test:contact-import && npm run test:employee-identity && npm run test:sharing-fallback && npm run test:remote-integrity && npm run test:backend-integration && npm run test:unit && npm run test:integration",
-    "test:security": "node scripts/test-security.mjs",
-    "test:auth-broker": "node scripts/test-auth-session-broker.mjs",
-    "test:crm-index": "node scripts/test-crm-index-encryption.mjs",
-    "test:installation": "node scripts/test-installation-auth.mjs",
-    "test:remote-policy": "node scripts/test-remote-settings-policy.mjs",
-    "test:contact-import": "node scripts/test-contact-import.mjs",
-    "test:employee-identity": "node scripts/test-employee-identity.mjs",
-    "test:sharing-fallback": "node scripts/test-sharing-fallback.mjs",
-    "test:remote-integrity": "node scripts/test-remote-integrity.mjs",
-    "test:backend-integration": "node scripts/test-backend-integration.mjs",
+    "test": "npm run test:unit && npm run test:integration",
     "test:unit": "node --test \"tests/unit/*.test.mjs\"",
     "test:integration": "node --test \"tests/integration/*.test.mjs\"",
     "check": "npm run audit && npm test && npm run build"
@@ -168,6 +158,10 @@
       "file": "tests/unit/scales.test.mjs"
     },
     {
+      "name": "ui \u00b7 Campaign Manager deterministic scaling",
+      "file": "tests/unit/campaignPresentation.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Actions Shelf panel motion",
       "file": "tests/unit/shelfMotion.test.mjs"
     },
@@ -301,83 +295,43 @@
     },
     {
       "name": "guard \u00b7 security policy allowlists",
-      "id": "guard-security",
-      "command": [
-        "node",
-        "scripts/test-security.mjs"
-      ]
+      "file": "tests/unit/securityPolicy.test.mjs"
     },
     {
       "name": "guard \u00b7 auth session broker",
-      "id": "guard-auth-broker",
-      "command": [
-        "node",
-        "scripts/test-auth-session-broker.mjs"
-      ]
+      "file": "tests/unit/authSessionBroker.test.mjs"
     },
     {
       "name": "guard \u00b7 crm index encryption",
-      "id": "guard-crm-index",
-      "command": [
-        "node",
-        "scripts/test-crm-index-encryption.mjs"
-      ]
+      "file": "tests/unit/crmIndexEncryption.test.mjs"
     },
     {
       "name": "guard \u00b7 installation enrollment",
-      "id": "guard-installation",
-      "command": [
-        "node",
-        "scripts/test-installation-auth.mjs"
-      ]
+      "file": "tests/unit/installationAuth.test.mjs"
     },
     {
       "name": "guard \u00b7 remote settings policy",
-      "id": "guard-remote-policy",
-      "command": [
-        "node",
-        "scripts/test-remote-settings-policy.mjs"
-      ]
+      "file": "tests/unit/remoteSettingsPolicy.test.mjs"
     },
     {
       "name": "guard \u00b7 contact import",
-      "id": "guard-contact-import",
-      "command": [
-        "node",
-        "scripts/test-contact-import.mjs"
-      ]
+      "file": "tests/unit/contactImport.test.mjs"
     },
     {
       "name": "guard \u00b7 employee identity",
-      "id": "guard-employee-identity",
-      "command": [
-        "node",
-        "scripts/test-employee-identity.mjs"
-      ]
+      "file": "tests/unit/employeeIdentity.test.mjs"
     },
     {
       "name": "guard \u00b7 sharing fallback",
-      "id": "guard-sharing-fallback",
-      "command": [
-        "node",
-        "scripts/test-sharing-fallback.mjs"
-      ]
+      "file": "tests/unit/sharingFallback.test.mjs"
     },
     {
       "name": "remote \u00b7 update-channel integrity",
-      "id": "remote-integrity",
-      "command": [
-        "node",
-        "scripts/test-remote-integrity.mjs"
-      ]
+      "file": "tests/integration/remoteIntegrity.test.mjs"
     },
     {
       "name": "remote \u00b7 backend api contract",
-      "id": "backend-contract",
-      "command": [
-        "node",
-        "scripts/test-backend-integration.mjs"
-      ]
+      "file": "tests/integration/backendContract.test.mjs"
     }
   ],
   "devDependencies": {

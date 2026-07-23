@@ -3,7 +3,7 @@
  *
  * Vanilla (non-module) content script: loaded with node:vm into a jsdom
  * window with stubbed chrome.runtime + smart-detection globals, following
- * the loading pattern of scripts/test-security.mjs. Tests the modal's data
+ * the loading pattern of tests/unit/securityPolicy.test.mjs. Tests the modal's data
  * contract: the editOrder proxy request, cart-iframe URL encoding, and the
  * order-summary sidebar math built from a realistic editOrder response.
  * Conventions per findPhone.test.mjs.

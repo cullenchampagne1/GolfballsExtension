@@ -39,7 +39,7 @@ function makeSandbox(stored = {}) {
 const enrollments = (requests) => requests.filter(({ url }) => url === ENROLLMENT_URL);
 
 describe('enrollment lifecycle', () => {
-  it('continues a fresh enrollment through runtime verification and page-script activation', async () => {
+  it('continues a fresh enrollment through runtime verification without gating injection', async () => {
     const { fetchMock, requests } = createFetchMock(enrollmentRouter);
     const background = await loadBackground({ stored: {}, fetchImpl: fetchMock });
 
@@ -51,7 +51,9 @@ describe('enrollment lifecycle', () => {
       `Bearer ${API_KEY}`,
     );
     assert.equal(background.actionState.enabled, true);
-    assert.equal(background.registeredContentScripts.length, 6);
+    // Content scripts are static in the manifest; the runtime gate must not
+    // register or unregister them (that dynamic model bricked the extension).
+    assert.equal(background.registeredContentScripts.length, 0);
     assert.equal(background.stored.gbRuntimeState.o, 1);
     assert.equal(background.context.GBRuntimeCoordinator.isOpen(), true);
   });

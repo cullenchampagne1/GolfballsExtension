@@ -3,7 +3,7 @@
  *
  * Vanilla (non-module) content script: loaded with node:vm into a jsdom
  * window with a stubbed chrome.runtime bridge, following the loading
- * pattern of scripts/test-security.mjs. Tests the modal's data contract:
+ * pattern of tests/unit/securityPolicy.test.mjs. Tests the modal's data contract:
  * amount prefill, method selection, the exact chargeCard/SaveAdjustment
  * payloads, and the money-critical stop-after-success loop.
  * Conventions per findPhone.test.mjs.

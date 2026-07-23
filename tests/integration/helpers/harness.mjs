@@ -3,8 +3,8 @@
  * (security-policy.js, installation-auth.js, settings-registry.js,
  * remote-settings-policy.js, crm-index-store.js, background.js) with mocked
  * I/O boundaries only: chrome.*, fetch, and indexedDB. All product logic runs
- * unmodified inside the vm context, mirroring scripts/test-installation-auth.mjs
- * and scripts/test-remote-settings-policy.mjs.
+ * unmodified inside the vm context, mirroring tests/unit/installationAuth.test.mjs
+ * and tests/unit/remoteSettingsPolicy.test.mjs.
  */
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -162,7 +162,7 @@ export function loadInstallationAuth({ stored = {}, fetchImpl } = {}) {
   return { ...parts, context, client: context.GBInstallationAuth };
 }
 
-/** In-memory IndexedDB double (same shape as scripts/test-crm-index-encryption.mjs). */
+/** In-memory IndexedDB double (same shape as tests/unit/crmIndexEncryption.test.mjs). */
 export function makeFakeIndexedDb() {
   const records = new Map();
   const keys = new Map();
