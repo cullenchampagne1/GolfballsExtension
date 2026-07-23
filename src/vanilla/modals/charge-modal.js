@@ -526,7 +526,7 @@
               <svg class="gb-status-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 6L9 17l-5-5"/>
               </svg>
-              <span></span>
+              <span>${detail || 'Approved'}</span>
             `;
         }
         if (state === 'fail') {
@@ -536,7 +536,7 @@
               <svg class="gb-status-icon fail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
-              <span></span>
+              <span>${detail || 'Declined'}</span>
             `;
         }
         if (state === 'warn') {
@@ -547,7 +547,7 @@
                 <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <span style="font-size:10.5px"></span>
+              <span style="font-size:10.5px">${detail || 'Needs attention'}</span>
             `;
         }
       }
@@ -805,4 +805,3 @@
     // Kickoff
     loadMethods();
   }
-

@@ -462,7 +462,7 @@
     }
 
     async function status() {
-      return auth.apiJson(`${BASE_PATH}/status`, { responseLimit: RESPONSE_LIMIT });
+      return auth.apiJson(`${BASE_PATH}/health`, { responseLimit: RESPONSE_LIMIT });
     }
 
     return Object.freeze({

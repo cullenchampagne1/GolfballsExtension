@@ -14,9 +14,11 @@ import {
   createFetchMock, jsonResponse, loadInstallationAuth, validInstallation,
 } from './helpers/harness.mjs';
 
+const CLIENT_BASE = '/projects/golfballs-extension/client';
+
 function makeSandbox() {
   const { fetchMock, requests } = createFetchMock((url) => {
-    if (url.startsWith(`${API_ORIGIN}/extension/`)
+    if (url.startsWith(`${API_ORIGIN}${CLIENT_BASE}/`)
         || url.startsWith(`${API_ORIGIN}/projects/golfballs-extension/assistant/`)) {
       return jsonResponse({ ok: true, path: new URL(url).pathname });
     }
@@ -32,11 +34,11 @@ function makeSandbox() {
 describe('extension API guard', () => {
   it('sends a happy GET with the installation Bearer key and credentials omitted', async () => {
     const { client, requests } = makeSandbox();
-    const response = await client.apiFetch('/extension/settings-shares');
+    const response = await client.apiFetch(`${CLIENT_BASE}/settings-shares`);
 
     assert.equal(response.status, 200);
     assert.equal(requests.length, 1);
-    assert.equal(requests[0].url, `${API_ORIGIN}/extension/settings-shares`);
+    assert.equal(requests[0].url, `${API_ORIGIN}${CLIENT_BASE}/settings-shares`);
     assert.equal(requests[0].method, 'GET');
     assert.equal(requests[0].options.headers.get('Authorization'), `Bearer ${API_KEY}`);
     assert.equal(requests[0].options.headers.get('Accept'), 'application/json');
@@ -47,9 +49,9 @@ describe('extension API guard', () => {
   it('sends a happy POST through apiJson with a JSON content type and parsed reply', async () => {
     const { client, requests } = makeSandbox();
     const body = JSON.stringify({ name: 'Team defaults', scopes: { settings: {} } });
-    const payload = await client.apiJson('/extension/settings-shares', { method: 'POST', body });
+    const payload = await client.apiJson(`${CLIENT_BASE}/settings-shares`, { method: 'POST', body });
 
-    assert.deepEqual(payload, { ok: true, path: '/extension/settings-shares' });
+    assert.deepEqual(payload, { ok: true, path: `${CLIENT_BASE}/settings-shares` });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].method, 'POST');
     assert.equal(requests[0].options.body, body);
@@ -101,9 +103,44 @@ describe('extension API guard', () => {
     }, /HTTP 429/);
   });
 
+  it('bricks the product runtime on revoked credentials or disabled client access', async () => {
+    for (const status of [401, 403]) {
+      const { fetchMock } = createFetchMock(() => jsonResponse({ detail: 'Denied' }, status));
+      const loaded = loadInstallationAuth({
+        stored: { gbApiInstallation: validInstallation() },
+        fetchImpl: fetchMock,
+      });
+      const disabled = [];
+      loaded.context.GBExtensionAccessGateController = {
+        disable: async (...args) => { disabled.push(args); },
+      };
+
+      await loaded.client.apiFetch(`${CLIENT_BASE}/health`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(disabled.length, 1);
+      assert.equal(disabled[0][0], 'credential-or-access-disabled');
+      assert.equal(disabled[0][1]?.reload, true);
+    }
+  });
+
+  it('does not brick product access when only Help Companion is disabled', async () => {
+    const { fetchMock } = createFetchMock(() => jsonResponse({ detail: 'Chat disabled' }, 403));
+    const loaded = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation() },
+      fetchImpl: fetchMock,
+    });
+    const disabled = [];
+    loaded.context.GBExtensionAccessGateController = {
+      disable: async (...args) => { disabled.push(args); },
+    };
+    await loaded.client.apiFetch('/projects/golfballs-extension/assistant/health');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(disabled, []);
+  });
+
   it('overrides any caller-supplied Authorization header with the installation key', async () => {
     const { client, requests } = makeSandbox();
-    await client.apiFetch('/extension/ping', {
+    await client.apiFetch(`${CLIENT_BASE}/ping`, {
       method: 'POST',
       headers: { Authorization: 'Bearer caller-controlled' },
     });
@@ -133,28 +170,28 @@ describe('extension API guard', () => {
     assert.equal(requests.length, 5, 'rejected project paths must not reach fetch');
   });
 
-  it('rejects non-/extension/ paths and foreign origins without touching the network', async () => {
+  it('rejects non-project-client paths and foreign origins without touching the network', async () => {
     const { client, requests } = makeSandbox();
     await assert.rejects(client.apiFetch('/graph/search'), /Blocked non-extension API path/);
-    await assert.rejects(client.apiFetch('https://evil.example/extension/ping'), /Blocked non-extension API path/);
+    await assert.rejects(client.apiFetch(`https://evil.example${CLIENT_BASE}/ping`), /Blocked non-extension API path/);
     await assert.rejects(
-      client.apiFetch(`${API_ORIGIN}:8443/extension/ping`),
+      client.apiFetch(`${API_ORIGIN}:8443${CLIENT_BASE}/ping`),
       /Blocked non-extension API path|Blocked malformed extension API URL/,
     );
-    await assert.rejects(client.apiFetch('/extension/ping#frag'), /Blocked malformed extension API URL/);
+    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping#frag`), /Blocked malformed extension API URL/);
     assert.equal(requests.length, 0, 'blocked paths must never reach fetch');
   });
 
   it('rejects disallowed methods and GET requests that carry a body', async () => {
     const { client, requests } = makeSandbox();
-    await assert.rejects(client.apiFetch('/extension/ping', { method: 'PUT' }), /Blocked extension API method/);
-    await assert.rejects(client.apiFetch('/extension/ping', { method: 'DELETE' }), /Blocked extension API method/);
+    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'PUT' }), /Blocked extension API method/);
+    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'DELETE' }), /Blocked extension API method/);
     await assert.rejects(
-      client.apiFetch('/extension/ping', { method: 'GET', body: '{"x":1}' }),
+      client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'GET', body: '{"x":1}' }),
       /GET extension API requests cannot contain a body/,
     );
     await assert.rejects(
-      client.apiFetch('/extension/ping', { method: 'POST', body: { not: 'a string' } }),
+      client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'POST', body: { not: 'a string' } }),
       /Extension API body must be a bounded serialized string/,
     );
     assert.equal(requests.length, 0, 'blocked methods must never reach fetch');

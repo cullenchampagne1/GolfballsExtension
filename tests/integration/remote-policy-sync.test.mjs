@@ -16,14 +16,14 @@ import {
   settle, validInstallation,
 } from './helpers/harness.mjs';
 
-const CONFIG_URL = `${API_ORIGIN}/extension/configuration`;
+const CONFIG_URL = `${API_ORIGIN}/projects/golfballs-extension/client/configuration`;
 
 let context;
 let stored;
 let alarms;
 let requests;
 let registry;
-let payloadHolder; // what the mocked /extension/configuration currently serves
+let payloadHolder; // what the mocked project configuration endpoint serves
 
 function buildConfiguration(reg) {
   const section = (rules, managedFor = () => true) => Object.fromEntries(
@@ -78,7 +78,7 @@ before(async () => {
 });
 
 describe('remote policy sync', () => {
-  it('fetches /extension/configuration with the installation Bearer key and dashboard cookies', async () => {
+  it('fetches project configuration with the installation Bearer key and dashboard cookies', async () => {
     await context.GBRemoteSettingsPolicy.sync();
     const configRequests = requests.filter(({ url }) => url === CONFIG_URL);
     assert.ok(configRequests.length >= 1);

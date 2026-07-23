@@ -55,6 +55,21 @@ function decodePart(s, enc) {
   return s;
 }
 
+function decodeTextPart(body, transferEncoding, charset = 'utf-8') {
+  const normalized = String(charset || 'utf-8')
+    .toLowerCase().replace(/^cp-?/i, 'windows-');
+  const decoded = decodePart(body, transferEncoding);
+  const encoding = String(transferEncoding || '').toLowerCase().trim();
+  if (encoding !== 'quoted-printable'
+      && (normalized === 'utf-8' || normalized === 'us-ascii')) return decoded;
+  try {
+    const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+    return new TextDecoder(normalized, { fatal: false }).decode(bytes);
+  } catch {
+    return decoded;
+  }
+}
+
 /**
  * Parse a raw EML string into a flat record.
  * @returns {{subject,from,to,date,bodyHtml,messageId,references,replyTo}}
@@ -114,17 +129,10 @@ export function parseEml(raw) {
       }
     } else if (ctLow.startsWith('text/html')) {
       const csm = partCT.match(/charset\s*=\s*["']?([^"';\s]+)/i);
-      const charset = (csm ? csm[1] : 'utf-8').toLowerCase().replace(/^cp-?/i, 'windows-');
-      let decoded = decodePart(body, partCTE);
-      if (charset !== 'utf-8' && charset !== 'us-ascii') {
-        try {
-          const bytes = Uint8Array.from(decodePart(body, partCTE), (c) => c.charCodeAt(0));
-          decoded = new TextDecoder(charset, { fatal: false }).decode(bytes);
-        } catch { /* keep the best-effort decode */ }
-      }
-      out.html.push(decoded);
+      out.html.push(decodeTextPart(body, partCTE, csm ? csm[1] : 'utf-8'));
     } else if (ctLow.startsWith('text/plain')) {
-      out.text.push(decodePart(body, partCTE));
+      const csm = partCT.match(/charset\s*=\s*["']?([^"';\s]+)/i);
+      out.text.push(decodeTextPart(body, partCTE, csm ? csm[1] : 'utf-8'));
     }
   }
 

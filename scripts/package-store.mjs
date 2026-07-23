@@ -193,6 +193,14 @@ function pageReferences(path, bytes) {
     if (resolved.startsWith('../')) throw new Error(`Unsafe local reference ${raw} in ${path}`);
     refs.add(resolved);
   };
+  const addExtensionRoot = (raw) => {
+    const value = raw.trim().replace(/[?#].*$/, '').replace(/^\/+/, '');
+    if (!value || /^(?:data|https?|chrome-extension):/i.test(value)) return;
+    if (value.includes('..') || value.includes('\\')) {
+      throw new Error(`Unsafe extension-root reference ${raw} in ${path}`);
+    }
+    refs.add(value);
+  };
   if (path.endsWith('.html')) {
     for (const match of text.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)) add(match[1]);
   }
@@ -202,6 +210,14 @@ function pageReferences(path, bytes) {
   if (path.endsWith('.js')) {
     for (const match of text.matchAll(/\bimportScripts\(([^)]*)\)/g)) {
       for (const quoted of match[1].matchAll(/["']([^"']+)["']/g)) add(quoted[1]);
+    }
+    // MV3 dynamically registered content scripts are runtime dependencies even
+    // though they no longer appear in manifest.json. Chrome resolves these
+    // paths from the extension root, not relative to this JavaScript file.
+    for (const match of text.matchAll(/\b(?:js|css)\s*:\s*\[([\s\S]*?)\]/g)) {
+      for (const quoted of match[1].matchAll(/["']([^"']+)["']/g)) {
+        addExtensionRoot(quoted[1]);
+      }
     }
   }
   return refs;
@@ -220,7 +236,18 @@ export function collectStoreEntries(root, manifest, { stageRoot = null } = {}) {
   const dirPaths = RUNTIME_DIRECTORIES.flatMap((directory) => (
     directory === 'react-dist' && consumer ? walkFiles(stageRoot, directory) : walkFiles(root, directory)
   )).filter((path) => !(consumer && isAdminRootFile(path)));
-  const uniquePaths = [...new Set([...rootFilePaths, ...dirPaths])].sort((a, b) => a.localeCompare(b, 'en'));
+  // A manifest may explicitly expose an otherwise uncommon runtime asset.
+  // Include concrete local references without broadening the directory
+  // allowlist; forbidden paths and unresolved wildcard groups still fail.
+  const manifestPaths = [...manifestReferences(manifest)].filter((path) => (
+    !path.includes('*')
+    && !isForbiddenPath(path)
+    && existsSync(sourceFor(path))
+    && statSync(sourceFor(path)).isFile()
+  ));
+  const uniquePaths = [...new Set([
+    ...rootFilePaths, ...dirPaths, ...manifestPaths,
+  ])].sort((a, b) => a.localeCompare(b, 'en'));
   const entries = uniquePaths.map((path) => {
     let bytes = readFileSync(sourceFor(path));
     // Strip @admin regions from every RAW shipped .js (root workers + src/vanilla

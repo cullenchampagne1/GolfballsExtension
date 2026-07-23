@@ -1,0 +1,763 @@
+#!/usr/bin/env python3
+"""Golfballs extension release manager for the RevStack Control Center terminal.
+
+Builds the production branch of the Golfballs payment extension, packs a signed
+CRX3, and publishes it through the backend's self-hosted Chrome update channel
+(/extension/updates.xml). All state lives in .golfballs-extension-production/;
+nothing is written inside revstack-backend.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import urllib.request
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parent
+BASE = ROOT / ".golfballs-extension-production"
+CONFIG_PATH = BASE / "config.json"
+KEY_PATH = BASE / "signing-key.pem"
+WORKSPACE = BASE / "workspace"
+PUBLIC = BASE / "public"
+RELEASES_DIR = PUBLIC / "releases"
+UPDATES_XML = PUBLIC / "updates.xml"
+LEDGER_PATH = BASE / "releases.json"
+LOGS = BASE / "logs"
+
+DEFAULT_CONFIG = {
+    "repo_url": "https://github.com/cullenchampagne1/GolfballsExtension.git",
+    "branch": "production",
+    "slug": "golfballs-extension",
+    "public_origin": "https://api.cullenchampagne.com",
+    "update_path": "/extension/updates.xml",
+    "release_path": "/extension/releases",
+    "local_backend": "http://127.0.0.1:8000",
+    "keep_releases": 10,
+    "build_command": "npm run check",
+    "fast_build_command": "npm run build",
+    "pack_exclude": [
+        ".claude", ".git", ".github", ".gitignore", ".revstack", ".DS_Store",
+        "node_modules", "docs", "install", "scripts", "tests", "tools",
+        "companion-app", "build.js", "package.json", "package-lock.json",
+        "README.md", "revstack.project.json",
+    ],
+}
+
+# These paths are release-safety invariants, not user preferences. In particular,
+# load_config() intentionally allows local configuration to replace list values;
+# enforcing this set in build_zip() prevents an older or incomplete config.json
+# from leaking agent settings, companion binaries, or development sources.
+REQUIRED_PACK_EXCLUDE = frozenset(DEFAULT_CONFIG["pack_exclude"])
+
+
+class UI:
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled and sys.stdout.isatty() and not os.getenv("NO_COLOR")
+
+    def color(self, code: str, value: Any) -> str:
+        text = str(value)
+        return f"\033[{code}m{text}\033[0m" if self.enabled else text
+
+    def teal(self, value: Any) -> str:
+        return self.color("38;5;43", value)
+
+    def green(self, value: Any) -> str:
+        return self.color("38;5;78", value)
+
+    def yellow(self, value: Any) -> str:
+        return self.color("38;5;221", value)
+
+    def red(self, value: Any) -> str:
+        return self.color("38;5;203", value)
+
+    def dim(self, value: Any) -> str:
+        return self.color("2", value)
+
+    def bold(self, value: Any) -> str:
+        return self.color("1", value)
+
+    def step(self, label: str) -> None:
+        print(self.teal("▸") + " " + label)
+
+    def ok(self, label: str) -> None:
+        print(self.green("✓") + " " + label)
+
+    def warn(self, label: str) -> None:
+        print(self.yellow("!") + " " + label)
+
+
+def load_config() -> dict[str, Any]:
+    config = dict(DEFAULT_CONFIG)
+    if CONFIG_PATH.is_file():
+        config.update(json.loads(CONFIG_PATH.read_text()))
+    return config
+
+
+def save_config(config: dict[str, Any]) -> None:
+    BASE.mkdir(exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
+
+
+def load_ledger() -> dict[str, Any]:
+    if LEDGER_PATH.is_file():
+        return json.loads(LEDGER_PATH.read_text())
+    return {"current": None, "releases": []}
+
+
+def save_ledger(ledger: dict[str, Any]) -> None:
+    LEDGER_PATH.write_text(json.dumps(ledger, indent=2) + "\n")
+
+
+def run(cmd: list[str], *, cwd: Path | None = None, log: Path | None = None,
+        input_bytes: bytes | None = None, timeout: int = 1800) -> bytes:
+    result = subprocess.run(
+        cmd, cwd=str(cwd) if cwd else None, input=input_bytes,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout,
+    )
+    if log:
+        with log.open("ab") as handle:
+            handle.write(f"\n$ {' '.join(cmd)}\n".encode())
+            handle.write((result.stdout or b"") + (result.stderr or b""))
+    if result.returncode != 0:
+        combined = (result.stdout or b"") + (result.stderr or b"")
+        tail = combined.decode("utf-8", "replace").strip().splitlines()[-14:]
+        raise RuntimeError(
+            f"command failed ({' '.join(cmd[:3])}…):\n  " + "\n  ".join(tail)
+            + (f"\n  full log: {log}" if log else "")
+        )
+    return result.stdout or b""
+
+
+# ── key + CRX3 primitives ────────────────────────────────────────────────────
+
+def public_key_der(pem: Path) -> bytes:
+    return run(["openssl", "rsa", "-in", str(pem), "-pubout", "-outform", "DER"])
+
+
+def extension_id_from_der(der: bytes) -> str:
+    digest = hashlib.sha256(der).hexdigest()[:32]
+    return "".join("abcdefghijklmnop"[int(char, 16)] for char in digest)
+
+
+def key_summary() -> dict[str, Any] | None:
+    if not KEY_PATH.is_file():
+        return None
+    der = public_key_der(KEY_PATH)
+    return {
+        "path": str(KEY_PATH),
+        "extension_id": extension_id_from_der(der),
+        "public_key_b64": base64.b64encode(der).decode(),
+        "fingerprint": hashlib.sha256(der).hexdigest()[:16],
+    }
+
+
+def varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        chunk = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(chunk | 0x80)
+        else:
+            out.append(chunk)
+            return bytes(out)
+
+
+def pack_crx3(zip_bytes: bytes, pem: Path) -> bytes:
+    """CRX3 container: Cr24 magic, protobuf header with one RSA proof, then zip."""
+    der = public_key_der(pem)
+    crx_id = hashlib.sha256(der).digest()[:16]
+    signed_header = b"\x0a\x10" + crx_id  # SignedData{ crx_id = 1 }
+    payload = (b"CRX3 SignedData\x00" + struct.pack("<I", len(signed_header))
+               + signed_header + zip_bytes)
+    signature = run(
+        ["openssl", "dgst", "-sha256", "-sign", str(pem)], input_bytes=payload)
+    proof = (b"\x0a" + varint(len(der)) + der
+             + b"\x12" + varint(len(signature)) + signature)
+    header = (b"\x12" + varint(len(proof)) + proof
+              + b"\x82\xf1\x04" + varint(len(signed_header)) + signed_header)
+    return b"Cr24" + struct.pack("<II", 3, len(header)) + header + zip_bytes
+
+
+def verify_crx3(path: Path) -> dict[str, Any]:
+    """Parse a crx, verify its RSA proof with openssl, and return its identity."""
+    blob = path.read_bytes()
+    magic, version, header_size = blob[:4], *struct.unpack("<II", blob[4:12])
+    if magic != b"Cr24" or version != 3:
+        raise RuntimeError("not a CRX3 file")
+    header, zip_bytes = blob[12:12 + header_size], blob[12 + header_size:]
+    if header[0:1] != b"\x12":
+        raise RuntimeError("unexpected header layout")
+    # decode varints/fields for the single proof this tool writes
+    def read_varint(buf: bytes, pos: int) -> tuple[int, int]:
+        shift = value = 0
+        while True:
+            byte = buf[pos]
+            value |= (byte & 0x7F) << shift
+            pos += 1
+            if not byte & 0x80:
+                return value, pos
+            shift += 7
+    proof_len, pos = read_varint(header, 1)
+    proof = header[pos:pos + proof_len]
+    key_len, kpos = read_varint(proof, 1)
+    der = proof[kpos:kpos + key_len]
+    sig_len, spos = read_varint(proof, kpos + key_len + 1)
+    signature = proof[spos:spos + sig_len]
+    signed_header = b"\x0a\x10" + hashlib.sha256(der).digest()[:16]
+    payload = (b"CRX3 SignedData\x00" + struct.pack("<I", len(signed_header))
+               + signed_header + zip_bytes)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        der_path, sig_path, data_path = (Path(tmp) / n for n in ("k.der", "s.bin", "d.bin"))
+        der_path.write_bytes(der)
+        sig_path.write_bytes(signature)
+        data_path.write_bytes(payload)
+        run(["openssl", "dgst", "-sha256", "-verify", str(der_path), "-keyform", "DER",
+             "-signature", str(sig_path), str(data_path)])
+    with zipfile.ZipFile(path) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    return {"extension_id": extension_id_from_der(der),
+            "version": manifest.get("version"), "manifest": manifest}
+
+
+# ── workspace + packaging ────────────────────────────────────────────────────
+
+def ensure_workspace(config: dict[str, Any], ui: UI, log: Path) -> None:
+    if not (WORKSPACE / ".git").is_dir():
+        ui.step(f"Cloning {config['repo_url']}")
+        run(["git", "clone", "--quiet", config["repo_url"], str(WORKSPACE)], log=log)
+
+
+def checkout_ref(config: dict[str, Any], ref: str, ui: UI, log: Path) -> str:
+    ui.step(f"Fetching origin/{ref}")
+    run(["git", "fetch", "--quiet", "origin", ref], cwd=WORKSPACE, log=log)
+    run(["git", "checkout", "--force", "--detach", "FETCH_HEAD"], cwd=WORKSPACE, log=log)
+    run(["git", "clean", "-fdxq", "-e", "node_modules"], cwd=WORKSPACE, log=log)
+    return run(["git", "rev-parse", "--short", "HEAD"], cwd=WORKSPACE).decode().strip()
+
+
+def collect_manifest_references(manifest: dict[str, Any]) -> set[str]:
+    refs: set[str] = set()
+
+    def add(value: Any) -> None:
+        if isinstance(value, str) and value and "*" not in value:
+            refs.add(value.lstrip("/"))
+
+    background = manifest.get("background") or {}
+    add(background.get("service_worker"))
+    for script in background.get("scripts") or []:
+        add(script)
+    for entry in manifest.get("content_scripts") or []:
+        for item in (entry.get("js") or []) + (entry.get("css") or []):
+            add(item)
+    for entry in manifest.get("web_accessible_resources") or []:
+        for item in entry.get("resources") or []:
+            add(item)
+    for value in (manifest.get("icons") or {}).values():
+        add(value)
+    action = manifest.get("action") or {}
+    add(action.get("default_popup"))
+    for value in (action.get("default_icon") or {}).values() \
+            if isinstance(action.get("default_icon"), dict) else []:
+        add(value)
+    add(manifest.get("options_page"))
+    for page in (manifest.get("sandbox") or {}).get("pages") or []:
+        add(page)
+    add((manifest.get("storage") or {}).get("managed_schema"))
+    return refs
+
+
+def build_zip(config: dict[str, Any]) -> tuple[bytes, dict[str, Any], list[str]]:
+    manifest = json.loads((WORKSPACE / "manifest.json").read_text())
+    excluded = REQUIRED_PACK_EXCLUDE | set(config.get("pack_exclude", []))
+    buffer_path = BASE / ".package.zip.tmp"
+    names: set[str] = set()
+    with zipfile.ZipFile(buffer_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(WORKSPACE.rglob("*")):
+            relative = path.relative_to(WORKSPACE)
+            parts = relative.parts
+            if not path.is_file() or any(part in excluded for part in parts):
+                continue
+            if path.name in {".DS_Store"} or str(relative) in excluded:
+                continue
+            # The built react-dist bundle IS the shipped app; the raw src/ tree
+            # is React SOURCE and must never ship. Only src/vanilla loads at
+            # runtime (it is referenced directly, not bundled), so ship that
+            # subtree and nothing else under src/. Mirrors the store packager's
+            # allowlist (RUNTIME_DIRECTORIES), which ships only src/vanilla.
+            if parts and parts[0] == "src" and (len(parts) < 2 or parts[1] != "vanilla"):
+                continue
+            # Source maps reconstruct original source — never ship them.
+            if path.name.endswith(".map"):
+                continue
+            archive.write(path, relative.as_posix())
+            names.add(relative.as_posix())
+    data = buffer_path.read_bytes()
+    buffer_path.unlink()
+    missing = sorted(ref for ref in collect_manifest_references(manifest)
+                     if ref not in names)
+    return data, manifest, missing
+
+
+def compare_versions(left: str, right: str) -> int:
+    def parts(value: str) -> list[int]:
+        return [int(piece) for piece in value.split(".")]
+    a, b = parts(left), parts(right)
+    length = max(len(a), len(b))
+    a += [0] * (length - len(a))
+    b += [0] * (length - len(b))
+    return (a > b) - (a < b)
+
+
+def write_updates_xml(config: dict[str, Any], extension_id: str,
+                      version: str, file_name: str) -> str:
+    codebase = f"{config['public_origin']}{config['release_path']}/{file_name}"
+    xml = (
+        "<?xml version='1.0' encoding='UTF-8'?>\n"
+        "<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>\n"
+        f"  <app appid='{extension_id}'>\n"
+        f"    <updatecheck codebase='{codebase}' version='{version}'/>\n"
+        "  </app>\n"
+        "</gupdate>\n"
+    )
+    UPDATES_XML.write_text(xml)
+    return codebase
+
+
+def prune_releases(config: dict[str, Any], ledger: dict[str, Any], ui: UI) -> None:
+    keep = int(config.get("keep_releases", 10))
+    current = ledger.get("current")
+    releases = ledger["releases"]
+    keepers = {row["file"] for row in releases[:keep]}
+    if current:
+        keepers.update(row["file"] for row in releases if row["version"] == current)
+    survivors = [row for row in releases if row["file"] in keepers]
+    for row in releases:
+        if row["file"] not in keepers:
+            target = RELEASES_DIR / row["file"]
+            if target.is_file():
+                target.unlink()
+            ui.warn(f"pruned old release {row['file']}")
+    ledger["releases"] = survivors
+
+
+# ── presentation ─────────────────────────────────────────────────────────────
+
+def print_box(ui: UI, title: str, details: list[tuple[str, Any]],
+              footer: str | None = None) -> None:
+    line = "─" * 66
+    print(ui.teal("╭" + line + "╮"))
+    print(ui.teal("│") + ("  " + ui.bold(title)).ljust(66 + len(ui.bold(title)) - len(title)) + ui.teal("│"))
+    print(ui.teal("├" + line + "┤"))
+    for label, value in details:
+        text = f"  {label:<10} {value}"
+        print(ui.teal("│") + text[:65].ljust(66) + ui.teal("│"))
+    if footer:
+        print(ui.teal("├" + line + "┤"))
+        print(ui.teal("│") + ("  " + footer)[:65].ljust(66) + ui.teal("│"))
+    print(ui.teal("╰" + line + "╯"))
+
+
+def short_hash(value: str) -> str:
+    return value[:12] + "…" if len(value) > 13 else value
+
+
+def probe_backend(config: dict[str, Any]) -> tuple[str, str]:
+    url = f"{config['local_backend']}{config['update_path']}"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            body = response.read()
+        if UPDATES_XML.is_file() and body == UPDATES_XML.read_bytes():
+            return "serving", "backend is publicly serving the current updates.xml"
+        return "stale", "backend responds but its updates.xml differs from disk"
+    except urllib.error.HTTPError as error:
+        if error.code in {401, 403}:
+            return "blocked", f"backend returned {error.code} — restart it to load the public update routes"
+        if error.code == 404:
+            return "missing", "backend returned 404 — restart it to load the update routes"
+        return "error", f"backend returned HTTP {error.code}"
+    except OSError:
+        return "down", "backend is not reachable on " + config["local_backend"]
+
+
+# ── commands ─────────────────────────────────────────────────────────────────
+
+def cmd_status(args: argparse.Namespace, ui: UI) -> None:
+    config = load_config()
+    ledger = load_ledger()
+    key = key_summary()
+    current = next((row for row in ledger["releases"]
+                    if row["version"] == ledger.get("current")), None)
+    state, state_text = probe_backend(config)
+    if args.json:
+        print(json.dumps({
+            "key": key, "current": current, "backend": {"state": state},
+            "update_url": config["public_origin"] + config["update_path"],
+            "releases": len(ledger["releases"]),
+        }, indent=2))
+        return
+
+    print(ui.bold("Golfballs extension · production channel"))
+    print()
+    if key:
+        print(f"  Extension ID   {ui.teal(key['extension_id'])}")
+        print(f"  Signing key    {key['path']} " + ui.dim(f"(sha256 {key['fingerprint']}…)"))
+    else:
+        print("  Signing key    " + ui.red("missing") + ui.dim("  → run: ./golfballs key generate"))
+    print(f"  Update URL     {config['public_origin']}{config['update_path']}")
+    print(f"  Source         {config['repo_url']} " + ui.dim(f"[{config['branch']}]"))
+    print()
+    if current:
+        published = current.get("published_at", "")[:19].replace("T", " ")
+        print(f"  Published      {ui.green('● v' + current['version'])} "
+              + ui.dim(f"{current['file']} · {current['size']:,} bytes · {published}"))
+        print(f"  Commit         {current.get('commit', '?')} "
+              + ui.dim(f"sha256 {short_hash(current.get('sha256', ''))}"))
+    else:
+        print("  Published      " + ui.yellow("nothing yet") + ui.dim("  → run: ./golfballs publish"))
+    marker = {"serving": ui.green("● serving"), "stale": ui.yellow("● stale"),
+              "blocked": ui.yellow("● restart needed"), "missing": ui.yellow("● restart needed"),
+              "down": ui.red("● down"), "error": ui.red("● error")}[state]
+    print(f"  Backend        {marker} " + ui.dim(state_text))
+    print(f"  Releases kept  {len(ledger['releases'])} " + ui.dim(f"(max {config['keep_releases']})"))
+    print()
+    print(ui.dim("  publish · releases · rollback <version> · key · install-info · setup"))
+
+
+def cmd_setup(args: argparse.Namespace, ui: UI) -> None:
+    config = load_config()
+    for directory in (BASE, PUBLIC, RELEASES_DIR, LOGS):
+        directory.mkdir(exist_ok=True)
+    if not CONFIG_PATH.is_file():
+        save_config(config)
+        ui.ok(f"wrote {CONFIG_PATH}")
+    log = LOGS / "setup.log"
+    ensure_workspace(config, ui, log)
+    ui.ok("workspace ready")
+    if not KEY_PATH.is_file():
+        ui.warn("no signing key — run: ./golfballs key generate")
+    else:
+        ui.ok(f"signing key present · extension ID {key_summary()['extension_id']}")
+    ui.ok("setup complete — run ./golfballs status")
+
+
+def cmd_key(args: argparse.Namespace, ui: UI) -> None:
+    if args.key_command == "generate":
+        BASE.mkdir(exist_ok=True)
+        if KEY_PATH.is_file() and not args.force:
+            raise RuntimeError(
+                "a signing key already exists; --force will back it up and replace it.\n"
+                "Replacing the key CHANGES THE EXTENSION ID and orphans every install.")
+        if KEY_PATH.is_file():
+            backup = KEY_PATH.with_suffix(
+                ".pem.replaced-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+            KEY_PATH.rename(backup)
+            ui.warn(f"previous key moved to {backup.name}")
+        run(["openssl", "genrsa", "-out", str(KEY_PATH), "2048"])
+        KEY_PATH.chmod(0o600)
+        summary = key_summary()
+        print_box(ui, "Signing key generated", [
+            ("ID", summary["extension_id"]),
+            ("Key file", summary["path"]),
+            ("SHA-256", summary["fingerprint"] + "…"),
+        ], footer="Back this file up. Losing it breaks all future updates.")
+        print(ui.yellow("Set manifest.json \"key\" to the value below (kept in key.pub.txt):"))
+        pub_file = BASE / "key.pub.txt"
+        pub_file.write_text(summary["public_key_b64"] + "\n")
+        print(ui.dim(summary["public_key_b64"]))
+    elif args.key_command == "import":
+        source = Path(args.path).expanduser()
+        der = public_key_der(source)  # validates it is a readable RSA key
+        BASE.mkdir(exist_ok=True)
+        shutil.copyfile(source, KEY_PATH)
+        KEY_PATH.chmod(0o600)
+        ui.ok(f"imported key · extension ID {extension_id_from_der(der)}")
+    else:
+        summary = key_summary()
+        if not summary:
+            raise RuntimeError("no signing key — run: ./golfballs key generate")
+        if args.json:
+            print(json.dumps(summary, indent=2))
+            return
+        print(ui.bold("Signing key"))
+        print(f"  Extension ID  {ui.teal(summary['extension_id'])}")
+        print(f"  File          {summary['path']}")
+        print(f"  SHA-256       {summary['fingerprint']}…")
+        manifest_path = WORKSPACE / "manifest.json"
+        if manifest_path.is_file():
+            manifest_key = json.loads(manifest_path.read_text()).get("key")
+            matches = manifest_key == summary["public_key_b64"]
+            print("  Manifest      " + (ui.green("matches workspace manifest key")
+                                        if matches else ui.red("does NOT match workspace manifest key")))
+
+
+def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
+    config = load_config()
+    ledger = load_ledger()
+    key = key_summary()
+    if not key:
+        raise RuntimeError("no signing key — run: ./golfballs key generate")
+    for directory in (PUBLIC, RELEASES_DIR, LOGS):
+        directory.mkdir(exist_ok=True)
+    ref = args.ref or config["branch"]
+    log = LOGS / ("publish-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".log")
+
+    ensure_workspace(config, ui, log)
+    commit = checkout_ref(config, ref, ui, log)
+    manifest = json.loads((WORKSPACE / "manifest.json").read_text())
+    version = manifest["version"]
+
+    if manifest.get("key") != key["public_key_b64"]:
+        raise RuntimeError(
+            "manifest.json \"key\" does not match the signing key.\n"
+            "Update the manifest on the production branch (see ./golfballs key show)\n"
+            "or import the matching key with: ./golfballs key import <pem>")
+    if manifest.get("update_url") != config["public_origin"] + config["update_path"]:
+        ui.warn("manifest update_url is not " + config["public_origin"] + config["update_path"])
+
+    current = ledger.get("current")
+    if current and compare_versions(version, current) <= 0 and not args.force:
+        raise RuntimeError(
+            f"manifest version {version} is not greater than published {current}.\n"
+            f"Bump \"version\" on {ref} and push, or pass --force to republish.")
+
+    build_cmd = config["fast_build_command"] if args.fast else config["build_command"]
+    ui.step("Installing dependencies (npm ci)")
+    run(["npm", "ci", "--no-audit", "--no-fund"], cwd=WORKSPACE, log=log)
+    ui.step(f"Building ({build_cmd})")
+    run(build_cmd.split(), cwd=WORKSPACE, log=log)
+
+    ui.step("Packaging CRX3")
+    zip_bytes, manifest, missing = build_zip(config)
+    if missing:
+        raise RuntimeError(
+            "manifest references files missing from the package:\n  " + "\n  ".join(missing))
+    crx = pack_crx3(zip_bytes, KEY_PATH)
+    file_name = f"{config['slug']}-{version}.crx"
+    (RELEASES_DIR / file_name).write_bytes(crx)
+    digest = hashlib.sha256(crx).hexdigest()
+    checked = verify_crx3(RELEASES_DIR / file_name)
+    if checked["extension_id"] != key["extension_id"] or checked["version"] != version:
+        raise RuntimeError("packed crx failed self-verification")
+
+    codebase = write_updates_xml(config, key["extension_id"], version, file_name)
+    ledger["releases"] = [row for row in ledger["releases"] if row["version"] != version]
+    ledger["releases"].insert(0, {
+        "version": version, "file": file_name, "sha256": digest, "size": len(crx),
+        "commit": commit, "ref": ref,
+        "published_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
+    ledger["current"] = version
+    prune_releases(config, ledger, ui)
+    save_ledger(ledger)
+
+    if args.json:
+        print(json.dumps(ledger["releases"][0] | {"codebase": codebase}, indent=2))
+        return
+    print_box(ui, f"Published v{version}", [
+        ("Version", version),
+        ("ID", key["extension_id"]),
+        ("Source", f"{ref} @ {commit}"),
+        ("Package", f"{file_name} · {len(crx):,} bytes"),
+        ("SHA-256", short_hash(digest)),
+        ("Serves at", codebase),
+    ], footer="Chrome polls every ~5h; force via chrome://extensions → Update")
+    state, text = probe_backend(config)
+    if state != "serving":
+        ui.warn(text)
+
+
+def cmd_releases(args: argparse.Namespace, ui: UI) -> None:
+    ledger = load_ledger()
+    rows = ledger["releases"]
+    if args.json:
+        print(json.dumps(ledger, indent=2))
+        return
+    if not rows:
+        print(ui.dim("No releases published yet."))
+        return
+    print(ui.bold("Published releases") + ui.dim(f"  ·  {len(rows)} kept"))
+    headers = ["", "VERSION", "PUBLISHED", "COMMIT", "SIZE", "SHA-256"]
+    widths = [1, 8, 19, 8, 12, 14]
+    print(ui.dim("  ".join(h.ljust(w) for h, w in zip(headers, widths))))
+    print(ui.dim("  ".join("─" * w for w in widths)))
+    for row in rows:
+        is_current = row["version"] == ledger.get("current")
+        marker = ui.green("●") if is_current else ui.dim("○")
+        cells = [
+            row["version"].ljust(widths[1]),
+            row.get("published_at", "")[:19].replace("T", " ").ljust(widths[2]),
+            str(row.get("commit", "?")).ljust(widths[3]),
+            f"{row['size']:,}".ljust(widths[4]),
+            short_hash(row.get("sha256", "")),
+        ]
+        print(marker + "  " + "  ".join(cells))
+
+
+def cmd_rollback(args: argparse.Namespace, ui: UI) -> None:
+    config = load_config()
+    ledger = load_ledger()
+    key = key_summary()
+    if not key:
+        raise RuntimeError("no signing key — run: ./golfballs key generate")
+    target = next((row for row in ledger["releases"]
+                   if row["version"] == args.version), None)
+    if not target:
+        raise RuntimeError(f"version {args.version} is not in the release ledger")
+    if not (RELEASES_DIR / target["file"]).is_file():
+        raise RuntimeError(f"release file {target['file']} is missing on disk")
+    if not args.yes:
+        answer = input(f"Point the update channel back at v{args.version}? [y/N] ").strip().lower()
+        if answer not in {"y", "yes"}:
+            print(ui.dim("Cancelled."))
+            return
+    write_updates_xml(config, key["extension_id"], target["version"], target["file"])
+    ledger["current"] = target["version"]
+    save_ledger(ledger)
+    ui.ok(f"update channel now serves v{target['version']}")
+    ui.warn("Chrome will NOT downgrade clients already on a newer version —")
+    ui.warn("to truly roll back, publish the old code again with a higher version.")
+
+
+def write_windows_helpers(config: dict[str, Any], forcelist: str) -> tuple[Path, Path]:
+    """Double-click .reg files that enroll/unenroll under HKCU (no admin).
+
+    regedit requires .reg files in UTF-16 LE with a BOM; UTF-8 triggers the
+    "Error accessing the registry" import failure on many Windows builds.
+    """
+    PUBLIC.mkdir(exist_ok=True)
+    enroll = PUBLIC / "golfballs-extension-enroll.reg"
+    unenroll = PUBLIC / "golfballs-extension-remove.reg"
+    key_path = r"[HKEY_CURRENT_USER\Software\Policies\Google\Chrome\ExtensionInstallForcelist]"
+
+    def write_reg(path: Path, body: str) -> None:
+        text = "Windows Registry Editor Version 5.00\r\n\r\n" + key_path + "\r\n" + body
+        path.write_bytes(b"\xff\xfe" + text.encode("utf-16-le"))
+
+    write_reg(enroll, f"\"1\"=\"{forcelist}\"\r\n")
+    write_reg(unenroll, "\"1\"=-\r\n")
+    return enroll, unenroll
+
+
+def cmd_install_info(args: argparse.Namespace, ui: UI) -> None:
+    config = load_config()
+    key = key_summary()
+    if not key:
+        raise RuntimeError("no signing key — run: ./golfballs key generate")
+    update_url = config["public_origin"] + config["update_path"]
+    forcelist = f"{key['extension_id']};{update_url}"
+    enroll, unenroll = write_windows_helpers(config, forcelist)
+
+    print(ui.bold("Install & auto-update — voluntary, no admin required"))
+    print()
+    print(f"  Extension ID  {ui.teal(key['extension_id'])}")
+    print(f"  Update URL    {update_url}")
+    print()
+    print(ui.bold("Easiest — hand each person a file to double-click (per-user, no admin):"))
+    print("  enroll  " + ui.teal(str(enroll)))
+    print("  remove  " + ui.dim(str(unenroll)))
+    print(ui.dim("  They double-click it, click Yes, then fully quit and reopen Chrome."))
+    print(ui.dim("  Verify on their machine at chrome://policy (Reload policies)."))
+    print()
+    print(ui.bold("Same thing as a command (no admin) — HKCU, not HKLM:"))
+    print("  " + ui.teal(
+        r'reg add "HKCU\Software\Policies\Google\Chrome\ExtensionInstallForcelist" '
+        f"/v 1 /t REG_SZ /d \"{forcelist}\" /f"))
+    print()
+    print(ui.dim("  macOS voluntary (per-user, no sudo):"))
+    print("  defaults write com.google.Chrome ExtensionInstallForcelist \\")
+    print(f"    -array-add '{forcelist}'")
+    print()
+    print(ui.dim("Chrome applies HKCU policy for the logged-in user without admin; it"))
+    print(ui.dim("installs the extension, marks it \"managed\", and auto-updates it from"))
+    print(ui.dim("this server (~5h, or chrome://extensions → Update). Removing the key"))
+    print(ui.dim("(the remove file) lets the user delete it again — hence voluntary."))
+
+
+def parser() -> argparse.ArgumentParser:
+    root = argparse.ArgumentParser(
+        prog="golfballs",
+        description="Publish and manage the Golfballs extension production update channel.",
+        epilog="Examples: ./golfballs publish | ./golfballs releases | ./golfballs install-info",
+    )
+    root.add_argument("--no-color", action="store_true", help="disable ANSI colors")
+    commands = root.add_subparsers(dest="command")
+
+    status = commands.add_parser("status", help="channel, key, backend, and release state")
+    status.add_argument("--json", action="store_true")
+
+    commands.add_parser("setup", help="create the production folder and clone the workspace")
+
+    publish = commands.add_parser("publish", help="build the production branch and publish a signed release")
+    publish.add_argument("--ref", help="git ref to publish (default: production)")
+    publish.add_argument("--fast", action="store_true", help="build only; skip the audit + test gate")
+    publish.add_argument("--force", action="store_true", help="allow republishing a non-greater version")
+    publish.add_argument("--json", action="store_true")
+
+    releases = commands.add_parser("releases", aliases=["ls"], help="list published releases")
+    releases.add_argument("--json", action="store_true")
+
+    rollback = commands.add_parser("rollback", help="repoint the channel at an older kept release")
+    rollback.add_argument("version")
+    rollback.add_argument("--yes", "-y", action="store_true", help="skip confirmation")
+
+    key = commands.add_parser("key", help="manage the CRX signing key")
+    key_commands = key.add_subparsers(dest="key_command")
+    generate = key_commands.add_parser("generate", help="create a new signing key (new extension ID)")
+    generate.add_argument("--force", action="store_true")
+    imported = key_commands.add_parser("import", help="import an existing private key PEM")
+    imported.add_argument("path")
+    show = key_commands.add_parser("show", help="show key identity and manifest match")
+    show.add_argument("--json", action="store_true")
+
+    commands.add_parser("install-info", help="print the forcelist entry and install instructions")
+    return root
+
+
+def main() -> int:
+    args = parser().parse_args()
+    ui = UI(not args.no_color)
+    try:
+        if args.command in {None, "status"}:
+            if args.command is None:
+                args.json = False
+            cmd_status(args, ui)
+        elif args.command == "setup":
+            cmd_setup(args, ui)
+        elif args.command == "publish":
+            cmd_publish(args, ui)
+        elif args.command in {"releases", "ls"}:
+            cmd_releases(args, ui)
+        elif args.command == "rollback":
+            cmd_rollback(args, ui)
+        elif args.command == "key":
+            if not getattr(args, "key_command", None):
+                args.json = False
+                args.key_command = "show"
+            cmd_key(args, ui)
+        elif args.command == "install-info":
+            cmd_install_info(args, ui)
+        return 0
+    except subprocess.TimeoutExpired:
+        print(ui.red("Error:") + " command timed out", file=sys.stderr)
+        return 1
+    except (RuntimeError, ValueError, OSError, json.JSONDecodeError, KeyError) as exc:
+        print(ui.red("Error:") + " " + str(exc), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

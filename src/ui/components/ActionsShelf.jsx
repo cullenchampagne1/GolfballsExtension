@@ -412,6 +412,7 @@ export function ActionsShelf({
   const actionsViewRef = useRef(null);
   const { actions, page, pageLabel, pageSubLabel, topModalLabel } = useActionRegistry();
   const help = useHelpAssistant(page);
+  const helpAvailable = help.service.ready === true;
 
   const closeShelf = () => {
     setOpen(false);
@@ -588,7 +589,7 @@ export function ActionsShelf({
     observer?.observe(node);
     Array.from(node.children || []).forEach((child) => observer?.observe(child));
     return () => observer?.disconnect();
-  }, [open, view, rows.length, showContextHeader, help.state?.unread]);
+  }, [open, view, rows.length, showContextHeader, helpAvailable, help.state?.unread]);
 
   return (
     <div
@@ -706,7 +707,9 @@ export function ActionsShelf({
 
                 <div className="gb-thin-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                   <div data-shelf-measure-content style={{ padding: '6px 6px 8px' }}>
-                    <HelpCompanionEntry state={help.state} loading={help.loading} onOpen={() => setView('chat')} />
+                    {helpAvailable && (
+                      <HelpCompanionEntry state={help.state} loading={help.loading} onOpen={() => setView('chat')} />
+                    )}
                     {rows.length === 0 && (
                       <div style={{ padding: '12px 16px 18px', fontSize: 10.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
                         No other actions are registered for this page.
@@ -762,7 +765,7 @@ export function ActionsShelf({
       <ShelfTrigger
         variant={variant}
         count={smartCount}
-        unread={help.state?.unread || 0}
+        unread={helpAvailable ? (help.state?.unread || 0) : 0}
         open={open}
         onClick={() => {
           if (open) closeShelf();

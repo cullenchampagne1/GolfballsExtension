@@ -15,7 +15,8 @@ import {
 } from './helpers/harness.mjs';
 
 const SHARE_ID = 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6';
-const SHARE_URL = `${API_ORIGIN}/extension/settings-shares/${SHARE_ID}`;
+const CLIENT_BASE = `${API_ORIGIN}/projects/golfballs-extension/client`;
+const SHARE_URL = `${CLIENT_BASE}/settings-shares/${SHARE_ID}`;
 
 const serverShare = {
   id: SHARE_ID,
@@ -30,7 +31,7 @@ let requests;
 before(async () => {
   const mock = createFetchMock((url, options) => {
     const method = String(options.method || 'GET').toUpperCase();
-    if (url === `${API_ORIGIN}/extension/settings-shares` && method === 'POST') {
+    if (url === `${CLIENT_BASE}/settings-shares` && method === 'POST') {
       return jsonResponse(serverShare, 201);
     }
     if (url === SHARE_URL && method === 'GET') return jsonResponse(serverShare);
@@ -52,7 +53,7 @@ before(async () => {
 });
 
 describe('settings-share lifecycle', () => {
-  it('creates a share: POST /extension/settings-shares with name+scopes and Bearer auth', async () => {
+  it('creates a share through the project client endpoint with Bearer auth', async () => {
     const response = await sendMessage({
       action: 'settingsShareCreate',
       name: '  Team defaults  ',
@@ -63,7 +64,7 @@ describe('settings-share lifecycle', () => {
     assert.deepEqual(response.share, serverShare, 'the server share flows back to the caller');
 
     const request = requests.at(-1);
-    assert.equal(request.url, `${API_ORIGIN}/extension/settings-shares`);
+    assert.equal(request.url, `${CLIENT_BASE}/settings-shares`);
     assert.equal(request.method, 'POST');
     assert.deepEqual(JSON.parse(request.options.body), {
       name: 'Team defaults',

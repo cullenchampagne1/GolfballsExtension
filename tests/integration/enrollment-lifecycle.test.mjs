@@ -15,6 +15,7 @@ import {
 } from './helpers/harness.mjs';
 
 const ENROLLMENT_URL = `${API_ORIGIN}/auth/extension-installation`;
+const IDENTITY_PATH = '/projects/golfballs-extension/client/identity';
 
 function enrollmentRouter(url) {
   if (url === ENROLLMENT_URL) {
@@ -38,9 +39,9 @@ const enrollments = (requests) => requests.filter(({ url }) => url === ENROLLMEN
 
 describe('enrollment lifecycle', () => {
   it('enrolls exactly once on fresh install and persists the credential', async () => {
-    const { stored, listeners, requests } = makeSandbox();
-    assert.equal(listeners.installed.length, 1, 'installation auth registers one onInstalled listener');
-    listeners.installed[0]({ reason: 'install' });
+    const { client, stored, listeners, requests } = makeSandbox();
+    assert.equal(listeners.installed.length, 0, 'the access gate owns installation startup');
+    await client.ensureInstallation();
     await settle();
 
     assert.equal(enrollments(requests).length, 1);
@@ -61,7 +62,7 @@ describe('enrollment lifecycle', () => {
 
     const first = await client.ensureInstallation();
     assert.equal(first.apiKey, API_KEY);
-    listeners.startup[0]();
+    assert.equal(listeners.startup.length, 0, 'installation auth does not run before health');
     await client.ensureInstallation();
     await settle();
 
@@ -102,7 +103,7 @@ describe('enrollment lifecycle', () => {
     const identityRequests = [];
     const { fetchMock, requests } = createFetchMock((url, options) => {
       const path = new URL(url).pathname;
-      if (path !== '/extension/identity') return enrollmentRouter(url);
+      if (path !== IDENTITY_PATH) return enrollmentRouter(url);
       identityRequests.push({ method: String(options.method || 'GET'), body: options.body });
       if (String(options.method || 'GET').toUpperCase() === 'POST') {
         const body = JSON.parse(options.body);
@@ -124,8 +125,7 @@ describe('enrollment lifecycle', () => {
       fetchImpl: fetchMock,
     });
 
-    sandbox.listeners.startup[0]();
-    await settle();
+    await sandbox.client.syncIdentityFromStorage();
 
     assert.equal(enrollments(requests).length, 0);
     assert.deepEqual(identityRequests.map(({ method }) => method), ['GET', 'POST']);
@@ -139,7 +139,7 @@ describe('enrollment lifecycle', () => {
 
   it('keeps the existing key and requests a Settings name when no local part exists', async () => {
     const { fetchMock, requests } = createFetchMock((url, options) => {
-      if (new URL(url).pathname === '/extension/identity') {
+      if (new URL(url).pathname === IDENTITY_PATH) {
         if (String(options.method || 'GET').toUpperCase() === 'POST') {
           const body = JSON.parse(options.body);
           return jsonResponse({

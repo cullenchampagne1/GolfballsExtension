@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/installation-auth.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/installation-auth.js', 'lib/extension-access-gate.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js');
 /* @admin:start */
 importScripts('lib/notifications-store.js', 'lib/email-relay-poll.js');
 /* @admin:end */
@@ -10,12 +10,23 @@ const GB_CALENDAR_FORM = globalThis.GBCalendarForm;
 if (!GB_CALENDAR_FORM) throw new Error('Calendar form-state helper failed to initialize');
 const GB_HELP_ASSISTANT = globalThis.GBHelpAssistant?.createController();
 if (!GB_HELP_ASSISTANT) throw new Error('Help assistant failed to initialize');
+const GB_EXTENSION_ACCESS = globalThis.GBExtensionAccessGate?.createController();
+if (!GB_EXTENSION_ACCESS) throw new Error('Extension access gate failed to initialize');
+globalThis.GBExtensionAccessGateController = GB_EXTENSION_ACCESS;
 
-// Resume a pending run whenever MV3 wakes the worker. A one-shot alarm is the
-// durable wake-up; the in-memory timer provides the responsive 3-second path
-// while the worker is already alive.
-GB_HELP_ASSISTANT.resume().catch(() => {});
-chrome.runtime.onStartup?.addListener(() => { GB_HELP_ASSISTANT.resume().catch(() => {}); });
+// Product scripts, popup access, and Help recovery start only after the
+// credential-backed health check succeeds. Failed enrollment, revocation,
+// disablement, and network failure all leave the extension inert.
+GB_EXTENSION_ACCESS.start().then((allowed) => {
+  if (!allowed) return;
+  GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
+  GB_HELP_ASSISTANT.resume().catch(() => {});
+}).catch(() => {});
+chrome.runtime.onStartup?.addListener(() => {
+  GB_EXTENSION_ACCESS.check().then((allowed) => {
+    if (allowed) GB_HELP_ASSISTANT.resume().catch(() => {});
+  }).catch(() => {});
+});
 chrome.alarms?.onAlarm?.addListener((alarm) => {
   if (alarm?.name === GB_HELP_ASSISTANT.ALARM_NAME) GB_HELP_ASSISTANT.poll({ force: true }).catch(() => {});
 });
@@ -801,7 +812,7 @@ function gbSettingsShareId(value) {
   try {
     const url = new URL(raw);
     if (url.origin !== globalThis.GB_BACKEND_ORIGIN || url.search || url.hash) return '';
-    const match = url.pathname.match(/^\/extension\/settings-shares\/([A-Za-z0-9_-]{32})\/?$/);
+    const match = url.pathname.match(/^\/projects\/golfballs-extension\/client\/settings-shares\/([A-Za-z0-9_-]{32})\/?$/);
     return match ? match[1] : '';
   } catch { return ''; }
 }
@@ -812,7 +823,7 @@ function gbEmailTemplateShareId(value) {
   try {
     const url = new URL(raw);
     if (url.origin !== globalThis.GB_BACKEND_ORIGIN || url.search || url.hash) return '';
-    const match = url.pathname.match(/^\/extension\/email-template-shares\/([A-Za-z0-9_-]{32})\/?$/);
+    const match = url.pathname.match(/^\/projects\/golfballs-extension\/client\/email-template-shares\/([A-Za-z0-9_-]{32})\/?$/);
     return match ? match[1] : '';
   } catch { return ''; }
 }
@@ -823,7 +834,7 @@ function gbProductStoreId(value) {
   try {
     const url = new URL(raw);
     if (url.origin !== globalThis.GB_BACKEND_ORIGIN || url.search || url.hash) return '';
-    const match = url.pathname.match(/^\/extension\/product-stores\/([A-Za-z0-9_-]{32})\/?$/);
+    const match = url.pathname.match(/^\/projects\/golfballs-extension\/client\/product-stores\/([A-Za-z0-9_-]{32})\/?$/);
     return match ? match[1] : '';
   } catch { return ''; }
 }
@@ -845,6 +856,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      is defense-in-depth: it fails safe if that ever changes and documents
      that page/other-extension senders are not trusted. */
   if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return;
+  if (!GB_EXTENSION_ACCESS.isEnabled()) {
+    sendResponse({ ok: false, error: 'This Golfballs Toolkit installation is not authorized.' });
+    return true;
+  }
 
   // ── Backend origin ─────────────────────────────────────────────────────
   // config.js owns the origin in the worker global; the 3D viewer (content
@@ -960,7 +975,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Installation-owned support tickets ────────────────────────────────
   if (msg.action === 'supportTicketList') {
-    GBInstallationAuth.apiJson('/extension/tickets', { responseLimit: 2 * 1024 * 1024 })
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/tickets`, { responseLimit: 2 * 1024 * 1024 })
       .then((payload) => sendResponse({
         ok: true,
         tickets: Array.isArray(payload?.tickets) ? payload.tickets : [],
@@ -982,7 +997,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Invalid support ticket' });
       return true;
     }
-    GBInstallationAuth.apiJson('/extension/tickets', {
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/tickets`, {
       method: 'POST',
       body: JSON.stringify({ request_id: requestId, kind, title, description, context }),
     }).then((payload) => sendResponse({ ok: true, ticket: payload?.ticket, created: payload?.created === true }))
@@ -1018,7 +1033,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Installation-authenticated settings share service ───────────────────
   if (msg.action === 'settingsShareList') {
-    GBInstallationAuth.apiJson('/extension/settings-shares')
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/settings-shares`)
       .then((payload) => sendResponse({ ok: true, shares: payload.shares || [] }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list settings shares' }));
     return true;
@@ -1030,7 +1045,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         const part = String(msg.localPart || '').trim();
-        const resp = await GBInstallationAuth.apiFetch(`/extension/email-exchange-flow?localPart=${encodeURIComponent(part)}`);
+        const resp = await GBInstallationAuth.apiFetch(`${GBInstallationAuth.CLIENT_BASE}/email-exchange-flow?localPart=${encodeURIComponent(part)}`);
         if (!resp.ok) { sendResponse({ ok: false, error: `HTTP ${resp.status}` }); return; }
         const bytes = new Uint8Array(await resp.arrayBuffer());
         let binary = '';
@@ -1049,7 +1064,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Invalid email template' });
       return true;
     }
-    GBInstallationAuth.apiJson('/extension/email-template-shares', {
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares`, {
       method: 'POST', body,
     }).then((share) => sendResponse({ ok: true, share }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to share email template' }));
@@ -1058,7 +1073,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'emailTemplateShareGet') {
     const shareId = gbEmailTemplateShareId(msg.url || msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Enter a valid email template link' }); return true; }
-    GBInstallationAuth.apiJson(`/extension/email-template-shares/${shareId}`)
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}`)
       .then((share) => sendResponse({ ok: true, share }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load email template' }));
     return true;
@@ -1072,7 +1087,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Invalid settings share' });
       return true;
     }
-    GBInstallationAuth.apiJson('/extension/settings-shares', {
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/settings-shares`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -1083,7 +1098,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'settingsShareGet') {
     const shareId = gbSettingsShareId(msg.url || msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Enter a valid settings share URL' }); return true; }
-    GBInstallationAuth.apiJson(`/extension/settings-shares/${shareId}`)
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/settings-shares/${shareId}`)
       .then((share) => sendResponse({ ok: true, share }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to open settings share' }));
     return true;
@@ -1097,7 +1112,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Invalid settings share import' });
       return true;
     }
-    GBInstallationAuth.apiJson(`/extension/settings-shares/${shareId}/imports`, {
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/settings-shares/${shareId}/imports`, {
       method: 'POST',
       body: JSON.stringify({ scope_ids: scopeIds }),
     }).then((share) => sendResponse({ ok: true, share }))
@@ -1107,13 +1122,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'settingsShareRevoke') {
     const shareId = gbSettingsShareId(msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Invalid settings share' }); return true; }
-    GBInstallationAuth.apiJson(`/extension/settings-shares/${shareId}/revoke`, { method: 'POST' })
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/settings-shares/${shareId}/revoke`, { method: 'POST' })
       .then(() => sendResponse({ ok: true, shareId }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke settings share' }));
     return true;
   }
   if (msg.action === 'emailShareList') {
-    GBInstallationAuth.apiJson('/extension/email-template-shares')
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares`)
       .then((payload) => sendResponse({ ok: true, shares: payload.shares || [] }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list email links' }));
     return true;
@@ -1121,7 +1136,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'emailShareRevoke') {
     const shareId = /^[A-Za-z0-9_-]{32}$/.test(String(msg.shareId || '')) ? String(msg.shareId) : '';
     if (!shareId) { sendResponse({ ok: false, error: 'Invalid email link' }); return true; }
-    GBInstallationAuth.apiJson(`/extension/email-template-shares/${shareId}/revoke`, { method: 'POST' })
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}/revoke`, { method: 'POST' })
       .then(() => sendResponse({ ok: true, shareId }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke email link' }));
     return true;
@@ -1135,13 +1150,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Invalid store' });
       return true;
     }
-    GBInstallationAuth.apiJson('/extension/product-stores', { method: 'POST', body })
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-stores`, { method: 'POST', body })
       .then((store) => sendResponse({ ok: true, store }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to create store' }));
     return true;
   }
   if (msg.action === 'productStoreList') {
-    GBInstallationAuth.apiJson('/extension/product-stores')
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-stores`)
       .then((payload) => sendResponse({ ok: true, stores: payload.stores || [] }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list stores' }));
     return true;
@@ -1149,7 +1164,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'productStoreRevoke') {
     const storeId = gbProductStoreId(msg.storeId);
     if (!storeId) { sendResponse({ ok: false, error: 'Invalid store' }); return true; }
-    GBInstallationAuth.apiJson(`/extension/product-stores/${storeId}/revoke`, { method: 'POST' })
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-stores/${storeId}/revoke`, { method: 'POST' })
       .then(() => sendResponse({ ok: true, storeId }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke store' }));
     return true;
@@ -1157,7 +1172,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'productStoreFetch') {
     const storeId = gbProductStoreId(msg.url || msg.storeId);
     if (!storeId) { sendResponse({ ok: false, error: 'Enter a valid store link' }); return true; }
-    GBInstallationAuth.apiJson(`/extension/product-stores/${storeId}`)
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-stores/${storeId}`)
       .then((store) => sendResponse({ ok: true, store }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load store' }));
     return true;

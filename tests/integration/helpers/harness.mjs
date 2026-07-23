@@ -62,6 +62,8 @@ export function createChrome({ stored = {}, extensionId = EXTENSION_ID, version 
     alarm: [], windowRemoved: [], tabRemoved: [],
   };
   const alarms = [];
+  const registeredContentScripts = [];
+  const actionState = { enabled: true };
   const toList = (keys) => (Array.isArray(keys) ? keys : [keys]);
   const chrome = {
     runtime: {
@@ -87,10 +89,34 @@ export function createChrome({ stored = {}, extensionId = EXTENSION_ID, version 
       onChanged: { addListener: (fn) => listeners.storageChanged.push(fn) },
     },
     tabs: {
-      query: async () => [],
+      query(_query, callback) {
+        if (callback) { callback([]); return undefined; }
+        return Promise.resolve([]);
+      },
       sendMessage: async () => undefined,
       create: () => undefined,
+      remove(_ids, callback) { callback?.(); },
+      reload(_id, callback) { callback?.(); },
       onRemoved: { addListener: (fn) => listeners.tabRemoved.push(fn) },
+    },
+    scripting: {
+      unregisterContentScripts({ ids } = {}, callback) {
+        const selected = new Set(ids || []);
+        for (let index = registeredContentScripts.length - 1; index >= 0; index -= 1) {
+          if (!ids || selected.has(registeredContentScripts[index].id)) {
+            registeredContentScripts.splice(index, 1);
+          }
+        }
+        callback?.();
+      },
+      registerContentScripts(scripts, callback) {
+        registeredContentScripts.push(...structuredClone(scripts));
+        callback?.();
+      },
+    },
+    action: {
+      enable(callback) { actionState.enabled = true; callback?.(); },
+      disable(callback) { actionState.enabled = false; callback?.(); },
     },
     windows: {
       onRemoved: { addListener: (fn) => listeners.windowRemoved.push(fn) },
@@ -100,7 +126,7 @@ export function createChrome({ stored = {}, extensionId = EXTENSION_ID, version 
       onAlarm: { addListener: (fn) => listeners.alarm.push(fn) },
     },
   };
-  return { chrome, stored, listeners, alarms };
+  return { chrome, stored, listeners, alarms, registeredContentScripts, actionState };
 }
 
 /** vm context seeded with the host intrinsics the extension scripts use. */
@@ -196,9 +222,18 @@ export function makeFakeIndexedDb() {
  */
 export async function loadBackground({ stored = {}, fetchImpl, indexedDb } = {}) {
   const parts = createChrome({ stored });
+  const gatedFetch = (url, options) => {
+    if (new URL(String(url)).pathname === '/projects/golfballs-extension/client/health') {
+      return Promise.resolve(jsonResponse({
+        ok: true, session_valid: true, extension_enabled: true,
+        assistant_enabled: true,
+      }));
+    }
+    return fetchImpl(url, options);
+  };
   const context = createContext({
     chrome: parts.chrome,
-    fetchImpl,
+    fetchImpl: gatedFetch,
     extras: { indexedDB: indexedDb ?? makeFakeIndexedDb().indexedDB },
   });
   context.importScripts = (...files) => { for (const file of files) loadScript(context, file); };

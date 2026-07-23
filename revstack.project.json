@@ -1,0 +1,446 @@
+{
+  "id": "golfballs-extension",
+  "title": "Golfballs Extension",
+  "icon": "package",
+  "api_docs": {
+    "title": "Golfballs Extension API",
+    "order": 24,
+    "intro": "Live project-owned configuration, release, key, sharing, publishing, and guarded AI-help endpoints. This category is generated from the mounted Golfballs Extension project and remains authoritative after the deprecated core /extension/* compatibility namespace is removed.",
+    "routes": {
+      "GET /updates.xml": {
+        "auth": "public",
+        "summary": "Serve the Chrome self-hosted update manifest.",
+        "description": "Returns the current updates.xml document for Chrome's external update client with no-store caching. A missing published release returns 404."
+      },
+      "GET /releases/{file_name}": {
+        "auth": "public",
+        "summary": "Download one published signed CRX release.",
+        "description": "Serves a validated CRX filename from the project-owned release directory. Traversal, unknown extensions, and missing releases return 404; successful downloads use a short public cache lifetime.",
+        "params": [
+          {
+            "name": "file_name",
+            "in": "path",
+            "required": true,
+            "description": "Published CRX filename from the release ledger.",
+            "schema": {"type": "string", "example": "golfballs-extension-1.2.3.crx"}
+          }
+        ]
+      },
+      "GET /assets/{file_name:path}": {
+        "auth": "public",
+        "summary": "Serve one on-demand 3D-viewer asset (model / HDRI / texture).",
+        "description": "The Golfball 3D viewer no longer bundles its ~45MB of models, HDRIs, and textures in the extension; it downloads each here on first use and caches it locally. Unauthenticated, permissive CORS, and immutably cached. file_name may include the model subfolder. Path traversal, bad names, and missing files return 404.",
+        "params": [
+          {
+            "name": "file_name",
+            "in": "path",
+            "required": true,
+            "description": "Asset path relative to the served assets directory, including any model subfolder.",
+            "schema": {"type": "string", "example": "golfball_model/Golf_ball.obj"}
+          }
+        ]
+      },
+      "GET /status": {
+        "summary": "Read update-channel version and serving state.",
+        "description": "Returns the extension id, canonical update URL, current version, publish time, commit, size, and release count used by the project dashboard channel card."
+      },
+      "GET /overview": {
+        "summary": "Read extension release, credential, and sharing totals.",
+        "description": "Combines the current release ledger with active installation credentials and non-revoked settings/email share counts and opens. Administrator session required."
+      },
+      "GET /release-list": {
+        "summary": "List published extension releases newest first.",
+        "description": "Returns a normalized table payload containing version, publish date, source commit, artifact size, and the currently active release marker."
+      },
+      "POST /publish": {
+        "summary": "Build, sign, and publish a production extension release.",
+        "description": "Runs the project publishing CLI under a single-flight lock. Set fast=true to request the CLI's fast mode; failures and timeouts return bounded diagnostics.",
+        "request_body": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {"type": "object", "properties": {"fast": {"type": "boolean", "default": false}}}
+            }
+          }
+        },
+        "example": "curl -sX POST :8000/projects/golfballs-extension/publish -H 'content-type: application/json' -b \"$SESSION\" -d '{\"fast\":false}'"
+      },
+      "POST /build": {
+        "summary": "Build the extension bundle without publishing it.",
+        "description": "Runs npm run build in the project directory under a single-flight lock. Administrator session required; build failures return a bounded output tail."
+      },
+      "POST /commit-push": {
+        "summary": "Commit and push the extension working tree.",
+        "description": "Stages all project changes, creates the project-defined automated commit when needed, and performs a normal Git push. Concurrent actions are rejected and history is never force-rewritten."
+      },
+      "GET /configuration": {
+        "auth": "mixed",
+        "preferred_auth": "api-key",
+        "summary": "Canonical extension policy envelope for installations or dashboard administrators.",
+        "description": "Returns the managed Golfballs settings policy to an extension installation key. An accompanying administrator dashboard cookie intentionally returns admin_bypass=true, configuration_reason=dashboard_admin_bypass, and configuration=null so the extension restores unrestricted local settings."
+      },
+      "GET /configuration-values": {
+        "summary": "List every managed extension policy value.",
+        "description": "Returns an administrator table of section, setting path, current value, hidden state, and managed state with a visibility action for every entry."
+      },
+      "POST /configuration-values/toggle": {
+        "summary": "Hide or show one extension policy setting.",
+        "description": "Applies an optimistic visibility update to one validated nested setting path. Hiding a true boolean also disables it; conflicts return 409 and invalid paths return 404 or 422.",
+        "request_body": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["path", "expected_hidden"],
+                "properties": {
+                  "path": {"type": "array", "items": {"type": "string"}, "example": ["features", "crm"]},
+                  "expected_hidden": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "GET /client/health": {
+        "auth": "api-key",
+        "summary": "Validate an extension installation session.",
+        "description": "Fails closed unless the API key is active, belongs to the Golfballs extension, and both the global and per-installation product settings allow access. Successful responses are never cached."
+      },
+      "GET /client/configuration": {
+        "auth": "api-key",
+        "summary": "Read managed extension policy.",
+        "description": "Project-owned replacement for the deprecated core extension configuration route. The compatibility file remains the policy source during migration, while access decisions are database-backed."
+      },
+      "GET /client/identity": {
+        "auth": "api-key",
+        "summary": "Read the registered installation identity.",
+        "description": "Returns only the identity bound to the calling installation credential."
+      },
+      "POST /client/identity": {
+        "auth": "api-key",
+        "summary": "Register or update the installation identity.",
+        "description": "Stores a normalized display name and optional email local-part for the calling installation."
+      },
+      "GET /client/tickets": {
+        "auth": "api-key",
+        "summary": "List the installation's support tickets.",
+        "description": "Returns tickets and administrator replies owned by the calling installation only."
+      },
+      "POST /client/tickets": {
+        "auth": "api-key",
+        "summary": "Create an idempotent support ticket.",
+        "description": "Creates a bug report or feature request for the calling installation, deduplicated by request_id."
+      },
+      "GET /client/settings-shares": {
+        "auth": "api-key",
+        "summary": "List settings links owned by the installation.",
+        "description": "Returns the caller's settings-share metadata without exposing another installation's payloads."
+      },
+      "POST /client/settings-shares": {
+        "auth": "api-key",
+        "summary": "Create a settings share.",
+        "description": "Creates a bounded, revocable settings bundle owned by the calling installation."
+      },
+      "GET /client/settings-shares/{share_id}": {
+        "auth": "api-key",
+        "summary": "Read one settings share.",
+        "description": "Returns a settings bundle by opaque id and records a bounded access count."
+      },
+      "POST /client/settings-shares/{share_id}/imports": {
+        "auth": "api-key",
+        "summary": "Record imported settings scopes.",
+        "description": "Stores the calling installation's selected imported scope ids idempotently."
+      },
+      "POST /client/settings-shares/{share_id}/revoke": {
+        "auth": "api-key",
+        "summary": "Revoke an owned settings share.",
+        "description": "Revokes a settings link only when the calling installation owns it."
+      },
+      "GET /client/email-template-shares": {
+        "auth": "api-key",
+        "summary": "List temporary email-template links.",
+        "description": "Returns temporary email shares owned by the calling installation."
+      },
+      "POST /client/email-template-shares": {
+        "auth": "api-key",
+        "summary": "Create a temporary email-template link.",
+        "description": "Stores one bounded email template in an expiring, revocable share."
+      },
+      "GET /client/email-template-shares/{share_id}": {
+        "auth": "api-key",
+        "summary": "Read a temporary email-template share.",
+        "description": "Returns an unexpired email-template share by opaque id."
+      },
+      "POST /client/email-template-shares/{share_id}/revoke": {
+        "auth": "api-key",
+        "summary": "Revoke an owned email-template share.",
+        "description": "Revokes an email-template link only when the calling installation owns it."
+      },
+      "GET /client/product-stores": {
+        "auth": "api-key",
+        "summary": "List shared custom-item stores.",
+        "description": "Returns product stores owned by the calling installation."
+      },
+      "POST /client/product-stores": {
+        "auth": "api-key",
+        "summary": "Create a shared custom-item store.",
+        "description": "Creates a bounded, revocable custom-item store owned by the calling installation."
+      },
+      "GET /client/product-stores/{store_id}": {
+        "auth": "api-key",
+        "summary": "Read a shared custom-item store.",
+        "description": "Returns a non-revoked product store by opaque id."
+      },
+      "POST /client/product-stores/{store_id}/revoke": {
+        "auth": "api-key",
+        "summary": "Revoke an owned custom-item store.",
+        "description": "Revokes a custom-item store only when the calling installation owns it."
+      },
+      "GET /client/email-exchange-flow": {
+        "auth": "api-key",
+        "summary": "Download the email Exchange flow package.",
+        "description": "Returns the project asset used to configure email relay, personalized with a validated local-part where supported."
+      },
+      "GET /client/email-relay/pending": {
+        "auth": "api-key",
+        "summary": "Poll pending relayed email messages.",
+        "description": "Returns a bounded cursor page of pending relay messages for the authenticated installation."
+      },
+      "GET /assistant/health": {
+        "auth": "api-key",
+        "summary": "Validate Help Companion access and readiness.",
+        "description": "Checks the installation session, database-backed chat entitlement, knowledge corpus, and completion provider. The extension hides chat unless this endpoint succeeds."
+      },
+      "GET /assistant/status": {
+        "auth": "mixed",
+        "preferred_auth": "api-key",
+        "summary": "Read AI help readiness and knowledge revision.",
+        "description": "Returns content-free completion readiness, corpus counts, version, SHA-256 revision, supported navigation and typed client-action kinds, and short-lived run recovery policy. Extension installation credentials and administrator sessions are accepted."
+      },
+      "POST /assistant/messages": {
+        "auth": "mixed",
+        "preferred_auth": "api-key",
+        "summary": "Queue one guarded AI help turn.",
+        "description": "Validates a bounded question, up to 12 caller-owned history turns, bounded prior typed-action references for referential follow-ups, and a two-bucket client context: low-risk feature/developer-setting state supplied automatically, plus user-approved bounded projections of registered local sources such as email or note templates. The backend retrieves only Golfballs project guide/inventory/source evidence, may perform one additional bounded read-only evidence search, and starts tools-disabled structured completions. It cannot read the monorepo root or generic backend infrastructure. Typed actions are validated against project-declared targets before the client independently validates and executes them. Returns 202 with an installation-owned run id; one active run and a separate message quota apply per credential.",
+        "request_body": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["request_id", "message"],
+                "properties": {
+                  "request_id": {"type": "string", "minLength": 8, "maxLength": 80},
+                  "message": {"type": "string", "minLength": 1, "maxLength": 4000},
+                  "history": {"type": "array", "maxItems": 12, "items": {"type": "object", "required": ["role", "content"], "properties": {"role": {"enum": ["user", "assistant"]}, "content": {"type": "string", "maxLength": 4000}}}},
+                  "context": {"type": "object", "additionalProperties": false, "properties": {"extension_version": {"type": "string"}, "edition": {"enum": ["admin", "consumer"]}, "surface": {"type": "string"}, "guide_route": {"type": "string"}, "page_type": {"type": "string"}, "page_url": {"type": "string", "maxLength": 500}, "answer_mode": {"enum": ["operator", "technical", "adaptive"], "default": "adaptive"}, "feature_states": {"type": "object", "additionalProperties": {"type": "boolean"}, "description": "Compatibility mirror of automatic_state.features."}, "automatic_state": {"type": "object", "additionalProperties": false, "description": "Low-risk state sent on every turn without approval.", "properties": {"features": {"type": "object", "maxProperties": 80, "additionalProperties": {"type": "boolean"}}, "developer_settings": {"type": "object", "maxProperties": 240, "additionalProperties": {"type": ["boolean", "number", "string", "null"]}}}}, "recent_actions": {"type": "array", "maxItems": 8, "description": "Bounded prior typed-action references used to resolve follow-up language; not execution receipts or authorization.", "items": {"type": "object", "additionalProperties": false, "required": ["type", "target"], "properties": {"type": {"enum": ["set_feature", "set_setting", "set_theme_preset", "set_theme_palette", "share_settings", "share_email_template", "request_data_access", "submit_ticket"]}, "target": {"type": "string", "maxLength": 100}, "value": {"type": "string", "maxLength": 500}, "options": {"type": "array", "maxItems": 16, "items": {"type": "string"}}, "label": {"type": "string", "maxLength": 100}}}}, "hidden_settings": {"type": "array", "items": {"type": "string"}}, "action_confirmations": {"type": "array", "maxItems": 20, "items": {"type": "string"}, "description": "Action types for which this client renders an explicit confirmation preview before execution."}, "available_resources": {"type": "array", "maxItems": 80, "description": "One-time user-approved projections; never raw storage objects.", "items": {"type": "object", "additionalProperties": false, "required": ["kind", "id", "label"], "properties": {"kind": {"type": "string"}, "id": {"type": "string"}, "label": {"type": "string"}, "summary": {"type": "string", "maxLength": 1200}}}}, "resource_access": {"type": "object", "additionalProperties": false, "properties": {"request_id": {"type": "string"}, "target": {"type": "string"}, "query": {"type": "string"}, "options": {"type": "array", "maxItems": 16, "items": {"type": "string"}}, "result_count": {"type": "integer"}, "truncated": {"type": "boolean"}}}}}
+                }
+              }
+            }
+          }
+        }
+      },
+      "GET /assistant/runs/{run_id}": {
+        "auth": "mixed",
+        "preferred_auth": "api-key",
+        "summary": "Recover one AI help run.",
+        "description": "Returns queued/running state or the validated answer for a run owned by the same authenticated credential. Active responses advertise poll_after_ms=3000 so callers stay below the installation request quota. Completed answers expire from process memory after the advertised recovery TTL; cross-installation ids always return 404."
+      },
+      "POST /assistant/runs/{run_id}/cancel": {
+        "auth": "mixed",
+        "preferred_auth": "api-key",
+        "summary": "Cancel one AI help run.",
+        "description": "Cancels a queued or running tools-disabled completion owned by the same credential. Repeating cancellation on a terminal run is idempotent."
+      },
+      "POST /assistant/feedback": {
+        "auth": "mixed",
+        "preferred_auth": "api-key",
+        "summary": "Record content-free AI help feedback.",
+        "description": "Records helpful or not_helpful for a completed credential-owned run. No free-form prompt, answer, customer, or browser content is accepted or retained.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["run_id", "rating"], "properties": {"run_id": {"type": "string"}, "rating": {"enum": ["helpful", "not_helpful"]}}}}}
+        }
+      },
+      "GET /assistant/admin/status": {
+        "summary": "Read AI help operational status and grant drift.",
+        "description": "Administrator-only readiness view with aggregate content-free run/feedback counters, provider status, and the existing Golfballs installation credentials missing newly declared assistant route grants."
+      },
+      "GET /assistant/admin/runs": {
+        "summary": "List active and recently completed Help Companion sessions.",
+        "description": "Administrator-only content-free telemetry with registered user, lifecycle phase, queue and elapsed timing, provider/model, timestamps, and safe error type. Questions and answers are never returned."
+      },
+      "POST /assistant/admin/reindex": {
+        "summary": "Rebuild the AI help knowledge index.",
+        "description": "Administrator-only rebuild of the in-memory FTS5 index from the current generated guide, machine-readable inventory, and allowlisted referenced extension source files. No service or browser is restarted."
+      },
+      "POST /assistant/admin/grants": {
+        "summary": "Grant existing installations the assistant route scopes.",
+        "description": "Explicit administrator migration for active Golfballs installation keys. It merges only the assistant grants declared by this project manifest; project discovery itself never broadens an old credential.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["confirm"], "properties": {"confirm": {"const": "grant assistant access"}}}}}
+        }
+      },
+      "POST /keys/assistant-access": {
+        "summary": "Grant Help Companion access to one installation.",
+        "description": "Administrator-only reversible database setting used by the API Keys dashboard table. Enabling also retains exact assistant grants for older extension builds during the compatibility window.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["key_id"], "properties": {"key_id": {"type": "string", "description": "Opaque API credential id from GET /keys."}}}}}
+        }
+      },
+      "POST /keys/access": {
+        "summary": "Enable or disable one extension installation.",
+        "description": "Writes a reversible database setting for one Golfballs credential without revoking its API key. Disabled installations fail health checks and do not load page scripts."
+      },
+      "POST /keys/access/bulk": {
+        "summary": "Enable or disable every extension installation.",
+        "description": "Writes the global database override used by every current and future Golfballs installation, regardless of its per-installation setting."
+      },
+      "GET /keys": {
+        "summary": "List extension installation credentials.",
+        "description": "Returns only Golfballs-owned credential metadata and lifecycle state, the registered extension user (or an explicit unregistered state), and separate Help Companion grant and revocation controls. Secret API-key values are never returned."
+      },
+      "POST /keys/revoke": {
+        "summary": "Revoke one extension installation credential.",
+        "description": "Revokes a credential only after confirming it belongs to the Golfballs client scope and project namespace.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "required": ["key_id"], "properties": {"key_id": {"type": "string"}}}}}
+        }
+      },
+      "GET /tickets": {
+        "summary": "List extension support tickets for dashboard triage.",
+        "description": "Returns bug reports and feature requests across enrolled installations with registered user identity, status, reply count, safe extension/page context, record-detail metadata, and a generic modal-form reply action. Administrator session required."
+      },
+      "POST /tickets/{ticket_id}/reply": {
+        "summary": "Reply to a support ticket and update its status.",
+        "description": "Creates an administrator-authored reply visible to the ticket owner's extension and moves the ticket to open, triaged, in progress, planned, resolved, or closed. This endpoint is driven by the dashboard's declarative modal action API.",
+        "params": [
+          {
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
+            "description": "Public support ticket id, such as GBT-ABCD2345.",
+            "schema": {"type": "string"}
+          }
+        ],
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["message", "status"], "properties": {"message": {"type": "string", "minLength": 1, "maxLength": 2000}, "status": {"enum": ["open", "triaged", "in_progress", "planned", "resolved", "closed"]}}}}}
+        }
+      },
+      "DELETE /tickets/{ticket_id}": {
+        "summary": "Permanently delete a support ticket.",
+        "description": "Administrator-only destructive action used by the Support Tickets table. Deletes the ticket and its complete administrator reply history; unknown ids return 404.",
+        "params": [
+          {
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
+            "description": "Public support ticket id, such as GBT-ABCD2345.",
+            "schema": {"type": "string"}
+          }
+        ]
+      },
+      "GET /shares/settings": {
+        "summary": "List active shared-settings links.",
+        "description": "Returns non-revoked settings bundles with their credential-bound creator, names, scopes, setting counts, opens, timestamps, canonical links, detail metadata, and row-level revoke actions."
+      },
+      "GET /shares/email": {
+        "summary": "List active temporary email-template links.",
+        "description": "Returns unexpired, non-revoked email-template links with their credential-bound creator, type, subject, variation count, opens, expiry, canonical link, and a row-level revoke action."
+      },
+      "GET /shares/products": {
+        "summary": "List active shared custom-item product stores.",
+        "description": "Returns non-revoked product stores with their credential-bound creator, item names and counts, opens, canonical link, detail metadata, and a row-level revoke action."
+      },
+      "POST /shares/settings/revoke": {
+        "summary": "Revoke one shared-settings link.",
+        "description": "Marks the project-owned settings share revoked by opaque id. Repeating the operation is safe; unknown ids return 404.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}}}
+        }
+      },
+      "POST /shares/email/revoke": {
+        "summary": "Revoke one temporary email-template link.",
+        "description": "Marks the project-owned email-template share revoked by opaque id. Repeating the operation is safe; unknown ids return 404.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}}}
+        }
+      },
+      "POST /shares/products/revoke": {
+        "summary": "Revoke one shared custom-item product store.",
+        "description": "Marks the project-owned product store revoked by opaque id. Repeating the operation is safe; unknown ids return 404.",
+        "request_body": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}}}
+        }
+      }
+    }
+  },
+  "routes": ".revstack/routes.py",
+  "blocks": ".revstack/blocks.py",
+  "public_routes": [
+    { "method": "GET", "path": "/projects/golfballs-extension/updates.xml" },
+    { "method": "GET", "path": "/projects/golfballs-extension/releases/*" },
+    { "method": "GET", "path": "/projects/golfballs-extension/assets/*" }
+  ],
+  "client_routes": [
+    {
+      "scope": "client:extension",
+      "method": "GET",
+      "path": "/projects/golfballs-extension/client/*"
+    },
+    {
+      "scope": "client:extension",
+      "method": "POST",
+      "path": "/projects/golfballs-extension/client/*"
+    },
+    {
+      "scope": "client:extension",
+      "method": "GET",
+      "path": "/projects/golfballs-extension/configuration"
+    },
+    {
+      "scope": "client:extension",
+      "method": "GET",
+      "path": "/projects/golfballs-extension/assistant/health"
+    },
+    {
+      "scope": "client:extension",
+      "method": "GET",
+      "path": "/projects/golfballs-extension/assistant/status"
+    },
+    {
+      "scope": "client:extension",
+      "method": "POST",
+      "path": "/projects/golfballs-extension/assistant/messages"
+    },
+    {
+      "scope": "client:extension",
+      "method": "GET",
+      "path": "/projects/golfballs-extension/assistant/runs/*"
+    },
+    {
+      "scope": "client:extension",
+      "method": "POST",
+      "path": "/projects/golfballs-extension/assistant/runs/*"
+    },
+    {
+      "scope": "client:extension",
+      "method": "POST",
+      "path": "/projects/golfballs-extension/assistant/feedback"
+    }
+  ],
+  "cors_origins": [
+    "chrome-extension://annoeoeiijgdgmlpefllibcilcamnjek"
+  ],
+  "git": { "analytics": true },
+  "files": { "root": "." }
+}

@@ -54,7 +54,7 @@ async function mockFetch(url, options = {}) {
     }), { status: 201, headers: { 'Content-Type': 'application/json' } });
   }
   return new Response(JSON.stringify({ ok: true }), {
-    status: String(url).endsWith('/extension/revoked') ? 401 : 200,
+    status: String(url).endsWith('/projects/golfballs-extension/client/revoked') ? 401 : 200,
     headers: { 'Content-Type': 'application/json' },
   });
 }
@@ -80,9 +80,9 @@ const context = vm.createContext({
 context.globalThis = context;
 new vm.Script(source, { filename: 'installation-auth.js' }).runInContext(context);
 
-assert.equal(installedListeners.length, 1);
-assert.equal(startupListeners.length, 1);
-installedListeners[0]({ reason: 'install' });
+assert.equal(installedListeners.length, 0, 'the fail-closed access gate owns install bootstrapping');
+assert.equal(startupListeners.length, 0, 'installation auth must not enroll before health bootstrap');
+await context.GBInstallationAuth.ensureInstallation();
 for (let attempt = 0; attempt < 10 && !stored.gbApiInstallation; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -98,8 +98,6 @@ assert.equal(stored.gbApiInstallation.extensionId, expectedId);
 
 const client = context.GBInstallationAuth;
 await client.ensureInstallation();
-startupListeners[0]();
-await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(
   requests.filter(({ url }) => url.endsWith('/auth/extension-installation')).length,
   1,
@@ -111,7 +109,7 @@ assert.equal(status.enrolled, true);
 assert.equal(status.installationId, installationId);
 assert.equal(Object.hasOwn(status, 'apiKey'), false, 'status must never expose the secret');
 
-const apiResponse = await client.apiFetch('/extension/ping', {
+const apiResponse = await client.apiFetch(`${client.CLIENT_BASE}/ping`, {
   method: 'POST',
   headers: { Authorization: 'Bearer caller-controlled' },
 });
@@ -121,16 +119,16 @@ assert.equal(requests.at(-1).options.credentials, 'omit');
 
 const configuration = await client.fetchConfiguration();
 assert.deepEqual(configuration, { ok: true });
-assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/extension/configuration');
+assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/projects/golfballs-extension/client/configuration');
 assert.equal(requests.at(-1).options.headers.Authorization, `Bearer ${apiKey}`);
 assert.equal(requests.at(-1).options.credentials, 'include', 'dashboard cookie must be available for admin bypass');
 
-const shareResponse = await client.apiJson('/extension/settings-shares', {
+const shareResponse = await client.apiJson(`${client.CLIENT_BASE}/settings-shares`, {
   method: 'POST',
   body: JSON.stringify({ name: 'Team defaults', scopes: { settings: {} } }),
 });
 assert.equal(shareResponse.ok, true);
-assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/extension/settings-shares');
+assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/projects/golfballs-extension/client/settings-shares');
 assert.equal(requests.at(-1).options.headers.get('Authorization'), `Bearer ${apiKey}`);
 assert.equal(requests.at(-1).options.headers.get('Content-Type'), 'application/json');
 assert.equal(requests.at(-1).options.credentials, 'omit');
@@ -144,7 +142,7 @@ assert.equal(requests.at(-1).options.headers.get('Authorization'), `Bearer ${api
 assert.equal(Object.hasOwn(requests.at(-1).options, 'responseLimit'), false, 'local response guard options must not leak into fetch');
 
 await assert.rejects(
-  client.apiFetch('https://evil.example/extension/ping'),
+  client.apiFetch('https://evil.example/projects/golfballs-extension/client/ping'),
   /Blocked non-extension API path/,
 );
 await assert.rejects(client.apiFetch('/graph/search'), /Blocked non-extension API path/);
@@ -153,16 +151,16 @@ await assert.rejects(
   /Blocked non-extension API path/,
 );
 await assert.rejects(
-  client.apiFetch('/extension/ping', { method: 'DELETE' }),
+  client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'DELETE' }),
   /Blocked extension API method/,
 );
-const largeSettingsResponse = await client.apiFetch('/extension/settings-shares', {
+const largeSettingsResponse = await client.apiFetch(`${client.CLIENT_BASE}/settings-shares`, {
   method: 'POST', body: 'x'.repeat(2_000_000),
 });
 assert.equal(largeSettingsResponse.status, 200, 'multi-megabyte settings must reach fetch');
 assert.equal(requests.at(-1).options.body.length, 2_000_000);
 
-const revoked = await client.apiFetch('/extension/revoked');
+const revoked = await client.apiFetch(`${client.CLIENT_BASE}/revoked`);
 assert.equal(revoked.status, 401);
 await client.ensureInstallation();
 assert.equal(

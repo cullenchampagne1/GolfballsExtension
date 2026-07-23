@@ -15,10 +15,6 @@ import { InlineVariableForm } from './InlineVariableForm.jsx';
 import { useSettingNotification } from './SettingNotification.jsx';
 import { I, Icon } from '../icons.jsx';
 
-// Sentinel returned by the rename prompt's "Delete" extraAction. Compared
-// with === so the caller knows the user picked Delete vs typing a name.
-const DELETE_SENTINEL = Symbol('delete-variable');
-
 const VariableIcon = (p) => (
   <Icon {...p}>
     <path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/>
@@ -52,6 +48,7 @@ const COL_GRID = 'minmax(0, 1fr) 84px 120px 120px 28px';
  */
 export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart, paEnabled = false, onExport }) {
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [exported, setExported] = useState(false);
   const notify = useSettingNotification();
 
@@ -67,33 +64,6 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
     } catch {
       notify.notify('Couldn’t write to the clipboard.', { tone: 'warning' });
     }
-  };
-
-  // Open the rename prompt with a "Delete" tertiary action. This is the
-  // SINGLE entry point for both rename and delete — collapsing two icon
-  // buttons into one and giving the user a confirmation step before
-  // destructive deletion. Validates the new name and re-prompts on
-  // collision so the user keeps their typed value.
-  const renameVariable = async (variable) => {
-    const result = await notify.prompt(`Rename variable`, {
-      title: `"${variable.name}"`,
-      defaultValue: variable.name,
-      confirmLabel: 'Rename',
-      extraAction: { label: 'Delete', tone: 'danger', value: DELETE_SENTINEL },
-    });
-    if (result === DELETE_SENTINEL) { onDelete?.(variable.name); return; }
-    if (result == null) return;
-    const newName = String(result).trim();
-    if (!newName || newName === variable.name) return;
-    if (!/^\w+$/.test(newName)) {
-      notify.notify('Variable name must contain only letters, numbers, and underscores.', { tone: 'warning' });
-      return;
-    }
-    if (vars.some((v) => v.name === newName && v.name !== variable.name)) {
-      notify.notify(`A variable named "${newName}" already exists.`, { tone: 'warning' });
-      return;
-    }
-    onEdit?.({ oldName: variable.name, newName }, variable);
   };
 
   return (
@@ -242,8 +212,8 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               <IconBtn
                 size="sm"
                 icon={<I.edit />}
-                tooltip="Rename or delete"
-                onClick={() => renameVariable(v)}
+                tooltip="Edit variable"
+                onClick={() => { setAdding(false); setEditing(v); }}
               />
             </div>
           </motion.div>
@@ -254,24 +224,37 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
       {/* Inline add-variable form — slides into the table when the
           dashed Add button is clicked. Replaces the legacy modal. */}
       <AnimatePresence initial={false}>
+        {editing && (
+          <InlineVariableForm
+            key={`inline-edit-${editing.name}`}
+            typeId={typeId}
+            initialVariable={editing}
+            varNames={vars.filter((v) => v.name !== editing.name).map((v) => v.name)}
+            onAdd={(payload) => {
+              onEdit?.({ oldName: editing.name, newName: payload.name }, payload);
+              setEditing(null);
+            }}
+            onDelete={() => { onDelete?.(editing.name); setEditing(null); }}
+            onCancel={() => setEditing(null)}
+          />
+        )}
         {adding && (
           <InlineVariableForm
             key="inline-add"
             typeId={typeId}
-            paEnabled={paEnabled}
             varNames={vars.map((v) => v.name)}
             onAdd={(payload) => { onAdd?.(payload); setAdding(false); }}
             onCancel={() => setAdding(false)}
           />
         )}
       </AnimatePresence>
-      {!adding && (
+      {!adding && !editing && (
         <div style={{
           padding: 8,
           background: 'var(--gb-surface-modal)',
           borderTop: '1px solid var(--gb-border-subtle)',
         }}>
-          <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={() => setAdding(true)}>
+          <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={() => { setEditing(null); setAdding(true); }}>
             Add variable
           </Btn>
         </div>

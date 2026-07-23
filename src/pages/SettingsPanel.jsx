@@ -566,7 +566,7 @@ function SettingsLinksManager({ onPresetLoad }) {
                   value={importUrl}
                   onChange={setImportUrl}
                   onKeyDown={(e) => e.key === 'Enter' && openImportUrl()}
-                  placeholder="https://api.cullenchampagne.com/extension/settings-shares/…"
+                  placeholder="https://api.cullenchampagne.com/projects/golfballs-extension/client/settings-shares/…"
                   leading={<I.link />}
                   mono
                   autoFocus

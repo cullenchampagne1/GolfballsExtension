@@ -68,11 +68,12 @@ export function sanitizeHtml(value) {
 
   const elements = Array.from(container.content.querySelectorAll('*'));
   for (const element of elements) {
-    if (DROP_WITH_CONTENT.has(element.tagName)) {
+    const tagName = String(element.tagName || '').toUpperCase();
+    if (DROP_WITH_CONTENT.has(tagName)) {
       element.remove();
       continue;
     }
-    if (!ALLOWED_TAGS.has(element.tagName)) {
+    if (!ALLOWED_TAGS.has(tagName)) {
       element.replaceWith(...element.childNodes);
       continue;
     }
@@ -97,12 +98,12 @@ export function sanitizeHtml(value) {
       if (!GLOBAL_ATTRS.has(name) && !name.startsWith('data-gb-')) element.removeAttribute(attribute.name);
     }
 
-    if (element.tagName === 'A') {
+    if (tagName === 'A') {
       element.setAttribute('rel', 'noopener noreferrer');
       if (element.getAttribute('target') === '_blank') element.setAttribute('target', '_blank');
       else element.removeAttribute('target');
     }
-    if (element.tagName === 'IMG') {
+    if (tagName === 'IMG') {
       element.setAttribute('referrerpolicy', 'no-referrer');
       element.setAttribute('loading', 'lazy');
       element.removeAttribute('srcset');

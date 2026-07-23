@@ -36,11 +36,6 @@ __pycache__/
 dist/store-stage/
 dist/store/
 
-# Backend integration — lives on the local backend machine only, never in the
-# shared extension source (loaded by the RevStack backend's ProjectManager).
-.revstack/
-revstack.project.json
-golfballs
-
-# Admin/consumer strip config — builds run on the server, not from the shared source.
-admin-only.json
+# Project-owned RevStack integration, release tooling, and consumer packaging
+# policy are versioned with the extension. Runtime release state and signing
+# material remain isolated above in .golfballs-extension-production/.

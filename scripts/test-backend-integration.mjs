@@ -5,7 +5,7 @@
  * drift silently. For each endpoint it asserts (a) the extension source still
  * calls it and (b) — when the backend sibling repo is present — a matching
  * route serves it. It also locks the enrollment + configuration response
- * shapes and the `apiFetch` security guard (origin + /extension/ path +
+ * shapes and the `apiFetch` security guard (origin + project client path +
  * GET/POST only). No live server or CRM context is required: this reads source.
  */
 import assert from 'node:assert/strict';
@@ -18,7 +18,18 @@ const read = (rel, base = root) => readFile(new URL(rel, base), 'utf8');
 const installationAuth = await read('lib/installation-auth.js');
 const background = await read('background.js');
 const remotePolicy = await read('lib/remote-settings-policy.js');
-const sources = { 'installation-auth.js': installationAuth, 'background.js': background };
+const accessGate = await read('lib/extension-access-gate.js');
+const relayPoll = await read('lib/email-relay-poll.js');
+const helpAssistant = await read('help/help-assistant.js');
+const sources = {
+  'installation-auth.js': installationAuth,
+  'extension-access-gate.js': accessGate,
+  'background.js': background,
+  'email-relay-poll.js': relayPoll,
+  'help-assistant.js': helpAssistant,
+};
+const projectRoutes = await read('.revstack/routes.py');
+const clientApi = await read('.revstack/logic/client_api.py');
 
 // Backend sibling is optional (standalone extension checkouts skip its half).
 const backendRoot = new URL('../revstack-backend/', root);
@@ -30,7 +41,6 @@ if (!hasBackend) {
 }
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-// extension.py routes mount under /extension, so match the RELATIVE decorator.
 const backendServes = (src, method, relPath) =>
   new RegExp(`@router\\.${method}\\(\\s*["']${esc(relPath)}["']`).test(src);
 
@@ -46,18 +56,30 @@ if (hasBackend) {
   );
 }
 
-// --- Runtime /extension/* contract (each call ↔ each route) ------------------
+// --- Runtime project-client contract (each call ↔ each project route) --------
 const RUNTIME = [
-  { name: 'identity:read',          in: 'installation-auth.js', literal: '/extension/identity',                 method: 'get',  route: '/identity' },
-  { name: 'identity:update',        in: 'installation-auth.js', literal: '/extension/identity',                 method: 'post', route: '/identity' },
-  { name: 'configuration',          in: 'installation-auth.js', literal: '/extension/configuration',            method: 'get',  route: '/configuration' },
-  { name: 'settings-shares:list',   in: 'background.js',        literal: '/extension/settings-shares',          method: 'get',  route: '/settings-shares' },
-  { name: 'settings-shares:create', in: 'background.js',        literal: '/extension/settings-shares',          method: 'post', route: '/settings-shares' },
-  { name: 'settings-share:get',     in: 'background.js',        literal: '/extension/settings-shares/${',       method: 'get',  route: '/settings-shares/{share_id}' },
+  { name: 'health',                 in: 'extension-access-gate.js', literal: '/projects/golfballs-extension/client/health', method: 'get', route: '/client/health' },
+  { name: 'identity:read',          in: 'installation-auth.js', literal: '/identity',                            method: 'get',  route: '/client/identity' },
+  { name: 'identity:update',        in: 'installation-auth.js', literal: '/identity',                            method: 'post', route: '/client/identity' },
+  { name: 'configuration',          in: 'installation-auth.js', literal: '/configuration',                       method: 'get',  route: '/client/configuration' },
+  { name: 'tickets:list',           in: 'background.js',        literal: '/tickets',                             method: 'get',  route: '/client/tickets' },
+  { name: 'tickets:create',         in: 'background.js',        literal: '/tickets',                             method: 'post', route: '/client/tickets' },
+  { name: 'settings-shares:list',   in: 'background.js',        literal: '/settings-shares',                     method: 'get',  route: '/client/settings-shares' },
+  { name: 'settings-shares:create', in: 'background.js',        literal: '/settings-shares',                     method: 'post', route: '/client/settings-shares' },
+  { name: 'settings-share:get',     in: 'background.js',        literal: '/settings-shares/${',                  method: 'get',  route: '/client/settings-shares/{share_id}' },
   { name: 'settings-share:import',  in: 'background.js',        literal: '/imports',                            method: 'post', route: '/settings-shares/{share_id}/imports' },
   { name: 'settings-share:revoke',  in: 'background.js',        literal: '/revoke',                             method: 'post', route: '/settings-shares/{share_id}/revoke' },
-  { name: 'email-share:create',     in: 'background.js',        literal: '/extension/email-template-shares',    method: 'post', route: '/email-template-shares' },
-  { name: 'email-share:get',        in: 'background.js',        literal: '/extension/email-template-shares/${', method: 'get',  route: '/email-template-shares/{share_id}' },
+  { name: 'email-shares:list',      in: 'background.js',        literal: '/email-template-shares',              method: 'get',  route: '/client/email-template-shares' },
+  { name: 'email-share:create',     in: 'background.js',        literal: '/email-template-shares',               method: 'post', route: '/client/email-template-shares' },
+  { name: 'email-share:get',        in: 'background.js',        literal: '/email-template-shares/${',            method: 'get',  route: '/client/email-template-shares/{share_id}' },
+  { name: 'email-share:revoke',     in: 'background.js',        literal: '/revoke',                              method: 'post', route: '/client/email-template-shares/{share_id}/revoke' },
+  { name: 'product-stores:list',    in: 'background.js',        literal: '/product-stores',                      method: 'get',  route: '/client/product-stores' },
+  { name: 'product-stores:create',  in: 'background.js',        literal: '/product-stores',                      method: 'post', route: '/client/product-stores' },
+  { name: 'product-store:get',      in: 'background.js',        literal: '/product-stores/${',                   method: 'get',  route: '/client/product-stores/{store_id}' },
+  { name: 'product-store:revoke',   in: 'background.js',        literal: '/revoke',                              method: 'post', route: '/client/product-stores/{store_id}/revoke' },
+  { name: 'email-exchange-flow',    in: 'background.js',        literal: '/email-exchange-flow',                 method: 'get',  route: '/client/email-exchange-flow' },
+  { name: 'email-relay:pending',    in: 'email-relay-poll.js',  literal: '/email-relay/pending',                 method: 'get',  route: '/client/email-relay/pending' },
+  { name: 'assistant:health',       in: 'help-assistant.js',     literal: '/health',                              method: 'get',  route: '/assistant/health' },
 ];
 
 for (const ep of RUNTIME) {
@@ -65,23 +87,24 @@ for (const ep of RUNTIME) {
     sources[ep.in].includes(ep.literal),
     `extension ${ep.in} must still call ${ep.name} (missing literal "${ep.literal}")`,
   );
-  // Every runtime call goes through apiFetch/apiJson, so its path is /extension/*.
+  const route = ep.route.startsWith('/client/') || ep.route.startsWith('/assistant/')
+    ? ep.route
+    : `/client${ep.route}`;
   assert.ok(
-    `/extension${ep.route}`.startsWith('/extension/'),
-    `${ep.name} must live under /extension/ to pass the apiFetch guard`,
+    backendServes(projectRoutes, ep.method, route),
+    `.revstack/routes.py must serve ${ep.method.toUpperCase()} ${route} (${ep.name})`,
   );
-  if (hasBackend) {
-    assert.ok(
-      backendServes(extensionPy, ep.method, ep.route),
-      `backend routes/extension.py must serve ${ep.method.toUpperCase()} ${ep.route} (${ep.name})`,
-    );
-  }
+}
+
+assert.ok(clientApi.includes('class ExtensionClientApi'), 'product API logic must live in the extension project');
+if (hasBackend) {
+  assert.ok(extensionPy.includes('deprecated_extension_forwarder'), 'core /extension compatibility must be redirect-only');
 }
 
 // --- apiFetch security guard is intact ---------------------------------------
 assert.ok(
-  installationAuth.includes("url.pathname.startsWith('/extension/')"),
-  'apiFetch must confine requests to the /extension/ path prefix',
+  installationAuth.includes('url.pathname.startsWith(`${CLIENT_BASE}/`)'),
+  'apiFetch must confine product requests to the project client path prefix',
 );
 assert.ok(
   /url\.origin !== API_ORIGIN/.test(installationAuth),
@@ -115,8 +138,8 @@ for (const key of ['schema_version', 'admin_bypass', 'revision']) {
   assert.ok(remotePolicy.includes(key), `extension validateEnvelope must inspect "${key}"`);
   if (hasBackend) {
     assert.ok(
-      new RegExp(`["']${key}["']\\s*:`).test(extensionPy),
-      `backend configuration must return "${key}"`,
+      new RegExp(`["']${key}["']\\s*:`).test(clientApi),
+      `project client configuration must return "${key}"`,
     );
   }
 }
@@ -126,16 +149,16 @@ assert.ok(
 );
 if (hasBackend) {
   assert.ok(
-    /["']schema_version["']\s*:\s*1\b/.test(extensionPy),
-    'backend configuration must emit schema_version 1',
+    /["']schema_version["']\s*:\s*1\b/.test(clientApi),
+    'project client configuration must emit schema_version 1',
   );
   assert.ok(
-    /["']configuration["']\s*:/.test(extensionPy),
-    'backend configuration must return the "configuration" document field',
+    /["']configuration["']\s*:/.test(clientApi),
+    'project client configuration must return the "configuration" document field',
   );
 }
 
 console.log(
-  `backend-integration OK — 1 enrollment + ${RUNTIME.length} /extension/* endpoints bound, ` +
+  `backend-integration OK — 1 enrollment + ${RUNTIME.length} project-client endpoints bound, ` +
     `guard + enrollment + envelope shapes verified (backend ${hasBackend ? 'present' : 'absent'})`,
 );

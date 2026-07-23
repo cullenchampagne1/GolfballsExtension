@@ -188,6 +188,13 @@ export function useHelpAssistant(page) {
     }
   }, [service]);
 
+  // The Actions shelf uses this result to decide whether the Help entry exists
+  // at all. A disabled grant, invalid credential, or unhealthy provider never
+  // leaves a dead chat affordance in the UI.
+  useEffect(() => {
+    checkStatus({ force: true }).catch(() => {});
+  }, []); // one authenticated health decision per mounted shelf
+
   return {
     state,
     loading,

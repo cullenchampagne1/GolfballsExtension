@@ -8,6 +8,8 @@ import {
   createFetchMock, jsonResponse, loadBackground, validInstallation,
 } from './helpers/harness.mjs';
 
+const TICKETS_URL = `${API_ORIGIN}/projects/golfballs-extension/client/tickets`;
+
 const ticket = {
   id: 'GBT-ABCD2345',
   kind: 'bug',
@@ -23,10 +25,10 @@ let requests;
 before(async () => {
   const mock = createFetchMock((url, options) => {
     const method = String(options.method || 'GET').toUpperCase();
-    if (url === `${API_ORIGIN}/extension/tickets` && method === 'POST') {
+    if (url === TICKETS_URL && method === 'POST') {
       return jsonResponse({ created: true, ticket }, 201);
     }
-    if (url === `${API_ORIGIN}/extension/tickets` && method === 'GET') {
+    if (url === TICKETS_URL && method === 'GET') {
       return jsonResponse({ tickets: [{ ...ticket, status: 'in_progress', replies: [{ id: 'reply-1', author: 'Cullen', message: 'I can reproduce it.' }] }] });
     }
     return undefined;
@@ -59,7 +61,7 @@ describe('support ticket lifecycle', () => {
     assert.equal(response.ticket.id, 'GBT-ABCD2345');
 
     const request = requests.at(-1);
-    assert.equal(request.url, `${API_ORIGIN}/extension/tickets`);
+    assert.equal(request.url, TICKETS_URL);
     assert.equal(request.method, 'POST');
     assert.equal(request.options.headers.get('Authorization'), `Bearer ${API_KEY}`);
     assert.deepEqual(JSON.parse(request.options.body), {

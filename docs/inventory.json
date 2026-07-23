@@ -209,7 +209,7 @@
   },
 
   "remoteSettingsPolicy": {
-    "endpoint": "GET https://api.cullenchampagne.com/extension/configuration",
+    "endpoint": "GET https://api.cullenchampagne.com/projects/golfballs-extension/client/configuration",
     "policyFile": "api-access-configs/golfballs-extension-configuration.yaml",
     "what": "Complete, authenticated feature/developer value and visibility policy with dashboard-administrator bypass.",
     "consoleCommands": {
@@ -296,7 +296,7 @@
     { "service": "HPG Brands / SnugZ USA", "endpoints": ["Searchspring API + product detail pages"], "usedFor": "supplier product import into custom items", "auth": "public / session iframe" },
     { "service": "admin.icustomize.com", "endpoints": ["charge portlet API", "order notes", "delivery calendar"], "usedFor": "charges, notes, order dates", "auth": "JWT from frame context / session" },
     { "service": "OpenStreetMap Nominatim", "endpoints": ["/search"], "usedFor": "address geocoding", "auth": "public HTTPS endpoint with bounded queries and responses" },
-    { "service": "RevStack API (api.cullenchampagne.com)", "endpoints": ["POST /auth/extension-installation", "GET/POST /extension/identity", "GET /extension/configuration", "GET/POST /extension/settings-shares*", "GET /extension/email-relay/pending"], "usedFor": "anonymous installation enrollment, credential-bound user attribution, administrator settings policy, revocable settings-template URLs, and admin-build inbound reply relay", "auth": "unique server-issued rsk_ bearer per extension installation; dashboard admin cookie enables policy bypass without exposing the cookie; rate-limited and server-revocable" }
+    { "service": "RevStack API (api.cullenchampagne.com)", "endpoints": ["POST /auth/extension-installation", "GET /projects/golfballs-extension/client/health", "GET/POST /projects/golfballs-extension/client/identity", "GET /projects/golfballs-extension/client/configuration", "GET/POST /projects/golfballs-extension/client/settings-shares*", "GET /projects/golfballs-extension/client/email-relay/pending", "GET /projects/golfballs-extension/assistant/health"], "usedFor": "anonymous installation enrollment, fail-closed installation access, credential-bound user attribution, administrator settings policy, revocable settings-template URLs, admin-build inbound reply relay, and Help Companion readiness", "auth": "unique server-issued rsk_ bearer per extension installation; dashboard admin cookie enables policy bypass without exposing the cookie; rate-limited and server-revocable" }
   ],
 
   "messageHandlers": {

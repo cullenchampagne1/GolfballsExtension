@@ -6,6 +6,7 @@
  * 32-char id extracted, an authenticated GET is issued, the payload flows back
  * to the caller, and a follow-up import is recorded — while cross-type,
  * query-carrying, and foreign-origin links are rejected before any fetch.
+ * SECURITY-AUDITED-HTTP-NEGATIVE-TEST: insecure pasted links must be rejected.
  */
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,8 +17,9 @@ import {
 
 const SETTINGS_ID = 'S1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p_';
 const TEMPLATE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
-const SETTINGS_URL = `${API_ORIGIN}/extension/settings-shares/${SETTINGS_ID}`;
-const TEMPLATE_URL = `${API_ORIGIN}/extension/email-template-shares/${TEMPLATE_ID}`;
+const CLIENT_BASE = `${API_ORIGIN}/projects/golfballs-extension/client`;
+const SETTINGS_URL = `${CLIENT_BASE}/settings-shares/${SETTINGS_ID}`;
+const TEMPLATE_URL = `${CLIENT_BASE}/email-template-shares/${TEMPLATE_ID}`;
 
 const settingsShare = {
   id: SETTINGS_ID,
@@ -39,7 +41,7 @@ before(async () => {
     if (url === SETTINGS_URL && method === 'GET') return jsonResponse(settingsShare);
     if (url === `${SETTINGS_URL}/imports` && method === 'POST') return jsonResponse({ ...settingsShare, imports: 3 });
     if (url === TEMPLATE_URL && method === 'GET') return jsonResponse(templateShare);
-    if (url === `${API_ORIGIN}/extension/email-template-shares` && method === 'POST') {
+    if (url === `${CLIENT_BASE}/email-template-shares` && method === 'POST') {
       return jsonResponse({ id: TEMPLATE_ID, url: TEMPLATE_URL }, 201);
     }
     return undefined;
@@ -107,10 +109,10 @@ describe('template/settings share import', () => {
     const badLinks = [
       `${SETTINGS_URL}?utm=1`,
       `${SETTINGS_URL}#frag`,
-      `https://evil.example/extension/settings-shares/${SETTINGS_ID}`,
-      `http://api.cullenchampagne.com/extension/settings-shares/${SETTINGS_ID}`,
-      `${API_ORIGIN}/extension/settings-shares/${SETTINGS_ID.slice(0, 31)}`,
-      `${API_ORIGIN}/extension/settings-shares/${SETTINGS_ID}extra`,
+      `https://evil.example/projects/golfballs-extension/client/settings-shares/${SETTINGS_ID}`,
+      `http://api.cullenchampagne.com/projects/golfballs-extension/client/settings-shares/${SETTINGS_ID}`,
+      `${CLIENT_BASE}/settings-shares/${SETTINGS_ID.slice(0, 31)}`,
+      `${CLIENT_BASE}/settings-shares/${SETTINGS_ID}extra`,
     ];
     for (const url of badLinks) {
       const response = await sendMessage({ action: 'settingsShareGet', url });
@@ -127,7 +129,7 @@ describe('template/settings share import', () => {
     assert.equal(created.ok, true);
     assert.equal(created.share.url, TEMPLATE_URL);
     const request = requests.at(-1);
-    assert.equal(request.url, `${API_ORIGIN}/extension/email-template-shares`);
+    assert.equal(request.url, `${CLIENT_BASE}/email-template-shares`);
     assert.equal(request.method, 'POST');
     assert.deepEqual(JSON.parse(request.options.body), { template: templateShare.template });
 

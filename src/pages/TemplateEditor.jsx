@@ -11,6 +11,7 @@ import {
   VariableTable, OrderRules, CaseRules, AccountConditions, CaseTagsEditor,
 } from '../ui/index.js';
 import { SENDER_OPTIONS } from '../lib/sender.js';
+import { updateVariableDefinition } from '../lib/templateVariableEditing.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -44,6 +45,7 @@ function convertVars(tpl) {
       ...(v.group  ? { group:  v.group  } : {}),
       ...(v.scope  ? { scope:  v.scope  } : {}),
       ...(v.async  ? { async:  v.async  } : {}),
+      ...(v.attach ? { attach: v.attach } : {}),
       resolved: v.resolved ?? null,
       status:   v.status  || 'miss',
       smart:    v.smart   || {},
@@ -431,11 +433,8 @@ export function TemplateEditor({ tpl, onDelete }) {
     });
     return JSON.stringify({ vars: obj, varOrder: vars.map((v) => v.name) }, null, 2);
   };
-  const handleEditVar = ({ oldName, newName }) => {
-    // Rename only — VariableTable no longer offers kind-change because each
-    // kind stores config in a different shape (path vs regex vs literal), so
-    // the only sane way to "change kind" is to delete + re-add.
-    setVars(vs => vs.map(v => v.name === oldName ? { ...v, name: newName } : v));
+  const handleEditVar = ({ oldName }, updated) => {
+    setVars(vs => updateVariableDefinition(vs, oldName, updated));
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
   /* RichTextEditor.onChipClick → (name, chipEl, { x, y })
@@ -544,7 +543,7 @@ export function TemplateEditor({ tpl, onDelete }) {
      The editor window has no page DOM, so it asks the order /
      account tab (via editor.js' __gbResolveVars bridge) to resolve
      each variable, then overlays the values onto the table. */
-  const varSig = vars.map((v) => `${v.name} ${v.kind} ${v.config}`).join('');
+  const varSig = vars.map((v) => `${v.name}\0${v.kind}\0${v.config}`).join('\x01');
   useEffect(() => {
     if (typeof window.__gbResolveVars !== 'function' || vars.length === 0) {
       setResolvedMap({});

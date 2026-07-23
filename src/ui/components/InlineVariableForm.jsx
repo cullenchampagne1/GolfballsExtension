@@ -11,6 +11,7 @@ import { SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './AddVariableModal.js
 import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
 import { CodeVarEditor, isAsyncBody } from './CodeVarEditor.jsx';
 import { orderSchema } from '../../lib/page-schemas/order.js';
+import { variableEditorKinds } from '../../lib/templateVariableEditing.js';
 
 /* ────────────────────────────────────────────────────────────────
    InlineVariableForm — compact, in-table replacement for
@@ -56,34 +57,37 @@ const KIND_ICONS = {
 
 const SOFT = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
 
-export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paEnabled = false }) {
-  const [name,         setName]         = useState('');
-  const [kind,         setKind]         = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
-  const [config,       setConfig]       = useState('');
+export function InlineVariableForm({ typeId, onAdd, onCancel, onDelete, varNames = [], initialVariable = null }) {
+  const initial = initialVariable || {};
+  const initialAttach = initial.attach || {};
+  const [name,         setName]         = useState(initial.name || '');
+  const [kind,         setKind]         = useState(initial.kind || SOURCE_KINDS[typeId]?.[0] || 'literal');
+  const [config,       setConfig]       = useState(initial.config || '');
   const [picking,      setPicking]      = useState(false);
   const [hoverText,    setHoverText]    = useState('');
   const [liveResolved, setLiveResolved] = useState(null);
-  const [regexField,   setRegexField]   = useState('body');
-  const [regexGroup,   setRegexGroup]   = useState('1');
-  const [regexScope,   setRegexScope]   = useState('');
+  const [regexField,   setRegexField]   = useState(initial.source || 'body');
+  const [regexGroup,   setRegexGroup]   = useState(String(initial.group || 1));
+  const [regexScope,   setRegexScope]   = useState(initial.scope || '');
   const [pickingScope, setPickingScope] = useState(false);
   // Attachment config — inline image (placed in the body, sized/aligned) vs an
   // attached file (rides the email as a real attachment). Source mirrors the
   // main kinds: a fixed URL, a schema path that resolves to a URL, or a code
   // block that returns a URL / data: URL.
-  const [attMode,      setAttMode]      = useState('inline');   // 'inline' | 'attach'
-  const [attSource,    setAttSource]    = useState('url');      // 'url' | 'schema' | 'code'
-  const [attFilename,  setAttFilename]  = useState('');
-  const [attWidth,     setAttWidth]     = useState(220);
-  const [attAlign,     setAttAlign]     = useState('left');
+  const [attMode,      setAttMode]      = useState(initialAttach.mode || 'inline');
+  const [attSource,    setAttSource]    = useState(initialAttach.source || 'url');
+  const [attFilename,  setAttFilename]  = useState(initialAttach.filename || '');
+  const [attWidth,     setAttWidth]     = useState(initialAttach.width || 220);
+  const [attAlign,     setAttAlign]     = useState(initialAttach.align || 'left');
 
   // Reset kind/config when the template type changes.
   useEffect(() => {
+    if (initialVariable) return;
     setKind(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
     setConfig('');
     setPicking(false);
     setHoverText('');
-  }, [typeId]);
+  }, [typeId, initialVariable]);
 
   // DOM picker — same plumbing as AddVariableModal: an initial .get
   // catches any pickResult that landed before we subscribed,
@@ -181,13 +185,10 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paE
     return () => { cancelled = true; clearTimeout(timer); };
   }, [kind, config, picking]);
 
-  /* Attachment only exists on the Power-Automate direct-send path (mailto
-     can't carry attachments), and only for page-driven templates (order /
-     account) — case replies go out as mailto. */
-  const kinds = [
-    ...(SOURCE_KINDS[typeId] || []),
-    ...(paEnabled && typeId !== 'case' ? ['attachment'] : []),
-  ];
+  // Attachment definitions belong to the template, not to whether Direct Send
+  // happens to be enabled at edit time. Keeping the editor available for every
+  // email type prevents an existing proof attachment from becoming uneditable.
+  const kinds = variableEditorKinds(typeId, SOURCE_KINDS);
   const kindOptions = kinds.map((id) => ({
     id, label: KIND_LABELS[id] || id, icon: KIND_ICONS[id],
   }));
@@ -202,7 +203,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paE
     : kind === 'attachment' ? (config ? (attMode === 'inline' ? `(inline image · ${attWidth}px)` : '(file attachment)') : '— point at a file —')
     : '—';
 
-  const canAdd = !!name && !!config;
+  const canAdd = !!name && !!config && /^\w+$/.test(name) && !varNames.includes(name);
 
   /* The form previously ran a ResizeObserver that called
      anchor.scrollIntoView({ block: 'nearest' }) on every layout
@@ -241,12 +242,12 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paE
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <I.plus size={11} style={{ color: 'var(--gb-brand-label)' }} />
+          {initialVariable ? <I.edit size={11} style={{ color: 'var(--gb-brand-label)' }} /> : <I.plus size={11} style={{ color: 'var(--gb-brand-label)' }} />}
           <span style={{
             flex: 1, fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
             textTransform: 'uppercase', color: 'var(--gb-text-muted)',
           }}>
-            New variable
+            {initialVariable ? 'Edit variable' : 'New variable'}
           </span>
         </div>
 
@@ -574,11 +575,15 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paE
 
         {/* Actions — also the scroll anchor (see ResizeObserver above) */}
         <div ref={bottomRef} style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+          {initialVariable && onDelete && (
+            <Btn variant="ghost" status="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
+          )}
+          <div style={{ flex: 1 }} />
           <Btn variant="ghost" size="sm" onClick={onCancel}>Cancel</Btn>
           <Btn
             variant="primary"
             size="sm"
-            icon={<I.plus />}
+            icon={initialVariable ? <I.check /> : <I.plus />}
             disabled={!canAdd}
             onClick={() => onAdd?.({
               name, kind, config,
@@ -601,7 +606,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paE
               } : {}),
             })}
           >
-            Add
+            {initialVariable ? 'Save changes' : 'Add'}
           </Btn>
         </div>
       </div>

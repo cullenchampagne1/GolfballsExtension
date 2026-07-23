@@ -3,6 +3,7 @@
  *
  * Feeds realistic SnapEngage transcript blobs and pins the structured
  * output: line kinds, speaker names, timestamps, and entity/tag handling.
+ * SECURITY-AUDITED-HTTP-NEGATIVE-TEST: insecure transcript links stay inert.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';

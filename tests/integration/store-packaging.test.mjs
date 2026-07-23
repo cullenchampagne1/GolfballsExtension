@@ -130,6 +130,23 @@ describe('store packaging', () => {
     }
   });
 
+  it('fails when a dynamically registered content script is missing', () => {
+    const root = createFixture();
+    try {
+      writeFixture(root, 'lib/dynamic-registration.js', [
+        "chrome.scripting.registerContentScripts([{",
+        "  id: 'dynamic', js: ['src/vanilla/missing-dynamic.js'],",
+        "}]);",
+      ].join('\n'));
+      assert.throws(
+        () => buildStorePackage({ root }),
+        /missing local references:[\s\S]*src\/vanilla\/missing-dynamic\.js/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('fails when a declared store icon does not have the exact required dimensions', () => {
     const root = createFixture();
     try {

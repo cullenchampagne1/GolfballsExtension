@@ -6,6 +6,7 @@
  * isChargeRequest must allow exactly the fixed method+endpoint pairs the
  * charge modal uses and reject every origin/method/path/port/query/redirect
  * variant; isCalendarUrl / isCrmCallLogUrl gate the credentialed CRM fetches.
+ * SECURITY-AUDITED-HTTP-NEGATIVE-TEST: insecure URLs below must be rejected.
  */
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
