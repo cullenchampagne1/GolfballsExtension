@@ -390,26 +390,30 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
       }}>
       <div style={{ position: 'relative' }}>
         <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} h={compact ? 132 : 156} />
-        {onToggleFavorite && (
-          <button type="button" title={favorite ? 'Remove from favorites' : 'Add to favorites'}
-            aria-label={favorite ? `Remove ${p.title} from favorites` : `Add ${p.title} to favorites`}
-            aria-pressed={favorite}
-            onClick={(event) => { event.stopPropagation(); onToggleFavorite(p); }}
-            style={{ position: 'absolute', top: 7, right: 7, width: 25, height: 25, borderRadius: '50%', padding: 0, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: favorite ? 'var(--gb-warning)' : 'var(--gb-text-muted)',
-              background: favorite ? 'color-mix(in srgb, var(--gb-warning) 14%, var(--gb-surface-modal))' : 'color-mix(in srgb, var(--gb-surface-modal) 90%, transparent)',
-              border: '1px solid ' + (favorite ? 'color-mix(in srgb, var(--gb-warning) 45%, var(--gb-border-default))' : 'var(--gb-border-default)'),
-              boxShadow: '0 2px 7px rgba(0,0,0,.12)', backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)',
-              transform: favorite ? 'scale(1.04)' : 'none', transition: 'all var(--gb-anim)' }}>
-            <Icon size={12.5} fill={favorite ? 'currentColor' : 'none'} strokeWidth={2.1}><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></Icon>
-          </button>
+        {(onSale(p) || onToggleFavorite) && (
+          <div style={{ position: 'absolute', top: 7, right: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
+            {onSale(p) && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', minHeight: 22, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 3px rgba(0,0,0,.14)' }}>Sale</span>
+            )}
+            {onToggleFavorite && (
+              <button type="button" title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+                aria-label={favorite ? `Remove ${p.title} from favorites` : `Add ${p.title} to favorites`}
+                aria-pressed={favorite}
+                onClick={(event) => { event.stopPropagation(); onToggleFavorite(p); }}
+                style={{ width: 22, height: 22, borderRadius: '50%', padding: 0, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: favorite ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+                  background: 'color-mix(in srgb, var(--gb-surface-modal) 88%, transparent)',
+                  border: '1px solid var(--gb-border-default)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,.08)',
+                  transition: 'color var(--gb-anim), background-color var(--gb-anim), border-color var(--gb-anim)' }}>
+                <Icon size={11.5} fill={favorite ? 'currentColor' : 'none'} strokeWidth={2}><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></Icon>
+              </button>
+            )}
+          </div>
         )}
         {hasPromo(p) && (
           <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>
-        )}
-        {onSale(p) && (
-          <span style={{ position: 'absolute', top: onToggleFavorite ? 38 : 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 4px rgba(0,0,0,.18)', transition: 'top var(--gb-anim)' }}>Sale</span>
         )}
         {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>

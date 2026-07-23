@@ -9,6 +9,11 @@ import { loadGiftSetOptions } from '../lib/giftSetsData.js';
 import { giftSetSizeLabel } from '../lib/giftSets.js';
 import { giftSetLayout } from '../lib/giftSetLayout.js';
 import { giftSetPreviewUrl } from '../lib/cartSerializer.js';
+import {
+  clientDeltaToLocal,
+  clientPointToLocal,
+  measuredAlignmentGeometry,
+} from '../lib/alignmentGeometry.js';
 
 /* ───────────────────────────────────────────────────────────────
    giftCustomize.jsx — the real per-product personalization UI for
@@ -449,10 +454,10 @@ const AG_SHADOW = '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.
 const AG_RADIUS = 9;
 
 /* Centered ring + crosshair (copied from ImagePreview.AlignmentOverlay). */
-function AlignRing() {
+function AlignRing({ ringRef }) {
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-      <div style={{ height: '70%', aspectRatio: '1 / 1', maxWidth: 240, maxHeight: 240, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px var(--gb-overlay-strong)' }} />
+      <div ref={ringRef} style={{ height: '70%', aspectRatio: '1 / 1', maxWidth: 240, maxHeight: 240, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px var(--gb-overlay-strong)' }} />
       <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'var(--gb-brand-label)', opacity: 0.4 }} />
       <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--gb-brand-label)', opacity: 0.4 }} />
     </div>
@@ -497,6 +502,7 @@ function ARotationSlider({ value, onChange }) {
 
 export function ImageAlignModal({ image, initial, onCancel, onApply }) {
   const [nat, setNat] = useState(null);
+  const [stageSize, setStageSize] = useState({ width: ALIGN_STAGE, height: ALIGN_STAGE });
   const [zoomLevel, setZoomLevel] = useState(Math.round((initial?.scale ?? 1) * 100));
   const [rotation, setRotation] = useState(initial?.rot ?? 0);
   // Transform tracked in refs (no re-render per wheel/drag) — mirrors ImagePreview.
@@ -506,6 +512,7 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
   const rotationRef = useRef(initial?.rot ?? 0);
   const wrapRef = useRef(null);
   const vpRef = useRef(null);
+  const ringRef = useRef(null);
   // Color-swap (eyedropper) state — same model as the Image Viewer.
   const [eyedropping, setEyedropping] = useState(false);
   const [pendingPick, setPendingPick] = useState(null);   // { color:{r,g,b}, x, y }
@@ -519,9 +526,25 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
 
   useEffect(() => { _loadImage(image).then((im) => setNat({ w: im.naturalWidth || im.width, h: im.naturalHeight || im.height })).catch(() => {}); }, [image]);
 
-  // Image fits the stage at scale 1 (contain) — same fit used by the capture
-  // canvas so display and output stay in lockstep.
-  const fit = nat ? Math.min(0.85 * ALIGN_STAGE / nat.w, 0.85 * ALIGN_STAGE / nat.h) : 1;
+  // The compact modal is responsive, so its alignment stage is not guaranteed
+  // to be 320px wide. Recompute the displayed contain-fit from the live stage
+  // box whenever page/modal sizing changes.
+  useEffect(() => {
+    const stage = wrapRef.current;
+    if (!stage) return undefined;
+    const update = () => setStageSize({
+      width: stage.clientWidth || ALIGN_STAGE,
+      height: stage.clientHeight || ALIGN_STAGE,
+    });
+    update();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+  const fit = nat
+    ? Math.min(0.85 * stageSize.width / nat.w, 0.85 * stageSize.height / nat.h)
+    : 1;
 
   // Eyedropper: read the {r,g,b} under a stage point, mapped through the live
   // pan/zoom back to the image's natural pixels (shared helper).
@@ -579,8 +602,8 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
     const c = wrapRef.current; if (!c) return undefined;
     const onWheel = (e) => {
       e.preventDefault();
-      const r = c.getBoundingClientRect();
-      zoom(e.deltaY < 0 ? A_ZOOM_STEP_WHEEL : -A_ZOOM_STEP_WHEEL, e.clientX - r.left, e.clientY - r.top);
+      const point = clientPointToLocal(c, e.clientX, e.clientY);
+      zoom(e.deltaY < 0 ? A_ZOOM_STEP_WHEEL : -A_ZOOM_STEP_WHEEL, point.x, point.y);
     };
     c.addEventListener('wheel', onWheel, { passive: false });
     return () => c.removeEventListener('wheel', onWheel);
@@ -592,15 +615,20 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
     // Eyedropper armed → clicking the image samples a pixel + opens the swap popover.
     if (eyedropping) {
       const c = wrapRef.current; if (!c) return;
-      const r = c.getBoundingClientRect();
-      const cssX = e.clientX - r.left, cssY = e.clientY - r.top;
+      const { x: cssX, y: cssY } = clientPointToLocal(c, e.clientX, e.clientY);
       const sample = samplePixelAt(cssX, cssY);
       if (sample) { setPendingPick({ color: sample, x: cssX, y: cssY }); setEyedropping(false); }
       return;
     }
     e.preventDefault();
     const sx = e.clientX, sy = e.clientY, px = txRef.current, py = tyRef.current;
-    const move = (ev) => { txRef.current = px + (ev.clientX - sx); tyRef.current = py + (ev.clientY - sy); clampPan(); applyTransform(false); };
+    const move = (ev) => {
+      const delta = clientDeltaToLocal(wrapRef.current, ev.clientX - sx, ev.clientY - sy);
+      txRef.current = px + delta.x;
+      tyRef.current = py + delta.y;
+      clampPan();
+      applyTransform(false);
+    };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
@@ -609,7 +637,10 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
   // clipped to a CIRCLE so the decal is round (the ball print area).
   const apply = () => {
     const wrap = wrapRef.current; if (!wrap || !nat) return;
-    const ringD = Math.min(wrap.clientHeight * 0.70, 240);   // matches AlignRing
+    const im = wrap.querySelector('img');   // already showing the recolored bytes
+    if (!im) return;
+    const geometry = measuredAlignmentGeometry(wrap, im, ringRef.current);
+    const ringD = geometry.ringDiameter;
     const c = document.createElement('canvas'); c.width = ALIGN_OUT; c.height = ALIGN_OUT;
     const ctx = c.getContext('2d');
     const k = ALIGN_OUT / ringD;        // wrapper px → canvas px (ring → full canvas)
@@ -620,8 +651,14 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
     ctx.translate(txRef.current, tyRef.current);
     ctx.rotate((rotationRef.current * Math.PI) / 180);
     ctx.scale(scaleRef.current, scaleRef.current);
-    const im = wrap.querySelector('img');   // already showing the recolored bytes
-    ctx.drawImage(im, -(nat.w * fit) / 2, -(nat.h * fit) / 2, nat.w * fit, nat.h * fit);
+    // Mirror the image's actual layout box. The stage is responsive and the
+    // surrounding modal can be scaled, so a hard-coded stage fit drifts from
+    // what the user positioned inside the ring.
+    ctx.drawImage(
+      im,
+      -geometry.imageWidth / 2, -geometry.imageHeight / 2,
+      geometry.imageWidth, geometry.imageHeight,
+    );
     ctx.restore();
     // Pass back the recolored full-res source so a later re-align keeps the swaps.
     onApply(c.toDataURL('image/png'), { scale: scaleRef.current, x: txRef.current, y: tyRef.current, rot: rotationRef.current }, editedDataUrl || image);
@@ -644,7 +681,7 @@ export function ImageAlignModal({ image, initial, onCancel, onApply }) {
           <div ref={vpRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             {nat && <img src={shownSrc} alt="" draggable={false} style={{ width: nat.w * fit, height: nat.h * fit, display: 'block' }} />}
           </div>
-          <AlignRing />
+          <AlignRing ringRef={ringRef} />
           {/* Eyedropper + reset cluster (top-left) — same tools as the Image Viewer. */}
           <div data-viewer-ui="true" style={{ position: 'absolute', top: 8, left: 10, display: 'flex', alignItems: 'center', gap: 4, zIndex: 6 }}>
             <GlassIconBtn icon={<DropperIcon />} active={eyedropping} title="Swap a color" onClick={() => { setEyedropping((v) => !v); setPendingPick(null); }} />

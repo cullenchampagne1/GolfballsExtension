@@ -158,6 +158,10 @@
       "file": "tests/unit/scales.test.mjs"
     },
     {
+      "name": "ui \u00b7 alignment geometry under modal zoom",
+      "file": "tests/unit/alignmentGeometry.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Campaign Manager deterministic scaling",
       "file": "tests/unit/campaignPresentation.test.mjs"
     },

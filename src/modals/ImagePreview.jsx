@@ -19,6 +19,11 @@ import {
 import { GrassMockupComposer } from './GrassMockupComposer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
+import {
+  clientDeltaToLocal,
+  clientPointToLocal,
+  measuredAlignmentGeometry,
+} from '../lib/alignmentGeometry.js';
 
 /* ───────────────────────────────────────────────────────────────
    ImagePreview — port of content/logo-extractor.js's logo modal.
@@ -324,6 +329,7 @@ export function ImagePreview({
 
   const wrapRef = useRef(null);      // the 340px preview surface (drag + wheel target)
   const viewportRef = useRef(null);  // inner transform layer (translate + scale applied here)
+  const alignRingRef = useRef(null); // rendered ring is the capture source of truth
   const viewerRef = useRef(null);    // GolfballViewer imperative handle — .snapshot() returns a PNG dataURL
   const mockupRef = useRef(null);    // GrassMockupComposer imperative handle — .snapshot() returns a PNG dataURL
   // True whenever we're in a viewer-style mode (3D ball OR grass mockup),
@@ -654,10 +660,8 @@ export function ImagePreview({
     if (!c || status !== 'ready' || inViewerMode) return undefined;
     const onWheel = (e) => {
       e.preventDefault();
-      const rect = c.getBoundingClientRect();
-      const ox = e.clientX - rect.left;
-      const oy = e.clientY - rect.top;
-      zoom(e.deltaY < 0 ? ZOOM_STEP_WHEEL : -ZOOM_STEP_WHEEL, ox, oy);
+      const point = clientPointToLocal(c, e.clientX, e.clientY);
+      zoom(e.deltaY < 0 ? ZOOM_STEP_WHEEL : -ZOOM_STEP_WHEEL, point.x, point.y);
     };
     c.addEventListener('wheel', onWheel, { passive: false });
     return () => c.removeEventListener('wheel', onWheel);
@@ -684,9 +688,7 @@ export function ImagePreview({
     if (eyedropping) {
       const wrap = wrapRef.current;
       if (!wrap) return;
-      const r = wrap.getBoundingClientRect();
-      const cssX = e.clientX - r.left;
-      const cssY = e.clientY - r.top;
+      const { x: cssX, y: cssY } = clientPointToLocal(wrap, e.clientX, e.clientY);
       const sample = samplePixelAt(e.clientX, e.clientY);
       if (sample) {
         setPendingPick({ color: sample, x: cssX, y: cssY });
@@ -702,8 +704,13 @@ export function ImagePreview({
   };
   const onPointerMove = (e) => {
     if (dragRef.current) {
-      txRef.current = dragRef.current.tx + (e.clientX - dragRef.current.x);
-      tyRef.current = dragRef.current.ty + (e.clientY - dragRef.current.y);
+      const delta = clientDeltaToLocal(
+        wrapRef.current,
+        e.clientX - dragRef.current.x,
+        e.clientY - dragRef.current.y,
+      );
+      txRef.current = dragRef.current.tx + delta.x;
+      tyRef.current = dragRef.current.ty + delta.y;
       clampPan();
       applyTransform(false);
       return;
@@ -716,11 +723,10 @@ export function ImagePreview({
       const wrap = wrapRef.current;
       const p = wrap && clientToSourcePx(e.clientX, e.clientY);
       if (!p) { setLoupe(null); return; }
-      const r = wrap.getBoundingClientRect();
-      const z = (r.width / wrap.clientWidth) || 1;
+      const point = clientPointToLocal(wrap, e.clientX, e.clientY);
       setLoupe({
-        x: (e.clientX - r.left) / z,
-        y: (e.clientY - r.top) / z,
+        x: point.x,
+        y: point.y,
         pxX: p.pxX, pxY: p.pxY,
         color: readPixel(p.pxX, p.pxY),
       });
@@ -757,30 +763,15 @@ export function ImagePreview({
      and stash the result as `decalDataUrl`. Called from the Save
      button in the alignment action strip.
 
-     Coordinate math (wrapper space → image natural pixel space):
-       inner viewport transform = translate(tx, ty) scale(scale)
-       around the wrapper's center; image inside is centered via
-       flexbox at its rendered (post-fit) size where
-         fit = min(0.85 * wrapperW/natW, 0.85 * wrapperH/natH)
-       To go from a point P in wrapper coords to image natural coords:
-         P' = (P - wrapperCenter - {tx,ty}) / scale / fit + natCenter
-     Ring center is wrapperCenter, so its image-space position is:
-         ringCenterImage = (-{tx,ty} / scale) / fit + natCenter
-     Ring radius in wrapper px = ringRadiusWrapperPx.
-     Ring radius in image px = ringRadiusWrapperPx / scale / fit.
+     The output replays the same local translate/rotate/scale pipeline using
+     the rendered ring and image layout boxes as its source of truth. This is
+     important because the modal and host page can each have their own scale,
+     and CSS max-width/max-height shrink large images without upscaling small
+     ones.
   ─────────────────────────────────────────────────────────── */
   function captureAlignment() {
     const wrap = wrapRef.current;
     if (!wrap || !imageSize) return null;
-    const wrapperH = wrap.clientHeight;
-    const wrapperW = wrap.clientWidth;
-    const natW = imageSize.w;
-    const natH = imageSize.h;
-    // Ring matches AlignmentOverlay (height 70% of wrapper, aspect 1, max 240).
-    const ringDiameterWrapperPx = Math.min(wrapperH * 0.70, 240);
-    const ringRadiusWrapperPx = ringDiameterWrapperPx / 2;
-
-    const fit = Math.min(0.85 * wrapperW / natW, 0.85 * wrapperH / natH);
     const scale = scaleRef.current;
     const tx = txRef.current;
     const ty = tyRef.current;
@@ -788,6 +779,8 @@ export function ImagePreview({
 
     const sourceImg = wrap.querySelector('img');
     if (!sourceImg) return null;
+    const geometry = measuredAlignmentGeometry(wrap, sourceImg, alignRingRef.current);
+    const ringDiameterWrapperPx = geometry.ringDiameter;
 
     // We re-create the viewport's transform pipeline on a canvas the
     // size of the ring (circle) and crop. Output capped at 1024.
@@ -812,15 +805,14 @@ export function ImagePreview({
     ctx.translate(tx, ty);
     ctx.rotate(rotRad);
     ctx.scale(scale, scale);
-    // The image is rendered (without our transform) at its natural-pixel
-    // size, scaled to fit. fit = wrapper-pixels-per-natural-pixel at scale=1.
-    // So in the un-rotated viewport space the image occupies a rect
-    // centered on the origin of size (natW*fit, natH*fit). We draw the
-    // source image into that rect.
+    // Mirror the actual untransformed image layout box. `max-width` and
+    // `max-height` shrink large sources but intentionally do not upscale a
+    // small source, so recomputing a contain-fit from natural dimensions
+    // produces a different crop than the one visible in the alignment grid.
     ctx.drawImage(
       sourceImg,
-      -(natW * fit) / 2, -(natH * fit) / 2,
-      natW * fit, natH * fit,
+      -geometry.imageWidth / 2, -geometry.imageHeight / 2,
+      geometry.imageWidth, geometry.imageHeight,
     );
     ctx.restore();
 
@@ -1428,7 +1420,7 @@ export function ImagePreview({
                   alignment logic ships later; this is the visual
                   scaffold + view-change animation. */}
               <AnimatePresence>
-                {aligning && <AlignmentOverlay />}
+                {aligning && <AlignmentOverlay ringRef={alignRingRef} />}
               </AnimatePresence>
 
               {/* Rotation slider — appears on the right edge while
@@ -1879,7 +1871,7 @@ function DropOverlay({ active }) {
      • Ring scales from 0.85 → 1 with a slight bounce
      • Crosshair guides fade in shortly after the ring
 ─────────────────────────────────────────────────────────────── */
-function AlignmentOverlay() {
+function AlignmentOverlay({ ringRef }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1898,6 +1890,7 @@ function AlignmentOverlay() {
           the modal is wider than tall). Width follows aspect-ratio 1
           for a true circle. */}
       <motion.div
+        ref={ringRef}
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.85, opacity: 0 }}

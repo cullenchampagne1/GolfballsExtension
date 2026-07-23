@@ -18,6 +18,7 @@ import React, { useState, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Btn, I, Slider, DraggablePopup } from '../index.js';
 import { ColorPickerPopover as DSColorPickerPopover } from './ColorPicker.jsx';
+import { localPointToClient } from '../../lib/alignmentGeometry.js';
 
 /* Frosted-glass tokens — match the LiquidDrawer capsule aesthetic. color-mix
    provides a theme-adaptive tint; backdrop-filter does the blur. */
@@ -183,8 +184,9 @@ export function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onA
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newColor, tolerance, strip]);
 
-  const wrapRect = wrapRef?.current?.getBoundingClientRect();
-  const cursor = wrapRect ? { x: wrapRect.left + (pick?.x ?? 0), y: wrapRect.top + (pick?.y ?? 0) } : null;
+  const cursor = wrapRef?.current
+    ? localPointToClient(wrapRef.current, pick?.x ?? 0, pick?.y ?? 0)
+    : null;
 
   return (
     <DraggablePopup
