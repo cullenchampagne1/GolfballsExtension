@@ -39,3 +39,5 @@ dist/store/
 # Project-owned RevStack integration, release tooling, and consumer packaging
 # policy are versioned with the extension. Runtime release state and signing
 # material remain isolated above in .golfballs-extension-production/.
+dist/safari/
+dist/safari-stage/

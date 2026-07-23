@@ -13,6 +13,7 @@
     "remote-config": "node scripts/build-remote-settings-config.mjs",
     "remote-config:legacy-seed": "node scripts/build-remote-settings-config.mjs --legacy-seed",
     "pack:store": "GB_ADMIN=0 node --max-old-space-size=4096 scripts/package-store.mjs",
+    "pack:safari": "node --max-old-space-size=4096 scripts/pack-safari.mjs",
     "pretest": "npm run help-content",
     "test": "npm run test:security && npm run test:auth-broker && npm run test:crm-index && npm run test:installation && npm run test:remote-policy && npm run test:contact-import && npm run test:employee-identity && npm run test:sharing-fallback && npm run test:remote-integrity && npm run test:backend-integration && npm run test:unit && npm run test:integration",
     "test:security": "node scripts/test-security.mjs",
