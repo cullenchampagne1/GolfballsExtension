@@ -8,7 +8,8 @@ import {
   isExecutableHelpAction, prepareHelpActionReceipts, readHelpActionReceipt,
 } from '../../lib/helpActions.js';
 import {
-  createSerialHelpActionRunner, orderHelpActions, shouldNotifyHelpActionReceipt,
+  createSerialHelpActionRunner, helpActionConfirmationCopy, orderHelpActions,
+  shouldNotifyHelpActionReceipt,
 } from '../../lib/helpActionCore.js';
 import { FEATURE_DEFAULTS } from '../../lib/flags.js';
 import { resolveHelpComposerPrompt, syncHelpComposerHeight } from '../../lib/helpComposer.js';
@@ -373,6 +374,7 @@ async function copyText(text) {
 
 function ExecutableActionCard({ action, receiptId, historical = false, onAction, ready }) {
   const confirmation = helpActionRequiresConfirmation(action);
+  const confirmCopy = helpActionConfirmationCopy(action);
   const [receipt, setReceipt] = useState(historical
     ? { status: 'succeeded', message: 'Historical action was not replayed.', url: '' }
     : { status: 'running', message: 'Checking action history…', url: '' });
@@ -386,9 +388,7 @@ function ExecutableActionCard({ action, receiptId, historical = false, onAction,
         if (!alive) return;
         setReceipt(existing || {
           status: 'pending',
-          message: action.target === 'feature'
-            ? 'Review this feature request before sending it.'
-            : 'Review this bug report before sending it.',
+          message: confirmCopy.pending,
           url: '',
         });
       }).catch((error) => {
@@ -454,7 +454,7 @@ function ExecutableActionCard({ action, receiptId, historical = false, onAction,
       ) : pending ? (
         <span style={{ display: 'flex', gap: 5 }}>
           <button type="button" onClick={async () => setReceipt(await declineHelpAction(receiptId))} style={{ height: 25, padding: '0 7px', borderRadius: 7, background: 'transparent', color: 'var(--gb-text-muted)', border: '1px solid var(--gb-border-default)', fontSize: 8.75, fontWeight: 700, cursor: 'pointer' }}>Not now</button>
-          <button type="button" onClick={() => setAuthorized(true)} style={{ height: 25, padding: '0 8px', borderRadius: 7, background: 'linear-gradient(145deg, var(--gb-brand), var(--gb-brand-dark))', color: 'var(--gb-text-on-brand)', border: '1px solid var(--gb-brand-border)', fontSize: 8.75, fontWeight: 750, cursor: 'pointer' }}>{action.target === 'feature' ? 'Submit request' : 'Submit report'}</button>
+          <button type="button" onClick={() => setAuthorized(true)} style={{ height: 25, padding: '0 8px', borderRadius: 7, background: 'linear-gradient(145deg, var(--gb-brand), var(--gb-brand-dark))', color: 'var(--gb-text-on-brand)', border: '1px solid var(--gb-brand-border)', fontSize: 8.75, fontWeight: 750, cursor: 'pointer' }}>{confirmCopy.confirm}</button>
         </span>
       ) : declined ? (
         <button type="button" onClick={() => setAuthorized(true)} style={{ height: 24, padding: '0 7px', borderRadius: 7, background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', fontSize: 9, fontWeight: 750, cursor: 'pointer' }}>Submit</button>

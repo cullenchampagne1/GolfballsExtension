@@ -12,9 +12,16 @@ export const MUTATION_ACTION_TYPES = Object.freeze(new Set([
 
 /** Commands that must never execute just because a receipt card mounted.
  * The client advertises these capabilities to the backend, then presents a
- * visible preview and waits for a click before calling the write endpoint. */
+ * visible preview and waits for a click before calling the write endpoint.
+ *
+ * Both SHARE actions mint an externally reachable link — the most outward-
+ * facing, least reversible thing the assistant can do — so they are gated
+ * exactly like a ticket. A toggle or theme change stays auto-applied because
+ * it is local and trivially undone; publishing a link is neither. */
 export const CONFIRMATION_ACTION_TYPES = Object.freeze(new Set([
   'submit_ticket',
+  'share_settings',
+  'share_email_template',
 ]));
 
 export function helpActionRequiresConfirmation(action) {
@@ -23,6 +30,34 @@ export function helpActionRequiresConfirmation(action) {
 
 export function helpActionConfirmationTypes() {
   return [...CONFIRMATION_ACTION_TYPES];
+}
+
+/**
+ * Copy for a confirmation card, per action type. The card is no longer
+ * ticket-only, so its prompt and button label cannot assume a bug/feature
+ * target — a share action would otherwise read "Submit report".
+ */
+export function helpActionConfirmationCopy(action) {
+  const type = String(action?.type || '');
+  if (type === 'share_settings') {
+    return {
+      pending: 'Review this settings link before it is created and shared.',
+      confirm: 'Create link',
+    };
+  }
+  if (type === 'share_email_template') {
+    return {
+      pending: 'Review this email-template link before it is created and shared.',
+      confirm: 'Create link',
+    };
+  }
+  const feature = String(action?.target || '') === 'feature';
+  return {
+    pending: feature
+      ? 'Review this feature request before sending it.'
+      : 'Review this bug report before sending it.',
+    confirm: feature ? 'Submit request' : 'Submit report',
+  };
 }
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;

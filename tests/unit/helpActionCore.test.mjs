@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createSerialHelpActionRunner, hasIssuedHelpActionReceipt, helpActionReceiptDecision,
-  helpActionConfirmationTypes, helpActionReceiptId, helpActionRequiresConfirmation,
+  helpActionConfirmationCopy, helpActionConfirmationTypes, helpActionReceiptId,
+  helpActionRequiresConfirmation,
   orderHelpActions, planHelpAction, sanitizePageRoute,
   seedHistoricalHelpActionReceipts, shouldNotifyHelpActionReceipt,
 } from '../../src/lib/helpActionCore.js';
@@ -121,10 +122,44 @@ describe('Help Companion action policy', () => {
     assert.equal(shouldNotifyHelpActionReceipt({ status: 'succeeded', replayed: true }), false);
   });
 
-  it('advertises ticket confirmation and keeps declined tickets inert until a user retries', () => {
-    assert.deepEqual(helpActionConfirmationTypes(), ['submit_ticket']);
+  it('gates every link-minting and ticket action behind confirmation', () => {
+    // A share action publishes an externally reachable link, so it must never
+    // run just because its card mounted — the same rule as a ticket.
+    assert.deepEqual(
+      helpActionConfirmationTypes().sort(),
+      ['share_email_template', 'share_settings', 'submit_ticket'],
+    );
     assert.equal(helpActionRequiresConfirmation({ type: 'submit_ticket' }), true);
+    assert.equal(helpActionRequiresConfirmation({ type: 'share_settings' }), true);
+    assert.equal(helpActionRequiresConfirmation({ type: 'share_email_template' }), true);
+    // Local, trivially reversible mutations stay auto-applied.
     assert.equal(helpActionRequiresConfirmation({ type: 'set_feature' }), false);
+    assert.equal(helpActionRequiresConfirmation({ type: 'set_setting' }), false);
+    assert.equal(helpActionRequiresConfirmation({ type: 'set_theme_preset' }), false);
+  });
+
+  it('labels each confirmation card for its own action, never ticket-only', () => {
+    const share = helpActionConfirmationCopy({ type: 'share_settings', target: 'settings' });
+    assert.match(share.pending, /settings link/i);
+    assert.match(share.pending, /created|shared/i);
+    assert.equal(share.confirm, 'Create link');
+
+    const shareTemplate = helpActionConfirmationCopy({ type: 'share_email_template', target: 'tpl-1' });
+    assert.match(shareTemplate.pending, /template link/i);
+    assert.equal(shareTemplate.confirm, 'Create link');
+
+    // The ticket copy still branches on bug vs feature.
+    assert.equal(
+      helpActionConfirmationCopy({ type: 'submit_ticket', target: 'feature' }).confirm,
+      'Submit request',
+    );
+    assert.equal(
+      helpActionConfirmationCopy({ type: 'submit_ticket', target: 'bug' }).confirm,
+      'Submit report',
+    );
+  });
+
+  it('keeps a declined confirmation inert until the user retries', () => {
     const receipts = {
       declined: { status: 'declined', message: 'Not submitted.' },
     };
