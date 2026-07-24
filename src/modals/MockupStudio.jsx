@@ -58,7 +58,10 @@ const LOAD_CATALOG_ADMIN = __ADMIN__
 
 const ACTIVE = new Set(['queued', 'running']);
 // Gallery tiles are a constant size regardless of how many a batch holds.
-const GALLERY_TILE = 186;
+// The card is wider than its image band is tall, so a row of results reads as
+// a row rather than a column of portrait slabs.
+const GALLERY_TILE = 232;
+const GALLERY_IMAGE = 176;
 const TONES = {
   queued: ['var(--gb-warning-tint-medium)', 'var(--gb-warning-fg)', 'var(--gb-warning-tint-border)'],
   running: ['var(--gb-brand-tint-medium)', 'var(--gb-brand-label)', 'var(--gb-brand-tint-border)'],
@@ -1122,13 +1125,23 @@ function ResultCard({ job, onOpen }) {
       border: '1px solid var(--gb-border-default)',
       boxShadow: ready ? 'var(--gb-shadow-sm)' : 'none',
     }}>
+      {/* The band has a FIXED height, and the square photo is centred inside it
+          rather than filling the card width. A wider card would otherwise mean
+          a taller square — this keeps the image square while letting the card
+          be wider than it is tall. */}
       <div style={{
-        width: '100%', aspectRatio: '1 / 1', position: 'relative',
+        width: '100%', height: GALLERY_IMAGE, position: 'relative',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'var(--gb-fill-inverse-medium)',
         animation: pending ? 'gb-ms-breathe 2.4s ease-in-out infinite' : 'none',
       }}>
-        <ResultArtwork job={job} />
+        <div style={{
+          height: '100%', aspectRatio: '1 / 1', position: 'relative',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden',
+        }}>
+          <ResultArtwork job={job} />
+        </div>
         {/* A finished image announces itself; only an unfinished one needs a
             word for it, and running already has its own loading treatment. */}
         {job.status !== 'completed' && (
@@ -1349,9 +1362,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             style={{
-              // Tight side gutters: a fixed-width grid already centres itself,
-              // so wide padding only cost a column at common widths.
-              flex: 1, minHeight: 0, overflowY: 'auto', padding: '13px 8px',
+              flex: 1, minHeight: 0, overflowY: 'auto', padding: 14,
               background: 'var(--gb-surface-canvas)',
             }}
           >
@@ -1378,7 +1389,9 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: `repeat(auto-fill, ${GALLERY_TILE}px)`,
-                justifyContent: 'center',
+                // Pack from the top-left rather than centring the row, so a
+                // partial last row lines up under the first card.
+                justifyContent: 'start',
                 gap: 12,
               }}>
                 {jobs.map((job) => (
