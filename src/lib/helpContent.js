@@ -2998,8 +2998,9 @@ export const HELP_CONTENT = {
         "AI image",
         "batch",
         "render",
-        "scene",
-        "lighting",
+        "logo",
+        "product source",
+        "imprint placement",
         "aspect ratio",
         "variations"
       ],
@@ -3013,7 +3014,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Open Mockup Studio from the Actions Shelf on any supported page. The studio loads its product list and render choices from RevStack, so there is no account or order page requirement."
+            "text": "Open Mockup Studio from the Actions Shelf on any supported page. The studio loads products, source photos, and imprint placements from RevStack, so there is no account or order page requirement."
           },
           {
             "type": "heading",
@@ -3022,16 +3023,16 @@ export const HELP_CONTENT = {
           {
             "type": "list",
             "items": [
-              "Choose up to 5 configured products.",
-              "Pick the scene, image shape, lighting, and 1–4 variations per product.",
-              "The image count updates before you submit and is capped at 20 images per batch.",
+              "Choose up to 5 configured products and upload the customer's PNG, JPEG, or WebP logo.",
+              "For each product, select one or more source photos (such as polo colors) and one or more imprint variations (such as left sleeve or center chest). Aspect ratio is the only fixed studio option.",
+              "Each source × imprint-variation combination becomes one final mockup. Source and placement counts stay separate in the selection bar, and the total is capped at 20 images per batch.",
               "Select Generate to create the server-owned batch. You can close the studio while it runs and reopen it later from Batches."
             ]
           },
           {
             "type": "callout",
             "kind": "note",
-            "text": "A new installation may show an empty catalog. That is a valid ready state: an administrator still needs to configure public product recipes and their reference images. The diagnostic cat test is intentionally admin-only and never appears as a product."
+            "text": "A new installation may show an empty catalog. That is a valid ready state: an administrator still needs to configure products, source photos, placement references, and private prompts in the image-generation YAML. Prompt text and full reference URLs remain server-side. The diagnostic cat test is intentionally admin-only and never appears as a product."
           }
         ],
         "intermediate": [
@@ -3041,7 +3042,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The Batches tray is your durable render history. Open a batch to see each product variation and its current stage. Queued and running batches can be cancelled; finished, failed, partial, and cancelled batches can be deleted."
+            "text": "The Batches tray is your durable render history. Open a batch to see the product source and imprint placement for each final mockup, plus its current stage. Queued and running batches can be cancelled; finished, failed, partial, and cancelled batches can be deleted."
           },
           {
             "type": "table",
@@ -8306,8 +8307,9 @@ export const HELP_CONTENT = {
         "AI image",
         "batch",
         "render",
-        "scene",
-        "lighting",
+        "logo",
+        "product source",
+        "imprint placement",
         "aspect ratio",
         "variations"
       ],

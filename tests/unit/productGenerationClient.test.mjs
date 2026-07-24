@@ -7,13 +7,26 @@ import {
   isActiveProductGenerationBatch,
   isTerminalProductGenerationBatch,
   normalizeStudioBootstrap,
+  prepareProductGenerationLogo,
 } from '../../src/lib/productGenerationClient.js';
 
 const studio = {
-  constraints: { max_products: 5, max_variations: 4, max_images: 20 },
-  scenes: [{ id: 'studio' }],
+  constraints: { max_products: 5, max_images: 20 },
   aspects: [{ id: 'square' }],
-  lighting: [{ id: 'soft' }],
+};
+const products = [{
+  id: 'hat-1',
+  sources: [{ id: 'navy' }, { id: 'white' }],
+  variations: [{ id: 'front' }, { id: 'side' }],
+}, {
+  id: 'hat-2',
+  sources: [{ id: 'black' }],
+  variations: [{ id: 'front' }],
+}];
+const logo = {
+  filename: 'logo.png',
+  mediaType: 'image/png',
+  dataBase64: 'aGVsbG8=',
 };
 
 describe('product mockup studio client contract', () => {
@@ -22,10 +35,8 @@ describe('product mockup studio client contract', () => {
       studio: {
         configuration_revision: 'abc123',
         product_count: 0,
-        constraints: { max_products: 5, max_variations: 4, max_images: 20 },
-        scenes: [{ id: 'studio' }],
+        constraints: { max_products: 5, max_images: 20 },
         aspects: [{ id: 'square' }],
-        lighting: [{ id: 'soft' }],
       },
       products: [],
       batches: [],
@@ -36,43 +47,72 @@ describe('product mockup studio client contract', () => {
     assert.deepEqual(normalized.batches, []);
   });
 
-  it('builds a bounded batch request and removes duplicate products', () => {
+  it('builds a bounded source × imprint-variation batch request', () => {
     const request = buildProductGenerationBatchRequest({
       studio,
+      products,
       requestId: 'mockup:request:0001',
       name: '  Spring hats  ',
-      productIds: ['Hat-1', 'hat-1', 'hat-2'],
-      sceneId: 'STUDIO',
+      selections: [{
+        productId: 'HAT-1',
+        sourceIds: ['Navy', 'navy', 'white'],
+        variationIds: ['front', 'side'],
+      }, {
+        productId: 'hat-2',
+        sourceIds: ['black'],
+        variationIds: ['front'],
+      }],
       aspectId: 'square',
-      lightingId: 'soft',
-      variations: 3,
-      brief: '  Use the approved logo  ',
+      logo,
     });
     assert.deepEqual(request, {
       requestId: 'mockup:request:0001',
       name: 'Spring hats',
-      productIds: ['hat-1', 'hat-2'],
-      sceneId: 'studio',
+      selections: [{
+        productId: 'hat-1',
+        sourceIds: ['navy', 'white'],
+        variationIds: ['front', 'side'],
+      }, {
+        productId: 'hat-2',
+        sourceIds: ['black'],
+        variationIds: ['front'],
+      }],
       aspectId: 'square',
-      lightingId: 'soft',
-      variations: 3,
-      brief: 'Use the approved logo',
+      logo,
     });
   });
 
-  it('rejects a batch that exceeds the server-advertised image limit', () => {
+  it('counts every selected source × imprint variation toward the output limit', () => {
     assert.throws(() => buildProductGenerationBatchRequest({
       studio: {
         ...studio,
-        constraints: { max_products: 5, max_variations: 4, max_images: 6 },
+        constraints: { max_products: 5, max_images: 3 },
       },
+      products,
       requestId: 'mockup:request:0002',
-      productIds: ['hat-1', 'hat-2'],
-      sceneId: 'studio',
+      selections: [{
+        productId: 'hat-1',
+        sourceIds: ['navy', 'white'],
+        variationIds: ['front', 'side'],
+      }],
       aspectId: 'square',
-      lightingId: 'soft',
-      variations: 4,
-    }), /at most 6 images/);
+      logo,
+    }), /at most 3 images/);
+  });
+
+  it('encodes a bounded logo file for the protected worker request', async () => {
+    const prepared = await prepareProductGenerationLogo({
+      name: 'customer.png',
+      type: 'image/png',
+      size: 5,
+      arrayBuffer: async () => Uint8Array.from([104, 101, 108, 108, 111]).buffer,
+    });
+    assert.deepEqual(prepared, {
+      filename: 'customer.png',
+      mediaType: 'image/png',
+      dataBase64: 'aGVsbG8=',
+      sizeBytes: 5,
+    });
   });
 
   it('creates valid stable-shape request ids and classifies lifecycle states', () => {

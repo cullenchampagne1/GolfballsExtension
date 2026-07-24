@@ -930,22 +930,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'productGenerationCreateBatch') {
     const requestId = String(msg.requestId || '').trim();
     const name = String(msg.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
-    const productIds = Array.isArray(msg.productIds)
-      ? [...new Set(msg.productIds.map((value) => String(value || '').trim().toLowerCase()))]
-      : [];
-    const sceneId = String(msg.sceneId || '').trim().toLowerCase();
+    const selections = Array.isArray(msg.selections)
+      ? msg.selections.map((selection) => ({
+        product_id: String(selection?.productId || '').trim().toLowerCase(),
+        source_ids: Array.isArray(selection?.sourceIds)
+          ? [...new Set(selection.sourceIds.map(
+            (value) => String(value || '').trim().toLowerCase(),
+          ))] : [],
+        variation_ids: Array.isArray(selection?.variationIds)
+          ? [...new Set(selection.variationIds.map(
+            (value) => String(value || '').trim().toLowerCase(),
+          ))] : [],
+      })) : [];
     const aspectId = String(msg.aspectId || '').trim().toLowerCase();
-    const lightingId = String(msg.lightingId || '').trim().toLowerCase();
-    const variations = Number(msg.variations);
-    const brief = String(msg.brief || '').trim().slice(0, 2_000);
+    const logo = msg.logo && typeof msg.logo === 'object' ? {
+      filename: String(msg.logo.filename || '').trim().slice(0, 180),
+      media_type: String(msg.logo.mediaType || '').trim().toLowerCase(),
+      data_base64: String(msg.logo.dataBase64 || ''),
+    } : null;
     if (
       !GB_PRODUCT_REQUEST_ID_RE.test(requestId)
-      || productIds.length < 1 || productIds.length > 10
-      || productIds.some((value) => !GB_PRODUCT_OPTION_ID_RE.test(value))
-      || !GB_PRODUCT_OPTION_ID_RE.test(sceneId)
+      || selections.length < 1 || selections.length > 10
+      || new Set(selections.map((selection) => selection.product_id)).size
+        !== selections.length
+      || selections.some((selection) => (
+        !GB_PRODUCT_OPTION_ID_RE.test(selection.product_id)
+        || selection.source_ids.length < 1 || selection.source_ids.length > 20
+        || selection.source_ids.some(
+          (value) => !GB_PRODUCT_OPTION_ID_RE.test(value)
+        )
+        || selection.variation_ids.length < 1
+        || selection.variation_ids.length > 20
+        || selection.variation_ids.some(
+          (value) => !GB_PRODUCT_OPTION_ID_RE.test(value)
+        )
+      ))
       || !GB_PRODUCT_OPTION_ID_RE.test(aspectId)
-      || !GB_PRODUCT_OPTION_ID_RE.test(lightingId)
-      || !Number.isInteger(variations) || variations < 1 || variations > 8
+      || !logo || !logo.filename
+      || !['image/png', 'image/jpeg', 'image/webp'].includes(logo.media_type)
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(logo.data_base64)
+      || logo.data_base64.length > 17_000_000
     ) {
       sendResponse({ ok: false, error: 'Invalid product mockup batch' });
       return true;
@@ -958,12 +982,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           body: JSON.stringify({
             request_id: requestId,
             name: name || 'Mockup batch',
-            product_ids: productIds,
-            scene_id: sceneId,
+            selections,
             aspect_id: aspectId,
-            lighting_id: lightingId,
-            variations,
-            brief,
+            logo,
           }),
         },
       ),

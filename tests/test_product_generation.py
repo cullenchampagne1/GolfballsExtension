@@ -1,6 +1,8 @@
 """Durable product-image lifecycle and Codex provider boundary tests."""
 
 import asyncio
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -49,10 +51,14 @@ class ImageBatch(Base):
     request_id = Column(String(80), nullable=False)
     name = Column(String(120), nullable=False)
     configuration_revision = Column(String(64), nullable=False)
-    scene_id = Column(String(40), nullable=False)
+    scene_id = Column(String(40), nullable=True)
     aspect_id = Column(String(40), nullable=False)
-    lighting_id = Column(String(40), nullable=False)
-    variation_count = Column(Integer, nullable=False)
+    lighting_id = Column(String(40), nullable=True)
+    variation_count = Column(Integer, nullable=True)
+    source_variant_count = Column(Integer, nullable=False, default=0)
+    imprint_variation_count = Column(Integer, nullable=False, default=0)
+    selection_manifest = Column(JSON, nullable=False, default=dict)
+    logo_filename = Column(String(180), nullable=True)
     product_count = Column(Integer, nullable=False)
     job_count = Column(Integer, nullable=False)
     status = Column(String(32), nullable=False, index=True)
@@ -72,6 +78,10 @@ class ImageJob(Base):
     batch_id = Column(String(40), nullable=True, index=True)
     batch_position = Column(Integer, nullable=True)
     variation_index = Column(Integer, nullable=True)
+    source_variant_id = Column(String(100), nullable=True)
+    source_variant_label = Column(String(160), nullable=True)
+    imprint_variation_id = Column(String(100), nullable=True)
+    imprint_variation_label = Column(String(160), nullable=True)
     request_id = Column(String(80), nullable=False)
     product_id = Column(String(100), nullable=False, index=True)
     product_name = Column(String(160), nullable=False)
@@ -119,33 +129,89 @@ class StaticConfig:
 
 def configured_studio():
     return {
-        "schema_version": 2,
-        "studio": PRODUCTS._DEFAULT_STUDIO,
-        "recipes": [{
-            "id": "embroidered-hat",
-            "name": "Embroidered hat",
-            "description": "A structured cap mockup.",
-            "enabled": True,
-            "mode": "generate",
-            "prompt_version": "hat-v1",
-            "accepts_source_image": False,
-            "prompt": (
-                "Create a photoreal product mockup of the registered structured "
-                "cap while preserving its construction and materials."
-            ),
-        }],
+        "schema_version": 3,
+        "constraints": {
+            "max_products": 5,
+            "max_images": 20,
+        },
         "products": [{
             "id": "embroidered-hat",
             "title": "Performance Rope Cap",
             "brand": "Ahead",
             "category": "Headwear",
             "description": "Structured performance cap.",
-            "thumbnail_url": "",
-            "recipe_id": "embroidered-hat",
+            "display_image_url": "https://assets.example/hat/display.png",
             "enabled": True,
             "sort": 10,
+            "prompt_version": "hat-v1",
+            "prompt": (
+                "Edit the registered structured cap photo while preserving its "
+                "construction, materials, color, camera, crop, and background."
+            ),
+            "sources": [{
+                "id": "navy",
+                "label": "Navy",
+                "description": "Navy cap",
+                "reference_image_url": "https://assets.example/hat/navy.png",
+                "thumbnail_url": "https://assets.example/hat/navy-thumb.png",
+                "prompt": "Preserve the exact navy color.",
+            }, {
+                "id": "white",
+                "label": "White",
+                "description": "White cap",
+                "reference_image_url": "https://assets.example/hat/white.png",
+                "thumbnail_url": "https://assets.example/hat/white-thumb.png",
+                "prompt": "Preserve the exact white color.",
+            }],
+            "variations": [{
+                "id": "front-center",
+                "label": "Front center",
+                "description": "Centered front embroidery",
+                "reference_image_url": (
+                    "https://assets.example/hat/front-center.png"
+                ),
+                "thumbnail_url": (
+                    "https://assets.example/hat/front-center-thumb.png"
+                ),
+                "prompt": (
+                    "Embroider the logo at the exact front-center placement "
+                    "demonstrated by the placement reference."
+                ),
+            }, {
+                "id": "left-side",
+                "label": "Left side",
+                "description": "Left panel embroidery",
+                "reference_image_url": (
+                    "https://assets.example/hat/left-side.png"
+                ),
+                "thumbnail_url": (
+                    "https://assets.example/hat/left-side-thumb.png"
+                ),
+                "prompt": (
+                    "Embroider the logo on the left panel at the exact placement "
+                    "demonstrated by the placement reference."
+                ),
+            }],
         }],
     }
+
+
+def logo_payload():
+    return {
+        "filename": "customer-logo.png",
+        "media_type": "image/png",
+        "data_base64": base64.b64encode(PNG_BYTES).decode("ascii"),
+    }
+
+
+class FakeReferenceFetcher:
+    def __init__(self):
+        self.urls = []
+
+    async def fetch(self, url, destination):
+        self.urls.append(url)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(PNG_BYTES)
 
 
 class FakeProvider:
@@ -159,6 +225,9 @@ class FakeProvider:
 
     async def generate(self, *, prompt, work_dir, progress):
         self.prompt = prompt
+        self.input_files = sorted(
+            path.name for path in (work_dir / "input").glob("*")
+        ) if (work_dir / "input").is_dir() else []
         await progress("generating", "Generating the test image")
         path = work_dir / "output" / "result.png"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -208,29 +277,24 @@ class ProductPromptRegistryTests(unittest.TestCase):
             registry.public_products()
         self.assertFalse(registry.status()["ready"])
 
-    def test_managed_recipe_metadata_never_discloses_prompt(self):
-        config = StaticConfig({
-            "schema_version": 1,
-            "products": [{
-                "id": "embroidered-hat",
-                "name": "Embroidered hat",
-                "description": "A structured cap mockup.",
-                "enabled": True,
-                "mode": "edit",
-                "prompt_version": "hat-v1",
-                "accepts_source_image": True,
-                "prompt": "Render the approved mark as realistic embroidered thread.",
-            }],
-        })
+    def test_configured_sources_and_variations_never_disclose_prompts(self):
+        config = StaticConfig(configured_studio())
         registry = PRODUCTS.ProductPromptRegistry(config)
         public = registry.public_products()[0]
         self.assertEqual(public["id"], "embroidered-hat")
-        self.assertTrue(public["accepts_source_image"])
         self.assertNotIn("prompt", public)
+        self.assertNotIn("reference_image_url", public["sources"][0])
+        self.assertNotIn("prompt", public["variations"][0])
+        self.assertEqual(public["sources"][0]["label"], "Navy")
+        self.assertEqual(public["variations"][0]["label"], "Front center")
+        self.assertEqual(
+            [item["id"] for item in registry.studio()["aspects"]],
+            ["square", "landscape", "portrait"],
+        )
         first_revision = registry.status()["revision"]
         config.value["products"][0]["prompt_version"] = "hat-v2"
         refreshed = registry.public_products()[0]
-        self.assertEqual(refreshed["recipe_version"], "hat-v2")
+        self.assertEqual(refreshed["prompt_version"], "hat-v2")
         self.assertNotEqual(registry.status()["revision"], first_revision)
 
 
@@ -382,13 +446,16 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["jobs"]["active"], 0)
 
     async def test_batch_expands_persists_archives_and_is_idempotent(self):
+        reference_fetcher = FakeReferenceFetcher()
+        provider = FakeProvider()
         manager = PRODUCTS.ProductImageJobManager(
             engine=self.engine,
             batch_model=ImageBatch,
             job_model=ImageJob,
             project_dir=ROOT,
             config_reader=StaticConfig(configured_studio()),
-            provider=FakeProvider(),
+            provider=provider,
+            reference_fetcher=reference_fetcher,
             storage_root=self.root / "batch-artifacts",
         )
         queued = await manager.start_batch(
@@ -396,11 +463,13 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             owner_credential_id="key-a",
             request_id="request:batch:0001",
             name="David spring hats",
-            product_ids=["embroidered-hat"],
-            scene_id="studio",
+            selections=[{
+                "product_id": "embroidered-hat",
+                "source_ids": ["navy", "white"],
+                "variation_ids": ["front-center", "left-side"],
+            }],
             aspect_id="square",
-            lighting_id="soft",
-            variations=2,
+            logo=logo_payload(),
         )
         for job in queued["jobs"]:
             await manager.wait(job["job_id"])
@@ -412,34 +481,75 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             owner_credential_id="key-a",
             request_id="request:batch:0001",
             name="This name must not create another batch",
-            product_ids=["embroidered-hat"],
-            scene_id="fairway",
+            selections=[{
+                "product_id": "embroidered-hat",
+                "source_ids": ["white"],
+                "variation_ids": ["front-center"],
+            }],
             aspect_id="portrait",
-            lighting_id="dramatic",
-            variations=1,
+            logo=logo_payload(),
         )
         self.assertEqual(completed["status"], "completed")
-        self.assertEqual(completed["progress"]["completed"], 2)
+        self.assertEqual(completed["progress"]["completed"], 4)
         self.assertEqual(completed["progress"]["percent"], 100)
         self.assertEqual(repeated["batch_id"], queued["batch_id"])
+        self.assertEqual(completed["selection"]["aspect_id"], "square")
+        self.assertEqual(completed["source_variant_count"], 2)
+        self.assertEqual(completed["imprint_variation_count"], 2)
         self.assertEqual(
-            [job["variation_index"] for job in completed["jobs"]], [0, 1]
+            [job["source"]["id"] for job in completed["jobs"]],
+            ["navy", "navy", "white", "white"],
         )
+        self.assertEqual(
+            [job["variation"]["id"] for job in completed["jobs"]],
+            ["front-center", "left-side", "front-center", "left-side"],
+        )
+        self.assertIn("Base product photo:", provider.prompt)
+        self.assertIn("Customer logo artwork:", provider.prompt)
+        self.assertIn("left panel", provider.prompt)
+        self.assertEqual(provider.input_files, [
+            "logo.png", "placement-reference.png", "product-reference.png",
+        ])
+        self.assertEqual(len(reference_fetcher.urls), 4)
         archive, media_type, filename = manager.archive_path(
             owner_id="api_key:key-a", batch_id=queued["batch_id"]
         )
         self.assertEqual(media_type, "application/zip")
         self.assertEqual(filename, "David-spring-hats.zip")
         with zipfile.ZipFile(archive) as bundle:
-            self.assertEqual(len(bundle.namelist()), 2)
+            self.assertEqual(len(bundle.namelist()), 4)
             self.assertTrue(all(name.endswith(".png") for name in bundle.namelist()))
         with self.assertRaises(PRODUCTS.ProductJobNotFound):
             manager.get_batch(
                 owner_id="api_key:key-b", batch_id=queued["batch_id"]
             )
 
+    async def test_corrupt_cached_reference_is_discarded_and_downloaded_again(self):
+        reference_fetcher = FakeReferenceFetcher()
+        manager = PRODUCTS.ProductImageJobManager(
+            engine=self.engine,
+            batch_model=ImageBatch,
+            job_model=ImageJob,
+            project_dir=ROOT,
+            config_reader=StaticConfig(configured_studio()),
+            provider=FakeProvider(),
+            reference_fetcher=reference_fetcher,
+            storage_root=self.root / "reference-recovery-artifacts",
+        )
+        url = "https://cdn.example.com/hat/navy.png"
+        cached = await manager._cached_reference(url, ".png")
+        cached.write_bytes(b"not-an-image")
+        recovered = await manager._cached_reference(url, ".png")
+        self.assertEqual(recovered.read_bytes(), PNG_BYTES)
+        self.assertEqual(reference_fetcher.urls, [url, url])
+        self.assertEqual(
+            recovered.name,
+            f"{hashlib.sha256(url.encode('utf-8')).hexdigest()}.png",
+        )
+
     async def test_active_batch_can_be_cancelled_then_deleted(self):
         provider = BlockingProvider()
+        reference_fetcher = FakeReferenceFetcher()
         manager = PRODUCTS.ProductImageJobManager(
             engine=self.engine,
             batch_model=ImageBatch,
@@ -447,6 +557,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             project_dir=ROOT,
             config_reader=StaticConfig(configured_studio()),
             provider=provider,
+            reference_fetcher=reference_fetcher,
             storage_root=self.root / "cancelled-batch-artifacts",
         )
         queued = await manager.start_batch(
@@ -454,11 +565,13 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             owner_credential_id="key-a",
             request_id="request:batch:0002",
             name="Cancelled batch",
-            product_ids=["embroidered-hat"],
-            scene_id="desk",
+            selections=[{
+                "product_id": "embroidered-hat",
+                "source_ids": ["navy", "white"],
+                "variation_ids": ["front-center"],
+            }],
             aspect_id="landscape",
-            lighting_id="golden",
-            variations=2,
+            logo=logo_payload(),
         )
         await asyncio.wait_for(provider.started.wait(), timeout=2)
         with self.assertRaises(PRODUCTS.ProductJobConflict):
@@ -561,6 +674,19 @@ class ProductGenerationRegistrationTests(unittest.TestCase):
         )
         self.assertIn(
             "POST /product-generation/admin/test", docs
+        )
+        batch_schema = docs[
+            "POST /client/product-generation/batches"
+        ]["request_body"]["content"]["application/json"]["schema"]
+        self.assertEqual(
+            set(batch_schema["required"]),
+            {"request_id", "selections", "aspect_id", "logo"},
+        )
+        self.assertNotIn("scene_id", batch_schema["properties"])
+        self.assertNotIn("lighting_id", batch_schema["properties"])
+        self.assertIn(
+            "variation_ids",
+            batch_schema["properties"]["selections"]["items"]["properties"],
         )
         self.assertIn(
             '@router.get("/client/product-generation/health")', routes

@@ -57,26 +57,26 @@
       "title": "Product Mockup Studio",
       "icon": "image",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["mockup", "image generation", "AI image", "batch", "render", "scene", "lighting", "aspect ratio", "variations"],
+      "keywords": ["mockup", "image generation", "AI image", "batch", "render", "logo", "product source", "imprint placement", "aspect ratio", "variations"],
       "summary": "Build product-image render batches from the Actions Shelf and keep track of them after the studio closes.",
       "feature": "mockup-studio",
       "flag": "mockupStudioEnabled",
       "covers": ["mockup-studio"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Open Mockup Studio from the Actions Shelf on any supported page. The studio loads its product list and render choices from RevStack, so there is no account or order page requirement." },
+          { "type": "p", "text": "Open Mockup Studio from the Actions Shelf on any supported page. The studio loads products, source photos, and imprint placements from RevStack, so there is no account or order page requirement." },
           { "type": "heading", "text": "Create a render batch" },
           { "type": "list", "items": [
-            "Choose up to 5 configured products.",
-            "Pick the scene, image shape, lighting, and 1–4 variations per product.",
-            "The image count updates before you submit and is capped at 20 images per batch.",
+            "Choose up to 5 configured products and upload the customer's PNG, JPEG, or WebP logo.",
+            "For each product, select one or more source photos (such as polo colors) and one or more imprint variations (such as left sleeve or center chest). Aspect ratio is the only fixed studio option.",
+            "Each source × imprint-variation combination becomes one final mockup. Source and placement counts stay separate in the selection bar, and the total is capped at 20 images per batch.",
             "Select Generate to create the server-owned batch. You can close the studio while it runs and reopen it later from Batches."
           ] },
-          { "type": "callout", "kind": "note", "text": "A new installation may show an empty catalog. That is a valid ready state: an administrator still needs to configure public product recipes and their reference images. The diagnostic cat test is intentionally admin-only and never appears as a product." }
+          { "type": "callout", "kind": "note", "text": "A new installation may show an empty catalog. That is a valid ready state: an administrator still needs to configure products, source photos, placement references, and private prompts in the image-generation YAML. Prompt text and full reference URLs remain server-side. The diagnostic cat test is intentionally admin-only and never appears as a product." }
         ],
         "intermediate": [
           { "type": "heading", "text": "Batch status and controls" },
-          { "type": "p", "text": "The Batches tray is your durable render history. Open a batch to see each product variation and its current stage. Queued and running batches can be cancelled; finished, failed, partial, and cancelled batches can be deleted." },
+          { "type": "p", "text": "The Batches tray is your durable render history. Open a batch to see the product source and imprint placement for each final mockup, plus its current stage. Queued and running batches can be cancelled; finished, failed, partial, and cancelled batches can be deleted." },
           { "type": "table", "headers": ["Status", "Meaning"], "rows": [
             ["Queued", "RevStack accepted the batch and its image jobs are waiting for a render slot."],
             ["Running", "At least one image job is being generated."],

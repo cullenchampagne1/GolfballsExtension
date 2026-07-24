@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 
-import { Btn, Dropdown, IconBtn, Input } from '../ui/index.js';
+import { Btn, IconBtn, Input } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
@@ -15,6 +15,7 @@ import {
   getProductGenerationBatch,
   isActiveProductGenerationBatch,
   listProductGenerationBatches,
+  prepareProductGenerationLogo,
 } from '../lib/productGenerationClient.js';
 
 const Camera = (props) => (
@@ -249,7 +250,9 @@ function BatchTray({
   );
 }
 
-function OptionGrid({ label, options, value, onChange, aspect = false }) {
+function AspectGrid({
+  label, options, value, onChange,
+}) {
   return (
     <div>
       <div style={{
@@ -260,7 +263,7 @@ function OptionGrid({ label, options, value, onChange, aspect = false }) {
       </div>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${Math.min(options.length || 1, aspect ? 3 : 2)}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${Math.min(options.length || 1, 3)}, minmax(0, 1fr))`,
         gap: 6,
       }}>
         {options.map((option) => {
@@ -272,9 +275,9 @@ function OptionGrid({ label, options, value, onChange, aspect = false }) {
               whileTap={{ scale: 0.97 }}
               onClick={() => onChange(option.id)}
               style={{
-                minHeight: aspect ? 52 : 58, padding: aspect ? 7 : 8,
+                minHeight: 52, padding: 7,
                 borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
-                textAlign: aspect ? 'center' : 'left', fontFamily: 'inherit',
+                textAlign: 'center', fontFamily: 'inherit',
                 background: selected
                   ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
                 border: `1px solid ${selected
@@ -283,14 +286,6 @@ function OptionGrid({ label, options, value, onChange, aspect = false }) {
                 boxShadow: selected ? '0 0 0 1px var(--gb-brand-tint-soft) inset' : 'none',
               }}
             >
-              {!aspect && (
-                <span style={{
-                  display: 'block', width: '100%', height: 15, marginBottom: 6,
-                  borderRadius: 4, background: option.swatch || 'var(--gb-fill-soft)',
-                  border: '1px solid var(--gb-border-subtle)',
-                }}
-                />
-              )}
               <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700 }}>
                 {option.label}
               </span>
@@ -304,6 +299,202 @@ function OptionGrid({ label, options, value, onChange, aspect = false }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ReferenceGrid({
+  label, helper, options, values, onToggle,
+}) {
+  const selected = new Set(values || []);
+  return (
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 7,
+      }}>
+        <span style={{
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.75,
+          textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+        }}>
+          {label}
+        </span>
+        <span style={{
+          marginLeft: 'auto', fontSize: 9, color: 'var(--gb-text-ghost)',
+        }}>
+          {selected.size} selected
+        </span>
+      </div>
+      {helper && (
+        <div style={{
+          margin: '-2px 0 8px', fontSize: 9.5, lineHeight: 1.4,
+          color: 'var(--gb-text-muted)',
+        }}>
+          {helper}
+        </div>
+      )}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7,
+      }}>
+        {(options || []).map((option) => {
+          const isSelected = selected.has(option.id);
+          return (
+            <motion.button
+              type="button"
+              key={option.id}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onToggle(option.id)}
+              style={{
+                minWidth: 0, padding: 5, cursor: 'pointer',
+                borderRadius: 'var(--gb-r-md)', textAlign: 'left',
+                fontFamily: 'inherit', overflow: 'hidden',
+                background: isSelected
+                  ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
+                border: `1px solid ${isSelected
+                  ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+                color: isSelected ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+              }}
+            >
+              <span style={{
+                position: 'relative', display: 'flex', width: '100%',
+                aspectRatio: '4 / 3', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', borderRadius: 'calc(var(--gb-r-md) - 3px)',
+                background: 'var(--gb-fill-soft)',
+                border: '1px solid var(--gb-border-subtle)',
+              }}>
+                {option.thumbnail_url ? (
+                  <img
+                    src={option.thumbnail_url}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : <Camera size={18} style={{ color: 'var(--gb-text-ghost)' }} />}
+                <span style={{
+                  position: 'absolute', top: 5, right: 5,
+                  width: 18, height: 18, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: isSelected
+                    ? 'var(--gb-brand-label)' : 'var(--gb-surface-float)',
+                  border: `1px solid ${isSelected
+                    ? 'var(--gb-brand-border)' : 'var(--gb-border-default)'}`,
+                  color: isSelected ? 'var(--gb-text-on-brand)' : 'var(--gb-text-ghost)',
+                  boxShadow: 'var(--gb-shadow-sm)',
+                }}>
+                  {isSelected ? <I.check size={10} /> : <I.plus size={10} />}
+                </span>
+              </span>
+              <span style={{
+                display: 'block', margin: '6px 3px 1px', fontSize: 10,
+                fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {option.label}
+              </span>
+              {option.description && (
+                <span style={{
+                  display: '-webkit-box', margin: '0 3px 3px', fontSize: 8.5,
+                  lineHeight: 1.3, color: 'var(--gb-text-muted)',
+                  WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {option.description}
+                </span>
+              )}
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LogoPicker({
+  logo, busy, inputRef, onChoose, onClear,
+}) {
+  const preview = logo
+    ? `data:${logo.mediaType};base64,${logo.dataBase64}`
+    : '';
+  return (
+    <div>
+      <div style={{
+        marginBottom: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.75,
+        textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+      }}>
+        Logo artwork
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(event) => onChoose(event.target.files?.[0] || null)}
+        style={{ display: 'none' }}
+      />
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.99 }}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          width: '100%', minHeight: 72, display: 'flex', alignItems: 'center',
+          gap: 10, padding: 8, cursor: 'pointer', textAlign: 'left',
+          fontFamily: 'inherit', color: 'inherit',
+          borderRadius: 'var(--gb-r-md)',
+          background: logo ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)',
+          border: `1px ${logo ? 'solid' : 'dashed'} ${logo
+            ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+        }}
+      >
+        <span style={{
+          width: 54, height: 54, flexShrink: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+          borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)',
+          border: '1px solid var(--gb-border-subtle)',
+        }}>
+          {busy ? (
+            <span style={{
+              width: 17, height: 17, borderRadius: '50%',
+              border: '2px solid var(--gb-border-default)',
+              borderTopColor: 'var(--gb-brand-label)',
+              animation: 'gb-ms-spin .75s linear infinite',
+            }}
+            />
+          ) : preview ? (
+            <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          ) : <I.plus size={18} style={{ color: 'var(--gb-text-ghost)' }} />}
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            display: 'block', fontSize: 10.5, fontWeight: 700,
+            color: logo ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {busy ? 'Preparing artwork…' : logo?.filename || 'Choose customer logo'}
+          </span>
+          <span style={{
+            display: 'block', marginTop: 3, fontSize: 9,
+            color: 'var(--gb-text-muted)', lineHeight: 1.35,
+          }}>
+            PNG, JPEG, or WebP · up to 12 MB
+          </span>
+        </span>
+        {logo && !busy && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(event) => { event.stopPropagation(); onClear(); }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                onClear();
+              }
+            }}
+            style={{
+              display: 'flex', padding: 5, color: 'var(--gb-text-muted)',
+              borderRadius: 'var(--gb-r-sm)',
+            }}
+          >
+            <I.close size={12} />
+          </span>
+        )}
+      </motion.button>
     </div>
   );
 }
@@ -414,7 +605,8 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
                   {job.product?.name || job.product?.id || 'Product mockup'}
                 </div>
                 <div style={{ marginTop: 2, fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
-                  Variation {(Number(job.variation_index) || 0) + 1} · {job.status_message}
+                  {[job.source?.label, job.variation?.label]
+                    .filter(Boolean).join(' · ') || job.status_message}
                 </div>
               </div>
             </div>
@@ -452,14 +644,16 @@ export function MockupStudio({ onClose }) {
   const [products, setProducts] = useState([]);
   const [batches, setBatches] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [selections, setSelections] = useState({});
+  const [focusedProductId, setFocusedProductId] = useState('');
   const [query, setQuery] = useState('');
-  const [sceneId, setSceneId] = useState('');
   const [aspectId, setAspectId] = useState('');
-  const [lightingId, setLightingId] = useState('');
-  const [variations, setVariations] = useState(1);
+  const [logo, setLogo] = useState(null);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState(null);
   const loadingRef = useRef(false);
+  const logoInputRef = useRef(null);
 
   useEffect(() => { ensureStyles(); }, []);
 
@@ -473,9 +667,7 @@ export function MockupStudio({ onClose }) {
       setStudio(payload.studio);
       setProducts(payload.products);
       setBatches(payload.batches);
-      setSceneId((value) => value || payload.studio.scenes[0]?.id || '');
       setAspectId((value) => value || payload.studio.aspects[0]?.id || '');
-      setLightingId((value) => value || payload.studio.lighting[0]?.id || '');
       setState('ready');
     } catch (loadError) {
       setError(loadError?.message || 'Product Mockup Studio is unavailable');
@@ -520,7 +712,6 @@ export function MockupStudio({ onClose }) {
 
   const currentBatch = batches.find((batch) => batch.batch_id === currentBatchId) || null;
   const maxProducts = studio?.constraints?.max_products || 5;
-  const maxVariations = studio?.constraints?.max_variations || 4;
   const maxImages = studio?.constraints?.max_images || 20;
   const selected = products.filter((product) => selectedIds.includes(product.id));
   const filteredProducts = useMemo(() => {
@@ -530,31 +721,100 @@ export function MockupStudio({ onClose }) {
       product.title, product.brand, product.category, product.description,
     ].some((value) => String(value || '').toLowerCase().includes(needle)));
   }, [products, query]);
-  const previewScene = studio?.scenes?.find((option) => option.id === sceneId);
   const previewAspect = studio?.aspects?.find((option) => option.id === aspectId);
-  const imageCount = selectedIds.length * variations;
+  const focusedProduct = products.find((product) => product.id === focusedProductId)
+    || selected.at(-1)
+    || null;
+  const focusedSelection = focusedProduct
+    ? selections[focusedProduct.id] || { sourceIds: [], variationIds: [] }
+    : { sourceIds: [], variationIds: [] };
+  const previewSource = focusedProduct?.sources?.find(
+    (option) => focusedSelection.sourceIds.includes(option.id),
+  );
+  const imageCount = selectedIds.reduce((total, productId) => {
+    const selection = selections[productId];
+    return total + (
+      (selection?.sourceIds?.length || 0) * (selection?.variationIds?.length || 0)
+    );
+  }, 0);
 
   const toggleProduct = (productId) => {
-    setSelectedIds((ids) => ids.includes(productId)
-      ? ids.filter((id) => id !== productId)
-      : ids.length < maxProducts ? [...ids, productId] : ids);
+    const product = products.find((row) => row.id === productId);
+    if (!product) return;
+    if (selectedIds.includes(productId)) {
+      const remaining = selectedIds.filter((id) => id !== productId);
+      setSelectedIds(remaining);
+      setSelections((rows) => {
+        const next = { ...rows };
+        delete next[productId];
+        return next;
+      });
+      setFocusedProductId((value) => (value === productId
+        ? remaining.at(-1) || ''
+        : value));
+      return;
+    }
+    if (selectedIds.length >= maxProducts) return;
+    setSelectedIds([...selectedIds, productId]);
+    setSelections((rows) => ({
+      ...rows,
+      [productId]: {
+        sourceIds: product.sources?.[0]?.id ? [product.sources[0].id] : [],
+        variationIds: product.variations?.[0]?.id ? [product.variations[0].id] : [],
+      },
+    }));
+    setFocusedProductId(productId);
+  };
+
+  const toggleOption = (productId, key, optionId) => {
+    setSelections((rows) => {
+      const current = rows[productId] || { sourceIds: [], variationIds: [] };
+      const values = current[key] || [];
+      const nextValues = values.includes(optionId)
+        ? values.length > 1 ? values.filter((id) => id !== optionId) : values
+        : [...values, optionId];
+      return {
+        ...rows,
+        [productId]: { ...current, [key]: nextValues },
+      };
+    });
+  };
+
+  const chooseLogo = async (file) => {
+    if (!file) return;
+    setLogoBusy(true);
+    try {
+      setLogo(await prepareProductGenerationLogo(file));
+    } catch (logoError) {
+      toast.error(logoError?.message || 'Unable to read that logo');
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
+  const clearLogo = () => {
+    setLogo(null);
+    if (logoInputRef.current) logoInputRef.current.value = '';
   };
 
   const createBatch = async () => {
-    if (!studio || !selectedIds.length) return;
+    if (!studio || !selectedIds.length || !logo) return;
     const name = selected.length === 1
       ? `${selected[0].title} mockups`
       : `Mockup batch · ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
     try {
       const batch = await createProductGenerationBatch({
         studio,
+        products,
         requestId: createProductGenerationRequestId(),
         name,
-        productIds: selectedIds,
-        sceneId,
+        selections: selectedIds.map((productId) => ({
+          productId,
+          ...selections[productId],
+        })),
         aspectId,
-        lightingId,
-        variations,
+        logo,
       });
       setBatches((rows) => [
         batch, ...rows.filter((row) => row.batch_id !== batch.batch_id),
@@ -645,7 +905,7 @@ export function MockupStudio({ onClose }) {
               Product Mockup Studio
             </div>
             <div style={{ marginTop: 2, fontSize: 11, color: 'var(--gb-text-muted)' }}>
-              Photoreal lifestyle renders · {currentBatch
+              Config-driven product mockups · {currentBatch
                 ? currentBatch.status_message
                 : `${products.length} products available`}
             </div>
@@ -674,6 +934,9 @@ export function MockupStudio({ onClose }) {
                 onNew={() => {
                   setCurrentBatchId(null);
                   setSelectedIds([]);
+                  setSelections({});
+                  setFocusedProductId('');
+                  clearLogo();
                   setTrayOpen(false);
                 }}
                 onClose={() => setTrayOpen(false)}
@@ -821,8 +1084,8 @@ export function MockupStudio({ onClose }) {
                           lineHeight: 1.6, color: 'var(--gb-text-muted)',
                         }}>
                           No mockup products are configured yet. Add the first
-                          product reference and generation recipe to make it
-                          selectable here—no extension rebuild required.
+                          product, its source photos, and imprint variations to
+                          the image-generation YAML—no extension rebuild required.
                         </div>
                         <div style={{
                           marginTop: 14, display: 'flex', gap: 7,
@@ -851,7 +1114,11 @@ export function MockupStudio({ onClose }) {
                           type="button"
                           key={product.id}
                           whileTap={disabled ? undefined : { scale: 0.992 }}
-                          onClick={() => { if (!disabled) toggleProduct(product.id); }}
+                          onClick={() => {
+                            if (disabled) return;
+                            if (selectedProduct) setFocusedProductId(product.id);
+                            else toggleProduct(product.id);
+                          }}
                           disabled={disabled}
                           style={{
                             width: '100%', minHeight: 68, marginBottom: 6,
@@ -893,7 +1160,23 @@ export function MockupStudio({ onClose }) {
                               {[product.brand, product.category].filter(Boolean).join(' · ') || 'Mockup product'}
                             </div>
                           </div>
-                          <span style={{
+                          <span
+                            role="button"
+                            tabIndex={selectedProduct ? 0 : -1}
+                            onClick={(event) => {
+                              if (!selectedProduct) return;
+                              event.stopPropagation();
+                              toggleProduct(product.id);
+                            }}
+                            onKeyDown={(event) => {
+                              if (!selectedProduct) return;
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                toggleProduct(product.id);
+                              }
+                            }}
+                            style={{
                             width: 20, height: 20, borderRadius: '50%',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             background: selectedProduct
@@ -902,8 +1185,10 @@ export function MockupStudio({ onClose }) {
                               ? 'var(--gb-brand-border)' : 'var(--gb-border-default)'}`,
                             color: selectedProduct
                               ? 'var(--gb-text-on-brand)' : 'var(--gb-text-ghost)',
-                          }}>
-                            {selectedProduct ? <I.check size={11} /> : <I.plus size={11} />}
+                            cursor: selectedProduct ? 'pointer' : 'inherit',
+                          }}
+                          >
+                            {selectedProduct ? <I.close size={9} /> : <I.plus size={11} />}
                           </span>
                         </motion.button>
                       );
@@ -912,19 +1197,29 @@ export function MockupStudio({ onClose }) {
                 </div>
 
                 <div style={{
-                  width: 330, flexShrink: 0, minHeight: 0,
+                  width: 370, flexShrink: 0, minHeight: 0,
                   display: 'flex', flexDirection: 'column',
                   background: 'var(--gb-surface-canvas)',
                 }}>
                   <div style={{
                     padding: 16, borderBottom: '1px solid var(--gb-border-subtle)',
                   }}>
-                    <div style={{
-                      marginBottom: 8, fontSize: 9.5, fontWeight: 700,
-                      letterSpacing: 0.8, textTransform: 'uppercase',
-                      color: 'var(--gb-text-muted)',
-                    }}>
-                      Scene preview
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div style={{
+                        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
+                        textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+                      }}>
+                        Product reference
+                      </div>
+                      {focusedProduct && (
+                        <span style={{
+                          minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', fontSize: 9.5,
+                          color: 'var(--gb-brand-label)',
+                        }}>
+                          {focusedProduct.title}
+                        </span>
+                      )}
                     </div>
                     <div style={{
                       position: 'relative', width: '100%',
@@ -933,15 +1228,15 @@ export function MockupStudio({ onClose }) {
                       maxHeight: 180, overflow: 'hidden', margin: '0 auto',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       borderRadius: 'var(--gb-r-md)',
-                      background: previewScene?.swatch || 'var(--gb-fill-soft)',
+                      background: 'var(--gb-fill-soft)',
                       border: '1px solid var(--gb-border-default)',
                     }}>
-                      {selected.at(-1)?.thumbnail_url ? (
+                      {previewSource?.thumbnail_url || focusedProduct?.thumbnail_url ? (
                         <img
-                          src={selected.at(-1).thumbnail_url}
+                          src={previewSource?.thumbnail_url || focusedProduct?.thumbnail_url}
                           alt=""
                           style={{
-                            width: '62%', height: '62%', objectFit: 'contain',
+                            width: '100%', height: '100%', objectFit: 'contain',
                             filter: 'drop-shadow(0 15px 16px rgba(0,0,0,.28))',
                           }}
                         />
@@ -952,7 +1247,7 @@ export function MockupStudio({ onClose }) {
                         }}>
                           <Camera size={22} />
                           <span style={{ fontSize: 10, fontWeight: 700 }}>
-                            Product preview
+                            Select a product
                           </span>
                         </div>
                       )}
@@ -962,86 +1257,53 @@ export function MockupStudio({ onClose }) {
                     flex: 1, minHeight: 0, overflowY: 'auto',
                     padding: 16, display: 'flex', flexDirection: 'column', gap: 16,
                   }}>
-                    <OptionGrid
-                      label="Scene"
-                      options={studio?.scenes || []}
-                      value={sceneId}
-                      onChange={setSceneId}
+                    <LogoPicker
+                      logo={logo}
+                      busy={logoBusy}
+                      inputRef={logoInputRef}
+                      onChoose={chooseLogo}
+                      onClear={clearLogo}
                     />
-                    <OptionGrid
-                      label="Aspect"
-                      aspect
+                    <AspectGrid
+                      label="Aspect ratio"
                       options={studio?.aspects || []}
                       value={aspectId}
                       onChange={setAspectId}
                     />
-                    <div>
+                    {focusedProduct ? (
+                      <>
+                        <ReferenceGrid
+                          label="Product sources"
+                          helper="Choose the product colors or reference photos to mock up."
+                          options={focusedProduct.sources || []}
+                          values={focusedSelection.sourceIds}
+                          onToggle={(optionId) => toggleOption(
+                            focusedProduct.id, 'sourceIds', optionId,
+                          )}
+                        />
+                        <ReferenceGrid
+                          label="Imprint variations"
+                          helper="Choose where the uploaded logo should be applied."
+                          options={focusedProduct.variations || []}
+                          values={focusedSelection.variationIds}
+                          onToggle={(optionId) => toggleOption(
+                            focusedProduct.id, 'variationIds', optionId,
+                          )}
+                        />
+                      </>
+                    ) : (
                       <div style={{
-                        marginBottom: 7, fontSize: 9.5, fontWeight: 700,
-                        letterSpacing: 0.75, textTransform: 'uppercase',
-                        color: 'var(--gb-text-muted)',
+                        padding: '24px 16px', textAlign: 'center',
+                        borderRadius: 'var(--gb-r-md)',
+                        background: 'var(--gb-fill-subtle)',
+                        border: '1px dashed var(--gb-border-default)',
+                        color: 'var(--gb-text-muted)', fontSize: 10.5,
+                        lineHeight: 1.55,
                       }}>
-                        Lighting
+                        Select a product to choose its YAML-configured source
+                        photos and imprint variations.
                       </div>
-                      <Dropdown
-                        size="md"
-                        value={lightingId}
-                        onChange={setLightingId}
-                        options={(studio?.lighting || []).map((option) => ({
-                          id: option.id,
-                          label: option.label,
-                          trailing: (
-                            <span style={{ fontSize: 9, color: 'var(--gb-text-muted)' }}>
-                              {option.description}
-                            </span>
-                          ),
-                        }))}
-                      />
-                    </div>
-                    <div>
-                      <div style={{
-                        marginBottom: 7, display: 'flex', alignItems: 'center',
-                        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.75,
-                        textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-                      }}>
-                        Variations per product
-                        <span style={{
-                          marginLeft: 'auto', color: 'var(--gb-brand-label)',
-                          fontFamily: 'var(--gb-font-mono)',
-                        }}>
-                          {variations}
-                        </span>
-                      </div>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(${maxVariations}, 1fr)`,
-                        gap: 5, padding: 4, borderRadius: 'var(--gb-r-md)',
-                        background: 'var(--gb-fill-inverse-medium)',
-                        border: '1px solid var(--gb-border-default)',
-                      }}>
-                        {Array.from({ length: maxVariations }, (_, index) => index + 1).map((value) => (
-                          <motion.button
-                            type="button"
-                            key={value}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => setVariations(value)}
-                            style={{
-                              height: 27, borderRadius: 'var(--gb-r-sm)',
-                              cursor: 'pointer', fontFamily: 'var(--gb-font-mono)',
-                              fontSize: 10.5, fontWeight: 700,
-                              background: value === variations
-                                ? 'var(--gb-brand-label)' : 'transparent',
-                              color: value === variations
-                                ? 'var(--gb-text-on-brand)' : 'var(--gb-text-muted)',
-                              border: value === variations
-                                ? '1px solid var(--gb-brand-border)' : '1px solid transparent',
-                            }}
-                          >
-                            {value}
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1059,34 +1321,57 @@ export function MockupStudio({ onClose }) {
                     <span style={{ fontSize: 11.5, color: 'var(--gb-text-muted)' }}>
                       Pick up to {maxProducts} products to render mockups for
                     </span>
-                  ) : selected.map((product) => (
-                    <span key={product.id} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      maxWidth: 150, padding: '4px 7px',
-                      borderRadius: 'var(--gb-r-pill)',
-                      background: 'var(--gb-brand-tint-soft)',
-                      border: '1px solid var(--gb-brand-tint-border)',
-                      color: 'var(--gb-brand-label)', fontSize: 10.5, fontWeight: 600,
-                    }}>
-                      <span style={{
-                        overflow: 'hidden', whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
-                      }}>
-                        {product.title}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleProduct(product.id)}
-                        style={{
-                          display: 'flex', padding: 0, border: 0,
-                          background: 'transparent', color: 'inherit',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <I.close size={9} />
-                      </button>
-                    </span>
-                  ))}
+                  ) : selected.map((product) => {
+                    const selection = selections[product.id] || {};
+                    return (
+                      <React.Fragment key={product.id}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          maxWidth: 150, padding: '4px 7px',
+                          borderRadius: 'var(--gb-r-pill)',
+                          background: 'var(--gb-brand-tint-soft)',
+                          border: '1px solid var(--gb-brand-tint-border)',
+                          color: 'var(--gb-brand-label)', fontSize: 10.5, fontWeight: 600,
+                        }}>
+                          <span style={{
+                            overflow: 'hidden', whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                          }}>
+                            {product.title}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleProduct(product.id)}
+                            style={{
+                              display: 'flex', padding: 0, border: 0,
+                              background: 'transparent', color: 'inherit',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <I.close size={9} />
+                          </button>
+                        </span>
+                        <span style={{
+                          padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                          background: 'var(--gb-info-tint-medium)',
+                          border: '1px solid var(--gb-info-tint-border)',
+                          color: 'var(--gb-info-fg)', fontSize: 9.5, fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {selection.sourceIds?.length || 0} source{selection.sourceIds?.length === 1 ? '' : 's'}
+                        </span>
+                        <span style={{
+                          padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                          background: 'var(--gb-warning-tint-medium)',
+                          border: '1px solid var(--gb-warning-tint-border)',
+                          color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {selection.variationIds?.length || 0} placement{selection.variationIds?.length === 1 ? '' : 's'}
+                        </span>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
                 {selected.length > 0 && (
                   <span style={{ fontSize: 11, color: 'var(--gb-text-tertiary)' }}>
@@ -1103,7 +1388,10 @@ export function MockupStudio({ onClose }) {
                   size="md"
                   variant="primary"
                   icon={<Wand />}
-                  disabled={selected.length === 0 || imageCount > maxImages}
+                  disabled={
+                    selected.length === 0 || !logo || logoBusy
+                    || imageCount < 1 || imageCount > maxImages
+                  }
                   onClick={createBatch}
                 >
                   Generate mockups

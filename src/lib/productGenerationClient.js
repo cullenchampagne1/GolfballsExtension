@@ -2,6 +2,8 @@ const ACTIVE_BATCH_STATUSES = new Set(['queued', 'running']);
 const TERMINAL_BATCH_STATUSES = new Set([
   'completed', 'partial', 'failed', 'cancelled',
 ]);
+const MAX_LOGO_BYTES = 12 * 1024 * 1024;
+const LOGO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -46,14 +48,15 @@ export function normalizeStudioBootstrap(payload) {
       product_count: Math.max(0, Number(studio.product_count) || 0),
       constraints: {
         max_products: Math.max(1, Number(constraints.max_products) || 5),
-        max_variations: Math.max(1, Number(constraints.max_variations) || 4),
         max_images: Math.max(1, Number(constraints.max_images) || 20),
       },
-      scenes: asArray(studio.scenes),
       aspects: asArray(studio.aspects),
-      lighting: asArray(studio.lighting),
     },
-    products: asArray(source.products),
+    products: asArray(source.products).map((product) => ({
+      ...product,
+      sources: asArray(product?.sources),
+      variations: asArray(product?.variations),
+    })),
     batches: asArray(source.batches),
   };
 }
@@ -68,51 +71,106 @@ export function createProductGenerationRequestId(now = Date.now(), random = Math
 
 export function buildProductGenerationBatchRequest({
   studio,
+  products,
   requestId,
   name,
-  productIds,
-  sceneId,
+  selections,
   aspectId,
-  lightingId,
-  variations,
-  brief = '',
+  logo,
 }) {
   const constraints = studio?.constraints || {};
-  const ids = [...new Set(asArray(productIds).map(cleanId).filter(Boolean))];
-  const count = Number(variations);
   const maxProducts = Number(constraints.max_products) || 5;
-  const maxVariations = Number(constraints.max_variations) || 4;
   const maxImages = Number(constraints.max_images) || 20;
-  const optionIds = (key) => new Set(asArray(studio?.[key]).map((item) => cleanId(item?.id)));
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/.test(String(requestId || ''))) {
     throw new Error('A valid request id is required');
   }
-  if (!ids.length || ids.length > maxProducts) {
+  const productMap = new Map(
+    asArray(products).map((product) => [cleanId(product?.id), product]),
+  );
+  const normalizedSelections = asArray(selections).map((selection) => {
+    const productId = cleanId(selection?.productId);
+    const product = productMap.get(productId);
+    const sourceIds = [...new Set(
+      asArray(selection?.sourceIds).map(cleanId).filter(Boolean),
+    )];
+    const variationIds = [...new Set(
+      asArray(selection?.variationIds).map(cleanId).filter(Boolean),
+    )];
+    const availableSources = new Set(
+      asArray(product?.sources).map((item) => cleanId(item?.id)),
+    );
+    const availableVariations = new Set(
+      asArray(product?.variations).map((item) => cleanId(item?.id)),
+    );
+    if (!product
+        || !sourceIds.length || sourceIds.some((id) => !availableSources.has(id))
+        || !variationIds.length
+        || variationIds.some((id) => !availableVariations.has(id))) {
+      throw new Error('Choose valid product references and imprint variations');
+    }
+    return {
+      productId,
+      sourceIds,
+      variationIds,
+    };
+  });
+  if (!normalizedSelections.length || normalizedSelections.length > maxProducts) {
     throw new Error(`Select between 1 and ${maxProducts} products`);
   }
-  if (!Number.isInteger(count) || count < 1 || count > maxVariations) {
-    throw new Error(`Choose between 1 and ${maxVariations} variations`);
+  if (new Set(normalizedSelections.map((row) => row.productId)).size
+      !== normalizedSelections.length) {
+    throw new Error('Each product can be selected only once');
   }
-  if (ids.length * count > maxImages) {
+  const imageCount = normalizedSelections.reduce(
+    (total, row) => total + (row.sourceIds.length * row.variationIds.length),
+    0,
+  );
+  if (imageCount > maxImages) {
     throw new Error(`A batch can contain at most ${maxImages} images`);
   }
-  const selectedScene = cleanId(sceneId);
   const selectedAspect = cleanId(aspectId);
-  const selectedLighting = cleanId(lightingId);
-  if (!optionIds('scenes').has(selectedScene)
-      || !optionIds('aspects').has(selectedAspect)
-      || !optionIds('lighting').has(selectedLighting)) {
-    throw new Error('Choose valid scene, aspect, and lighting options');
+  const aspects = new Set(
+    asArray(studio?.aspects).map((item) => cleanId(item?.id)),
+  );
+  if (!aspects.has(selectedAspect)) {
+    throw new Error('Choose a valid aspect ratio');
+  }
+  const normalizedLogo = logo && typeof logo === 'object' ? {
+    filename: String(logo.filename || '').trim().slice(0, 180),
+    mediaType: String(logo.mediaType || '').trim().toLowerCase(),
+    dataBase64: String(logo.dataBase64 || ''),
+  } : {};
+  if (!normalizedLogo.filename
+      || !LOGO_TYPES.has(normalizedLogo.mediaType)
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalizedLogo.dataBase64)
+      || normalizedLogo.dataBase64.length > (MAX_LOGO_BYTES * 4 / 3) + 8) {
+    throw new Error('Add a valid PNG, JPEG, or WebP logo');
   }
   return {
     requestId: String(requestId),
     name: String(name || 'Mockup batch').trim().slice(0, 120) || 'Mockup batch',
-    productIds: ids,
-    sceneId: selectedScene,
+    selections: normalizedSelections,
     aspectId: selectedAspect,
-    lightingId: selectedLighting,
-    variations: count,
-    brief: String(brief || '').trim().slice(0, 2_000),
+    logo: normalizedLogo,
+  };
+}
+
+export async function prepareProductGenerationLogo(file) {
+  const mediaType = String(file?.type || '').toLowerCase();
+  const size = Number(file?.size || 0);
+  if (!file || !LOGO_TYPES.has(mediaType) || size < 1 || size > MAX_LOGO_BYTES) {
+    throw new Error('Choose a PNG, JPEG, or WebP logo up to 12 MB');
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return {
+    filename: String(file.name || 'logo').trim().slice(0, 180) || 'logo',
+    mediaType,
+    dataBase64: btoa(binary),
+    sizeBytes: bytes.length,
   };
 }
 
