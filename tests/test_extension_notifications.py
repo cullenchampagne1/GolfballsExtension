@@ -101,10 +101,14 @@ class ExtensionNotificationTests(unittest.TestCase):
             title="Mockups are ready",
             body="Your Venture Towel images are ready.",
             action={
-                "type": "open_mockup_batch",
-                "batch_id": "batch_" + ("1" * 32),
                 "label": "View batch",
+                "payload": (
+                    '{"command":"open_mockup_batch","batch_id":"batch_'
+                    + ("1" * 32)
+                    + '"}'
+                ),
             },
+            presentation={"type": "action"},
             dedup_key="batch:one:completed",
         )
         self.assertTrue(created)
@@ -121,12 +125,16 @@ class ExtensionNotificationTests(unittest.TestCase):
         self.assertEqual(payload["count"], 1)
         self.assertEqual(payload["notifications"][0]["id"], first["id"])
         self.assertEqual(
-            payload["notifications"][0]["action"]["arguments"]["batch_id"],
-            "batch_" + ("1" * 32),
+            payload["notifications"][0]["action"]["payload"],
+            (
+                '{"command":"open_mockup_batch","batch_id":"batch_'
+                + ("1" * 32)
+                + '"}'
+            ),
         )
         self.assertEqual(
-            payload["notifications"][0]["presentation"]["delivery"],
-            "native",
+            payload["notifications"][0]["presentation"]["type"],
+            "action",
         )
 
     def test_deduplication_and_receipts_are_idempotent(self):
@@ -169,14 +177,18 @@ class ExtensionNotificationTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(
             NOTIFICATIONS.ExtensionNotificationError,
-            "Unsupported notification action",
+            "Unsupported notification action field",
         ):
             self.service.enqueue(
                 owner_credential_id="a" * 36,
                 topic="general",
                 title="Unsafe",
                 body="No arbitrary navigation.",
-                action={"type": "open_url", "url": "https://example.test"},
+                action={
+                    "label": "Open",
+                    "payload": '{"command":"open_url"}',
+                    "url": "https://example.test",
+                },
             )
 
     def test_fanout_targets_only_the_requested_active_installations(self):

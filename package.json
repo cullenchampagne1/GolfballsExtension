@@ -94,10 +94,6 @@
       "file": "tests/unit/notificationsStore.test.mjs"
     },
     {
-      "name": "ui \u00b7 Chrome-native notification delivery and actions",
-      "file": "tests/unit/notificationsNative.test.mjs"
-    },
-    {
       "name": "modal \u00b7 shared Three.js runtime accessor",
       "file": "tests/unit/threeRuntime.test.mjs"
     },

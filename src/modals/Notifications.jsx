@@ -1,5 +1,5 @@
 import React, {
-  useCallback, useEffect, useMemo, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -365,10 +365,15 @@ function NotificationRow({
 
 export function Notifications({ onClosed, bindClose }) {
   const toast = useToast();
+  const closeRef = useRef(onClosed);
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState('unread');
   const [search, setSearch] = useState('');
+  const handleBindClose = useCallback((close) => {
+    closeRef.current = close;
+    bindClose?.(close);
+  }, [bindClose]);
 
   useEffect(() => {
     let active = true;
@@ -399,18 +404,29 @@ export function Notifications({ onClosed, bindClose }) {
   }, []);
 
   const runAction = useCallback((item) => {
-    const handled = window.__gbRunNotificationAction?.(item, { receipt: false });
-    if (handled) {
-      update(item, 'acted');
-      return;
-    }
     if (!item.action) {
       update(item, 'read');
       return;
     }
-    toast?.warning?.('That action is not available on this page', {
-      duration: 3200,
-    });
+    if (window.__gbCanRunNotificationAction?.(item) !== true) {
+      toast?.warning?.('That action is not available on this page', {
+        duration: 3200,
+      });
+      return;
+    }
+    // Let the notification center finish its exit before opening the target
+    // modal. Opening first toggled same-page floating surfaces into each other
+    // and made the batch gallery appear behind the center.
+    closeRef.current?.();
+    setTimeout(() => {
+      const handled = window.__gbRunNotificationAction?.(item);
+      if (!handled) {
+        window.__gbToast?.warning?.(
+          'That action is not available on this page',
+          { duration: 3200, placement: 'top-right' },
+        );
+      }
+    }, 240);
   }, [toast, update]);
 
   const counts = useMemo(() => ({
@@ -439,7 +455,13 @@ export function Notifications({ onClosed, bindClose }) {
     : 'Everything is up to date';
 
   return (
-    <FloatingPanel width={580} backdrop draggable={false} onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel
+      width={580}
+      backdrop
+      draggable={false}
+      onClose={onClosed}
+      bindClose={handleBindClose}
+    >
       <ModalHeader accent icon={<I.alert size={14} />} title="Notifications" subtitle={subtitle} />
       <div style={{
         display: 'flex',

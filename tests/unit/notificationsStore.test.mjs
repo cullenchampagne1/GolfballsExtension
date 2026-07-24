@@ -39,7 +39,12 @@ function harness(initial = {}) {
     actionSource, { filename: 'notification-actions.js' },
   ).runInContext(context);
   new vm.Script(source, { filename: 'notifications-store.js' }).runInContext(context);
-  return { store: context.GBNotifications, stored, badges };
+  return {
+    actions: context.GBNotificationActions,
+    store: context.GBNotifications,
+    stored,
+    badges,
+  };
 }
 
 function remote(overrides = {}) {
@@ -52,32 +57,43 @@ function remote(overrides = {}) {
     body: 'Venture Towel finished with 4 of 4 images ready.',
     created_at: '2026-07-24T12:00:00Z',
     action: {
-      type: 'open_mockup_batch',
-      batch_id: BATCH_ID,
       label: 'Open gallery',
+      payload: JSON.stringify({
+        command: 'open_mockup_batch',
+        batch_id: BATCH_ID,
+      }),
     },
+    presentation: { type: 'action' },
     ...overrides,
   };
 }
 
 describe('notification outbox cache', () => {
-  it('normalizes a server row and keeps only a registered action shape', () => {
+  it('normalizes a payload action and fixes its system location top-right', () => {
     const { store } = harness();
     const normalized = store.normalizeRemote(remote());
 
     assert.equal(normalized.remoteId, 12);
     assert.equal(normalized.status, 'unread');
-    assert.equal(normalized.action.type, 'open_mockup_batch');
-    assert.equal(normalized.action.version, 1);
-    assert.equal(normalized.action.arguments.batch_id, BATCH_ID);
+    assert.deepEqual(Object.keys(normalized.action).sort(), ['label', 'payload']);
+    assert.equal(
+      JSON.parse(normalized.action.payload).command,
+      'open_mockup_batch',
+    );
+    assert.equal(JSON.parse(normalized.action.payload).batch_id, BATCH_ID);
     assert.equal(normalized.action.label, 'Open gallery');
-    assert.equal(normalized.presentation.delivery, 'native');
+    assert.equal(normalized.presentation.type, 'action');
+    assert.equal(normalized.presentation.location, 'top-right');
 
     const rejected = store.normalizeRemote(remote({
       id: 13,
-      action: { type: 'open_url', url: 'https://evil.example' },
+      action: {
+        label: 'Open',
+        payload: '{"command":"open_url","url":"https://evil.example"}',
+      },
     }));
     assert.equal(rejected.action, null);
+    assert.equal(rejected.presentation.type, 'tag');
   });
 
   it('deduplicates retries by remote id and paints only the unread count', async () => {
@@ -114,10 +130,12 @@ describe('notification outbox cache', () => {
     const { store, stored } = harness();
     await store.mergeRemote([remote({
       action: {
-        type: 'open_contact',
-        contact_email: 'person@example.com',
-        message_id: 'message-12',
         label: 'Open contact',
+        payload: JSON.stringify({
+          command: 'open_contact',
+          contact_email: 'person@example.com',
+          message_id: 'message-12',
+        }),
       },
     })]);
     await store.setActionUrl(12, 'https://evil.example/contact/12');
@@ -128,30 +146,33 @@ describe('notification outbox cache', () => {
     assert.equal(stored.gbNotifications[0].localActionUrl, allowed);
   });
 
-  it('keeps registered action arguments and client display location', () => {
-    const { store } = harness();
+  it('interprets a backend-opaque payload through extension handlers', () => {
+    const { actions, store } = harness();
     const normalized = store.normalizeRemote(remote({
       action: {
-        type: 'open_contact',
-        version: 1,
         label: 'Read reply',
-        arguments: {
+        payload: JSON.stringify({
+          command: 'open_contact',
           contact_email: 'Person@Example.com',
           message_id: 'message-12',
-        },
+        }),
       },
-      presentation: {
-        delivery: 'both',
-        require_interaction: true,
-      },
+      presentation: { type: 'action' },
     }));
 
+    const handled = [];
+    actions.registerHandler('open_contact', 'content', (payload) => {
+      handled.push(payload);
+      return true;
+    });
+    assert.equal(actions.canExecute(normalized.action, 'content'), true);
+    assert.equal(actions.execute(normalized.action, 'content'), true);
     assert.equal(
-      normalized.action.arguments.contact_email,
+      handled[0].contact_email,
       'person@example.com',
     );
-    assert.equal(normalized.action.arguments.message_id, 'message-12');
-    assert.equal(normalized.presentation.delivery, 'both');
-    assert.equal(normalized.presentation.requireInteraction, true);
+    assert.equal(handled[0].message_id, 'message-12');
+    assert.equal(normalized.presentation.type, 'action');
+    assert.equal(normalized.presentation.location, 'top-right');
   });
 });

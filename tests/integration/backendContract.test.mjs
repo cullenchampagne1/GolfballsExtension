@@ -24,9 +24,8 @@ const background = await read('background.js');
 const remotePolicy = await read('lib/remote-settings-policy.js');
 const runtimeBootstrap = await read('lib/runtime-bootstrap.js');
 const notificationActions = await read('lib/notification-actions.js');
-const nativeNotifications = await read('lib/notifications-native.js');
 const notificationPoll = await read('lib/notifications-poll.js');
-const manifest = JSON.parse(await read('manifest.json'));
+const notificationCenter = await read('src/modals/Notifications.jsx');
 const helpAssistant = await read('help/help-assistant.js');
 const sources = {
   'installation-auth.js': installationAuth,
@@ -149,15 +148,29 @@ describe('backend contract · project client endpoints', () => {
 });
 
 describe('backend contract · notification producer correlation', () => {
-  it('loads registered actions before native delivery and requests Chrome notification access', () => {
-    assert.ok(manifest.permissions.includes('notifications'));
+  it('loads the extension payload interpreter before top-right delivery', () => {
     const actionsAt = background.indexOf("'lib/notification-actions.js'");
-    const nativeAt = background.indexOf("'lib/notifications-native.js'");
     const pollAt = background.indexOf("'lib/notifications-poll.js'");
-    assert.ok(actionsAt >= 0 && nativeAt > actionsAt && pollAt > nativeAt);
+    assert.ok(actionsAt >= 0 && pollAt > actionsAt);
+    assert.ok(!background.includes("'lib/notifications-native.js'"));
+    assert.ok(notificationActions.includes('registerCommand'));
     assert.ok(notificationActions.includes('registerHandler'));
-    assert.ok(nativeNotifications.includes('chrome.notifications.create'));
-    assert.ok(notificationPoll.includes('GBNativeNotifications?.show'));
+    assert.ok(notificationActions.includes('canExecute'));
+    assert.ok(notificationPoll.includes('added.slice(0, MAX_TOASTS)'));
+    assert.ok(!notificationPoll.includes('GBNativeNotifications'));
+  });
+
+  it('closes the notification center before launching a payload action', () => {
+    const closeAt = notificationCenter.indexOf('closeRef.current?.();');
+    const launchAt = notificationCenter.indexOf(
+      'window.__gbRunNotificationAction?.(item)',
+    );
+    assert.ok(closeAt >= 0, 'notification center must request its animated close');
+    assert.ok(
+      launchAt > closeAt,
+      'payload action must launch only after the center starts closing',
+    );
+    assert.ok(notificationCenter.includes('}, 240);'));
   });
 
   it('keeps installation correlation and outbox insertion in the message service', {
@@ -168,11 +181,12 @@ describe('backend contract · notification producer correlation', () => {
     assert.ok(relayServicePy.includes('_thread_installation_id'),
       'inbound messages must inherit the installation from their thread');
     assert.ok(relayServicePy.includes('ExtensionNotificationService'),
-      'inbound messages must use the shared registered-action outbox API');
-    assert.ok(relayServicePy.includes('"delivery": "native"'),
-      'inbound replies must fire a Chrome-native notification');
-    assert.ok(relayServicePy.includes('"type": "open_contact"'),
-      'inbound replies must register a local CRM contact action');
+      'inbound messages must use the shared installation outbox API');
+    assert.ok(relayServicePy.includes('"command": "open_contact"'),
+      'inbound replies must send the extension-owned open-contact payload');
+    assert.ok(relayServicePy.includes(
+      '"action" if record["contact_email"] else "tag"',
+    ), 'inbound replies must choose a visible tag or action type');
   });
 });
 

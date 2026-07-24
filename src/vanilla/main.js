@@ -55,8 +55,8 @@ function __gbAccessAllowed(st, now) {
   __gbNotificationActions?.registerHandler?.(
     'open_mockup_batch',
     'content',
-    (action) => {
-      const batchId = String(action.arguments?.batch_id || '');
+    (payload) => {
+      const batchId = String(payload.batch_id || '');
       if (
         !/^batch_[a-f0-9]{32}$/.test(batchId)
         || typeof window.__gbOpenMockupStudio !== 'function'
@@ -68,7 +68,7 @@ function __gbAccessAllowed(st, now) {
   __gbNotificationActions?.registerHandler?.(
     'open_contact',
     'content',
-    (_action, context) => {
+    (_payload, context) => {
       const url = String(context.notification?.localActionUrl || '');
       if (!/^https:\/\/api\.golfballs\.com\/golfballs\/adminnew\//i.test(url)) {
         window.__gbToast?.info?.(
@@ -84,9 +84,9 @@ function __gbAccessAllowed(st, now) {
   __gbNotificationActions?.registerHandler?.(
     'open_support_ticket',
     'content',
-    (action) => {
+    (payload) => {
       if (!/^GBT-[A-Z0-9]{6,16}$/.test(
-        String(action.arguments?.ticket_id || ''),
+        String(payload.ticket_id || ''),
       )) return false;
       chrome.runtime.sendMessage({
         action: 'openEditor',
@@ -126,26 +126,12 @@ function __gbAccessAllowed(st, now) {
     return false;
   }
   window.__gbRunNotificationAction = __gbOpenNotification;
-
-  // Native clicks survive service-worker suspension by leaving one bounded
-  // launch intent for the next supported page. main.js is the last content
-  // script, so every modal/action handler is available before this executes.
-  try {
-    chrome.storage.local.get('gbNotificationLaunchIntent', (bag) => {
-      const intent = bag?.gbNotificationLaunchIntent;
-      if (!intent || Number(intent.expiresAt || 0) < Date.now()) {
-        if (intent) chrome.storage.local.remove('gbNotificationLaunchIntent');
-        return;
-      }
-      const handled = intent.openCenter === true
-        ? (
-          typeof window.__gbShowNotificationsModal === 'function'
-          && (window.__gbShowNotificationsModal(), true)
-        )
-        : __gbOpenNotification(intent.notification);
-      if (handled) chrome.storage.local.remove('gbNotificationLaunchIntent');
-    });
-  } catch { /* storage unavailable during teardown */ }
+  window.__gbCanRunNotificationAction = (notification) => (
+    __gbNotificationActions?.canExecute?.(
+      notification?.action,
+      'content',
+    ) === true
+  );
 
   let __gbAutoPushUpdate = null;
   function __gbHandleIframeMessage(payload) {
@@ -163,21 +149,36 @@ function __gbAccessAllowed(st, now) {
       handled = true;
       const notification = payload?.notification || {};
       const toast = window.__gbToast;
-      if (toast && typeof toast.action === 'function') {
-        const tones = {
-          success: 'success',
-          warning: 'warning',
-          error: 'error',
-          info: 'brand',
+      const notificationType = notification.presentation?.type === 'action'
+        && notification.action
+        ? 'action'
+        : 'tag';
+      if (
+        notificationType === 'action'
+        && toast
+        && typeof toast.action === 'function'
+      ) {
+        const actionTones = {
+          success: 'success', warning: 'warning', error: 'error', info: 'brand',
         };
         toast.action({
-          tone: tones[notification.level] || 'brand',
+          tone: actionTones[notification.level] || 'brand',
           title: notification.title || 'New notification',
           message: notification.body || '',
+          placement: 'top-right',
           align: 'right',
-          secondary: 'Later',
+          secondary: 'Dismiss',
           primary: notification.action?.label || 'Open',
           onPrimary: () => __gbOpenNotification(notification),
+        });
+      } else if (toast && typeof toast.tag === 'function') {
+        const tagTones = {
+          success: 'success', warning: 'warning', error: 'error', info: 'info',
+        };
+        toast.tag(notification.body || notification.title || 'New notification', {
+          tone: tagTones[notification.level] || 'info',
+          placement: 'top-right',
+          duration: 5_000,
         });
       } else {
         gbNotify(notification.title || notification.body, notification.level, 6000);

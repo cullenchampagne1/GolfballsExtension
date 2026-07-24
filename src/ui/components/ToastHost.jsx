@@ -15,6 +15,7 @@ import { SelectToast } from './SelectToast.jsx';
    `useToast()` to fire toasts:
 
      const toast = useToast();
+     toast.tag('Saved', { tone: 'success' });
      toast.pill('Saved', { tone: 'success' });
      toast.action({ title: 'Proof ready', primary: 'Send', onPrimary: ... });
      toast.step({ steps: [...], currentStep: 0 });
@@ -154,6 +155,7 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
      props bag and return the toast id so callers can dismiss imperatively. */
   const api = useMemo(() => ({
     // Variant constructors — full control
+    tag:    (message, opts = {}) => push('pill',   { message, ...opts }),
     pill:   (message, opts = {}) => push('pill',   { message, ...opts }),
     action: (opts = {})          => push('action', opts),
     step:   (opts = {})          => push('step',   opts),
