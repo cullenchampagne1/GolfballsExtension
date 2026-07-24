@@ -164,7 +164,7 @@ function useResultAsset(job, enabled = true) {
 }
 
 function ResultArtwork({
-  job, compact = false, enabled = true, showDownload = false,
+  job, compact = false, enabled = true,
 }) {
   const { asset, loading, error } = useResultAsset(job, enabled);
   const ready = job?.status === 'completed' && job?.result?.available;
@@ -213,31 +213,6 @@ function ResultArtwork({
           size={compact ? 12 : 22}
           style={{ color: 'var(--gb-text-ghost)' }}
         />
-      )}
-      {showDownload && asset?.dataUrl && (
-        <motion.button
-          type="button"
-          initial={{ opacity: 0, y: 3 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileTap={{ scale: 0.94 }}
-          title="Download image"
-          onClick={() => saveResultAsset(
-            asset, job?.result?.filename || `${job?.job_id || 'mockup'}.png`,
-          )}
-          style={{
-            position: 'absolute', right: 8, bottom: 8,
-            width: 30, height: 30, padding: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
-            color: 'var(--gb-text-primary)',
-            background: 'color-mix(in srgb, var(--gb-surface-float) 88%, transparent)',
-            border: '1px solid var(--gb-border-default)',
-            boxShadow: 'var(--gb-shadow-md)',
-            backdropFilter: 'blur(10px)',
-          }}
-        >
-          <I.download size={13} />
-        </motion.button>
       )}
     </div>
   );
@@ -292,10 +267,11 @@ function BatchCollage({ batch }) {
 }
 
 function BatchTray({
-  batches, onOpen, onCancel, onDelete, onNew, onClose,
+  batches, onOpen, onCancel, onDelete, onClose, panelRef,
 }) {
   return (
     <motion.div
+      ref={panelRef}
       initial={{ opacity: 0, y: -7, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.98 }}
@@ -320,7 +296,15 @@ function BatchTray({
           Render batches
         </span>
         <span style={{ flex: 1 }} />
-        <Btn size="xs" variant="ghost" icon={<I.plus />} onClick={onNew}>New</Btn>
+        <Btn
+          size="xs"
+          variant="ghost"
+          icon={<Stack />}
+          disabled
+          title="Full batch history is coming soon"
+        >
+          View all
+        </Btn>
         <IconBtn size="xs" icon={<I.close />} onClick={onClose} />
       </div>
       <div className="gb-ms-scroll" style={{ overflowY: 'auto', padding: 7 }}>
@@ -772,7 +756,8 @@ function FacetedSelectionTags({
     return (
       <span style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        flexShrink: 0, padding: '5px 7px',
+        flex: '1 1 170px', minWidth: 40, maxWidth: 250,
+        padding: '5px 7px', overflow: 'hidden',
         borderRadius: 'var(--gb-r-md)',
         background: 'var(--gb-warning-tint-medium)',
         border: '1px solid var(--gb-warning-tint-border)',
@@ -806,7 +791,8 @@ function FacetedSelectionTags({
         title={[product.title, ...details].join(' · ')}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 7,
-          flexShrink: 0, maxWidth: 280, padding: '4px 6px 4px 8px',
+          flex: '1 1 170px', minWidth: 40, maxWidth: 260,
+          padding: '4px 6px 4px 8px', overflow: 'hidden',
           borderRadius: 'var(--gb-r-md)',
           background: 'var(--gb-brand-tint-soft)',
           border: '1px solid var(--gb-brand-tint-border)',
@@ -849,24 +835,162 @@ function FacetedSelectionTags({
   });
 }
 
+function BatchStat({ label, value, tone }) {
+  return (
+    <div style={{
+      flex: '1 1 64px', minWidth: 62, padding: '7px 9px',
+      borderRadius: 'var(--gb-r-md)',
+      background: 'var(--gb-fill-subtle)',
+      border: '1px solid var(--gb-border-subtle)',
+    }}>
+      <div style={{
+        fontSize: 14, lineHeight: 1, fontWeight: 800,
+        fontFamily: 'var(--gb-font-mono)', color: tone,
+      }}>
+        {value}
+      </div>
+      <div style={{
+        marginTop: 4, fontSize: 8.5, fontWeight: 700,
+        letterSpacing: 0.55, textTransform: 'uppercase',
+        color: 'var(--gb-text-muted)',
+      }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function FullResultViewer({ job, onBack }) {
+  const { asset, loading, error } = useResultAsset(job, true);
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.985 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.99 }}
+      transition={{ duration: 0.18 }}
+      style={{
+        position: 'absolute', inset: 0, zIndex: 12,
+        display: 'flex', flexDirection: 'column',
+        background: 'var(--gb-surface-float)',
+      }}
+    >
+      <div style={{
+        minHeight: 54, padding: '9px 12px',
+        display: 'flex', alignItems: 'center', gap: 10,
+        background: 'var(--gb-fill-inverse-strong)',
+        borderBottom: '1px solid var(--gb-border-subtle)',
+      }}>
+        <Btn
+          size="sm"
+          variant="secondary"
+          icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+          onClick={onBack}
+        >
+          All images
+        </Btn>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 11.5, fontWeight: 750, color: 'var(--gb-text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {job.product?.name || 'Product mockup'}
+          </div>
+          <div style={{
+            marginTop: 2, fontSize: 9.5, color: 'var(--gb-text-muted)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {[job.source?.label, job.variation?.label].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <Btn
+          size="sm"
+          variant="primary"
+          icon={<I.download />}
+          disabled={!asset?.dataUrl}
+          onClick={() => saveResultAsset(
+            asset, job.result?.filename || `${job.job_id}.png`,
+          )}
+        >
+          Download
+        </Btn>
+      </div>
+      <div style={{
+        flex: 1, minHeight: 0, padding: 18,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--gb-surface-canvas)',
+      }}>
+        <div style={{
+          width: 'min(520px, 100%)', maxHeight: '100%', aspectRatio: '1 / 1',
+          overflow: 'hidden', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          borderRadius: 'var(--gb-r-lg)',
+          background: 'var(--gb-fill-soft)',
+          border: '1px solid var(--gb-border-default)',
+          boxShadow: 'var(--gb-shadow-lg)',
+        }}>
+          {asset?.dataUrl ? (
+            <motion.img
+              initial={{ opacity: 0, scale: 0.99 }}
+              animate={{ opacity: 1, scale: 1 }}
+              src={asset.dataUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          ) : loading ? (
+            <span style={{
+              width: 28, height: 28, borderRadius: '50%',
+              border: '2.5px solid var(--gb-brand-tint-border)',
+              borderTopColor: 'var(--gb-brand-label)',
+              animation: 'gb-ms-spin .7s linear infinite',
+            }}
+            />
+          ) : (
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 8,
+              color: error ? 'var(--gb-error-fg)' : 'var(--gb-text-muted)',
+              fontSize: 10.5,
+            }}>
+              {error ? <I.alert size={22} /> : <Camera size={22} />}
+              {error || 'Image preview unavailable'}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function BatchView({ batch, onBack, onCancel, onDelete }) {
+  const [previewJobId, setPreviewJobId] = useState('');
   if (!batch) return null;
   const progress = batch.progress || {};
   const active = isActiveProductGenerationBatch(batch);
+  const jobs = batch.jobs || [];
+  const previewJob = jobs.find(
+    (job) => job.job_id === previewJobId,
+  ) || null;
+  const total = progress.total || batch.job_count || 0;
+  const issueCount = (progress.failed || 0) + (progress.cancelled || 0);
   return (
     <motion.div
       key={batch.batch_id}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
-      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+      style={{
+        flex: 1, minHeight: 0, position: 'relative',
+        display: 'flex', flexDirection: 'column',
+      }}
     >
       <div style={{
-        padding: '16px 20px 14px', borderBottom: '1px solid var(--gb-border-subtle)',
+        padding: '13px 16px 12px',
+        borderBottom: '1px solid var(--gb-border-subtle)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
           <div style={{
-            width: 38, height: 38, borderRadius: 'var(--gb-r-md)',
+            width: 38, height: 38, flexShrink: 0,
+            borderRadius: 'var(--gb-r-md)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: statusTone(batch.status)[0],
             border: `1px solid ${statusTone(batch.status)[2]}`,
@@ -880,32 +1004,25 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
                 animation: 'gb-ms-spin .7s linear infinite',
               }}
               />
-            ) : batch.status === 'completed' ? <I.check size={18} /> : <I.alert size={18} />}
+            ) : batch.status === 'completed'
+              ? <I.check size={18} /> : <I.alert size={18} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)',
+              fontSize: 14, fontWeight: 750, color: 'var(--gb-text-primary)',
             }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
                 {batch.name}
               </span>
               <StatusPill status={batch.status} />
             </div>
-            <div style={{ marginTop: 3, fontSize: 11, color: 'var(--gb-text-muted)' }}>
-              {batch.status_message}
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
             <div style={{
-              fontSize: 18, fontWeight: 800, color: 'var(--gb-text-primary)',
-              fontFamily: 'var(--gb-font-mono)',
+              marginTop: 3, fontSize: 10.5, color: 'var(--gb-text-muted)',
             }}>
-              {progress.completed || 0}
-              <span style={{ color: 'var(--gb-text-ghost)' }}>/{progress.total || batch.job_count || 0}</span>
-            </div>
-            <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
-              images ready
+              {batch.status_message} · {formatWhen(batch.created_at)}
             </div>
           </div>
           <IconBtn
@@ -916,75 +1033,164 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             onClick={onBack}
           />
         </div>
-        <div style={{ marginTop: 12 }}>
-          <ProgressBar value={progress.percent || 0} status={batch.status} />
+        <div style={{
+          marginTop: 11, display: 'flex', alignItems: 'stretch',
+          flexWrap: 'wrap', gap: 7,
+        }}>
+          <BatchStat label="Ready" value={progress.completed || 0} tone="var(--gb-success-fg)" />
+          <BatchStat label="Generating" value={progress.running || 0} tone="var(--gb-brand-label)" />
+          <BatchStat label="Waiting" value={progress.queued || 0} tone="var(--gb-warning-fg)" />
+          <BatchStat label="Issues" value={issueCount} tone={issueCount ? 'var(--gb-error-fg)' : 'var(--gb-text-ghost)'} />
+          <div style={{
+            flex: '2 1 160px', minWidth: 120, padding: '7px 10px',
+            display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            borderRadius: 'var(--gb-r-md)',
+            background: 'var(--gb-fill-subtle)',
+            border: '1px solid var(--gb-border-subtle)',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              marginBottom: 6, fontSize: 9, color: 'var(--gb-text-muted)',
+            }}>
+              <span>Overall progress</span>
+              <span style={{
+                marginLeft: 'auto', fontFamily: 'var(--gb-font-mono)',
+                fontWeight: 750, color: 'var(--gb-text-primary)',
+              }}>
+                {progress.processed || 0}/{total}
+              </span>
+            </div>
+            <ProgressBar value={progress.percent || 0} status={batch.status} />
+          </div>
         </div>
       </div>
       <div className="gb-ms-scroll" style={{
-        flex: 1, minHeight: 0, overflowY: 'auto', padding: 20,
+        flex: 1, minHeight: 0, overflowY: 'auto', padding: 16,
+        background: 'var(--gb-surface-canvas)',
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-          gap: 12,
+          gridTemplateColumns: jobs.length === 1
+            ? 'minmax(0, 400px)'
+            : jobs.length === 2
+              ? 'repeat(2, minmax(0, 330px))'
+              : 'repeat(auto-fill, minmax(220px, 1fr))',
+          justifyContent: 'center',
+          gap: 13,
         }}>
-          {(batch.jobs || []).map((job) => (
-            <div key={job.job_id} style={{
-              minHeight: 155, position: 'relative', overflow: 'hidden',
-              borderRadius: 'var(--gb-r-lg)',
-              background: 'var(--gb-surface-1)',
-              border: '1px solid var(--gb-border-default)',
-            }}>
-              <div style={{
-                height: 112, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', position: 'relative',
-                background: job.status === 'running'
-                  ? 'linear-gradient(110deg,var(--gb-fill-subtle) 20%,var(--gb-fill-soft) 45%,var(--gb-fill-subtle) 70%)'
-                  : 'var(--gb-fill-inverse-medium)',
-                backgroundSize: '220% 100%',
-                animation: job.status === 'running'
-                  ? 'gb-ms-shimmer 1.5s linear infinite' : 'none',
-              }}>
-                <ResultArtwork job={job} showDownload />
-                <span style={{ position: 'absolute', top: 8, right: 8 }}>
-                  <StatusPill status={job.status} />
-                </span>
-              </div>
-              <div style={{ padding: '9px 10px' }}>
+          {jobs.map((job) => {
+            const canPreview = job.status === 'completed' && job.result?.available;
+            return (
+              <motion.button
+                type="button"
+                key={job.job_id}
+                whileHover={canPreview ? { y: -2 } : undefined}
+                whileTap={canPreview ? { scale: 0.992 } : undefined}
+                disabled={!canPreview}
+                onClick={() => canPreview && setPreviewJobId(job.job_id)}
+                style={{
+                  minWidth: 0, padding: 0, overflow: 'hidden',
+                  textAlign: 'left', fontFamily: 'inherit',
+                  cursor: canPreview ? 'zoom-in' : 'default',
+                  color: 'inherit',
+                  borderRadius: 'var(--gb-r-lg)',
+                  background: 'var(--gb-surface-1)',
+                  border: '1px solid var(--gb-border-default)',
+                  boxShadow: canPreview ? 'var(--gb-shadow-sm)' : 'none',
+                }}
+              >
                 <div style={{
-                  fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  width: '100%', aspectRatio: '1 / 1',
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', position: 'relative',
+                  background: job.status === 'running'
+                    ? 'linear-gradient(110deg,var(--gb-fill-subtle) 20%,var(--gb-fill-soft) 45%,var(--gb-fill-subtle) 70%)'
+                    : 'var(--gb-fill-inverse-medium)',
+                  backgroundSize: '220% 100%',
+                  animation: job.status === 'running'
+                    ? 'gb-ms-shimmer 1.5s linear infinite' : 'none',
                 }}>
-                  {job.product?.name || job.product?.id || 'Product mockup'}
+                  <ResultArtwork job={job} />
+                  <span style={{ position: 'absolute', top: 8, right: 8 }}>
+                    <StatusPill status={job.status} />
+                  </span>
+                  {canPreview && (
+                    <span style={{
+                      position: 'absolute', left: 8, bottom: 8,
+                      padding: '4px 7px', borderRadius: 'var(--gb-r-md)',
+                      background: 'color-mix(in srgb, var(--gb-surface-float) 88%, transparent)',
+                      border: '1px solid var(--gb-border-default)',
+                      boxShadow: 'var(--gb-shadow-sm)',
+                      color: 'var(--gb-text-primary)',
+                      fontSize: 8.5, fontWeight: 750,
+                      backdropFilter: 'blur(8px)',
+                    }}>
+                      View full image
+                    </span>
+                  )}
                 </div>
-                <div style={{ marginTop: 2, fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
-                  {[job.source?.label, job.variation?.label]
-                    .filter(Boolean).join(' · ') || job.status_message}
+                <div style={{ padding: '9px 10px 10px' }}>
+                  <div style={{
+                    fontSize: 10.5, fontWeight: 750,
+                    color: 'var(--gb-text-primary)',
+                    whiteSpace: 'nowrap', overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {job.product?.name || job.product?.id || 'Product mockup'}
+                  </div>
+                  <div style={{
+                    marginTop: 3, fontSize: 9, color: 'var(--gb-text-muted)',
+                    whiteSpace: 'nowrap', overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {[job.source?.label, job.variation?.label]
+                      .filter(Boolean).join(' · ') || job.status_message}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              </motion.button>
+            );
+          })}
         </div>
       </div>
       <div style={{
-        padding: 12, display: 'flex', alignItems: 'center', gap: 8,
+        minHeight: 48, padding: '8px 12px',
+        display: 'flex', alignItems: 'center', gap: 8,
         background: 'var(--gb-fill-inverse-strong)',
         borderTop: '1px solid var(--gb-border-subtle)',
       }}>
-        <Btn variant="secondary" size="md" icon={<I.close />} onClick={onBack}>
-          Close details
-        </Btn>
-        <span style={{ flex: 1 }} />
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 9.5, color: 'var(--gb-text-muted)',
+        }}>
+          {total} square image{total === 1 ? '' : 's'} · select a ready image to inspect it
+        </span>
         {active ? (
-          <Btn variant="danger" size="md" icon={<I.close />} onClick={() => onCancel(batch.batch_id)}>
+          <Btn
+            variant="danger"
+            size="sm"
+            icon={<I.close />}
+            onClick={() => onCancel(batch.batch_id)}
+          >
             Cancel batch
           </Btn>
         ) : (
-          <Btn variant="ghost" size="md" icon={<I.trash />} onClick={() => onDelete(batch.batch_id)}>
+          <Btn
+            variant="ghost"
+            size="sm"
+            icon={<I.trash />}
+            onClick={() => onDelete(batch.batch_id)}
+          >
             Delete
           </Btn>
         )}
       </div>
+      <AnimatePresence>
+        {previewJob && (
+          <FullResultViewer
+            job={previewJob}
+            onBack={() => setPreviewJobId('')}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1054,6 +1260,8 @@ export function MockupStudio({ onClose, bindClose }) {
   const [currentBatchId, setCurrentBatchId] = useState(null);
   const loadingRef = useRef(false);
   const logoInputRef = useRef(null);
+  const trayRef = useRef(null);
+  const trayButtonRef = useRef(null);
   const closeRequestedRef = useRef(false);
 
   const requestClose = useCallback(() => {
@@ -1069,6 +1277,21 @@ export function MockupStudio({ onClose, bindClose }) {
   }, [bindClose, requestClose]);
 
   useEffect(() => { ensureStyles(); }, []);
+
+  useEffect(() => {
+    if (!trayOpen) return undefined;
+    const closeOnOutsidePointer = (event) => {
+      if (
+        trayRef.current?.contains(event.target)
+        || trayButtonRef.current?.contains(event.target)
+      ) return;
+      setTrayOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+    };
+  }, [trayOpen]);
 
   const load = useCallback(async () => {
     if (loadingRef.current) return;
@@ -1261,6 +1484,11 @@ export function MockupStudio({ onClose, bindClose }) {
       setBatches((rows) => [
         batch, ...rows.filter((row) => row.batch_id !== batch.batch_id),
       ]);
+      setSelectedIds([]);
+      setSelections({});
+      setFocusedProductId('');
+      setQuery('');
+      clearLogo();
       setCurrentBatchId(batch.batch_id);
       setTrayOpen(false);
     } catch (createError) {
@@ -1353,16 +1581,18 @@ export function MockupStudio({ onClose, bindClose }) {
               Config-driven product mockups · {products.length} products available
             </div>
           </div>
-          <Btn
-            size="md"
-            variant={trayOpen ? 'tinted' : 'secondary'}
-            icon={<Stack />}
-            badge={batches.length || null}
-            badgePulse={hasActive}
-            onClick={() => setTrayOpen((value) => !value)}
-          >
-            Batches
-          </Btn>
+          <span ref={trayButtonRef} style={{ display: 'inline-flex' }}>
+            <Btn
+              size="md"
+              variant={trayOpen ? 'tinted' : 'secondary'}
+              icon={<Stack />}
+              badge={batches.length || null}
+              badgePulse={hasActive}
+              onClick={() => setTrayOpen((value) => !value)}
+            >
+              Batches
+            </Btn>
+          </span>
           <IconBtn size="md" icon={<I.close />} onClick={requestClose} />
           <AnimatePresence>
             {trayOpen && (
@@ -1374,15 +1604,8 @@ export function MockupStudio({ onClose, bindClose }) {
                 }}
                 onCancel={cancelBatch}
                 onDelete={deleteBatch}
-                onNew={() => {
-                  setCurrentBatchId(null);
-                  setSelectedIds([]);
-                  setSelections({});
-                  setFocusedProductId('');
-                  clearLogo();
-                  setTrayOpen(false);
-                }}
                 onClose={() => setTrayOpen(false)}
+                panelRef={trayRef}
               />
             )}
           </AnimatePresence>
@@ -1840,10 +2063,10 @@ export function MockupStudio({ onClose, bindClose }) {
                 paddingBottom: logo ? 10 : 0,
                 overflow: 'hidden',
               }}>
-                <div className="gb-ms-scroll" style={{
+                <div style={{
                   flex: 1, minWidth: 0, display: 'flex',
                   alignItems: 'center', gap: 6,
-                  overflowX: 'auto', overflowY: 'hidden', paddingBottom: 1,
+                  overflow: 'hidden',
                 }}>
                   {selected.length === 0 ? (
                     <span style={{ fontSize: 11.5, color: 'var(--gb-text-muted)' }}>
@@ -1868,7 +2091,8 @@ export function MockupStudio({ onClose, bindClose }) {
                       <React.Fragment key={product.id}>
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: 5,
-                          maxWidth: 150, padding: '4px 7px',
+                          flex: '1 1 110px', minWidth: 32, maxWidth: 150,
+                          padding: '4px 7px', overflow: 'hidden',
                           borderRadius: 'var(--gb-r-pill)',
                           background: 'var(--gb-brand-tint-soft)',
                           border: '1px solid var(--gb-brand-tint-border)',
@@ -1884,7 +2108,7 @@ export function MockupStudio({ onClose, bindClose }) {
                             type="button"
                             onClick={() => toggleProduct(product.id)}
                             style={{
-                              display: 'flex', padding: 0, border: 0,
+                              display: 'flex', flexShrink: 0, padding: 0, border: 0,
                               background: 'transparent', color: 'inherit',
                               cursor: 'pointer',
                             }}
@@ -1893,6 +2117,8 @@ export function MockupStudio({ onClose, bindClose }) {
                           </button>
                         </span>
                         <span style={{
+                          flex: '0 1 auto', minWidth: 28, overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                           padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
                           background: 'var(--gb-info-tint-medium)',
                           border: '1px solid var(--gb-info-tint-border)',
@@ -1902,6 +2128,8 @@ export function MockupStudio({ onClose, bindClose }) {
                           {selection.sourceIds?.length || 0} source{selection.sourceIds?.length === 1 ? '' : 's'}
                         </span>
                         <span style={{
+                          flex: '0 1 auto', minWidth: 28, overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                           padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
                           background: 'var(--gb-warning-tint-medium)',
                           border: '1px solid var(--gb-warning-tint-border)',

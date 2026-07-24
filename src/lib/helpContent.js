@@ -3030,7 +3030,8 @@ export const HELP_CONTENT = {
               "Choose up to 5 configured products. For Venture Golf Microfiber Magnetic Towel, choose the Studio or Golf course scene and then select every towel color you want; each scene/color pair resolves to its exact outlined reference image.",
               "Other products can expose their own YAML-defined option groups or traditional source-photo and imprint-placement choices. Every result is generated as a square image.",
               "Each selected scene/color or source × imprint-variation combination becomes one final mockup. Detailed tags show every queued combination, and the total is capped at 20 images per batch.",
-              "Select Generate to create the server-owned batch. You can close the studio while it runs and reopen it later from Batches. Completed batches show a result collage, and every image has its own download action."
+              "Select Generate to create the server-owned batch. The accepted artwork and selection tags clear immediately so the studio is ready for another batch. You can close the studio while the batch runs and reopen it later from Batches.",
+              "Batch details emphasize the square result images and show compact Ready, Generating, Waiting, and Issues counts. Select a completed image to inspect it at full size before downloading it."
             ]
           },
           {
