@@ -1099,16 +1099,13 @@ function FullResultViewer({ job, onBack }) {
 }
 
 /**
- * One gallery tile — a square, and nothing but a square.
+ * One gallery tile: a square image with a SOLID information bar beneath it.
  *
- * Caption and actions are glass overlays ON the artwork rather than a column
- * stacked beneath it: stacking them made a 186px-wide card ~260px tall, so a
- * row of results read as a column of tall slabs. Overlaying keeps the tile
- * itself 1:1, which is also the aspect every generated mockup is rendered at.
- *
- * Opening and downloading stay separate labelled actions, so reading a caption
- * cannot dump you into the full view and saving a file does not require
- * opening one first.
+ * The caption and actions were briefly overlaid on the artwork to keep the
+ * tile itself 1:1, but icons floating on a photograph have no reliable
+ * contrast — a light mockup swallowed them. The bar is its own opaque surface
+ * again, so the controls always sit on a known background; only the IMAGE is
+ * square, which is what actually needed to be.
  */
 function ResultCard({ job, onOpen }) {
   const ready = job.status === 'completed' && job.result?.available;
@@ -1118,39 +1115,41 @@ function ResultCard({ job, onOpen }) {
     .filter(Boolean).join(' · ') || job.status_message;
   return (
     <div style={{
-      width: GALLERY_TILE, aspectRatio: '1 / 1', position: 'relative',
-      overflow: 'hidden',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      width: GALLERY_TILE, overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
       borderRadius: 'var(--gb-r-lg)',
-      background: 'var(--gb-fill-inverse-medium)',
+      background: 'var(--gb-surface-1)',
       border: '1px solid var(--gb-border-default)',
       boxShadow: ready ? 'var(--gb-shadow-sm)' : 'none',
-      animation: pending ? 'gb-ms-breathe 2.4s ease-in-out infinite' : 'none',
     }}>
-      <ResultArtwork job={job} />
-      {/* A finished image announces itself; only an unfinished one needs a
-          word for it, and running already has its own loading treatment. */}
-      {job.status !== 'completed' && (
-        <span style={{ position: 'absolute', top: 7, right: 7 }}>
-          <StatusPill status={job.status} />
-        </span>
-      )}
       <div style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0,
-        padding: ready ? '14px 8px 8px' : '14px 8px 9px',
-        display: 'flex', alignItems: 'flex-end', gap: 7,
-        background: 'linear-gradient(to top,'
-          + 'color-mix(in srgb, var(--gb-backdrop) 88%, transparent) 35%,'
-          + 'transparent)',
-        pointerEvents: 'none',
+        width: '100%', aspectRatio: '1 / 1', position: 'relative',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--gb-fill-inverse-medium)',
+        animation: pending ? 'gb-ms-breathe 2.4s ease-in-out infinite' : 'none',
       }}>
-        <span style={{ flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
+        <ResultArtwork job={job} />
+        {/* A finished image announces itself; only an unfinished one needs a
+            word for it, and running already has its own loading treatment. */}
+        {job.status !== 'completed' && (
+          <span style={{ position: 'absolute', top: 7, right: 7 }}>
+            <StatusPill status={job.status} />
+          </span>
+        )}
+      </div>
+      <div style={{
+        padding: '6px 5px 6px 8px',
+        display: 'flex', alignItems: 'center', gap: 5,
+        background: 'var(--gb-fill-inverse-strong)',
+        borderTop: '1px solid var(--gb-border-subtle)',
+      }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
           <span
             title={job.product?.name || ''}
             style={{
-              display: 'block', fontSize: 10, fontWeight: 750, color: '#fff',
+              display: 'block', fontSize: 9.5, fontWeight: 750,
+              color: 'var(--gb-text-primary)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              textShadow: '0 1px 3px rgba(0,0,0,.55)',
             }}
           >
             {job.product?.name || job.product?.id || 'Product mockup'}
@@ -1158,29 +1157,25 @@ function ResultCard({ job, onOpen }) {
           <span
             title={caption}
             style={{
-              display: 'block', marginTop: 1, fontSize: 8.5,
-              color: 'rgba(255,255,255,.76)',
+              display: 'block', fontSize: 8.5, color: 'var(--gb-text-muted)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              textShadow: '0 1px 3px rgba(0,0,0,.55)',
             }}
           >
             {caption}
           </span>
         </span>
         {ready && (
-          <span style={{
-            flexShrink: 0, display: 'flex', gap: 3, pointerEvents: 'auto',
-          }}>
+          <span style={{ flexShrink: 0, display: 'flex', gap: 2 }}>
             <IconBtn
               size="xs"
-              variant="secondary"
+              variant="ghost"
               title="View full image"
               icon={<I.eye />}
               onClick={onOpen}
             />
             <IconBtn
               size="xs"
-              variant="secondary"
+              variant="ghost"
               title="Download this image"
               icon={<I.download />}
               disabled={!asset?.dataUrl}
@@ -1354,7 +1349,9 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             style={{
-              flex: 1, minHeight: 0, overflowY: 'auto', padding: 16,
+              // Tight side gutters: a fixed-width grid already centres itself,
+              // so wide padding only cost a column at common widths.
+              flex: 1, minHeight: 0, overflowY: 'auto', padding: '13px 8px',
               background: 'var(--gb-surface-canvas)',
             }}
           >
