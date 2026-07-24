@@ -94,6 +94,10 @@
       "file": "tests/unit/notificationsStore.test.mjs"
     },
     {
+      "name": "ui \u00b7 Chrome-native notification delivery and actions",
+      "file": "tests/unit/notificationsNative.test.mjs"
+    },
+    {
       "name": "modal \u00b7 shared Three.js runtime accessor",
       "file": "tests/unit/threeRuntime.test.mjs"
     },
@@ -180,6 +184,10 @@
     {
       "name": "ui \u00b7 display scales clamp & persist",
       "file": "tests/unit/scales.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 saved-proposal masonry gaps & catalog scale",
+      "file": "tests/unit/catalogMasonry.test.mjs"
     },
     {
       "name": "ui \u00b7 alignment geometry under modal zoom",

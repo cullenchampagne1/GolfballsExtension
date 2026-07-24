@@ -31,6 +31,8 @@ import {
   catalogSidebarLabel,
   fitCatalogScale,
   normalizeCatalogScale,
+  CATALOG_SCALE_DEFAULT,
+  computeMasonry,
 } from '../lib/catalogPresentation.js';
 
 /* The boxed gift-set preview for a line (sleeve render with the ball's print +
@@ -1781,26 +1783,6 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
   );
 }
 
-// Masonry geometry: place each card in the shortest column (absolute x/y) so
-// columns stay balanced, cards keep their natural height, and framer can spring
-// neighbors into the gap when one is deleted.
-const MASONRY_GAP = 12;
-const MASONRY_COL_MIN = 290;
-function computeMasonry(items, width, heights) {
-  if (!width) return { positions: {}, height: 0, colW: MASONRY_COL_MIN, cols: 1 };
-  const cols = Math.max(1, Math.floor((width + MASONRY_GAP) / (MASONRY_COL_MIN + MASONRY_GAP)));
-  const colW = (width - MASONRY_GAP * (cols - 1)) / cols;
-  const colH = new Array(cols).fill(0);
-  const positions = {};
-  items.forEach((it) => {
-    let c = 0;
-    for (let i = 1; i < cols; i++) if (colH[i] < colH[c] - 0.5) c = i;
-    positions[it.id] = { x: c * (colW + MASONRY_GAP), y: colH[c] };
-    colH[c] += (heights[it.id] || 240) + MASONRY_GAP;
-  });
-  return { positions, height: Math.max(0, Math.max(...colH, 0) - MASONRY_GAP), colW, cols };
-}
-
 /* A pinned banner for the live, unsaved working proposal — click to inspect its
    margin in the same breakdown panel. */
 function CurrentProposalCard({ entries, onOpen }) {
@@ -2270,28 +2252,42 @@ function useCatalogScale() {
   const [scale, setScale] = useState(_catalogScale);
   useEffect(() => {
     let alive = true;
-    let own = _catalogScale == null ? 1 : _catalogScale;
+    // The catalog's own band is a MAGNIFICATION (1–3, default 1.8), not the
+    // 0.5–1.5 multiplier the Modals slider uses. Defaulting an unset
+    // giftCatalog.scale to 1 rather than its real default collapsed the whole
+    // surface to a third of its intended size.
+    let own = CATALOG_SCALE_DEFAULT;
     let modals = 1;
+    let ownLoaded = false;
+    let modalsLoaded = false;
     const push = () => {
+      // Wait for BOTH inputs before touching the scale: publishing an
+      // intermediate value re-lays out the masonry mid-measurement.
+      if (!ownLoaded || !modalsLoaded) return;
       const next = normalizeCatalogScale(own * modals);
       _catalogScale = next;
       if (alive) setScale(next);
     };
-    loadDevSettings().then((d) => {
-      const raw = Number(d['giftCatalog.scale']);
-      own = Number.isFinite(raw) && raw > 0 ? raw : 1;
+    const readOwn = (bag) => {
+      const raw = Number((bag || {})['giftCatalog.scale']);
+      own = Number.isFinite(raw) && raw > 0 ? raw : CATALOG_SCALE_DEFAULT;
+      ownLoaded = true;
+    };
+    loadDevSettings().then((d) => { readOwn(d); push(); });
+    loadScales().then((all) => {
+      modals = Number(all?.modals) || 1;
+      modalsLoaded = true;
       push();
     });
-    loadScales().then((all) => { modals = Number(all?.modals) || 1; push(); });
     const onCh = (changes) => {
       if (!changes) return;
       if (changes[DEV_STORAGE_KEY]) {
-        const raw = Number((changes[DEV_STORAGE_KEY].newValue || {})['giftCatalog.scale']);
-        own = Number.isFinite(raw) && raw > 0 ? raw : 1;
+        readOwn(changes[DEV_STORAGE_KEY].newValue);
         push();
       }
       if (changes.uiScales) {
         modals = Number((changes.uiScales.newValue || {}).modals) || 1;
+        modalsLoaded = true;
         push();
       }
     };
