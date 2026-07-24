@@ -3003,9 +3003,9 @@ export const HELP_CONTENT = {
         "scene",
         "color",
         "imprint placement",
-        "aspect ratio",
         "variations",
-        "venture towel"
+        "venture towel",
+        "download"
       ],
       "summary": "Build product-image render batches from the Actions Shelf and keep track of them after the studio closes.",
       "feature": "mockup-studio",
@@ -3027,10 +3027,10 @@ export const HELP_CONTENT = {
             "type": "list",
             "items": [
               "Drag or choose the customer's PNG, JPEG, or WebP logo. The uploaded artwork stays visible in the confirmation bar at the top and can be replaced before generation.",
-              "Choose up to 5 configured products. For Venture Golf Microfiber Magnetic Towel, choose the Studio or Golf course scene and then an available towel color; RevStack resolves that pair to the exact outlined reference image.",
-              "Other products can expose their own YAML-defined option groups or traditional source-photo and imprint-placement choices. Aspect ratio is the only fixed studio option.",
-              "Each source × imprint-variation combination becomes one final mockup. Source and placement counts stay separate in the selection bar, and the total is capped at 20 images per batch.",
-              "Select Generate to create the server-owned batch. You can close the studio while it runs and reopen it later from Batches."
+              "Choose up to 5 configured products. For Venture Golf Microfiber Magnetic Towel, choose the Studio or Golf course scene and then select every towel color you want; each scene/color pair resolves to its exact outlined reference image.",
+              "Other products can expose their own YAML-defined option groups or traditional source-photo and imprint-placement choices. Every result is generated as a square image.",
+              "Each selected scene/color or source × imprint-variation combination becomes one final mockup. Detailed tags show every queued combination, and the total is capped at 20 images per batch.",
+              "Select Generate to create the server-owned batch. You can close the studio while it runs and reopen it later from Batches. Completed batches show a result collage, and every image has its own download action."
             ]
           },
           {
@@ -8316,9 +8316,9 @@ export const HELP_CONTENT = {
         "scene",
         "color",
         "imprint placement",
-        "aspect ratio",
         "variations",
-        "venture towel"
+        "venture towel",
+        "download"
       ],
       "description": "Build product-image render batches from the Actions Shelf and keep track of them after the studio closes.",
       "article": "product-mockup-studio",

@@ -10,11 +10,11 @@ import {
   normalizeStudioBootstrap,
   prepareProductGenerationLogo,
   resolveProductGenerationFacet,
+  updateProductGenerationFacetSelection,
 } from '../../src/lib/productGenerationClient.js';
 
 const studio = {
   constraints: { max_products: 5, max_images: 20 },
-  aspects: [{ id: 'square' }],
 };
 const products = [{
   id: 'hat-1',
@@ -41,14 +41,18 @@ const towel = {
     id: 'color',
     presentation: 'swatch',
     columns: 3,
-    options: [{ id: 'black' }, { id: 'blue' }, { id: 'white' }],
+    options: [
+      { id: 'black' }, { id: 'blue' }, { id: 'red' }, { id: 'white' },
+    ],
   }],
   sources: [
     { id: 'studio-black', option_values: { scene: 'studio', color: 'black' } },
     { id: 'studio-blue', option_values: { scene: 'studio', color: 'blue' } },
+    { id: 'studio-red', option_values: { scene: 'studio', color: 'red' } },
     { id: 'studio-white', option_values: { scene: 'studio', color: 'white' } },
     { id: 'grass-black', option_values: { scene: 'grass', color: 'black' } },
     { id: 'grass-blue', option_values: { scene: 'grass', color: 'blue' } },
+    { id: 'grass-red', option_values: { scene: 'grass', color: 'red' } },
   ],
   variations: [{ id: 'personalized-logo' }],
 };
@@ -60,7 +64,6 @@ describe('product mockup studio client contract', () => {
         configuration_revision: 'abc123',
         product_count: 0,
         constraints: { max_products: 5, max_images: 20 },
-        aspects: [{ id: 'square' }],
       },
       products: [],
       batches: [],
@@ -86,7 +89,6 @@ describe('product mockup studio client contract', () => {
         sourceIds: ['black'],
         variationIds: ['front'],
       }],
-      aspectId: 'square',
       logo,
     });
     assert.deepEqual(request, {
@@ -101,7 +103,6 @@ describe('product mockup studio client contract', () => {
         sourceIds: ['black'],
         variationIds: ['front'],
       }],
-      aspectId: 'square',
       logo,
     });
   });
@@ -109,7 +110,7 @@ describe('product mockup studio client contract', () => {
   it('resolves ordered YAML option groups to the exact product reference', () => {
     const initial = createDefaultProductGenerationSelection(towel);
     assert.deepEqual(initial, {
-      sourceIds: ['studio-black'],
+      sourceIds: [],
       variationIds: ['personalized-logo'],
       optionValues: { scene: 'studio', color: 'black' },
     });
@@ -141,6 +142,49 @@ describe('product mockup studio client contract', () => {
     }), null);
   });
 
+  it('adds each final facet choice as a separate image without losing prior scenes', () => {
+    const initial = createDefaultProductGenerationSelection(towel);
+    const red = updateProductGenerationFacetSelection({
+      product: towel,
+      selection: initial,
+      groupId: 'color',
+      optionId: 'red',
+    });
+    assert.deepEqual(red.sourceIds, ['studio-red']);
+    const blue = updateProductGenerationFacetSelection({
+      product: towel,
+      selection: red,
+      groupId: 'color',
+      optionId: 'blue',
+    });
+    assert.deepEqual(blue.sourceIds, ['studio-red', 'studio-blue']);
+    const grass = updateProductGenerationFacetSelection({
+      product: towel,
+      selection: blue,
+      groupId: 'scene',
+      optionId: 'grass',
+    });
+    assert.deepEqual(grass.sourceIds, ['studio-red', 'studio-blue']);
+    assert.deepEqual(grass.optionValues, { scene: 'grass', color: 'blue' });
+    const grassBlue = updateProductGenerationFacetSelection({
+      product: towel,
+      selection: grass,
+      groupId: 'color',
+      optionId: 'blue',
+    });
+    assert.deepEqual(
+      grassBlue.sourceIds,
+      ['studio-red', 'studio-blue', 'grass-blue'],
+    );
+    const removed = updateProductGenerationFacetSelection({
+      product: towel,
+      selection: grassBlue,
+      groupId: 'color',
+      optionId: 'blue',
+    });
+    assert.deepEqual(removed.sourceIds, ['studio-red', 'studio-blue']);
+  });
+
   it('counts every selected source × imprint variation toward the output limit', () => {
     assert.throws(() => buildProductGenerationBatchRequest({
       studio: {
@@ -154,7 +198,6 @@ describe('product mockup studio client contract', () => {
         sourceIds: ['navy', 'white'],
         variationIds: ['front', 'side'],
       }],
-      aspectId: 'square',
       logo,
     }), /at most 3 images/);
   });

@@ -78,6 +78,7 @@ const RUNTIME = [
   { name: 'mockups:batch:read',     in: 'background.js',        literal: '/product-generation/batches/${',       method: 'get',    route: '/client/product-generation/batches/{batch_id}' },
   { name: 'mockups:batch:cancel',   in: 'background.js',        literal: '/cancel',                              method: 'post',   route: '/client/product-generation/batches/{batch_id}/cancel' },
   { name: 'mockups:batch:delete',   in: 'background.js',        literal: 'productGenerationDeleteBatch',         method: 'delete', route: '/client/product-generation/batches/{batch_id}' },
+  { name: 'mockups:job:result',     in: 'background.js',        literal: '/product-generation/jobs/${jobId}/result', method: 'get',  route: '/client/product-generation/jobs/{job_id}/result' },
   { name: 'assistant:health',       in: 'help-assistant.js',    literal: '/health',                              method: 'get',  route: '/assistant/health' },
 ];
 

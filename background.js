@@ -847,6 +847,7 @@ function gbHelpReply(promise, sendResponse, fallback) {
 }
 
 const GB_PRODUCT_BATCH_ID_RE = /^batch_[a-f0-9]{32}$/;
+const GB_PRODUCT_JOB_ID_RE = /^img_[a-f0-9]{32}$/;
 const GB_PRODUCT_REQUEST_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/;
 const GB_PRODUCT_OPTION_ID_RE = /^[a-z0-9][a-z0-9._-]{0,99}$/;
 
@@ -942,7 +943,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             (value) => String(value || '').trim().toLowerCase(),
           ))] : [],
       })) : [];
-    const aspectId = String(msg.aspectId || '').trim().toLowerCase();
     const logo = msg.logo && typeof msg.logo === 'object' ? {
       filename: String(msg.logo.filename || '').trim().slice(0, 180),
       media_type: String(msg.logo.mediaType || '').trim().toLowerCase(),
@@ -965,7 +965,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           (value) => !GB_PRODUCT_OPTION_ID_RE.test(value)
         )
       ))
-      || !GB_PRODUCT_OPTION_ID_RE.test(aspectId)
       || !logo || !logo.filename
       || !['image/png', 'image/jpeg', 'image/webp'].includes(logo.media_type)
       || !/^[A-Za-z0-9+/]+={0,2}$/.test(logo.data_base64)
@@ -983,7 +982,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             request_id: requestId,
             name: name || 'Mockup batch',
             selections,
-            aspect_id: aspectId,
             logo,
           }),
         },
@@ -991,6 +989,57 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse,
       'Unable to create the mockup batch',
     );
+    return true;
+  }
+  if (msg.action === 'productGenerationGetResult') {
+    const jobId = String(msg.jobId || '').trim();
+    if (!GB_PRODUCT_JOB_ID_RE.test(jobId)) {
+      sendResponse({ ok: false, error: 'Invalid product mockup image' });
+      return true;
+    }
+    gbProductGenerationReply((async () => {
+      const response = await GBInstallationAuth.apiFetch(
+        `${GBInstallationAuth.CLIENT_BASE}/product-generation/jobs/${jobId}/result`,
+      );
+      if (!response.ok) {
+        const error = new Error(
+          `Mockup image request failed with HTTP ${response.status}`,
+        );
+        error.status = response.status;
+        throw error;
+      }
+      const mediaType = String(
+        response.headers.get('content-type') || '',
+      ).split(';')[0].trim().toLowerCase();
+      if (!/^image\/(?:png|jpe?g|webp)$/.test(mediaType)) {
+        throw new Error('Mockup result was not a supported image');
+      }
+      const bytes = await gbReadBytesLimited(response, 15 * 1024 * 1024);
+      let binary = '';
+      for (let index = 0; index < bytes.length; index += 8192) {
+        binary += String.fromCharCode.apply(
+          null, bytes.slice(index, index + 8192),
+        );
+      }
+      const disposition = String(
+        response.headers.get('content-disposition') || '',
+      );
+      const filenameMatch = disposition.match(
+        /filename\*?=(?:UTF-8''|"?)([^";]+)/i,
+      );
+      let filename = `${jobId}.${mediaType === 'image/png' ? 'png' : mediaType === 'image/webp' ? 'webp' : 'jpg'}`;
+      if (filenameMatch) {
+        try {
+          filename = decodeURIComponent(filenameMatch[1].replace(/"$/g, ''));
+        } catch { /* retain the safe generated filename */ }
+      }
+      return {
+        dataUrl: `data:${mediaType};base64,${btoa(binary)}`,
+        mediaType,
+        filename: filename.slice(0, 180),
+        sizeBytes: bytes.length,
+      };
+    })(), sendResponse, 'Unable to load the mockup image');
     return true;
   }
   if ([

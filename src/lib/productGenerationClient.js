@@ -4,6 +4,7 @@ const TERMINAL_BATCH_STATUSES = new Set([
 ]);
 const MAX_LOGO_BYTES = 12 * 1024 * 1024;
 const LOGO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const RESULT_ASSET_CACHE = new Map();
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -50,7 +51,6 @@ export function normalizeStudioBootstrap(payload) {
         max_products: Math.max(1, Number(constraints.max_products) || 5),
         max_images: Math.max(1, Number(constraints.max_images) || 20),
       },
-      aspects: asArray(studio.aspects),
     },
     products: asArray(source.products).map((product) => ({
       ...product,
@@ -76,8 +76,9 @@ export function createProductGenerationRequestId(now = Date.now(), random = Math
 export function createDefaultProductGenerationSelection(product) {
   const firstSource = asArray(product?.sources)[0];
   const firstVariation = asArray(product?.variations)[0];
+  const faceted = asArray(product?.option_groups).length > 0;
   return {
-    sourceIds: firstSource?.id ? [cleanId(firstSource.id)] : [],
+    sourceIds: !faceted && firstSource?.id ? [cleanId(firstSource.id)] : [],
     variationIds: firstVariation?.id ? [cleanId(firstVariation.id)] : [],
     optionValues: { ...(firstSource?.option_values || {}) },
   };
@@ -121,13 +122,46 @@ export function resolveProductGenerationFacet({
   };
 }
 
+export function updateProductGenerationFacetSelection({
+  product, selection, groupId, optionId,
+}) {
+  const groups = asArray(product?.option_groups);
+  const groupIndex = groups.findIndex(
+    (group) => cleanId(group?.id) === cleanId(groupId),
+  );
+  if (groupIndex < 0) return null;
+  const current = selection && typeof selection === 'object' ? selection : {};
+  const resolved = resolveProductGenerationFacet({
+    product,
+    currentOptionValues: current.optionValues,
+    groupId,
+    optionId,
+  });
+  if (!resolved) return null;
+  const sourceIds = asArray(current.sourceIds).map(cleanId).filter(Boolean);
+  if (groupIndex === groups.length - 1) {
+    const nextIds = sourceIds.includes(resolved.sourceId)
+      ? sourceIds.filter((id) => id !== resolved.sourceId)
+      : [...sourceIds, resolved.sourceId];
+    return {
+      ...current,
+      sourceIds: nextIds,
+      optionValues: resolved.optionValues,
+    };
+  }
+  return {
+    ...current,
+    sourceIds,
+    optionValues: resolved.optionValues,
+  };
+}
+
 export function buildProductGenerationBatchRequest({
   studio,
   products,
   requestId,
   name,
   selections,
-  aspectId,
   logo,
 }) {
   const constraints = studio?.constraints || {};
@@ -180,13 +214,6 @@ export function buildProductGenerationBatchRequest({
   if (imageCount > maxImages) {
     throw new Error(`A batch can contain at most ${maxImages} images`);
   }
-  const selectedAspect = cleanId(aspectId);
-  const aspects = new Set(
-    asArray(studio?.aspects).map((item) => cleanId(item?.id)),
-  );
-  if (!aspects.has(selectedAspect)) {
-    throw new Error('Choose a valid aspect ratio');
-  }
   const normalizedLogo = logo && typeof logo === 'object' ? {
     filename: String(logo.filename || '').trim().slice(0, 180),
     mediaType: String(logo.mediaType || '').trim().toLowerCase(),
@@ -202,7 +229,6 @@ export function buildProductGenerationBatchRequest({
     requestId: String(requestId),
     name: String(name || 'Mockup batch').trim().slice(0, 120) || 'Mockup batch',
     selections: normalizedSelections,
-    aspectId: selectedAspect,
     logo: normalizedLogo,
   };
 }
@@ -271,4 +297,22 @@ export function deleteProductGenerationBatch(batchId) {
     action: 'productGenerationDeleteBatch',
     batchId: String(batchId || ''),
   });
+}
+
+export function getProductGenerationResult(jobId) {
+  const id = String(jobId || '').trim();
+  if (!/^img_[a-f0-9]{32}$/.test(id)) {
+    return Promise.reject(new Error('Invalid product mockup image'));
+  }
+  if (!RESULT_ASSET_CACHE.has(id)) {
+    const request = runtimeMessage({
+      action: 'productGenerationGetResult',
+      jobId: id,
+    }).catch((error) => {
+      RESULT_ASSET_CACHE.delete(id);
+      throw error;
+    });
+    RESULT_ASSET_CACHE.set(id, request);
+  }
+  return RESULT_ASSET_CACHE.get(id);
 }

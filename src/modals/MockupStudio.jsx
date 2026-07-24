@@ -14,10 +14,12 @@ import {
   createProductGenerationRequestId,
   deleteProductGenerationBatch,
   getProductGenerationBatch,
+  getProductGenerationResult,
   isActiveProductGenerationBatch,
   listProductGenerationBatches,
   prepareProductGenerationLogo,
   resolveProductGenerationFacet,
+  updateProductGenerationFacetSelection,
 } from '../lib/productGenerationClient.js';
 
 const Camera = (props) => (
@@ -120,6 +122,175 @@ function formatWhen(value) {
   });
 }
 
+function saveResultAsset(asset, fallbackName = 'product-mockup.png') {
+  if (!asset?.dataUrl || typeof document === 'undefined') return;
+  const anchor = document.createElement('a');
+  anchor.href = asset.dataUrl;
+  anchor.download = asset.filename || fallbackName;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function useResultAsset(job, enabled = true) {
+  const available = job?.status === 'completed' && job?.result?.available;
+  const [state, setState] = useState({
+    jobId: job?.job_id || '', asset: null, loading: false, error: '',
+  });
+  useEffect(() => {
+    const jobId = job?.job_id || '';
+    if (!enabled || !available || !jobId) return undefined;
+    let cancelled = false;
+    setState((current) => (
+      current.jobId === jobId && current.asset
+        ? current
+        : { jobId, asset: null, loading: true, error: '' }
+    ));
+    getProductGenerationResult(jobId).then((asset) => {
+      if (!cancelled) setState({ jobId, asset, loading: false, error: '' });
+    }).catch((error) => {
+      if (!cancelled) {
+        setState({
+          jobId, asset: null, loading: false,
+          error: error?.message || 'Preview unavailable',
+        });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [available, enabled, job?.job_id]);
+  return state.jobId === job?.job_id
+    ? state : { asset: null, loading: Boolean(available), error: '' };
+}
+
+function ResultArtwork({
+  job, compact = false, enabled = true, showDownload = false,
+}) {
+  const { asset, loading, error } = useResultAsset(job, enabled);
+  const ready = job?.status === 'completed' && job?.result?.available;
+  return (
+    <div style={{
+      width: '100%', height: '100%', position: 'relative',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+      background: ready
+        ? 'var(--gb-fill-soft)' : 'var(--gb-fill-inverse-medium)',
+    }}>
+      {asset?.dataUrl ? (
+        <motion.img
+          initial={{ opacity: 0, scale: 1.025 }}
+          animate={{ opacity: 1, scale: 1 }}
+          src={asset.dataUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : loading ? (
+        <span style={{
+          width: compact ? 12 : 19, height: compact ? 12 : 19,
+          borderRadius: '50%',
+          border: `${compact ? 1.5 : 2}px solid var(--gb-brand-tint-border)`,
+          borderTopColor: 'var(--gb-brand-label)',
+          animation: 'gb-ms-spin .7s linear infinite',
+        }}
+        />
+      ) : error ? (
+        <I.alert
+          size={compact ? 12 : 22}
+          style={{ color: 'var(--gb-error-fg)' }}
+        />
+      ) : ready ? (
+        <I.check
+          size={compact ? 12 : 22}
+          style={{ color: 'var(--gb-success-fg)' }}
+        />
+      ) : job?.status === 'failed' ? (
+        <I.alert
+          size={compact ? 12 : 22}
+          style={{ color: 'var(--gb-error-fg)' }}
+        />
+      ) : (
+        <Camera
+          size={compact ? 12 : 22}
+          style={{ color: 'var(--gb-text-ghost)' }}
+        />
+      )}
+      {showDownload && asset?.dataUrl && (
+        <motion.button
+          type="button"
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileTap={{ scale: 0.94 }}
+          title="Download image"
+          onClick={() => saveResultAsset(
+            asset, job?.result?.filename || `${job?.job_id || 'mockup'}.png`,
+          )}
+          style={{
+            position: 'absolute', right: 8, bottom: 8,
+            width: 30, height: 30, padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
+            color: 'var(--gb-text-primary)',
+            background: 'color-mix(in srgb, var(--gb-surface-float) 88%, transparent)',
+            border: '1px solid var(--gb-border-default)',
+            boxShadow: 'var(--gb-shadow-md)',
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <I.download size={13} />
+        </motion.button>
+      )}
+    </div>
+  );
+}
+
+function BatchCollage({ batch }) {
+  const rootRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+  const jobs = (batch?.jobs || []).filter(
+    (job) => job.status === 'completed' && job.result?.available,
+  ).slice(0, 4);
+  useEffect(() => {
+    if (!jobs.length) return undefined;
+    const node = rootRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '60px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [batch?.batch_id, jobs.length]);
+  if (!jobs.length) return null;
+  return (
+    <div
+      ref={rootRef}
+      style={{
+        width: 42, height: 42, flexShrink: 0, overflow: 'hidden',
+        display: 'grid',
+        gridTemplateColumns: jobs.length === 1 ? '1fr' : 'repeat(2, 1fr)',
+        gridTemplateRows: jobs.length < 3 ? '1fr' : 'repeat(2, 1fr)',
+        gap: 1, borderRadius: 'var(--gb-r-md)',
+        background: 'var(--gb-border-subtle)',
+        border: '1px solid var(--gb-border-default)',
+      }}
+    >
+      {jobs.map((job) => (
+        <ResultArtwork
+          key={job.job_id}
+          job={job}
+          compact
+          enabled={visible}
+        />
+      ))}
+    </div>
+  );
+}
+
 function BatchTray({
   batches, onOpen, onCancel, onDelete, onNew, onClose,
 }) {
@@ -191,23 +362,28 @@ function BatchTray({
                   background: 'transparent', border: 0,
                 }}
               >
-                <div style={{
-                  width: 42, height: 42, borderRadius: 'var(--gb-r-md)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: statusTone(batch.status)[0],
-                  border: `1px solid ${statusTone(batch.status)[2]}`,
-                  color: statusTone(batch.status)[1], flexShrink: 0,
-                }}>
-                  {active ? (
-                    <span style={{
-                      width: 16, height: 16, borderRadius: '50%',
-                      border: '2px solid var(--gb-brand-tint-border)',
-                      borderTopColor: 'var(--gb-brand-label)',
-                      animation: 'gb-ms-spin .75s linear infinite',
-                    }}
-                    />
-                  ) : <Camera size={17} />}
-                </div>
+                <BatchCollage batch={batch} />
+                {!(batch.jobs || []).some(
+                  (job) => job.status === 'completed' && job.result?.available,
+                ) && (
+                  <div style={{
+                    width: 42, height: 42, borderRadius: 'var(--gb-r-md)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: statusTone(batch.status)[0],
+                    border: `1px solid ${statusTone(batch.status)[2]}`,
+                    color: statusTone(batch.status)[1], flexShrink: 0,
+                  }}>
+                    {active ? (
+                      <span style={{
+                        width: 16, height: 16, borderRadius: '50%',
+                        border: '2px solid var(--gb-brand-tint-border)',
+                        borderTopColor: 'var(--gb-brand-label)',
+                        animation: 'gb-ms-spin .75s linear infinite',
+                      }}
+                      />
+                    ) : <Camera size={17} />}
+                  </div>
+                )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5,
@@ -249,59 +425,6 @@ function BatchTray({
         })}
       </div>
     </motion.div>
-  );
-}
-
-function AspectGrid({
-  label, options, value, onChange,
-}) {
-  return (
-    <div>
-      <div style={{
-        marginBottom: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.75,
-        textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-      }}>
-        {label}
-      </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${Math.min(options.length || 1, 3)}, minmax(0, 1fr))`,
-        gap: 6,
-      }}>
-        {options.map((option) => {
-          const selected = option.id === value;
-          return (
-            <motion.button
-              type="button"
-              key={option.id}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => onChange(option.id)}
-              style={{
-                minHeight: 52, padding: 7,
-                borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
-                textAlign: 'center', fontFamily: 'inherit',
-                background: selected
-                  ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-                border: `1px solid ${selected
-                  ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
-                color: selected ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-                boxShadow: selected ? '0 0 0 1px var(--gb-brand-tint-soft) inset' : 'none',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700 }}>
-                {option.label}
-              </span>
-              <span style={{
-                display: 'block', marginTop: 2, fontSize: 8.5,
-                color: 'var(--gb-text-muted)', lineHeight: 1.25,
-              }}>
-                {option.description}
-              </span>
-            </motion.button>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -372,7 +495,7 @@ function ReferenceGrid({
                 ) : <Camera size={18} style={{ color: 'var(--gb-text-ghost)' }} />}
                 <span style={{
                   position: 'absolute', top: 5, right: 5,
-                  width: 18, height: 18, borderRadius: '50%',
+                  width: 20, height: 20, borderRadius: 'var(--gb-r-sm)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: isSelected
                     ? 'var(--gb-brand-label)' : 'var(--gb-surface-float)',
@@ -512,6 +635,11 @@ function FacetGrid({
   group, product, selection, onChange,
 }) {
   const currentValues = selection?.optionValues || {};
+  const groupIndex = (product.option_groups || []).findIndex(
+    (candidate) => candidate.id === group.id,
+  );
+  const selectsOutputs = groupIndex === (product.option_groups || []).length - 1;
+  const selectedSources = new Set(selection?.sourceIds || []);
   const presentation = ['thumbnail', 'swatch', 'button'].includes(group.presentation)
     ? group.presentation : 'button';
   const columns = Math.max(
@@ -527,6 +655,14 @@ function FacetGrid({
         textTransform: 'uppercase', color: 'var(--gb-text-muted)',
       }}>
         {group.label}
+        {selectsOutputs && (
+          <span style={{
+            float: 'right', textTransform: 'none', letterSpacing: 0,
+            fontSize: 9, fontWeight: 600, color: 'var(--gb-text-ghost)',
+          }}>
+            {selectedSources.size} image{selectedSources.size === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
       {group.description && (
         <div style={{
@@ -551,7 +687,9 @@ function FacetGrid({
           const source = (product.sources || []).find(
             (candidate) => candidate.id === resolved?.sourceId,
           );
-          const selected = currentValues[group.id] === option.id;
+          const selected = selectsOutputs
+            ? Boolean(source && selectedSources.has(source.id))
+            : currentValues[group.id] === option.id;
           return (
             <motion.button
               type="button"
@@ -601,12 +739,114 @@ function FacetGrid({
               }}>
                 {option.label}
               </span>
+              {selectsOutputs && (
+                <span style={{
+                  width: 16, height: 16, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 'var(--gb-r-sm)',
+                  background: selected
+                    ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)',
+                  border: `1px solid ${selected
+                    ? 'var(--gb-brand-border)' : 'var(--gb-border-default)'}`,
+                  color: selected
+                    ? 'var(--gb-text-on-brand)' : 'var(--gb-text-ghost)',
+                }}>
+                  {selected ? <I.check size={9} /> : <I.plus size={9} />}
+                </span>
+              )}
             </motion.button>
           );
         })}
       </div>
     </div>
   );
+}
+
+function FacetedSelectionTags({
+  product, selection, onRemoveProduct, onRemoveSource,
+}) {
+  const sources = (product.sources || []).filter(
+    (source) => (selection.sourceIds || []).includes(source.id),
+  );
+  if (!sources.length) {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        flexShrink: 0, padding: '5px 7px',
+        borderRadius: 'var(--gb-r-md)',
+        background: 'var(--gb-warning-tint-medium)',
+        border: '1px solid var(--gb-warning-tint-border)',
+        color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 700,
+      }}>
+        {product.title} · choose an image
+        <button
+          type="button"
+          title="Remove product"
+          onClick={onRemoveProduct}
+          style={{
+            display: 'flex', padding: 0, border: 0,
+            background: 'transparent', color: 'inherit', cursor: 'pointer',
+          }}
+        >
+          <I.close size={9} />
+        </button>
+      </span>
+    );
+  }
+  return sources.map((source) => {
+    const details = (product.option_groups || []).map((group) => {
+      const option = (group.options || []).find(
+        (candidate) => candidate.id === source.option_values?.[group.id],
+      );
+      return option ? `${group.label}: ${option.label}` : '';
+    }).filter(Boolean);
+    return (
+      <span
+        key={source.id}
+        title={[product.title, ...details].join(' · ')}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          flexShrink: 0, maxWidth: 280, padding: '4px 6px 4px 8px',
+          borderRadius: 'var(--gb-r-md)',
+          background: 'var(--gb-brand-tint-soft)',
+          border: '1px solid var(--gb-brand-tint-border)',
+          color: 'var(--gb-brand-label)',
+        }}
+      >
+        <span style={{ minWidth: 0 }}>
+          <span style={{
+            display: 'block', maxWidth: 230, overflow: 'hidden',
+            textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontSize: 9.5, fontWeight: 750,
+          }}>
+            {product.title}
+          </span>
+          <span style={{
+            display: 'block', marginTop: 1, maxWidth: 230,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontSize: 8.5, fontWeight: 650, color: 'var(--gb-text-muted)',
+          }}>
+            {details.join(' · ') || source.label}
+          </span>
+        </span>
+        <button
+          type="button"
+          title="Remove this image"
+          onClick={() => onRemoveSource(source.id)}
+          style={{
+            width: 18, height: 18, flexShrink: 0, padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--gb-r-sm)', cursor: 'pointer',
+            background: 'var(--gb-fill-subtle)',
+            border: '1px solid var(--gb-border-subtle)',
+            color: 'inherit',
+          }}
+        >
+          <I.close size={9} />
+        </button>
+      </span>
+    );
+  });
 }
 
 function BatchView({ batch, onBack, onCancel, onDelete }) {
@@ -668,6 +908,13 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
               images ready
             </div>
           </div>
+          <IconBtn
+            size="md"
+            variant="ghost"
+            title="Close batch details"
+            icon={<I.close />}
+            onClick={onBack}
+          />
         </div>
         <div style={{ marginTop: 12 }}>
           <ProgressBar value={progress.percent || 0} status={batch.status} />
@@ -698,11 +945,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
                 animation: job.status === 'running'
                   ? 'gb-ms-shimmer 1.5s linear infinite' : 'none',
               }}>
-                {job.status === 'completed'
-                  ? <I.check size={24} style={{ color: 'var(--gb-success-fg)' }} />
-                  : job.status === 'failed'
-                    ? <I.alert size={24} style={{ color: 'var(--gb-error-fg)' }} />
-                    : <Camera size={24} style={{ color: 'var(--gb-text-ghost)' }} />}
+                <ResultArtwork job={job} showDownload />
                 <span style={{ position: 'absolute', top: 8, right: 8 }}>
                   <StatusPill status={job.status} />
                 </span>
@@ -728,8 +971,8 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
         background: 'var(--gb-fill-inverse-strong)',
         borderTop: '1px solid var(--gb-border-subtle)',
       }}>
-        <Btn variant="secondary" size="md" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={onBack}>
-          Back to studio
+        <Btn variant="secondary" size="md" icon={<I.close />} onClick={onBack}>
+          Close details
         </Btn>
         <span style={{ flex: 1 }} />
         {active ? (
@@ -746,8 +989,56 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
   );
 }
 
-export function MockupStudio({ onClose }) {
+function BatchModal({
+  batch, onClose, onCancel, onDelete,
+}) {
+  return (
+    <motion.div
+      key={batch.batch_id}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      style={{
+        position: 'absolute', inset: 0, zIndex: 45, padding: 28,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'color-mix(in srgb, var(--gb-backdrop) 78%, transparent)',
+        backdropFilter: 'blur(7px)',
+        WebkitBackdropFilter: 'blur(7px)',
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.955, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 9 }}
+        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          width: 'min(900px, 100%)', height: 'min(650px, 100%)',
+          minHeight: 0, display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+          background: 'var(--gb-surface-float)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-xl)',
+          boxShadow: 'var(--gb-shadow-modal)',
+        }}
+      >
+        <BatchView
+          batch={batch}
+          onBack={onClose}
+          onCancel={onCancel}
+          onDelete={onDelete}
+        />
+      </motion.div>
+    </motion.div>
+  );
+}
+
+export function MockupStudio({ onClose, bindClose }) {
   const toast = useToast();
+  const [visible, setVisible] = useState(true);
   const [state, setState] = useState('loading');
   const [error, setError] = useState('');
   const [studio, setStudio] = useState(null);
@@ -757,13 +1048,25 @@ export function MockupStudio({ onClose }) {
   const [selections, setSelections] = useState({});
   const [focusedProductId, setFocusedProductId] = useState('');
   const [query, setQuery] = useState('');
-  const [aspectId, setAspectId] = useState('');
   const [logo, setLogo] = useState(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState(null);
   const loadingRef = useRef(false);
   const logoInputRef = useRef(null);
+  const closeRequestedRef = useRef(false);
+
+  const requestClose = useCallback(() => {
+    if (closeRequestedRef.current) return;
+    closeRequestedRef.current = true;
+    setTrayOpen(false);
+    setCurrentBatchId(null);
+    setVisible(false);
+  }, []);
+
+  useEffect(() => {
+    bindClose?.(requestClose);
+  }, [bindClose, requestClose]);
 
   useEffect(() => { ensureStyles(); }, []);
 
@@ -777,7 +1080,6 @@ export function MockupStudio({ onClose }) {
       setStudio(payload.studio);
       setProducts(payload.products);
       setBatches(payload.batches);
-      setAspectId((value) => value || payload.studio.aspects[0]?.id || '');
       setState('ready');
     } catch (loadError) {
       setError(loadError?.message || 'Product Mockup Studio is unavailable');
@@ -831,16 +1133,20 @@ export function MockupStudio({ onClose }) {
       product.title, product.brand, product.category, product.description,
     ].some((value) => String(value || '').toLowerCase().includes(needle)));
   }, [products, query]);
-  const previewAspect = studio?.aspects?.find((option) => option.id === aspectId);
   const focusedProduct = products.find((product) => product.id === focusedProductId)
     || selected.at(-1)
     || null;
   const focusedSelection = focusedProduct
     ? selections[focusedProduct.id] || { sourceIds: [], variationIds: [] }
     : { sourceIds: [], variationIds: [] };
-  const previewSource = focusedProduct?.sources?.find(
-    (option) => focusedSelection.sourceIds.includes(option.id),
-  );
+  const previewSource = focusedProduct?.sources?.find((option) => (
+    focusedSelection.sourceIds.includes(option.id)
+  )) || focusedProduct?.sources?.find((option) => (
+    focusedProduct.option_groups?.every(
+      (group) => option.option_values?.[group.id]
+        === focusedSelection.optionValues?.[group.id],
+    )
+  ));
   const imageCount = selectedIds.reduce((total, productId) => {
     const selection = selections[productId];
     return total + (
@@ -892,19 +1198,26 @@ export function MockupStudio({ onClose }) {
       const current = rows[product.id] || {
         sourceIds: [], variationIds: [], optionValues: {},
       };
-      const resolved = resolveProductGenerationFacet({
-        product,
-        currentOptionValues: current.optionValues,
-        groupId,
-        optionId,
+      const next = updateProductGenerationFacetSelection({
+        product, selection: current, groupId, optionId,
       });
-      if (!resolved) return rows;
+      if (!next) return rows;
       return {
         ...rows,
-        [product.id]: {
+        [product.id]: next,
+      };
+    });
+  };
+
+  const removeFacetedSource = (productId, sourceId) => {
+    setSelections((rows) => {
+      const current = rows[productId];
+      if (!current) return rows;
+      return {
+        ...rows,
+        [productId]: {
           ...current,
-          sourceIds: [resolved.sourceId],
-          optionValues: resolved.optionValues,
+          sourceIds: (current.sourceIds || []).filter((id) => id !== sourceId),
         },
       };
     });
@@ -943,7 +1256,6 @@ export function MockupStudio({ onClose }) {
           productId,
           ...selections[productId],
         })),
-        aspectId,
         logo,
       });
       setBatches((rows) => [
@@ -980,9 +1292,14 @@ export function MockupStudio({ onClose }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      animate={{ opacity: visible ? 1 : 0 }}
+      transition={{ duration: visible ? 0.2 : 0.18 }}
+      onAnimationComplete={() => {
+        if (!visible && closeRequestedRef.current) onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
       style={{
         position: 'fixed', inset: 0, zIndex: 999990, padding: 24,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -993,9 +1310,15 @@ export function MockupStudio({ onClose }) {
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.965, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.975, y: 6 }}
-        transition={{ duration: 0.24, ease: [0.34, 1.35, 0.64, 1] }}
+        animate={{
+          opacity: visible ? 1 : 0,
+          scale: visible ? 1 : 0.972,
+          y: visible ? 0 : 10,
+        }}
+        transition={{
+          duration: visible ? 0.28 : 0.2,
+          ease: visible ? [0.22, 1, 0.36, 1] : [0.4, 0, 1, 1],
+        }}
         style={{
           width: 'min(1140px, 100%)', height: 'min(780px, 100%)',
           position: 'relative', display: 'flex', flexDirection: 'column',
@@ -1013,14 +1336,6 @@ export function MockupStudio({ onClose }) {
           background: 'var(--gb-fill-inverse-strong)',
           borderBottom: '1px solid var(--gb-border-subtle)',
         }}>
-          {currentBatch && (
-            <IconBtn
-              size="md"
-              variant="ghost"
-              icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
-              onClick={() => setCurrentBatchId(null)}
-            />
-          )}
           <div style={{
             width: 32, height: 32, borderRadius: 'var(--gb-r-md)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1035,9 +1350,7 @@ export function MockupStudio({ onClose }) {
               Product Mockup Studio
             </div>
             <div style={{ marginTop: 2, fontSize: 11, color: 'var(--gb-text-muted)' }}>
-              Config-driven product mockups · {currentBatch
-                ? currentBatch.status_message
-                : `${products.length} products available`}
+              Config-driven product mockups · {products.length} products available
             </div>
           </div>
           <Btn
@@ -1050,7 +1363,7 @@ export function MockupStudio({ onClose }) {
           >
             Batches
           </Btn>
-          <IconBtn size="md" icon={<I.close />} onClick={onClose} />
+          <IconBtn size="md" icon={<I.close />} onClick={requestClose} />
           <AnimatePresence>
             {trayOpen && (
               <BatchTray
@@ -1076,14 +1389,7 @@ export function MockupStudio({ onClose }) {
         </div>
 
         <AnimatePresence mode="wait">
-          {currentBatch ? (
-            <BatchView
-              batch={currentBatch}
-              onBack={() => setCurrentBatchId(null)}
-              onCancel={cancelBatch}
-              onDelete={deleteBatch}
-            />
-          ) : state === 'loading' ? (
+          {state === 'loading' ? (
             <motion.div
               key="loading"
               initial={{ opacity: 0 }}
@@ -1380,7 +1686,7 @@ export function MockupStudio({ onClose }) {
                               }
                             }}
                             style={{
-                            width: 20, height: 20, borderRadius: '50%',
+                            width: 22, height: 22, borderRadius: 'var(--gb-r-sm)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             background: selectedProduct
                               ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)',
@@ -1426,8 +1732,7 @@ export function MockupStudio({ onClose }) {
                     </div>
                     <div style={{
                       position: 'relative', width: '100%',
-                      aspectRatio: previewAspect
-                        ? `${previewAspect.width} / ${previewAspect.height}` : '1 / 1',
+                      aspectRatio: '1 / 1',
                       maxHeight: 180, overflow: 'hidden', margin: '0 auto',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       borderRadius: 'var(--gb-r-md)',
@@ -1460,12 +1765,6 @@ export function MockupStudio({ onClose }) {
                     flex: 1, minHeight: 0, overflowY: 'auto',
                     padding: 16, display: 'flex', flexDirection: 'column', gap: 16,
                   }}>
-                    <AspectGrid
-                      label="Aspect ratio"
-                      options={studio?.aspects || []}
-                      value={aspectId}
-                      onChange={setAspectId}
-                    />
                     {focusedProduct ? (
                       focusedProduct.option_groups?.length ? (
                         <>
@@ -1487,9 +1786,9 @@ export function MockupStudio({ onClose }) {
                             color: 'var(--gb-success-fg)', fontSize: 9.5,
                             lineHeight: 1.45,
                           }}>
-                            The selected scene and color resolve to one exact
-                            YAML reference image. Your uploaded logo is routed
-                            with it as Image 2.
+                            Choose the scene, then select every color you want.
+                            Each selected combination becomes its own square
+                            image and appears as a detailed tag below.
                           </div>
                         </>
                       ) : (
@@ -1541,9 +1840,10 @@ export function MockupStudio({ onClose }) {
                 paddingBottom: logo ? 10 : 0,
                 overflow: 'hidden',
               }}>
-                <div style={{
+                <div className="gb-ms-scroll" style={{
                   flex: 1, minWidth: 0, display: 'flex',
-                  alignItems: 'center', gap: 6, overflow: 'hidden',
+                  alignItems: 'center', gap: 6,
+                  overflowX: 'auto', overflowY: 'hidden', paddingBottom: 1,
                 }}>
                   {selected.length === 0 ? (
                     <span style={{ fontSize: 11.5, color: 'var(--gb-text-muted)' }}>
@@ -1551,6 +1851,19 @@ export function MockupStudio({ onClose }) {
                     </span>
                   ) : selected.map((product) => {
                     const selection = selections[product.id] || {};
+                    if (product.option_groups?.length) {
+                      return (
+                        <FacetedSelectionTags
+                          key={product.id}
+                          product={product}
+                          selection={selection}
+                          onRemoveProduct={() => toggleProduct(product.id)}
+                          onRemoveSource={(sourceId) => removeFacetedSource(
+                            product.id, sourceId,
+                          )}
+                        />
+                      );
+                    }
                     return (
                       <React.Fragment key={product.id}>
                         <span style={{
@@ -1579,52 +1892,24 @@ export function MockupStudio({ onClose }) {
                             <I.close size={9} />
                           </button>
                         </span>
-                        {product.option_groups?.length ? (
-                          product.option_groups.map((group, index) => {
-                            const valueId = selection.optionValues?.[group.id];
-                            const value = group.options?.find(
-                              (option) => option.id === valueId,
-                            );
-                            if (!value) return null;
-                            return (
-                              <span key={group.id} style={{
-                                padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
-                                background: index % 2
-                                  ? 'var(--gb-warning-tint-medium)'
-                                  : 'var(--gb-info-tint-medium)',
-                                border: `1px solid ${index % 2
-                                  ? 'var(--gb-warning-tint-border)'
-                                  : 'var(--gb-info-tint-border)'}`,
-                                color: index % 2
-                                  ? 'var(--gb-warning-fg)' : 'var(--gb-info-fg)',
-                                fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap',
-                              }}>
-                                {group.label}: {value.label}
-                              </span>
-                            );
-                          })
-                        ) : (
-                          <>
-                            <span style={{
-                              padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
-                              background: 'var(--gb-info-tint-medium)',
-                              border: '1px solid var(--gb-info-tint-border)',
-                              color: 'var(--gb-info-fg)', fontSize: 9.5, fontWeight: 700,
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {selection.sourceIds?.length || 0} source{selection.sourceIds?.length === 1 ? '' : 's'}
-                            </span>
-                            <span style={{
-                              padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
-                              background: 'var(--gb-warning-tint-medium)',
-                              border: '1px solid var(--gb-warning-tint-border)',
-                              color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 700,
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {selection.variationIds?.length || 0} placement{selection.variationIds?.length === 1 ? '' : 's'}
-                            </span>
-                          </>
-                        )}
+                        <span style={{
+                          padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                          background: 'var(--gb-info-tint-medium)',
+                          border: '1px solid var(--gb-info-tint-border)',
+                          color: 'var(--gb-info-fg)', fontSize: 9.5, fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {selection.sourceIds?.length || 0} source{selection.sourceIds?.length === 1 ? '' : 's'}
+                        </span>
+                        <span style={{
+                          padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                          background: 'var(--gb-warning-tint-medium)',
+                          border: '1px solid var(--gb-warning-tint-border)',
+                          color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {selection.variationIds?.length || 0} placement{selection.variationIds?.length === 1 ? '' : 's'}
+                        </span>
                       </React.Fragment>
                     );
                   })}
@@ -1654,6 +1939,16 @@ export function MockupStudio({ onClose }) {
                 </Btn>
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {currentBatch && (
+            <BatchModal
+              batch={currentBatch}
+              onClose={() => setCurrentBatchId(null)}
+              onCancel={cancelBatch}
+              onDelete={deleteBatch}
+            />
           )}
         </AnimatePresence>
       </motion.div>

@@ -334,10 +334,7 @@ class ProductPromptRegistryTests(unittest.TestCase):
         self.assertNotIn("prompt", public["variations"][0])
         self.assertEqual(public["sources"][0]["label"], "Navy")
         self.assertEqual(public["variations"][0]["label"], "Front center")
-        self.assertEqual(
-            [item["id"] for item in registry.studio()["aspects"]],
-            ["square", "landscape", "portrait"],
-        )
+        self.assertNotIn("aspects", registry.studio())
         first_revision = registry.status()["revision"]
         config.value["products"][0]["prompt_version"] = "hat-v2"
         refreshed = registry.public_products()[0]
@@ -539,7 +536,6 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
                 "source_ids": ["navy", "white"],
                 "variation_ids": ["front-center", "left-side"],
             }],
-            aspect_id="square",
             logo=logo_payload(),
         )
         for job in queued["jobs"]:
@@ -557,7 +553,6 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
                 "source_ids": ["white"],
                 "variation_ids": ["front-center"],
             }],
-            aspect_id="portrait",
             logo=logo_payload(),
         )
         self.assertEqual(completed["status"], "completed")
@@ -641,7 +636,6 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
                 "source_ids": ["white"],
                 "variation_ids": ["personalized-logo"],
             }],
-            aspect_id="square",
             logo=logo_payload(),
         )
         await manager.wait(queued["jobs"][0]["job_id"])
@@ -683,7 +677,6 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
                 "source_ids": ["navy", "white"],
                 "variation_ids": ["front-center"],
             }],
-            aspect_id="landscape",
             logo=logo_payload(),
         )
         await asyncio.wait_for(provider.started.wait(), timeout=2)
@@ -793,8 +786,9 @@ class ProductGenerationRegistrationTests(unittest.TestCase):
         ]["request_body"]["content"]["application/json"]["schema"]
         self.assertEqual(
             set(batch_schema["required"]),
-            {"request_id", "selections", "aspect_id", "logo"},
+            {"request_id", "selections", "logo"},
         )
+        self.assertNotIn("aspect_id", batch_schema["properties"])
         self.assertNotIn("scene_id", batch_schema["properties"])
         self.assertNotIn("lighting_id", batch_schema["properties"])
         self.assertIn(

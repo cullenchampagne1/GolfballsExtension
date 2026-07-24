@@ -18,9 +18,9 @@ if (!window.__gbMockupStudioLoaded) {
 
   window.__gbOpenMockupStudio = function () {
     if ((window.__gbFeatureFlags || {}).mockupStudioEnabled === false) return;
-    mountFloating(HOST_ID, ({ onClosed }) => (
+    mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
-        <MockupStudio onClose={onClosed} />
+        <MockupStudio onClose={onClosed} bindClose={bindClose} />
       </ToastHost>
     ), { scaleCategory: CATALOG_MOUNT_SCALE_CATEGORY });
   };
