@@ -86,6 +86,10 @@
       "file": "tests/unit/mockupCatalogDraft.test.mjs"
     },
     {
+      "name": "ui \u00b7 full image viewer zoom anchoring",
+      "file": "tests/unit/imageZoom.test.mjs"
+    },
+    {
       "name": "modal \u00b7 shared Three.js runtime accessor",
       "file": "tests/unit/threeRuntime.test.mjs"
     },
@@ -259,6 +263,14 @@
       "command": [
         "../.venv/bin/python",
         "tests/test_product_generation.py"
+      ]
+    },
+    {
+      "name": "flow \u00b7 targeted extension notification lifecycle",
+      "id": "flow-extension-notifications",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_extension_notifications.py"
       ]
     },
     {

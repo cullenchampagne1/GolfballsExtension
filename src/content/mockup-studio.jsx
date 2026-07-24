@@ -3,7 +3,6 @@ import React from 'react';
 import { mountFloating } from '../lib/mountFloating.js';
 import { ensureTheme } from '../lib/theme.js';
 import { ensureScales } from '../lib/scales.js';
-import { CATALOG_MOUNT_SCALE_CATEGORY } from '../lib/catalogPresentation.js';
 import { MockupStudio } from '../modals/MockupStudio.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 
@@ -18,10 +17,13 @@ if (!window.__gbMockupStudioLoaded) {
 
   window.__gbOpenMockupStudio = function () {
     if ((window.__gbFeatureFlags || {}).mockupStudioEnabled === false) return;
+    // The studio is a plain flex modal with no CSS grid of its own, so the
+    // shared Modals zoom applies cleanly here — unlike the Gift Catalog, which
+    // opts out because `zoom` rounds its grid rows into each other.
     mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
         <MockupStudio onClose={onClosed} bindClose={bindClose} />
       </ToastHost>
-    ), { scaleCategory: CATALOG_MOUNT_SCALE_CATEGORY });
+    ));
   };
 }

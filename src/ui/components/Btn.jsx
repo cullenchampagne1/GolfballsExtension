@@ -223,6 +223,11 @@ function BtnBadge({ value, size, tone, pulse, ring }) {
             height: b.height,
             minWidth: b.minWidth,
             padding: `0 ${b.padX}px`,
+            // border-box so the horizontal padding is absorbed by minWidth
+            // instead of adding to it — otherwise a single digit renders
+            // (minWidth + 2*padX) wide against a fixed height, i.e. an oval.
+            // Two or more digits still push past minWidth into a pill.
+            boxSizing: 'border-box',
             borderRadius: b.height / 2,
             fontSize: b.font,
             fontWeight: 800,

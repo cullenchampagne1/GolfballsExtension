@@ -5,6 +5,7 @@ import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
+import { loadScales } from '../lib/scales.js';
 import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
@@ -2258,17 +2259,42 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
    the modal opens at the right size instead of snapping from the 1.8
    default to a custom value. Cached module-side so reopening is instant. */
 let _catalogScale = null;
+/* The catalog cannot take the shared Modals `zoom` — Chrome accumulates
+   sub-pixel rounding on grid ROW positions under a fractional zoom, so the
+   product rows creep into each other (see the overlay comment below). It still
+   has to OBEY that setting though, so the Modals scale is multiplied into the
+   catalog's own `giftCatalog.scale` and applied through the same transform.
+   Both sliders therefore compose: Modals is the global preference and
+   giftCatalog.scale is a per-surface adjustment on top of it. */
 function useCatalogScale() {
   const [scale, setScale] = useState(_catalogScale);
   useEffect(() => {
     let alive = true;
-    const apply = (v) => {
-      const next = normalizeCatalogScale(v);
+    let own = _catalogScale == null ? 1 : _catalogScale;
+    let modals = 1;
+    const push = () => {
+      const next = normalizeCatalogScale(own * modals);
       _catalogScale = next;
       if (alive) setScale(next);
     };
-    loadDevSettings().then((d) => apply(d['giftCatalog.scale']));
-    const onCh = (changes) => { if (changes && changes[DEV_STORAGE_KEY]) apply((changes[DEV_STORAGE_KEY].newValue || {})['giftCatalog.scale']); };
+    loadDevSettings().then((d) => {
+      const raw = Number(d['giftCatalog.scale']);
+      own = Number.isFinite(raw) && raw > 0 ? raw : 1;
+      push();
+    });
+    loadScales().then((all) => { modals = Number(all?.modals) || 1; push(); });
+    const onCh = (changes) => {
+      if (!changes) return;
+      if (changes[DEV_STORAGE_KEY]) {
+        const raw = Number((changes[DEV_STORAGE_KEY].newValue || {})['giftCatalog.scale']);
+        own = Number.isFinite(raw) && raw > 0 ? raw : 1;
+        push();
+      }
+      if (changes.uiScales) {
+        modals = Number((changes.uiScales.newValue || {}).modals) || 1;
+        push();
+      }
+    };
     try { chrome.storage.onChanged.addListener(onCh); } catch { /* no storage */ }
     return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
   }, []);

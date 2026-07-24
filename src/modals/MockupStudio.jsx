@@ -4,6 +4,9 @@ import React, {
 import { AnimatePresence, motion } from 'motion/react';
 
 import { Btn, IconBtn, Input } from '../ui/index.js';
+import {
+  ZOOM_MAX, ZOOM_MIN, ZOOM_BUTTON_STEP, framePoint, wheelZoom, zoomToPoint,
+} from '../lib/imageZoom.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
@@ -51,6 +54,8 @@ const LOAD_CATALOG_ADMIN = __ADMIN__
   : null;
 
 const ACTIVE = new Set(['queued', 'running']);
+// Gallery tiles are a constant size regardless of how many a batch holds.
+const GALLERY_TILE = 186;
 const TONES = {
   queued: ['var(--gb-warning-tint-medium)', 'var(--gb-warning-fg)', 'var(--gb-warning-tint-border)'],
   running: ['var(--gb-brand-tint-medium)', 'var(--gb-brand-label)', 'var(--gb-brand-tint-border)'],
@@ -66,7 +71,10 @@ function ensureStyles() {
   style.id = '__gb-mockup-studio-css';
   style.textContent = `
     @keyframes gb-ms-spin { to { transform: rotate(360deg); } }
-    @keyframes gb-ms-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    /* A pending tile breathes rather than sweeping a highlight across itself:
+       a whole wall of shimmering cards reads as noise, and the sweep competes
+       with the artwork that lands in the same box a moment later. */
+    @keyframes gb-ms-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
     .gb-ms-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-fill-strong) transparent; }
     .gb-ms-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
     .gb-ms-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -870,6 +878,60 @@ function BatchStat({ label, value, tone }) {
 
 function FullResultViewer({ job, onBack }) {
   const { asset, loading, error } = useResultAsset(job, true);
+  const [view, setView] = useState({ zoom: ZOOM_MIN, offset: { x: 0, y: 0 } });
+  const { zoom, offset } = view;
+  const dragRef = useRef(null);
+  const frameRef = useRef(null);
+
+  const reset = useCallback(
+    () => setView({ zoom: ZOOM_MIN, offset: { x: 0, y: 0 } }), [],
+  );
+  useEffect(() => { reset(); }, [job?.job_id, reset]);
+
+  const pointOf = (clientX, clientY) => framePoint(
+    frameRef.current?.getBoundingClientRect(), clientX, clientY,
+  );
+
+  const zoomAt = useCallback((nextZoom, clientX, clientY) => {
+    setView((current) => zoomToPoint(
+      current, nextZoom,
+      clientX == null ? { x: 0, y: 0 } : pointOf(clientX, clientY),
+    ));
+  }, []);
+
+  const onWheel = useCallback((event) => {
+    if (!asset?.dataUrl) return;
+    event.preventDefault();
+    const point = pointOf(event.clientX, event.clientY);
+    setView((current) => zoomToPoint(current, wheelZoom(current.zoom, event.deltaY), point));
+  }, [asset?.dataUrl]);
+
+  const onPointerDown = useCallback((event) => {
+    if (zoom <= ZOOM_MIN || !asset?.dataUrl) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX, startY: event.clientY,
+      originX: offset.x, originY: offset.y,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }, [zoom, offset, asset?.dataUrl]);
+
+  const onPointerMove = useCallback((event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setView((current) => ({
+      ...current,
+      offset: {
+        x: drag.originX + (event.clientX - drag.startX),
+        y: drag.originY + (event.clientY - drag.startY),
+      },
+    }));
+  }, []);
+
+  const endDrag = useCallback((event) => {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.985 }}
@@ -910,6 +972,40 @@ function FullResultViewer({ job, onBack }) {
             {[job.source?.label, job.variation?.label].filter(Boolean).join(' · ')}
           </div>
         </div>
+        {asset?.dataUrl && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 2, padding: 2,
+            borderRadius: 'var(--gb-r-md)',
+            background: 'var(--gb-fill-inverse-medium)',
+            border: '1px solid var(--gb-border-default)',
+          }}>
+            <IconBtn
+              size="xs" variant="ghost" title="Zoom out"
+              icon={<I.close style={{ transform: 'rotate(45deg)' }} />}
+              disabled={zoom <= ZOOM_MIN}
+              onClick={() => zoomAt(zoom / ZOOM_BUTTON_STEP)}
+            />
+            <button
+              type="button"
+              onClick={reset}
+              title="Reset zoom"
+              style={{
+                minWidth: 38, height: 20, padding: '0 4px', cursor: 'pointer',
+                border: 0, background: 'transparent', fontFamily: 'var(--gb-font-mono)',
+                fontSize: 9.5, fontWeight: 700,
+                color: zoom > ZOOM_MIN ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+              }}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <IconBtn
+              size="xs" variant="ghost" title="Zoom in"
+              icon={<I.plus />}
+              disabled={zoom >= ZOOM_MAX}
+              onClick={() => zoomAt(zoom * ZOOM_BUTTON_STEP)}
+            />
+          </div>
+        )}
         <Btn
           size="sm"
           variant="primary"
@@ -927,22 +1023,44 @@ function FullResultViewer({ job, onBack }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'var(--gb-surface-canvas)',
       }}>
-        <div style={{
-          width: 'min(520px, 100%)', maxHeight: '100%', aspectRatio: '1 / 1',
-          overflow: 'hidden', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          borderRadius: 'var(--gb-r-lg)',
-          background: 'var(--gb-fill-soft)',
-          border: '1px solid var(--gb-border-default)',
-          boxShadow: 'var(--gb-shadow-lg)',
-        }}>
+        <div
+          ref={frameRef}
+          onWheel={onWheel}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onDoubleClick={(event) => (
+            zoom > ZOOM_MIN ? reset() : zoomAt(2.5, event.clientX, event.clientY)
+          )}
+          style={{
+            width: 'min(560px, 100%)', maxHeight: '100%', aspectRatio: '1 / 1',
+            overflow: 'hidden', display: 'flex', position: 'relative',
+            alignItems: 'center', justifyContent: 'center',
+            touchAction: 'none',
+            cursor: !asset?.dataUrl ? 'default'
+              : zoom > ZOOM_MIN ? (dragRef.current ? 'grabbing' : 'grab') : 'zoom-in',
+            borderRadius: 'var(--gb-r-lg)',
+            background: 'var(--gb-fill-soft)',
+            border: '1px solid var(--gb-border-default)',
+            boxShadow: 'var(--gb-shadow-lg)',
+          }}
+        >
           {asset?.dataUrl ? (
             <motion.img
-              initial={{ opacity: 0, scale: 0.99 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               src={asset.dataUrl}
               alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              draggable={false}
+              style={{
+                width: '100%', height: '100%', objectFit: 'contain',
+                transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+                // No transition while dragging — the pan must track the pointer.
+                transition: dragRef.current ? 'none' : 'transform .16s cubic-bezier(.4,0,.2,1)',
+                willChange: 'transform',
+                userSelect: 'none',
+              }}
             />
           ) : loading ? (
             <span style={{
@@ -969,12 +1087,121 @@ function FullResultViewer({ job, onBack }) {
   );
 }
 
+/**
+ * One gallery tile.
+ *
+ * The card itself is no longer a giant button. Opening the viewer and saving
+ * the file are separate, explicitly labelled actions, so clicking a card to
+ * read its caption cannot dump you into a full-screen view, and grabbing a
+ * file no longer requires opening one first.
+ */
+function ResultCard({ job, onOpen }) {
+  const ready = job.status === 'completed' && job.result?.available;
+  const { asset } = useResultAsset(job, ready);
+  const pending = job.status === 'running' || job.status === 'queued';
+  const caption = [job.source?.label, job.variation?.label]
+    .filter(Boolean).join(' · ') || job.status_message;
+  return (
+    <div style={{
+      width: GALLERY_TILE, overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
+      borderRadius: 'var(--gb-r-lg)',
+      background: 'var(--gb-surface-1)',
+      border: '1px solid var(--gb-border-default)',
+      boxShadow: ready ? 'var(--gb-shadow-sm)' : 'none',
+    }}>
+      <div style={{
+        width: '100%', aspectRatio: '1 / 1', position: 'relative',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--gb-fill-inverse-medium)',
+        animation: pending ? 'gb-ms-breathe 2.4s ease-in-out infinite' : 'none',
+      }}>
+        <ResultArtwork job={job} />
+        <span style={{ position: 'absolute', top: 7, right: 7 }}>
+          <StatusPill status={job.status} />
+        </span>
+      </div>
+      <div style={{ padding: '8px 9px 9px' }}>
+        <div
+          title={job.product?.name || ''}
+          style={{
+            fontSize: 10.5, fontWeight: 750, color: 'var(--gb-text-primary)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
+          {job.product?.name || job.product?.id || 'Product mockup'}
+        </div>
+        <div
+          title={caption}
+          style={{
+            marginTop: 2, fontSize: 9, color: 'var(--gb-text-muted)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
+          {caption}
+        </div>
+        {ready && (
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Btn
+              size="xs"
+              variant="secondary"
+              icon={<I.eye />}
+              onClick={onOpen}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              View full image
+            </Btn>
+            <IconBtn
+              size="xs"
+              variant="ghost"
+              title="Download this image"
+              icon={<I.download />}
+              disabled={!asset?.dataUrl}
+              onClick={() => saveResultAsset(
+                asset, job.result?.filename || `${job.job_id}.png`,
+              )}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BatchView({ batch, onBack, onCancel, onDelete }) {
   const [previewJobId, setPreviewJobId] = useState('');
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadedCount, setDownloadedCount] = useState(0);
+  const jobs = batch?.jobs || [];
+  const readyJobs = useMemo(
+    () => jobs.filter((job) => job.status === 'completed' && job.result?.available),
+    [jobs],
+  );
+
+  /* Saved one at a time with a beat between each: Chrome silently drops
+     same-tick anchor downloads after the first few, so a batch of twenty would
+     otherwise land as three files with no error anywhere. */
+  const downloadAll = useCallback(async () => {
+    if (!readyJobs.length) return;
+    setDownloadingAll(true);
+    setDownloadedCount(0);
+    try {
+      for (const job of readyJobs) {
+        try {
+          const asset = await getProductGenerationResult(job.job_id);
+          saveResultAsset(asset, job.result?.filename || `${job.job_id}.png`);
+        } catch { /* skip the one that failed; the rest still save */ }
+        setDownloadedCount((count) => count + 1);
+        await new Promise((resolve) => { setTimeout(resolve, 260); });
+      }
+    } finally {
+      setDownloadingAll(false);
+    }
+  }, [readyJobs]);
+
   if (!batch) return null;
   const progress = batch.progress || {};
   const active = isActiveProductGenerationBatch(batch);
-  const jobs = batch.jobs || [];
   const previewJob = jobs.find(
     (job) => job.job_id === previewJobId,
   ) || null;
@@ -1076,88 +1303,23 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
         flex: 1, minHeight: 0, overflowY: 'auto', padding: 16,
         background: 'var(--gb-surface-canvas)',
       }}>
+        {/* A FIXED column width, not 1fr: stretching one or two results to
+            330-400px made every tile a near-full-size preview and left the
+            dedicated viewer with nothing to add. Tiles stay a constant size
+            whatever the batch holds; the viewer is where an image gets big. */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: jobs.length === 1
-            ? 'minmax(0, 400px)'
-            : jobs.length === 2
-              ? 'repeat(2, minmax(0, 330px))'
-              : 'repeat(auto-fill, minmax(220px, 1fr))',
+          gridTemplateColumns: `repeat(auto-fill, ${GALLERY_TILE}px)`,
           justifyContent: 'center',
-          gap: 13,
+          gap: 12,
         }}>
-          {jobs.map((job) => {
-            const canPreview = job.status === 'completed' && job.result?.available;
-            return (
-              <motion.button
-                type="button"
-                key={job.job_id}
-                whileHover={canPreview ? { y: -2 } : undefined}
-                whileTap={canPreview ? { scale: 0.992 } : undefined}
-                disabled={!canPreview}
-                onClick={() => canPreview && setPreviewJobId(job.job_id)}
-                style={{
-                  minWidth: 0, padding: 0, overflow: 'hidden',
-                  textAlign: 'left', fontFamily: 'inherit',
-                  cursor: canPreview ? 'zoom-in' : 'default',
-                  color: 'inherit',
-                  borderRadius: 'var(--gb-r-lg)',
-                  background: 'var(--gb-surface-1)',
-                  border: '1px solid var(--gb-border-default)',
-                  boxShadow: canPreview ? 'var(--gb-shadow-sm)' : 'none',
-                }}
-              >
-                <div style={{
-                  width: '100%', aspectRatio: '1 / 1',
-                  display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', position: 'relative',
-                  background: job.status === 'running'
-                    ? 'linear-gradient(110deg,var(--gb-fill-subtle) 20%,var(--gb-fill-soft) 45%,var(--gb-fill-subtle) 70%)'
-                    : 'var(--gb-fill-inverse-medium)',
-                  backgroundSize: '220% 100%',
-                  animation: job.status === 'running'
-                    ? 'gb-ms-shimmer 1.5s linear infinite' : 'none',
-                }}>
-                  <ResultArtwork job={job} />
-                  <span style={{ position: 'absolute', top: 8, right: 8 }}>
-                    <StatusPill status={job.status} />
-                  </span>
-                  {canPreview && (
-                    <span style={{
-                      position: 'absolute', left: 8, bottom: 8,
-                      padding: '4px 7px', borderRadius: 'var(--gb-r-md)',
-                      background: 'color-mix(in srgb, var(--gb-surface-float) 88%, transparent)',
-                      border: '1px solid var(--gb-border-default)',
-                      boxShadow: 'var(--gb-shadow-sm)',
-                      color: 'var(--gb-text-primary)',
-                      fontSize: 8.5, fontWeight: 750,
-                      backdropFilter: 'blur(8px)',
-                    }}>
-                      View full image
-                    </span>
-                  )}
-                </div>
-                <div style={{ padding: '9px 10px 10px' }}>
-                  <div style={{
-                    fontSize: 10.5, fontWeight: 750,
-                    color: 'var(--gb-text-primary)',
-                    whiteSpace: 'nowrap', overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {job.product?.name || job.product?.id || 'Product mockup'}
-                  </div>
-                  <div style={{
-                    marginTop: 3, fontSize: 9, color: 'var(--gb-text-muted)',
-                    whiteSpace: 'nowrap', overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {[job.source?.label, job.variation?.label]
-                      .filter(Boolean).join(' · ') || job.status_message}
-                  </div>
-                </div>
-              </motion.button>
-            );
-          })}
+          {jobs.map((job) => (
+            <ResultCard
+              key={job.job_id}
+              job={job}
+              onOpen={() => setPreviewJobId(job.job_id)}
+            />
+          ))}
         </div>
       </div>
       <div style={{
@@ -1169,8 +1331,22 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
         <span style={{
           flex: 1, minWidth: 0, fontSize: 9.5, color: 'var(--gb-text-muted)',
         }}>
-          {total} square image{total === 1 ? '' : 's'} · select a ready image to inspect it
+          {total} square image{total === 1 ? '' : 's'}
+          {readyJobs.length > 0 && ` · ${readyJobs.length} ready`}
         </span>
+        {readyJobs.length > 0 && (
+          <Btn
+            variant="secondary"
+            size="sm"
+            icon={<I.download />}
+            disabled={downloadingAll}
+            onClick={downloadAll}
+          >
+            {downloadingAll
+              ? `Saving ${downloadedCount}/${readyJobs.length}…`
+              : `Download all (${readyJobs.length})`}
+          </Btn>
+        )}
         {active ? (
           <Btn
             variant="danger"
