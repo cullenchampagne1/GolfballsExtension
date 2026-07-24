@@ -4029,7 +4029,7 @@ export const HELP_CONTENT = {
     },
     {
       "slug": "reply-notifications",
-      "title": "Customer Reply Notifications",
+      "title": "Notifications",
       "icon": "alert",
       "tiers": [
         "beginner",
@@ -4037,15 +4037,15 @@ export const HELP_CONTENT = {
       ],
       "keywords": [
         "notifications",
-        "email relay",
-        "customer reply",
+        "updates",
         "badge",
-        "inbound email",
-        "done",
-        "reopen"
+        "jobs",
+        "status",
+        "unread",
+        "archive"
       ],
-      "summary": "Admin-build inbox for inbound customer replies: near-real-time relay polling, toolbar badge, local thread list, CRM links, and automatic completion after a reply.",
-      "feature": "reply-notifications",
+      "summary": "Installation-specific updates with an unread badge, offline history, and safe actions that take you back to the relevant tool.",
+      "feature": "notifications",
       "flag": "notificationsEnabled",
       "covers": [
         "notifications"
@@ -4054,14 +4054,8 @@ export const HELP_CONTENT = {
       "body": {
         "beginner": [
           {
-            "type": "callout",
-            "kind": "warning",
-            "title": "Admin build only",
-            "text": "This capability is compiled only into the admin build. Turn on both Settings → Features → Notifications and Developer Settings → Email Relay: customer reply notifications. The RevStack relay endpoints and this extension installation must also be active."
-          },
-          {
             "type": "p",
-            "text": "When a customer replies through the email relay, the popup gains an open-count badge and the Notifications button. Open golfballs.com tabs also receive a toast. The notification is stored even when no matching tab is open; only the transient toast is skipped."
+            "text": "Notifications keep important updates attached to this extension installation. The toolbar badge shows how many are unread, the popup opens the full notification center, and an active Golfballs page can show a temporary action card when an update arrives."
           },
           {
             "type": "table",
@@ -4071,66 +4065,62 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Open / All / Done",
-                "Filters the stored reply list; each tab shows its live count."
+                "Unread / All / Archived",
+                "Filters new updates, current history, or dismissed items."
               ],
               [
                 "Search",
-                "Matches contact name, contact email, or subject."
+                "Matches a notification title, message, or topic."
               ],
               [
-                "View account",
-                "Opens the resolved CRM contact when the sender could be matched."
+                "Action link",
+                "Opens the relevant supported tool, CRM contact, or support ticket."
               ],
               [
-                "View email",
-                "Opens the relayed message in the existing email viewer."
+                "Mark read",
+                "Removes the item from the unread count without archiving it."
               ],
               [
-                "Mark done / Reopen",
-                "Closes or restores a reply manually. A Power Automate reply to the same address closes it automatically."
-              ],
-              [
-                "Clear completed",
-                "Removes Done rows after a confirmation click."
+                "Archive",
+                "Moves the item out of the current list while keeping it available for reference."
               ]
             ]
           },
           {
             "type": "callout",
             "kind": "info",
-            "text": "A missing CRM match does not lose the message. It only disables View account; View email, Done/Reopen, search, and the badge continue to work."
+            "text": "Notifications are addressed only to your registered installation. If the backend is temporarily unavailable, the last 200 downloaded items remain readable from the local cache."
           }
         ],
         "advanced": [
           {
             "type": "heading",
-            "text": "Polling, storage, and deduplication"
+            "text": "Delivery and receipts"
           },
           {
             "type": "p",
-            "text": "Enabling the relay first primes its cursor to the newest message, preventing historical mail from appearing as new. A 25-second authenticated long poll handles near-real-time delivery; a one-minute alarm recovers the loop after suspension or an offline response."
+            "text": "The extension polls its authenticated installation outbox, merges rows into chrome.storage.local under gbNotifications, and advances its cursor only after the rows are cached. Delivery, read, archive, and action receipts are idempotent, so retries do not duplicate an update or replay an action."
           },
           {
             "type": "p",
-            "text": "Messages are stored newest-first in chrome.storage.local under gbNotifications, capped at 200. Message IDs make re-polls idempotent. Open messages with the same normalized sender and subject (Re:/Fwd: removed) fold into one thread and show a reply count."
+            "text": "The worker performs a responsive foreground loop while available and maintains a one-minute Chrome alarm for recovery after service-worker suspension. Updates remain newest-first and are capped at 200 local rows."
           },
           {
             "type": "heading",
-            "text": "Contact resolution"
+            "text": "Safe actions"
           },
           {
             "type": "p",
-            "text": "The worker checks the encrypted local CRM index first, then tries a session-backed Solr lookup. Resolution is best-effort and is used only to build the CRM account shortcut; it is not required to persist or display the email."
+            "text": "A notification can request only a registered action type. The extension validates every identifier and reconstructs the action locally; arbitrary URLs and executable payloads are rejected. CRM contact shortcuts are resolved on the device and restricted to the Golfballs admin origin."
           }
         ]
       },
       "related": [
-        "email-thread-preview",
-        "how-email-sending-works",
-        "email-integrations"
+        "product-mockup-studio",
+        "feature-toggles",
+        "hidden-settings"
       ],
-      "sectionLabel": "Core Features / Email"
+      "sectionLabel": "Core Features / Tools"
     },
     {
       "slug": "margin-calculator",
@@ -4900,11 +4890,6 @@ export const HELP_CONTENT = {
                 "Campaign Manager",
                 "On",
                 "Multi-step campaign automation (from CRM Search / Tasks)."
-              ],
-              [
-                "Notifications",
-                "On",
-                "Track relayed customer email replies, with an icon badge and a notifications modal."
               ]
             ],
             "meta": {
@@ -4915,8 +4900,55 @@ export const HELP_CONTENT = {
                 "submitProofEnabled",
                 "emailPreviewEnabled",
                 "textPreviewEnabled",
-                "campaignManagerEnabled",
-                "notificationsEnabled"
+                "campaignManagerEnabled"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "Tools"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Feature",
+              "Default",
+              "What it controls"
+            ],
+            "rows": [
+              [
+                "Notifications",
+                "On",
+                "Receive targeted messages and completion alerts in the toolbar notification center."
+              ],
+              [
+                "Image Viewer",
+                "On",
+                "View / extract logo images + the 3D ball preview."
+              ],
+              [
+                "Gifting Catalog",
+                "On",
+                "Gifting catalog, customization, and monograms."
+              ],
+              [
+                "Mockup Studio",
+                "On",
+                "Generate product mockups in durable image batches."
+              ],
+              [
+                "Quick Actions Shelf",
+                "On",
+                "Floating bottom-right quick-actions shelf (Shift×2)."
+              ]
+            ],
+            "meta": {
+              "flagKeys": [
+                "notificationsEnabled",
+                "imagePreviewEnabled",
+                "giftCatalogEnabled",
+                "mockupStudioEnabled",
+                "actionsShelfEnabled"
               ]
             }
           },
@@ -5025,48 +5057,6 @@ export const HELP_CONTENT = {
                 "copyIdsEnabled",
                 "signifydGlowEnabled",
                 "phoneFinderEnabled"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "Tools"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Feature",
-              "Default",
-              "What it controls"
-            ],
-            "rows": [
-              [
-                "Image Viewer",
-                "On",
-                "View / extract logo images + the 3D ball preview."
-              ],
-              [
-                "Gifting Catalog",
-                "On",
-                "Gifting catalog, customization, and monograms."
-              ],
-              [
-                "Mockup Studio",
-                "On",
-                "Generate product mockups in durable image batches."
-              ],
-              [
-                "Quick Actions Shelf",
-                "On",
-                "Floating bottom-right quick-actions shelf (Shift×2)."
-              ]
-            ],
-            "meta": {
-              "flagKeys": [
-                "imagePreviewEnabled",
-                "giftCatalogEnabled",
-                "mockupStudioEnabled",
-                "actionsShelfEnabled"
               ]
             }
           },
@@ -5460,34 +5450,6 @@ export const HELP_CONTENT = {
             "meta": {
               "settingKeys": [
                 "proposalDebug.enabled"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "emailRelay"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Setting",
-              "Type",
-              "Default",
-              "Range",
-              "What it does"
-            ],
-            "rows": [
-              [
-                "Email Relay: customer reply notifications",
-                "bool",
-                "Off",
-                "",
-                "Poll the RevStack email relay for new inbound customer emails and raise a toast when a customer replies. Requires the relay endpoints to be live on the backend. Off = no polling, no notifications."
-              ]
-            ],
-            "meta": {
-              "settingKeys": [
-                "emailRelay.notifications"
               ]
             }
           },
@@ -7681,40 +7643,38 @@ export const HELP_CONTENT = {
     },
     {
       "id": "handle-customer-reply",
-      "title": "Handle a customer reply",
+      "title": "Handle a notification",
       "tier": "beginner",
-      "estMinutes": 3,
+      "estMinutes": 2,
       "prerequisites": [
-        "Admin build",
-        "Notifications and Email Relay reply notifications are enabled",
-        "A new relay reply is available"
+        "Notifications is enabled",
+        "A new update is available for this extension installation"
       ],
       "steps": [
         {
           "action": "Open the extension popup and choose Notifications.",
-          "expected": "The Open tab lists unresolved customer replies; its count matches the toolbar badge.",
-          "visualCue": "Notifications button below CRM Search in the admin popup."
+          "expected": "The Unread tab lists new updates and its count matches the toolbar badge.",
+          "visualCue": "Notifications button in the popup."
         },
         {
-          "action": "Search by name, email, or subject if needed, then open the reply row.",
-          "expected": "The relayed message opens in the Email Viewer.",
-          "visualCue": "Hover actions also expose View email and View account."
+          "action": "Search by title, message, or topic if needed.",
+          "expected": "The list narrows without changing read state.",
+          "visualCue": "Search field below the Unread / All / Archived switcher."
         },
         {
-          "action": "Open the linked account when available and prepare the reply.",
-          "expected": "The CRM contact opens in a new tab. A missing match only disables this shortcut.",
-          "visualCue": "Person icon on row hover."
+          "action": "Choose the notification action, or mark a message read.",
+          "expected": "A registered action opens the relevant tool; Mark read removes only the unread badge.",
+          "visualCue": "Action link inside the row and check button on hover."
         },
         {
-          "action": "Send the reply through Power Automate, or return to Notifications and mark the row done manually.",
-          "expected": "Power Automate auto-completes open notifications for that recipient; manual Done produces the same closed state.",
-          "visualCue": "The row moves from Open to Done and the badge decrements."
+          "action": "Archive an update you no longer need in the current list.",
+          "expected": "It moves to Archived and remains available as offline history.",
+          "visualCue": "Archive button on row hover."
         }
       ],
       "related": [
         "reply-notifications",
-        "email-thread-preview",
-        "how-email-sending-works"
+        "product-mockup-studio"
       ]
     },
     {
@@ -8719,17 +8679,17 @@ export const HELP_CONTENT = {
     {
       "id": "article:reply-notifications",
       "category": "Articles",
-      "title": "Customer Reply Notifications",
+      "title": "Notifications",
       "keywords": [
         "notifications",
-        "email relay",
-        "customer reply",
+        "updates",
         "badge",
-        "inbound email",
-        "done",
-        "reopen"
+        "jobs",
+        "status",
+        "unread",
+        "archive"
       ],
-      "description": "Admin-build inbox for inbound customer replies: near-real-time relay polling, toolbar badge, local thread list, CRM links, and automatic completion after a reply.",
+      "description": "Installation-specific updates with an unread badge, offline history, and safe actions that take you back to the relevant tool.",
       "article": "reply-notifications",
       "shortcut": null,
       "flag": "notificationsEnabled"
@@ -9289,11 +9249,11 @@ export const HELP_CONTENT = {
     {
       "id": "tutorial:handle-customer-reply",
       "category": "Tutorials",
-      "title": "Handle a customer reply",
+      "title": "Handle a notification",
       "keywords": [
         "beginner"
       ],
-      "description": "4 steps · ~3 min",
+      "description": "4 steps · ~2 min",
       "tutorial": "handle-customer-reply"
     },
     {
@@ -9416,9 +9376,9 @@ export const HELP_CONTENT = {
       "title": "Notifications",
       "keywords": [
         "notificationsEnabled",
-        "Email & Templates"
+        "Tools"
       ],
-      "description": "Track relayed customer email replies, with an icon badge and a notifications modal.",
+      "description": "Receive targeted messages and completion alerts in the toolbar notification center.",
       "article": "feature-toggles",
       "flag": "notificationsEnabled"
     },
@@ -9664,16 +9624,6 @@ export const HELP_CONTENT = {
         "proposalDebug.enabled"
       ],
       "description": "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.",
-      "article": "developer-settings"
-    },
-    {
-      "id": "devSetting:emailRelay.notifications",
-      "category": "Settings",
-      "title": "Email Relay: customer reply notifications",
-      "keywords": [
-        "emailRelay.notifications"
-      ],
-      "description": "Poll the RevStack email relay for new inbound customer emails and raise a toast when a customer replies. Requires the relay endpoints to be live on the backend. Off = no polling, no notifications.",
       "article": "developer-settings"
     },
     {

@@ -39,6 +39,70 @@ function __gbAccessAllowed(st, now) {
     try { fn?.(msg, dur > 0 ? { duration: dur } : {}); } catch { /* no host */ }
   }
 
+  function __gbNotificationReceipt(notification, state) {
+    const remoteId = Number(notification?.remoteId);
+    if (!Number.isSafeInteger(remoteId) || remoteId < 1) return;
+    try {
+      chrome.runtime.sendMessage({
+        action: 'notificationReceipt',
+        notificationIds: [remoteId],
+        state,
+      });
+    } catch { /* worker unavailable during navigation */ }
+  }
+
+  function __gbOpenNotification(notification, options = {}) {
+    const acknowledge = options.receipt !== false;
+    const receipt = (state) => {
+      if (acknowledge) __gbNotificationReceipt(notification, state);
+    };
+    const action = notification?.action;
+    if (!action || typeof action !== 'object') {
+      window.__gbShowNotificationsModal?.();
+      receipt('read');
+      return true;
+    }
+    if (
+      action.type === 'open_mockup_batch'
+      && /^batch_[a-f0-9]{32}$/.test(String(action.batchId || ''))
+      && typeof window.__gbOpenMockupStudio === 'function'
+    ) {
+      receipt('acted');
+      window.__gbOpenMockupStudio(action.batchId);
+      return true;
+    }
+    if (action.type === 'open_contact') {
+      const url = String(notification.localActionUrl || '');
+      if (/^https:\/\/api\.golfballs\.com\/golfballs\/adminnew\//i.test(url)) {
+        receipt('acted');
+        window.location.assign(url);
+        return true;
+      }
+      window.__gbToast?.info?.(
+        'No matching contact is available on this device yet',
+        { duration: 4000 },
+      );
+      return false;
+    }
+    if (
+      action.type === 'open_support_ticket'
+      && /^GBT-[A-Z0-9]{6,16}$/.test(String(action.ticketId || ''))
+    ) {
+      receipt('acted');
+      chrome.runtime.sendMessage({
+        action: 'openEditor',
+        openSettings: true,
+        settingsTarget: 'support-tickets',
+      });
+      return true;
+    }
+    window.__gbToast?.warning?.('This notification action is unavailable', {
+      duration: 3500,
+    });
+    return false;
+  }
+  window.__gbRunNotificationAction = __gbOpenNotification;
+
   let __gbAutoPushUpdate = null;
   function __gbHandleIframeMessage(payload) {
     const { action, message, type, duration, data } = payload || {};
@@ -49,38 +113,32 @@ function __gbAccessAllowed(st, now) {
       gbNotify(message, type, duration);
     }
 
-    /* @admin:start */
-    /* Large action toast for a new customer reply relayed by the background
-       email-relay poll. Functions can't cross the runtime boundary, so the
-       View handler is reconstructed HERE from the serializable `viewUrl` the
-       background pre-resolved (contact page for the sender's email). Dismiss +
-       View sit together on the right; the toast is sticky until dismissed. */
-    if (action === 'GB_EMAIL_RELAY_NOTIFY') {
+    /* Typed server notification. Functions cannot cross the runtime boundary,
+       so only allowlisted local actions are reconstructed on the page. */
+    if (action === 'GB_EXTENSION_NOTIFICATION') {
       handled = true;
+      const notification = payload?.notification || {};
       const toast = window.__gbToast;
       if (toast && typeof toast.action === 'function') {
-        const viewUrl = payload && payload.viewUrl;
+        const tones = {
+          success: 'success',
+          warning: 'warning',
+          error: 'error',
+          info: 'brand',
+        };
         toast.action({
-          tone: (payload && payload.tone) || 'brand',
-          title: (payload && payload.title) || 'New customer reply',
-          message: message || '',
+          tone: tones[notification.level] || 'brand',
+          title: notification.title || 'New notification',
+          message: notification.body || '',
           align: 'right',
-          secondary: 'Dismiss',
-          primary: 'View',
-          onPrimary: () => {
-            if (viewUrl) {
-              try { window.location.href = viewUrl; } catch { /* navigation blocked */ }
-            } else {
-              toast.info?.('No contact is linked to this email yet', { duration: 4000 });
-            }
-          },
+          secondary: 'Later',
+          primary: notification.action?.label || 'Open',
+          onPrimary: () => __gbOpenNotification(notification),
         });
       } else {
-        // No toast host on this page — fall back to the simple pill path.
-        gbNotify((payload && payload.title) || message, 'info', 6000);
+        gbNotify(notification.title || notification.body, notification.level, 6000);
       }
     }
-    /* @admin:end */
 
     if (action === 'GB_OPEN_CALENDAR') {
       handled = true;
@@ -380,12 +438,10 @@ function __gbAccessAllowed(st, now) {
       return true;
     }
 
-    /* @admin:start */
     if (msg.action === 'showNotificationsModal') {
       if (typeof window.__gbShowNotificationsModal === 'function') window.__gbShowNotificationsModal();
       return true;
     }
-    /* @admin:end */
 
     if (msg.action === 'sendViaPA') {
       // Build the lean payload, send to PA, and surface the real result

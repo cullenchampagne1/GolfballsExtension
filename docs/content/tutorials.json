@@ -179,17 +179,17 @@
     },
     {
       "id": "handle-customer-reply",
-      "title": "Handle a customer reply",
+      "title": "Handle a notification",
       "tier": "beginner",
-      "estMinutes": 3,
-      "prerequisites": ["Admin build", "Notifications and Email Relay reply notifications are enabled", "A new relay reply is available"],
+      "estMinutes": 2,
+      "prerequisites": ["Notifications is enabled", "A new update is available for this extension installation"],
       "steps": [
-        { "action": "Open the extension popup and choose Notifications.", "expected": "The Open tab lists unresolved customer replies; its count matches the toolbar badge.", "visualCue": "Notifications button below CRM Search in the admin popup." },
-        { "action": "Search by name, email, or subject if needed, then open the reply row.", "expected": "The relayed message opens in the Email Viewer.", "visualCue": "Hover actions also expose View email and View account." },
-        { "action": "Open the linked account when available and prepare the reply.", "expected": "The CRM contact opens in a new tab. A missing match only disables this shortcut.", "visualCue": "Person icon on row hover." },
-        { "action": "Send the reply through Power Automate, or return to Notifications and mark the row done manually.", "expected": "Power Automate auto-completes open notifications for that recipient; manual Done produces the same closed state.", "visualCue": "The row moves from Open to Done and the badge decrements." }
+        { "action": "Open the extension popup and choose Notifications.", "expected": "The Unread tab lists new updates and its count matches the toolbar badge.", "visualCue": "Notifications button in the popup." },
+        { "action": "Search by title, message, or topic if needed.", "expected": "The list narrows without changing read state.", "visualCue": "Search field below the Unread / All / Archived switcher." },
+        { "action": "Choose the notification action, or mark a message read.", "expected": "A registered action opens the relevant tool; Mark read removes only the unread badge.", "visualCue": "Action link inside the row and check button on hover." },
+        { "action": "Archive an update you no longer need in the current list.", "expected": "It moves to Archived and remains available as offline history.", "visualCue": "Archive button on row hover." }
       ],
-      "related": ["reply-notifications", "email-thread-preview", "how-email-sending-works"]
+      "related": ["reply-notifications", "product-mockup-studio"]
     },
     {
       "id": "apply-order-note",

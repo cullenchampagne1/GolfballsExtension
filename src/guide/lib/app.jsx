@@ -110,7 +110,7 @@ export const NAV = [
   ]},
   { group: 'Daily Driver', items: [
     { id: 'popup', title: 'The Popup', icon: 'mail', slugs: ['email-templates-popup', 'how-email-sending-works'] },
-    ...(__ADMIN__ ? [{ id: 'notifications', title: 'Notifications', icon: 'alert', slugs: ['reply-notifications'] }] : []),
+    { id: 'notifications', title: 'Notifications', icon: 'alert', slugs: ['reply-notifications'] },
     { id: 'templates', title: 'Email Templates', icon: 'edit', slugs: ['template-editor', 'template-variables', 'note-templates'] },
     { id: 'charge', title: 'Charge & Order Edit', icon: 'card', slugs: ['charge-refund', 'order-edit'] },
     { id: 'proof', title: 'Submit Proof', icon: 'send', slugs: ['submit-proof'] },

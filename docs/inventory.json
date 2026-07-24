@@ -487,18 +487,17 @@
       "id": "notifications",
       "component": "Notifications",
       "file": "src/modals/Notifications.jsx",
-      "displayName": "Customer Reply Notifications",
-      "purpose": "Admin-build inbox for relayed inbound customer replies with Open/All/Done filters, search, account/email actions, and manual completion.",
+      "displayName": "Notifications",
+      "purpose": "Installation-scoped update center with Unread/All/Archived filters, offline history, search, and validated tool actions.",
       "openedBy": [
-        "admin popup Notifications button"
+        "popup Notifications button",
+        "toolbar badge",
+        "new-update action toast"
       ],
       "pageContext": [
         "any golfballs.com tab"
       ],
       "flag": "notificationsEnabled",
-      "relatedSettings": [
-        "emailRelay.notifications"
-      ],
       "storage": "gbNotifications (chrome.storage.local; max 200)"
     },
     {
@@ -874,9 +873,8 @@
     {
       "name": "notificationsEnabled",
       "default": true,
-      "section": "Email & Templates",
-      "controls": "Admin-build popup button, toolbar badge, and customer-reply Notifications modal",
-      "audience": "admin build"
+      "section": "Tools",
+      "controls": "Popup button, toolbar badge, Notifications modal, and update action toasts"
     },
     {
       "name": "crmSearchEnabled",
@@ -1070,13 +1068,6 @@
         "type": "boolean",
         "default": false,
         "label": "Popup: ignore page context"
-      },
-      {
-        "key": "emailRelay.notifications",
-        "type": "boolean",
-        "default": false,
-        "label": "Email Relay: customer reply notifications",
-        "audience": "admin build"
       },
       {
         "key": "popup.ignoreContext.charge",
@@ -1533,12 +1524,12 @@
     {
       "key": "gbNotifications",
       "area": "local",
-      "contains": "newest-first customer reply notification threads (max 200)"
+      "contains": "newest-first installation notification cache and receipt state (max 200)"
     },
     {
-      "key": "gbEmailRelayCursor",
+      "key": "gbNotificationCursor",
       "area": "local",
-      "contains": "last processed email-relay cursor"
+      "contains": "last cached installation notification id"
     },
     {
       "key": "gbLocalNotes",
@@ -1798,10 +1789,11 @@
         "GET/POST /projects/golfballs-extension/client/identity",
         "GET /projects/golfballs-extension/client/configuration",
         "GET/POST /projects/golfballs-extension/client/settings-shares*",
-        "GET /projects/golfballs-extension/client/email-relay/pending",
+        "GET /projects/golfballs-extension/client/notifications",
+        "POST /projects/golfballs-extension/client/notifications/receipts",
         "GET /projects/golfballs-extension/assistant/health"
       ],
-      "usedFor": "anonymous installation enrollment, fail-closed installation access, credential-bound user attribution, administrator settings policy, revocable settings-template URLs, admin-build inbound reply relay, and Help Companion readiness",
+      "usedFor": "anonymous installation enrollment, fail-closed installation access, credential-bound user attribution, administrator settings policy, revocable settings-template URLs, installation-scoped notifications, and Help Companion readiness",
       "auth": "unique server-issued rsk_ bearer per extension installation; dashboard admin cookie enables policy bypass without exposing the cookie; rate-limited and server-revocable"
     }
   ],
@@ -1916,9 +1908,9 @@
       "what": "Encrypts complete CRM rows in worker-owned IndexedDB while retaining names for ranked local search."
     },
     {
-      "name": "Customer reply relay",
-      "trigger": "emailRelay.notifications enabled in the admin build",
-      "what": "Primes a cursor, maintains a 25-second authenticated long poll with a one-minute recovery alarm, stores/folds inbound reply notifications, updates the toolbar badge, and raises toasts on open golfballs.com tabs."
+      "name": "Installation notification outbox",
+      "trigger": "notificationsEnabled and a valid installation session",
+      "what": "Caches targeted updates before advancing its cursor, maintains a responsive polling loop with a one-minute recovery alarm, posts idempotent receipts, updates the toolbar badge, and raises safe action toasts on open Golfballs tabs."
     }
   ],
   "emailPipeline": {
@@ -1984,10 +1976,10 @@
     },
     {
       "id": "reply-notifications",
-      "name": "Customer Reply Notifications",
-      "surface": "admin popup + Notifications modal + toolbar badge",
-      "flag": "notificationsEnabled + emailRelay.notifications",
-      "summary": "Admin-build inbound email relay inbox with local thread folding, CRM links, toasts, and automatic completion after a reply."
+      "name": "Notifications",
+      "surface": "popup + Notifications modal + toolbar badge",
+      "flag": "notificationsEnabled",
+      "summary": "Installation-scoped update center with offline cache, receipts, safe actions, and completion alerts."
     },
     {
       "id": "text-preview",

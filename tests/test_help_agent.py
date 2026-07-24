@@ -59,9 +59,9 @@ class HelpAgentCorpusTests(unittest.TestCase):
             for chunk in self.chunks
         ))
 
-    def test_admin_only_help_and_source_are_tagged_for_consumer_filtering(self):
+    def test_consumer_notifications_and_admin_sources_are_edition_tagged(self):
         notification = self.by_id["guide:article:reply-notifications:beginner"]
-        self.assertEqual(notification["edition"], "admin")
+        self.assertEqual(notification["edition"], "all")
         self.assertTrue(any(chunk.get("edition") == "admin" for chunk in self.chunks))
         self.assertTrue(any(chunk.get("edition") == "all" for chunk in self.chunks))
 
@@ -141,8 +141,8 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "max_facts": 8,
         })
         self.assertEqual(self.descriptor["effort_policy"], {
-            "default": "low", "technical": "medium",
-            "troubleshooting": "high", "ticket": "high",
+            "default": "low", "technical": "low",
+            "troubleshooting": "medium", "ticket": "low",
         })
         self.assertEqual(self.descriptor["completion_timeout_seconds"], 75)
         self.assertEqual(
@@ -184,7 +184,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
             )
             consumer = manager.retrieve(
                 self.descriptor["id"],
-                "reply notifications emailRelay.notifications",
+                "notification unread archive safe action",
                 edition="consumer",
                 limit=12,
             )
@@ -192,10 +192,10 @@ class HelpAgentCorpusTests(unittest.TestCase):
             self.assertNotIn(
                 "registry:devSetting:emailRelay.notifications", consumer_ids
             )
-            self.assertNotIn(
+            self.assertIn(
                 "guide:article:reply-notifications:beginner", consumer_ids
             )
-            self.assertFalse(any(
+            self.assertTrue(any(
                 row["source"] == "src/modals/Notifications.jsx" for row in consumer
             ))
         finally:
@@ -204,6 +204,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
     def test_project_manifest_registers_every_client_and_documentation_route(self):
         manifest = json.loads((ROOT / "revstack.project.json").read_text())
         expected_client = {
+            ("GET", "/projects/golfballs-extension/assistant/health"),
             ("GET", "/projects/golfballs-extension/assistant/status"),
             ("POST", "/projects/golfballs-extension/assistant/messages"),
             ("GET", "/projects/golfballs-extension/assistant/runs/*"),

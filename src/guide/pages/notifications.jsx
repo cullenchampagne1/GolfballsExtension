@@ -3,17 +3,34 @@ import { I } from '../../ui/index.js';
 
 function NotificationPreview() {
   const rows = [
-    { name: 'Jordan Lee', subject: 'Re: Q3 golf outing', preview: 'The navy option looks great. Can we…', time: '2m', count: 2 },
-    { name: 'Avery Martin', subject: 'Logo approval', preview: 'Approved—please move forward.', time: '18m' },
+    {
+      title: 'Your mockups are ready',
+      message: 'Venture Towel finished with 4 of 4 images ready.',
+      time: '2m',
+      tone: 'success',
+    },
+    {
+      title: 'Support ticket updated',
+      message: 'GBT-N54EMKJ7 has a new reply.',
+      time: '18m',
+      tone: 'info',
+    },
   ];
   return (
     <div className="reference-demo-panel">
-      <div className="reference-demo-head"><span><I.alert size={15} /> Notifications</span><b>2 open</b></div>
-      <div className="reference-demo-tabs"><span className="on">Open · 2</span><span>All · 5</span><span>Done · 3</span></div>
+      <div className="reference-demo-head">
+        <span><I.alert size={15} /> Notifications</span>
+        <b>2 unread</b>
+      </div>
+      <div className="reference-demo-tabs">
+        <span className="on">Unread · 2</span><span>All · 5</span><span>Archived · 1</span>
+      </div>
       {rows.map((row) => (
-        <div className="reference-demo-row" key={row.name}>
-          <span className="reference-demo-avatar"><I.mail size={13} /></span>
-          <span><b>{row.name}{row.count ? ` · ${row.count}` : ''}</b><small>{row.subject}</small><small>{row.preview}</small></span>
+        <div className="reference-demo-row" key={row.title}>
+          <span className="reference-demo-avatar">
+            {row.tone === 'success' ? <I.check size={13} /> : <I.bolt size={13} />}
+          </span>
+          <span><b>{row.title}</b><small>{row.message}</small></span>
           <em>{row.time}</em>
         </div>
       ))}
@@ -24,15 +41,15 @@ function NotificationPreview() {
 export function NotificationsPage() {
   return (
     <div className="prose">
-      <div className="eyebrow">Daily Driver · Admin build</div>
-      <h1 className="title">Customer Reply Notifications</h1>
-      <p className="lede">The email relay watches for new inbound customer replies, stores a compact local inbox, updates the extension badge, and links each reply back to the customer when a CRM match is available.</p>
+      <div className="eyebrow">Daily Driver</div>
+      <h1 className="title">Notifications</h1>
+      <p className="lede">Keep job completions, support updates, and other important events attached to this extension installation—with an unread badge, offline history, and safe shortcuts back to the relevant tool.</p>
 
-      <div className="docnote warn">
+      <div className="docnote info">
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Availability</div>
-          <p>This is an admin-build capability. Both <strong>Notifications</strong> under Settings → Features and <strong>Email Relay: customer reply notifications</strong> under Developer Settings must be enabled. The relay endpoints must also be deployed and the extension installation enrolled with RevStack.</p>
+          <div className="dn-t">Private to this installation</div>
+          <p>The extension downloads only notifications addressed to its own registered installation. Other users’ messages are never part of the client response.</p>
         </div>
       </div>
 
@@ -40,33 +57,33 @@ export function NotificationsPage() {
       <div className="reference-split">
         <NotificationPreview />
         <div>
-          <p>The popup gains a <strong>Notifications</strong> button with the open-reply count. Chrome’s toolbar icon carries the same badge (capped at 99+). New replies also raise a toast on open golfballs.com tabs.</p>
-          <p>The modal has <strong>Open / All / Done</strong> filters and search by contact name, email, or subject. Hover a row to open the customer account, view the relayed email, or mark it done/reopen it. Completed rows can be cleared in bulk.</p>
+          <p>The popup has a <strong>Notifications</strong> button with the unread count. Chrome’s toolbar icon carries the same badge, capped at 99+. New updates can also show an action card on the active Golfballs page.</p>
+          <p>The center has <strong>Unread / All / Archived</strong> filters and full-message search. Mark an item read to clear its badge, archive it when you are finished, or use its action link to open the relevant supported surface.</p>
         </div>
       </div>
 
-      <h2 className="sec">How a reply moves through the system</h2>
+      <h2 className="sec">How an update moves through the system</h2>
       <table className="spectable">
         <thead><tr><th>Stage</th><th>Behavior</th></tr></thead>
         <tbody>
-          <tr><td><b>Enable</b></td><td>The first poll primes the cursor to the latest relay message so old mail is not announced as new.</td></tr>
-          <tr><td><b>Listen</b></td><td>A 25-second long poll provides near-real-time delivery; a one-minute alarm is the recovery/safety cadence.</td></tr>
-          <tr><td><b>Resolve</b></td><td>The sender email is matched against the encrypted local CRM index first, then Solr as a best-effort fallback.</td></tr>
-          <tr><td><b>Store</b></td><td>Replies are kept locally under <code>gbNotifications</code>, newest first, capped at 200. Replies from the same sender and subject fold into one thread row.</td></tr>
-          <tr><td><b>Close the loop</b></td><td>Sending a Power Automate reply to that email automatically marks its open notifications done; manual Done/Reopen remains available.</td></tr>
+          <tr><td><b>Address</b></td><td>The backend targets one active extension installation, or an administrator intentionally sends to all active installations.</td></tr>
+          <tr><td><b>Cache</b></td><td>The worker saves rows before advancing its cursor, so a service-worker suspension cannot create a silent gap.</td></tr>
+          <tr><td><b>Notify</b></td><td>An active Golfballs tab receives a temporary action card; otherwise the update still enters the toolbar badge and local center.</td></tr>
+          <tr><td><b>Acknowledge</b></td><td>Delivered, read, archived, and acted receipts are idempotent and remain scoped to the current installation.</td></tr>
+          <tr><td><b>Recover</b></td><td>The local cache keeps the most recent 200 rows readable when the backend is temporarily unavailable.</td></tr>
         </tbody>
       </table>
 
       <div className="docnote info">
         <span className="dn-ico"><I.eye size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">If replies do not appear</div>
-          <p>Confirm both switches are on, the backend relay is reachable, and the installation is enrolled. An unresolved CRM contact does <em>not</em> discard a notification—it only removes the account shortcut. If no golfballs.com tab is open, the reply still enters the stored list and badge; only the transient toast is skipped.</p>
+          <div className="dn-t">Actions stay constrained</div>
+          <p>Notifications cannot run arbitrary code or open arbitrary links. The extension accepts only registered action types, validates their identifiers, and reconstructs the action locally.</p>
         </div>
       </div>
 
       <div className="reference-links">
-        <a href="#workflows/handle-customer-reply"><I.play size={14} /> Handle a customer reply</a>
+        <a href="#workflows/handle-customer-reply"><I.play size={14} /> Handle a notification</a>
         <a href="#manual/reply-notifications"><I.bookmark size={14} /> Detailed reference</a>
       </div>
     </div>

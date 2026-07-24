@@ -1,8 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/runtime-bootstrap.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js');
-/* @admin:start */
-importScripts('lib/notifications-store.js', 'lib/email-relay-poll.js');
-/* @admin:end */
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/runtime-bootstrap.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
@@ -18,10 +15,14 @@ GB_RUNTIME.start().then((allowed) => {
   if (!allowed) return;
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
   GB_HELP_ASSISTANT.resume().catch(() => {});
+  GBNotificationPoll.reconcile().catch(() => {});
 }).catch(GB_RUNTIME.report);
 chrome.runtime.onStartup?.addListener(() => {
   GB_RUNTIME.sync().then((allowed) => {
-    if (allowed) GB_HELP_ASSISTANT.resume().catch(() => {});
+    if (allowed) {
+      GB_HELP_ASSISTANT.resume().catch(() => {});
+      GBNotificationPoll.reconcile().catch(() => {});
+    }
   }).catch(GB_RUNTIME.report);
 });
 chrome.alarms?.onAlarm?.addListener((alarm) => {
@@ -117,9 +118,8 @@ chrome.storage.onChanged.addListener((ch, area) => {
   // Keep the in-memory copy in sync when the panel clears the log.
   if (ch[GB_DBG_KEY] && Array.isArray(ch[GB_DBG_KEY].newValue)) gbDebugLog = ch[GB_DBG_KEY].newValue;
 });
-/* @admin:start */
 // ── Notifications icon badge ────────────────────────────────────────────────
-// Reflect the count of OPEN customer-email notifications on the toolbar icon.
+// Reflect the unread count from the local offline notification cache.
 // Painted on every worker spin-up and whenever the store or the feature flag
 // changes (the modal, poll, and send-hook all mutate the same storage key).
 const GB_NOTIF_KEY = (globalThis.GBNotifications && GBNotifications.STORAGE_KEY) || 'gbNotifications';
@@ -130,7 +130,6 @@ chrome.storage.onChanged.addListener((ch, area) => {
     try { GBNotifications.paintBadge(); } catch { /* */ }
   }
 });
-/* @admin:end */
 const _gbCap = (s) => (s == null ? null : (String(s).length > GB_DBG_BODY_CAP ? String(s).slice(0, GB_DBG_BODY_CAP) + '\n…[truncated]' : String(s)));
 /* Classify a request → { cat: 'proposal'|'email', label } or null (ignore). */
 function gbDebugClassify(url, bodyStr) {
@@ -900,6 +899,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         ok: false,
         error: error?.message || 'Unable to register extension identity',
       }));
+    return true;
+  }
+
+  if (msg.action === 'notificationReceipt') {
+    const ids = Array.isArray(msg.notificationIds)
+      ? msg.notificationIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0)
+      : [];
+    const state = String(msg.state || '');
+    if (!ids.length || !['read', 'dismissed', 'acted'].includes(state)) {
+      sendResponse({ ok: false, error: 'Invalid notification receipt' });
+      return true;
+    }
+    Promise.all([
+      globalThis.GBNotifications?.patch?.(
+        ids,
+        { status: state === 'dismissed' ? 'dismissed' : 'read' },
+      ),
+      globalThis.GBNotificationPoll?.sendReceipt?.(ids, state),
+    ]).then(([, sent]) => sendResponse({ ok: true, sent: sent === true }))
+      .catch(() => sendResponse({ ok: false, error: 'Unable to update notification' }));
     return true;
   }
 
@@ -2357,6 +2376,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         // only form that renders reliably. The PA flow forwards the
         // per-email `attachments` array to its send action.
         if (payload && Array.isArray(payload.emails)) {
+          const installation = await GBInstallationAuth.getStatus();
+          if (installation?.enrolled && installation.installationId) {
+            // The delivery workflow can mirror this stable id with its
+            // outbound record. A later reply can then inherit the same
+            // installation even when the inbound event carries no id itself.
+            payload.installationId = installation.installationId;
+            for (const em of payload.emails) {
+              if (em && typeof em === 'object') {
+                em.installationId = installation.installationId;
+              }
+            }
+          }
           for (const em of payload.emails) {
             if (em && typeof em.htmlBody === 'string') {
               // Attached-file markers FIRST (they're stripped from the html),
@@ -2384,18 +2415,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           redirect: 'error',
         });
         if (r.ok) {
-          /* @admin:start */
-          // Auto-complete: replying to a customer clears their open email
-          // notification(s). Every PA send (popup + all ESM paths) funnels here
-          // with the recipient in scope, so this is the one universal hook.
-          try {
-            if (globalThis.GBNotifications && Array.isArray(payload && payload.emails)) {
-              for (const em of payload.emails) {
-                if (em && em.to) GBNotifications.markDoneByEmail(em.to, 'replied');
-              }
-            }
-          } catch { /* notification bookkeeping must never block a send */ }
-          /* @admin:end */
           const text = await gbReadTextLimited(r, 1_000_000);
           try {
             const data = JSON.parse(text);

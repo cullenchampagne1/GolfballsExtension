@@ -1,13 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 
-/* __ADMIN__ build define (true in the full build, false in the served build),
-   guarded for node tooling. Admin-only dev settings are wrapped in
-   `...(ADMIN ? [ … ] : [])` so the consumer build drops them entirely. */
-/* eslint-disable no-undef */
-const ADMIN = (typeof __ADMIN__ !== 'undefined')
-  ? __ADMIN__
-  : !(typeof process !== 'undefined' && process.env && process.env.GB_ADMIN === '0');
-
 /* ───────────────────────────────────────────────────────────────
    devSettings.js — low-priority knobs that don't deserve a top-
    level feature flag. Things like animation durations, debounce
@@ -97,14 +89,6 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
-  // Admin-only: excluded from the served (consumer) build.
-  ...(ADMIN ? [{
-    key:     'emailRelay.notifications',
-    label:   'Email Relay: customer reply notifications',
-    desc:    'Poll the RevStack email relay for new inbound customer emails and raise a toast when a customer replies. Requires the relay endpoints to be live on the backend. Off = no polling, no notifications.',
-    type:    'bool',
-    default: false,
-  }] : []),
   {
     key:     'golfballViewer.showDebugHud',
     label:   'Golfball viewer: camera debug HUD',

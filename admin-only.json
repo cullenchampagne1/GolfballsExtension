@@ -1,40 +1,17 @@
 {
   "_doc": "Admin-only code excluded from the SERVED (consumer) build. The dev/full build (npm run build, GB_ADMIN default) keeps everything; the store/publish build (GB_ADMIN=0) skips 'entries', drops 'rootFiles' + 'contentScripts', strips /* @admin:start */.../* @admin:end */ regions from raw files, and regenerates the settings registry without 'configKeys'. 'leakTokens' must NOT appear anywhere in the packaged consumer output \u2014 the packager fails if they do.",
-  "entries": [
-    "src/content/notifications.jsx"
-  ],
-  "rootFiles": [
-    "lib/notifications-store.js",
-    "lib/email-relay-poll.js"
-  ],
-  "contentScripts": [
-    "react-dist/content/notifications.js"
-  ],
-  "configKeys": [
-    "notificationsEnabled",
-    "emailRelay.notifications"
-  ],
+  "entries": [],
+  "rootFiles": [],
+  "contentScripts": [],
+  "configKeys": [],
   "helpDocs": [
-    "notifications.json",
     "mockup-catalog.json"
   ],
   "adminModals": [
-    "notifications",
     "mockup-catalog-admin"
   ],
-  "adminTutorials": [
-    "handle-customer-reply"
-  ],
+  "adminTutorials": [],
   "leakTokens": [
-    "gbNotifications",
-    "GBNotifications",
-    "showNotificationsModal",
-    "__gbShowNotificationsModal",
-    "email-relay",
-    "gbEmailRelayPoll",
-    "emailRelay.notifications",
-    "notificationsEnabled",
-    "notifications-store",
     "importHpgCatalog",
     "importSnugzCatalog",
     "fetchHpgList",

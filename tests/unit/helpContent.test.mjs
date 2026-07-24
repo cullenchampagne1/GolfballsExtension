@@ -66,7 +66,7 @@ describe('generated operator guide coverage', () => {
     for (const tutorial of HELP_TUTORIALS) assert.ok(searchableTutorials.has(tutorial.id), `${tutorial.id} must be searchable`);
   });
 
-  it('documents admin notifications and labels proposal checkout as preview-only', () => {
+  it('documents installation notifications and labels proposal checkout as preview-only', () => {
     const notifications = HELP_ARTICLES.find((article) => article.slug === 'reply-notifications');
     assert.equal(notifications?.flag, 'notificationsEnabled');
     assert.ok(notifications?.covers.includes('notifications'));

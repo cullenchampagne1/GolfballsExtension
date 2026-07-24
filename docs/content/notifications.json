@@ -1,40 +1,38 @@
 {
-  "section": "Core Features / Email",
+  "section": "Core Features / Tools",
   "articles": [
     {
       "slug": "reply-notifications",
-      "title": "Customer Reply Notifications",
+      "title": "Notifications",
       "icon": "alert",
       "tiers": ["beginner", "advanced"],
-      "keywords": ["notifications", "email relay", "customer reply", "badge", "inbound email", "done", "reopen"],
-      "summary": "Admin-build inbox for inbound customer replies: near-real-time relay polling, toolbar badge, local thread list, CRM links, and automatic completion after a reply.",
-      "feature": "reply-notifications",
+      "keywords": ["notifications", "updates", "badge", "jobs", "status", "unread", "archive"],
+      "summary": "Installation-specific updates with an unread badge, offline history, and safe actions that take you back to the relevant tool.",
+      "feature": "notifications",
       "flag": "notificationsEnabled",
       "covers": ["notifications"],
       "tutorial": "handle-customer-reply",
       "body": {
         "beginner": [
-          { "type": "callout", "kind": "warning", "title": "Admin build only", "text": "This capability is compiled only into the admin build. Turn on both Settings → Features → Notifications and Developer Settings → Email Relay: customer reply notifications. The RevStack relay endpoints and this extension installation must also be active." },
-          { "type": "p", "text": "When a customer replies through the email relay, the popup gains an open-count badge and the Notifications button. Open golfballs.com tabs also receive a toast. The notification is stored even when no matching tab is open; only the transient toast is skipped." },
+          { "type": "p", "text": "Notifications keep important updates attached to this extension installation. The toolbar badge shows how many are unread, the popup opens the full notification center, and an active Golfballs page can show a temporary action card when an update arrives." },
           { "type": "table", "headers": ["Control", "What it does"], "rows": [
-            ["Open / All / Done", "Filters the stored reply list; each tab shows its live count."],
-            ["Search", "Matches contact name, contact email, or subject."],
-            ["View account", "Opens the resolved CRM contact when the sender could be matched."],
-            ["View email", "Opens the relayed message in the existing email viewer."],
-            ["Mark done / Reopen", "Closes or restores a reply manually. A Power Automate reply to the same address closes it automatically."],
-            ["Clear completed", "Removes Done rows after a confirmation click."]
+            ["Unread / All / Archived", "Filters new updates, current history, or dismissed items."],
+            ["Search", "Matches a notification title, message, or topic."],
+            ["Action link", "Opens the relevant supported tool, CRM contact, or support ticket."],
+            ["Mark read", "Removes the item from the unread count without archiving it."],
+            ["Archive", "Moves the item out of the current list while keeping it available for reference."]
           ] },
-          { "type": "callout", "kind": "info", "text": "A missing CRM match does not lose the message. It only disables View account; View email, Done/Reopen, search, and the badge continue to work." }
+          { "type": "callout", "kind": "info", "text": "Notifications are addressed only to your registered installation. If the backend is temporarily unavailable, the last 200 downloaded items remain readable from the local cache." }
         ],
         "advanced": [
-          { "type": "heading", "text": "Polling, storage, and deduplication" },
-          { "type": "p", "text": "Enabling the relay first primes its cursor to the newest message, preventing historical mail from appearing as new. A 25-second authenticated long poll handles near-real-time delivery; a one-minute alarm recovers the loop after suspension or an offline response." },
-          { "type": "p", "text": "Messages are stored newest-first in chrome.storage.local under gbNotifications, capped at 200. Message IDs make re-polls idempotent. Open messages with the same normalized sender and subject (Re:/Fwd: removed) fold into one thread and show a reply count." },
-          { "type": "heading", "text": "Contact resolution" },
-          { "type": "p", "text": "The worker checks the encrypted local CRM index first, then tries a session-backed Solr lookup. Resolution is best-effort and is used only to build the CRM account shortcut; it is not required to persist or display the email." }
+          { "type": "heading", "text": "Delivery and receipts" },
+          { "type": "p", "text": "The extension polls its authenticated installation outbox, merges rows into chrome.storage.local under gbNotifications, and advances its cursor only after the rows are cached. Delivery, read, archive, and action receipts are idempotent, so retries do not duplicate an update or replay an action." },
+          { "type": "p", "text": "The worker performs a responsive foreground loop while available and maintains a one-minute Chrome alarm for recovery after service-worker suspension. Updates remain newest-first and are capped at 200 local rows." },
+          { "type": "heading", "text": "Safe actions" },
+          { "type": "p", "text": "A notification can request only a registered action type. The extension validates every identifier and reconstructs the action locally; arbitrary URLs and executable payloads are rejected. CRM contact shortcuts are resolved on the device and restricted to the Golfballs admin origin." }
         ]
       },
-      "related": ["email-thread-preview", "how-email-sending-works", "email-integrations"]
+      "related": ["product-mockup-studio", "feature-toggles", "hidden-settings"]
     }
   ]
 }

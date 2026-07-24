@@ -4,17 +4,9 @@ import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { Notifications } from '../modals/Notifications.jsx';
 
-/* ───────────────────────────────────────────────────────────────
-   notifications.jsx — content-script entry for the Notifications modal.
-
-   Public contract used by content/main.js:
-     window.__gbShowNotificationsModal()   — opens (or toggles) the modal
-     window.__gbNotificationsModalLoaded   — single-execution guard
-
-   Wrapped in <ToastHost> so the modal's own toasts appear on pages that
-   don't otherwise host the toast system. Build → react-dist/content/
-   notifications.js, registered in manifest content_scripts.
-─────────────────────────────────────────────────────────────── */
+/* Global entry for the installation-scoped notification center.
+   Wrapped in ToastHost so action feedback remains available even on pages
+   where no other React surface has mounted the shared toast system. */
 
 if (!window.__gbNotificationsModalLoaded) {
   window.__gbNotificationsModalLoaded = true;

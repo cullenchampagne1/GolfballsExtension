@@ -29,8 +29,8 @@ const keep = (key) => !ADMIN_CONFIG.has(key);
 
 // Installation-local dev settings: a shared server policy never forces or hides
 // these — each stays a per-install choice. email.localPart guards sender
-// identity; emailRelay.notifications is a per-rep opt-in the rep toggles locally.
-const INSTALLATION_LOCAL_KEYS = new Set(['email.localPart', 'emailRelay.notifications']);
+// identity and is never replaced by a shared policy value.
+const INSTALLATION_LOCAL_KEYS = new Set(['email.localPart']);
 
 const featureMeta = Object.fromEntries(FEATURE_FLAGS.map((item) => [item.key, item]));
 const featureDefaultEntries = Object.entries(FEATURE_DEFAULTS).filter(([key]) => keep(key));

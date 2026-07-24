@@ -33,10 +33,8 @@ const OUT_FILE = process.env.GB_HELP_OUT
   ? path.resolve(process.env.GB_HELP_OUT)
   : path.join(ROOT, 'src', 'lib', 'helpContent.js');
 
-/* Consumer (served) build strips admin-only docs so the notification feature is
-   never referenced in the published guide. admin-only.json names the pieces;
-   flags.js / devSettings.js already report ADMIN=false under GB_ADMIN=0, so the
-   matching flags/dev-settings drop out of the coverage checks automatically. */
+/* Consumer builds strip the small set of explicitly administrator-only
+   catalog-management docs named by admin-only.json. */
 const IS_CONSUMER = process.env.GB_ADMIN === '0';
 const readJson0 = (p) => JSON.parse(readFileSync(p, 'utf8'));
 const ADMIN_ONLY = readJson0(path.join(ROOT, 'admin-only.json'));

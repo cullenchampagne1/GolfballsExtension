@@ -399,6 +399,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         )
         Base.metadata.create_all(self.engine)
         self.provider = FakeProvider()
+        self.events = []
         self.manager = PRODUCTS.ProductImageJobManager(
             engine=self.engine,
             batch_model=ImageBatch,
@@ -407,6 +408,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             config_reader=MissingConfig(),
             provider=self.provider,
             storage_root=self.root / "artifacts",
+            event_sink=lambda event, payload: self.events.append((event, payload)),
         )
 
     async def asyncTearDown(self):
@@ -455,6 +457,10 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Managed product recipe (builtin-cat-v1)", self.provider.prompt)
         self.assertIn("cheerful orange tabby", self.provider.prompt)
         self.assertNotIn("different brief", self.provider.prompt)
+        self.assertEqual(
+            [(event, payload["job_id"]) for event, payload in self.events],
+            [("job.completed", first["job_id"])],
+        )
 
     async def test_job_and_result_are_hidden_from_other_installations(self):
         queued = await self.manager.start(
@@ -539,6 +545,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
     async def test_batch_expands_persists_archives_and_is_idempotent(self):
         reference_fetcher = FakeReferenceFetcher()
         provider = FakeProvider()
+        events = []
         manager = PRODUCTS.ProductImageJobManager(
             engine=self.engine,
             batch_model=ImageBatch,
@@ -548,6 +555,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             provider=provider,
             reference_fetcher=reference_fetcher,
             storage_root=self.root / "batch-artifacts",
+            event_sink=lambda event, payload: events.append((event, payload)),
         )
         queued = await manager.start_batch(
             owner_id="api_key:key-a",
@@ -599,6 +607,10 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider.input_files, [
             "logo.png", "placement-reference.png", "product-reference.png",
         ])
+        self.assertEqual(
+            [(event, payload["batch_id"]) for event, payload in events],
+            [("batch.completed", queued["batch_id"])],
+        )
         self.assertEqual(len(reference_fetcher.urls), 4)
         archive, media_type, filename = manager.archive_path(
             owner_id="api_key:key-a", batch_id=queued["batch_id"]

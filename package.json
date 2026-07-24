@@ -90,6 +90,10 @@
       "file": "tests/unit/imageZoom.test.mjs"
     },
     {
+      "name": "ui \u00b7 installation notification cache and safe actions",
+      "file": "tests/unit/notificationsStore.test.mjs"
+    },
+    {
       "name": "modal \u00b7 shared Three.js runtime accessor",
       "file": "tests/unit/threeRuntime.test.mjs"
     },

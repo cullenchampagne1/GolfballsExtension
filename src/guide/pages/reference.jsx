@@ -481,11 +481,11 @@ const RELEASES = [
     version: '3.3 (July)',
     tag: 'Latest',
     date: 'Jul 21',
-    summary: 'Complete searchable reference coverage, guided workflows, reply notifications, and clearer preview boundaries.',
+    summary: 'Complete searchable reference coverage, guided workflows, installation notifications, and clearer preview boundaries.',
     highlights: [
       { icon: 'bookmark', text: 'Full Reference now exposes every authored help article at an exact deep link; guide search also includes tutorials and settings.', link: ['#manual', 'Full Reference'] },
       { icon: 'play', text: 'Guided Workflows turns the existing tutorials into optional-progress checklists that remain useful as refresher sheets.', link: ['#workflows', 'Guided Workflows'] },
-      { icon: 'alert', text: 'Customer Reply Notifications now has setup, lifecycle, storage, and troubleshooting documentation.', link: ['#notifications', 'Notifications'] },
+      { icon: 'alert', text: 'Notifications now has delivery, receipt, offline-storage, and safe-action documentation.', link: ['#notifications', 'Notifications'] },
       { icon: 'card', text: 'Proposal Checkout is now explicitly labeled as a non-operational preview until a real order backend is implemented.', link: ['#manual/proposal-checkout-preview', 'Checkout preview'] },
     ],
   },

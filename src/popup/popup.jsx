@@ -229,13 +229,15 @@ function PopupApp() {
         catch { res(); }
       });
 
-      const data = await storageGet(['templates', 'watchList', 'featureFlags', ...(__ADMIN__ ? ['gbNotifications'] : [])]);
+      const data = await storageGet([
+        'templates', 'watchList', 'featureFlags', 'gbNotifications',
+      ]);
       const credentials = await loadCredentials();
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-        ...(__ADMIN__ ? { notificationsEnabled: true } : {}),
+        notificationsEnabled: true,
         ...(data.featureFlags || {}),
       };
       // Read ignorePageContext directly from storage on init so we can branch
@@ -250,7 +252,7 @@ function PopupApp() {
       setTab(currentTab);
       setAllTemplates(tpls);
       setWatchList(data.watchList || []);
-      if (__ADMIN__) setNotifications(data.gbNotifications || []);
+      setNotifications(data.gbNotifications || []);
       setFlags(mergedFlags);
       setPaConfigured(isPowerAutomateUrl(credentials.powerAutomateUrl));
 
@@ -472,12 +474,12 @@ function PopupApp() {
         setFlags({
           chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
           taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-          ...(__ADMIN__ ? { notificationsEnabled: true } : {}),
+          notificationsEnabled: true,
           ...next,
         });
       }
       if (changes.watchList) setWatchList(changes.watchList.newValue || []);
-      if (__ADMIN__ && changes.gbNotifications) setNotifications(changes.gbNotifications.newValue || []);
+      if (changes.gbNotifications) setNotifications(changes.gbNotifications.newValue || []);
       if (changes.templates) {
         const next = (changes.templates.newValue || [])
           .filter((t) => t.enabled !== false && t.type !== 'case');
@@ -831,7 +833,7 @@ function MainView({
      stores `done: true` on completed rows. */
   const watchCount = watchList.filter((i) => !i.done).length;
   const watchHasCrit = watchList.some((i) => !i.done && (Date.now() - i.addedAt) >= 6 * 3600000);
-  const notifCount = notifications.filter((n) => n && n.status === 'open').length;
+  const notifCount = notifications.filter((n) => n && n.status === 'unread').length;
 
   const proofDisabledReal = !(knownType && (pageInfo.contactId || pageInfo.accountId || pageInfo.orderNo));
   const proofDisabled = ignoreProof ? false : proofDisabledReal;
@@ -898,11 +900,11 @@ function MainView({
     window.close();
   };
 
-  const onNotifications = __ADMIN__ ? async () => {
+  const onNotifications = async () => {
     if (!tab) return;
     await sendMessage(tab.id, { action: 'showNotificationsModal' });
     window.close();
-  } : undefined;
+  };
 
   /* Resolve the subject/body for this send. Picks the variation (a pinned
      saved one, a uniform random roll across [original, …saved] when the
@@ -1168,7 +1170,7 @@ function MainView({
               <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
             </Reveal>
           )}
-          {__ADMIN__ && flags.notificationsEnabled && (
+          {flags.notificationsEnabled && (
             <Reveal key="notifications">
               <Btn full size="sm" icon={<I.alert />} onClick={onNotifications} badge={notifCount} badgeTone="brand">Notifications</Btn>
             </Reveal>

@@ -1,32 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, {
+  useCallback, useEffect, useMemo, useState,
+} from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, Btn, Input, Segmented, formatHumanDate, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
-/* ───────────────────────────────────────────────────────────────
-   Notifications — tracks relayed customer-email replies. Mirrors the
-   Watch List modal (FloatingPanel + ModalHeader + Segmented filter +
-   searchable scroll list) so it reads as part of the same system.
-
-   Each notification is written by the background email-relay poll
-   (notifications-store.js) and auto-completed when the rep replies to
-   the contact (background paAutomate hook). The rep can also mark one
-   done by hand, open the contact account, or view the email in the
-   existing email render window.
-
-   Shape (see notifications-store.js):
-     { id, type:'email', status:'open'|'done', contactEmail, contactName,
-       subject, preview, body, messageId, viewUrl, receivedAt, createdAt,
-       completedAt, completedReason }
-
-   Storage: chrome.storage.local `gbNotifications` (localStorage fallback
-   for the playground). The store is shared with the worker, so writes
-   here and there stay in sync via chrome.storage.onChanged.
-─────────────────────────────────────────────────────────────── */
+/* Durable, installation-scoped notification center. The worker owns server
+   synchronization and receipts; this surface renders its offline cache and
+   executes only the typed actions reconstructed by content/main.js. */
 
 const STORAGE_KEY = 'gbNotifications';
+const FILTERS = [
+  { key: 'unread', label: 'Unread' },
+  { key: 'all', label: 'All' },
+  { key: 'dismissed', label: 'Archived' },
+];
 const hasChromeStorage = (() => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
   catch { return false; }
@@ -35,7 +25,9 @@ const hasChromeStorage = (() => {
 function loadItems() {
   return new Promise((resolve) => {
     if (hasChromeStorage) {
-      chrome.storage.local.get(STORAGE_KEY, (data) => resolve(Array.isArray(data?.[STORAGE_KEY]) ? data[STORAGE_KEY] : []));
+      chrome.storage.local.get(STORAGE_KEY, (data) => {
+        resolve(Array.isArray(data?.[STORAGE_KEY]) ? data[STORAGE_KEY] : []);
+      });
       return;
     }
     try {
@@ -44,30 +36,56 @@ function loadItems() {
     } catch { resolve([]); }
   });
 }
-function saveItems(list) {
-  if (hasChromeStorage) { chrome.storage.local.set({ [STORAGE_KEY]: list }); return; }
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
-}
-function subscribeItems(onChange) {
-  if (hasChromeStorage) {
-    const fn = (changes, area) => {
-      if (area === 'local' && changes[STORAGE_KEY]) onChange(Array.isArray(changes[STORAGE_KEY].newValue) ? changes[STORAGE_KEY].newValue : []);
-    };
-    chrome.storage.onChanged.addListener(fn);
-    return () => chrome.storage.onChanged.removeListener(fn);
-  }
-  const fn = (e) => {
-    if (e.key === STORAGE_KEY) { try { onChange(e.newValue ? JSON.parse(e.newValue) : []); } catch {} }
-  };
-  window.addEventListener('storage', fn);
-  return () => window.removeEventListener('storage', fn);
+
+function saveFallback(items) {
+  if (hasChromeStorage) return;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
 }
 
-const FILTERS = [
-  { key: 'open', label: 'Open' },
-  { key: 'all', label: 'All' },
-  { key: 'done', label: 'Done' },
-];
+function subscribeItems(onChange) {
+  if (hasChromeStorage) {
+    const listener = (changes, area) => {
+      if (area === 'local' && changes[STORAGE_KEY]) {
+        onChange(Array.isArray(changes[STORAGE_KEY].newValue)
+          ? changes[STORAGE_KEY].newValue : []);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }
+  const listener = (event) => {
+    if (event.key !== STORAGE_KEY) return;
+    try { onChange(event.newValue ? JSON.parse(event.newValue) : []); } catch {}
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
+}
+
+function sendReceipt(item, state) {
+  const remoteId = Number(item?.remoteId);
+  if (!Number.isSafeInteger(remoteId) || remoteId < 1 || !hasChromeStorage) {
+    return;
+  }
+  try {
+    chrome.runtime.sendMessage({
+      action: 'notificationReceipt',
+      notificationIds: [remoteId],
+      state,
+    });
+  } catch { /* worker may be waking; local cache still reflects the action */ }
+}
+
+function nextState(item, state) {
+  const now = Date.now();
+  return {
+    ...item,
+    status: state === 'dismissed' ? 'dismissed' : 'read',
+    readAt: item.readAt || now,
+    dismissedAt: state === 'dismissed' ? (item.dismissedAt || now) : item.dismissedAt,
+    actedAt: state === 'acted' ? (item.actedAt || now) : item.actedAt,
+    updatedAt: now,
+  };
+}
 
 function FilterLabel({ text, count, active }) {
   return (
@@ -75,149 +93,273 @@ function FilterLabel({ text, count, active }) {
       {text}
       {count > 0 && (
         <span style={{
-          fontSize: 9.5, fontWeight: 700, lineHeight: 1,
-          padding: '2px 5px', borderRadius: 999,
+          fontSize: 9.5,
+          fontWeight: 750,
+          lineHeight: 1,
+          padding: '2px 5px',
+          borderRadius: 999,
           background: active ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
           color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-        }}>{count}</span>
+        }}
+        >
+          {count}
+        </span>
       )}
     </span>
   );
 }
 
-/* Open the relayed email in the existing email render window. Passes the body
-   directly (payload path added to email-preview.jsx) since a relayed email has
-   no CRM message id to fetch. Closing that window returns to this modal. */
-function openEmail(item) {
-  const bodyHtml = item.body || (item.preview ? `<p>${escapeHtml(item.preview)}</p>` : '');
-  const email = {
-    from: item.contactName ? `${item.contactName} <${item.contactEmail}>` : item.contactEmail,
-    to: '',
-    subject: item.subject || '(no subject)',
-    date: item.receivedAt || '',
-    bodyHtml,
-  };
-  if (typeof window.__gbOpenEmailPreview === 'function') {
-    window.__gbOpenEmailPreview({ email, meta: email });
-    return true;
-  }
-  return false;
-}
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, (c) => (
-    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;'
-  ));
-}
-
-function Row({ item, onView, onAccount, onToggleDone }) {
-  const [hover, setHover] = useState(false);
-  const who = item.contactName || item.contactEmail;
-  const done = item.status === 'done';
+function EmptyState({ filter }) {
+  const copy = filter === 'dismissed'
+    ? { title: 'Nothing archived', body: 'Dismissed notifications stay here for reference.' }
+    : filter === 'all'
+      ? { title: 'No notifications yet', body: 'Updates from your tools will appear here.' }
+      : { title: 'You’re all caught up', body: 'New updates will appear here when they arrive.' };
   return (
-    <motion.li
-      layout
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.14 }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={() => onView(item)}
-      style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10,
-        padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
-        background: hover ? 'var(--gb-surface-1)' : 'transparent',
-        border: `1px solid ${hover ? 'var(--gb-border-default)' : 'transparent'}`,
-        opacity: done ? 0.62 : 1,
-      }}
+    <div style={{
+      minHeight: 290,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      padding: '44px 24px',
+      textAlign: 'center',
+    }}
     >
       <div style={{
-        width: 26, height: 26, flexShrink: 0, borderRadius: 'var(--gb-r-sm)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: done ? 'var(--gb-fill-subtle)' : 'var(--gb-brand-tint-soft)',
-        color: done ? 'var(--gb-text-muted)' : 'var(--gb-brand-label)',
-        border: `1px solid ${done ? 'var(--gb-border-subtle)' : 'var(--gb-brand-tint-border)'}`,
-      }}>{done ? <I.check size={13} /> : <I.mail size={13} />}</div>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 6,
-          fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)',
-          textDecoration: done ? 'line-through' : 'none',
-        }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who}</span>
-          {item.count > 1 && (
-            <span title={`${item.count} messages in this thread`} style={{
-              fontSize: 9.5, fontWeight: 700, lineHeight: 1, padding: '2px 5px', borderRadius: 999,
-              background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', flexShrink: 0,
-            }}>{item.count}</span>
-          )}
-          {done && <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-success-fg)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Done</span>}
-        </div>
-        {item.subject && (
-          <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{item.subject}</div>
-        )}
-        {item.preview && (
-          <div style={{ fontSize: 11, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{item.preview}</div>
-        )}
+        width: 42,
+        height: 42,
+        borderRadius: 'var(--gb-r-md)',
+        display: 'grid',
+        placeItems: 'center',
+        color: 'var(--gb-brand-label)',
+        background: 'var(--gb-brand-tint-soft)',
+        border: '1px solid var(--gb-brand-tint-border)',
+      }}
+      >
+        <I.alert size={17} />
       </div>
-
-      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-        {hover ? (
-          <div style={{ display: 'flex', gap: 3 }} onClick={(e) => e.stopPropagation()}>
-            <RowAction title="View account" disabled={!item.viewUrl} onClick={() => onAccount(item)}><I.user size={12} /></RowAction>
-            <RowAction title="View email" onClick={() => onView(item)}><I.mail size={12} /></RowAction>
-            <RowAction title={done ? 'Reopen' : 'Mark done'} status={done ? undefined : 'brand'} onClick={() => onToggleDone(item)}>
-              {done ? <I.history size={12} /> : <I.check size={12} />}
-            </RowAction>
-          </div>
-        ) : (
-          <span style={{ fontSize: 10, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap' }}>
-            {formatHumanDate(item.updatedAt || item.createdAt || item.receivedAt)}
-          </span>
-        )}
-      </div>
-    </motion.li>
+      <strong style={{ color: 'var(--gb-text-primary)', fontSize: 13 }}>{copy.title}</strong>
+      <span style={{ color: 'var(--gb-text-tertiary)', fontSize: 11.5 }}>{copy.body}</span>
+    </div>
   );
 }
 
-function RowAction({ children, title, onClick, disabled, status }) {
+function LevelIcon({ level }) {
+  const tones = {
+    success: {
+      fg: 'var(--gb-success-fg)',
+      bg: 'var(--gb-success-tint-soft)',
+      border: 'var(--gb-success-tint-border)',
+      icon: <I.check size={13} />,
+    },
+    warning: {
+      fg: 'var(--gb-warning-fg)',
+      bg: 'var(--gb-warning-tint-soft)',
+      border: 'var(--gb-warning-tint-border)',
+      icon: <I.alert size={13} />,
+    },
+    error: {
+      fg: 'var(--gb-error-fg)',
+      bg: 'var(--gb-error-tint-soft)',
+      border: 'var(--gb-error-tint-border)',
+      icon: <I.alert size={13} />,
+    },
+  };
+  const tone = tones[level] || {
+    fg: 'var(--gb-brand-label)',
+    bg: 'var(--gb-brand-tint-soft)',
+    border: 'var(--gb-brand-tint-border)',
+    icon: <I.bolt size={13} />,
+  };
+  return (
+    <span style={{
+      width: 28,
+      height: 28,
+      flex: '0 0 auto',
+      display: 'grid',
+      placeItems: 'center',
+      borderRadius: 'var(--gb-r-sm)',
+      color: tone.fg,
+      background: tone.bg,
+      border: `1px solid ${tone.border}`,
+    }}
+    >
+      {tone.icon}
+    </span>
+  );
+}
+
+function IconButton({
+  title, children, onClick, tone = 'neutral',
+}) {
   return (
     <button
       type="button"
       title={title}
-      disabled={disabled}
+      aria-label={title}
       onClick={onClick}
       style={{
-        width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 'var(--gb-r-sm)', border: '1px solid transparent',
-        background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer',
-        color: disabled ? 'var(--gb-text-ghost)' : (status === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)'),
-        opacity: disabled ? 0.5 : 1,
+        width: 27,
+        height: 27,
+        display: 'grid',
+        placeItems: 'center',
+        borderRadius: 'var(--gb-r-sm)',
+        border: '1px solid transparent',
+        color: tone === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+        background: tone === 'brand' ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        cursor: 'pointer',
       }}
-      onMouseEnter={(e) => { if (!disabled) { e.currentTarget.style.background = 'var(--gb-fill-subtle)'; e.currentTarget.style.borderColor = 'var(--gb-border-default)'; } }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
-    >{children}</button>
+      onMouseEnter={(event) => {
+        event.currentTarget.style.borderColor = tone === 'brand'
+          ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)';
+        if (tone !== 'brand') event.currentTarget.style.background = 'var(--gb-fill-subtle)';
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.borderColor = 'transparent';
+        event.currentTarget.style.background = tone === 'brand'
+          ? 'var(--gb-brand-tint-soft)' : 'transparent';
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
-function EmptyState({ filter }) {
-  const copy = filter === 'done'
-    ? { strong: 'No completed notifications', hint: 'Replies you resolve show up here.' }
-    : filter === 'all'
-      ? { strong: 'No notifications yet', hint: 'Customer replies will appear here as they arrive.' }
-      : { strong: 'You’re all caught up', hint: 'New customer replies will show up here.' };
+function NotificationRow({
+  item, onOpen, onRead, onDismiss,
+}) {
+  const [hovered, setHovered] = useState(false);
+  const unread = item.status === 'unread';
+  const archived = item.status === 'dismissed';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '52px 24px', textAlign: 'center' }}>
-      <div style={{
-        width: 42, height: 42, borderRadius: 'var(--gb-r-md)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--gb-brand-tint-soft)', color: 'var(--gb-brand-label)',
-        border: '1px solid var(--gb-brand-tint-border)',
-      }}><I.mail size={18} /></div>
-      <div style={{ fontSize: 13, fontWeight: 650, color: 'var(--gb-text-primary)' }}>{copy.strong}</div>
-      <div style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)', maxWidth: 260 }}>{copy.hint}</div>
-    </div>
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.985 }}
+      transition={{ duration: 0.15 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '10px 10px 9px',
+        borderRadius: 'var(--gb-r-md)',
+        border: `1px solid ${hovered ? 'var(--gb-border-default)' : 'var(--gb-border-subtle)'}`,
+        background: unread ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
+        opacity: archived ? 0.68 : 1,
+      }}
+    >
+      {unread && (
+        <span style={{
+          position: 'absolute',
+          left: -2,
+          top: 18,
+          width: 5,
+          height: 5,
+          borderRadius: 999,
+          background: 'var(--gb-brand-label)',
+          boxShadow: '0 0 0 2px var(--gb-surface-2)',
+        }}
+        />
+      )}
+      <LevelIcon level={item.level} />
+      <button
+        type="button"
+        onClick={() => (item.action ? onOpen(item) : onRead(item))}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: 0,
+          textAlign: 'left',
+          border: 0,
+          background: 'transparent',
+          cursor: 'pointer',
+          font: 'inherit',
+        }}
+      >
+        <span style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 7,
+          minWidth: 0,
+        }}
+        >
+          <strong style={{
+            flex: 1,
+            minWidth: 0,
+            color: 'var(--gb-text-primary)',
+            fontSize: 12.25,
+            fontWeight: unread ? 750 : 650,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+          >
+            {item.title}
+          </strong>
+          <span style={{
+            color: 'var(--gb-text-muted)',
+            fontSize: 9.75,
+            whiteSpace: 'nowrap',
+          }}
+          >
+            {formatHumanDate(item.updatedAt || item.createdAt)}
+          </span>
+        </span>
+        <span style={{
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: 2,
+          overflow: 'hidden',
+          marginTop: 3,
+          color: 'var(--gb-text-tertiary)',
+          fontSize: 11,
+          lineHeight: 1.42,
+        }}
+        >
+          {item.body}
+        </span>
+        {item.action?.label && !archived && (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            marginTop: 6,
+            color: 'var(--gb-brand-label)',
+            fontSize: 10.25,
+            fontWeight: 700,
+          }}
+          >
+            {item.action.label}
+            <I.chevr size={10} />
+          </span>
+        )}
+      </button>
+      {!archived && (
+        <div style={{
+          flex: '0 0 auto',
+          display: 'flex',
+          gap: 3,
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 120ms ease',
+        }}
+        >
+          {unread && (
+            <IconButton title="Mark read" onClick={() => onRead(item)}>
+              <I.check size={12} />
+            </IconButton>
+          )}
+          <IconButton title="Archive" onClick={() => onDismiss(item)}>
+            <I.close size={11} />
+          </IconButton>
+        </div>
+      )}
+    </motion.li>
   );
 }
 
@@ -225,111 +367,178 @@ export function Notifications({ onClosed, bindClose }) {
   const toast = useToast();
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [filter, setFilter] = useState('open');
+  const [filter, setFilter] = useState('unread');
   const [search, setSearch] = useState('');
-  const [clearArmed, setClearArmed] = useState(false);
-  const draggable = false;
 
   useEffect(() => {
-    let alive = true;
-    loadItems().then((list) => { if (alive) { setItems(list); setLoaded(true); } });
-    const unsub = subscribeItems((list) => { if (alive) setItems(list); });
-    return () => { alive = false; unsub(); };
+    let active = true;
+    loadItems().then((list) => {
+      if (active) {
+        setItems(list);
+        setLoaded(true);
+      }
+    });
+    const unsubscribe = subscribeItems((list) => {
+      if (active) setItems(list);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
-  const persist = useCallback((next) => { setItems(next); saveItems(next); }, []);
+  const update = useCallback((item, state) => {
+    setItems((current) => {
+      const next = current.map((row) => (
+        row.id === item.id ? nextState(row, state) : row
+      ));
+      saveFallback(next);
+      return next;
+    });
+    sendReceipt(item, state);
+  }, []);
+
+  const runAction = useCallback((item) => {
+    const handled = window.__gbRunNotificationAction?.(item, { receipt: false });
+    if (handled) {
+      update(item, 'acted');
+      return;
+    }
+    if (!item.action) {
+      update(item, 'read');
+      return;
+    }
+    toast?.warning?.('That action is not available on this page', {
+      duration: 3200,
+    });
+  }, [toast, update]);
 
   const counts = useMemo(() => ({
-    open: items.filter((n) => n.status === 'open').length,
+    unread: items.filter((item) => item.status === 'unread').length,
     all: items.length,
-    done: items.filter((n) => n.status === 'done').length,
+    dismissed: items.filter((item) => item.status === 'dismissed').length,
   }), [items]);
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase();
     return items
-      .filter((n) => (filter === 'all' ? true : n.status === filter))
-      .filter((n) => !q
-        || String(n.contactName || '').toLowerCase().includes(q)
-        || String(n.contactEmail || '').toLowerCase().includes(q)
-        || String(n.subject || '').toLowerCase().includes(q))
-      .sort((a, b) => ((b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)));
-  }, [items, filter, search]);
+      .filter((item) => {
+        if (filter === 'all') return item.status !== 'dismissed';
+        return item.status === filter;
+      })
+      .filter((item) => !query
+        || String(item.title || '').toLowerCase().includes(query)
+        || String(item.body || '').toLowerCase().includes(query)
+        || String(item.topic || '').toLowerCase().includes(query))
+      .sort((a, b) => Number(b.updatedAt || b.createdAt || 0)
+        - Number(a.updatedAt || a.createdAt || 0));
+  }, [filter, items, search]);
 
-  const onView = useCallback((item) => {
-    if (!openEmail(item)) toast?.error?.('Email viewer isn’t loaded on this page', { duration: 3500 });
-  }, [toast]);
-
-  const onAccount = useCallback((item) => {
-    if (item.viewUrl) window.open(item.viewUrl, '_blank', 'noopener');
-    else toast?.info?.('No contact is linked to this email yet', { duration: 3500 });
-  }, [toast]);
-
-  const onToggleDone = useCallback((item) => {
-    const done = item.status === 'done';
-    persist(items.map((n) => (n.id === item.id
-      ? { ...n, status: done ? 'open' : 'done', completedAt: done ? null : Date.now(), completedReason: done ? '' : 'manual' }
-      : n)));
-  }, [items, persist]);
-
-  const clearDone = useCallback(() => {
-    if (!clearArmed) { setClearArmed(true); return; }
-    persist(items.filter((n) => n.status !== 'done'));
-    setClearArmed(false);
-    toast?.success?.('Cleared completed notifications', { duration: 2000 });
-  }, [clearArmed, items, persist, toast]);
-
-  const subtitle = counts.open > 0
-    ? `${counts.open} open notification${counts.open === 1 ? '' : 's'}`
-    : 'All caught up';
+  const subtitle = counts.unread
+    ? `${counts.unread} unread update${counts.unread === 1 ? '' : 's'}`
+    : 'Everything is up to date';
 
   return (
-    <FloatingPanel width={560} backdrop draggable={draggable} onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel width={580} backdrop draggable={false} onClose={onClosed} bindClose={bindClose}>
       <ModalHeader accent icon={<I.alert size={14} />} title="Notifications" subtitle={subtitle} />
-
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px',
-        background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0,
-      }}>
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        padding: '11px 14px',
+        flexShrink: 0,
+        background: 'var(--gb-surface-1)',
+        borderBottom: '1px solid var(--gb-border-subtle)',
+      }}
+      >
         <Segmented
-          full size="md" value={filter} onChange={setFilter}
-          options={FILTERS.map((f) => ({ id: f.key, label: <FilterLabel text={f.label} count={counts[f.key]} active={filter === f.key} /> }))}
+          full
+          size="md"
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((entry) => ({
+            id: entry.key,
+            label: (
+              <FilterLabel
+                text={entry.label}
+                count={counts[entry.key]}
+                active={filter === entry.key}
+              />
+            ),
+          }))}
         />
-        <Input value={search} onChange={setSearch} placeholder="Search contact or subject…" leading={<I.search size={12} />} />
+        <Input
+          value={search}
+          onChange={setSearch}
+          placeholder="Search notifications…"
+          leading={<I.search size={12} />}
+        />
       </div>
-
-      <div style={{ minHeight: 320, maxHeight: 'min(56vh, 480px)', overflowY: 'auto', overflowX: 'hidden', padding: 8 }}>
+      <div
+        className="gb-thin-scroll"
+        style={{
+          minHeight: 320,
+          maxHeight: 'min(58vh, 500px)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: 9,
+          background: 'var(--gb-surface-2)',
+        }}
+      >
         <AnimatePresence mode="popLayout" initial={false}>
           {loaded && visible.length === 0 && (
-            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+            >
               <EmptyState filter={filter} />
             </motion.div>
           )}
         </AnimatePresence>
-        <motion.ul layout style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <motion.ul
+          layout
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            margin: 0,
+            padding: 0,
+            listStyle: 'none',
+          }}
+        >
           <AnimatePresence initial={false} mode="popLayout">
             {visible.map((item) => (
-              <Row key={item.id} item={item} onView={onView} onAccount={onAccount} onToggleDone={onToggleDone} />
+              <NotificationRow
+                key={item.id}
+                item={item}
+                onOpen={runAction}
+                onRead={(row) => update(row, 'read')}
+                onDismiss={(row) => update(row, 'dismissed')}
+              />
             ))}
           </AnimatePresence>
         </motion.ul>
       </div>
-
-      {counts.done > 0 && (
-        <div style={{
-          padding: '8px 14px', borderTop: '1px solid var(--gb-border-subtle)',
-          background: 'var(--gb-surface-1)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <div style={{ flex: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-            {clearArmed
-              ? <span style={{ color: 'var(--gb-error-fg)', fontWeight: 600 }}>Click again to remove {counts.done} completed</span>
-              : `${counts.done} completed`}
-          </div>
-          <Btn size="sm" variant="ghost" status={clearArmed ? 'error' : undefined} icon={<I.trash size={11} />} onClick={clearDone}>
-            {clearArmed ? 'Confirm clear' : 'Clear completed'}
-          </Btn>
-        </div>
-      )}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 14px',
+        flexShrink: 0,
+        color: 'var(--gb-text-muted)',
+        background: 'var(--gb-surface-1)',
+        borderTop: '1px solid var(--gb-border-subtle)',
+        fontSize: 10.25,
+      }}
+      >
+        <I.check size={11} />
+        Read and archived updates remain available while you’re offline.
+        <span style={{ flex: 1 }} />
+        <Btn size="xs" variant="ghost" onClick={onClosed}>Close</Btn>
+      </div>
     </FloatingPanel>
   );
 }

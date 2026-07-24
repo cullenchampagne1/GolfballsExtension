@@ -112,6 +112,12 @@
       "label": "Gifting Catalog",
       "managedDefault": true
     },
+    "mockupStudioEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Mockup Studio",
+      "managedDefault": true
+    },
     "callLogEnabled": {
       "type": "bool",
       "default": true,
@@ -140,6 +146,12 @@
       "type": "bool",
       "default": true,
       "label": "Campaign Manager",
+      "managedDefault": true
+    },
+    "notificationsEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Notifications",
       "managedDefault": true
     }
   },
@@ -369,7 +381,7 @@
       "default": 1.2,
       "label": "Campaign Manager: zoom scale",
       "managedDefault": true,
-      "min": 1,
+      "min": 0.5,
       "max": 2
     },
     "giftCatalog.previewScale": {

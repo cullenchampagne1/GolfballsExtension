@@ -7,8 +7,8 @@
  * locks the enrollment/configuration response shapes and the `apiFetch` security
  * guard. Reads source only; no live server or CRM context required.
  *
- * The RevStack project files (`.revstack/**`) and the sibling backend /
- * email-relay repos are LOCAL-ONLY, so their halves skip when absent.
+ * The RevStack project files (`.revstack/**`) and sibling services are
+ * LOCAL-ONLY, so their halves skip when absent.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,18 +23,13 @@ const installationAuth = await read('lib/installation-auth.js');
 const background = await read('background.js');
 const remotePolicy = await read('lib/remote-settings-policy.js');
 const runtimeBootstrap = await read('lib/runtime-bootstrap.js');
-// The relay poller is being renamed to a notifications poller; read whichever
-// is on disk and skip its assertions when neither is, so an in-flight rename
-// reports as a skip rather than crashing the whole contract suite at import.
-const relayPollPath = ['lib/email-relay-poll.js', 'lib/notifications-poll.js']
-  .find((candidate) => present(candidate)) || '';
-const relayPoll = relayPollPath ? await read(relayPollPath) : '';
+const notificationPoll = await read('lib/notifications-poll.js');
 const helpAssistant = await read('help/help-assistant.js');
 const sources = {
   'installation-auth.js': installationAuth,
   'runtime-bootstrap.js': runtimeBootstrap,
   'background.js': background,
-  'email-relay-poll.js': relayPoll,
+  'notifications-poll.js': notificationPoll,
   'help-assistant.js': helpAssistant,
 };
 
@@ -76,6 +71,8 @@ const RUNTIME = [
   { name: 'product-store:get',      in: 'background.js',        literal: '/product-stores/${',                   method: 'get',  route: '/client/product-stores/{store_id}' },
   { name: 'product-store:revoke',   in: 'background.js',        literal: '/revoke',                              method: 'post', route: '/client/product-stores/{store_id}/revoke' },
   { name: 'email-exchange-flow',    in: 'background.js',        literal: '/email-exchange-flow',                 method: 'get',  route: '/client/email-exchange-flow' },
+  { name: 'notifications:list',     in: 'notifications-poll.js', literal: '/projects/golfballs-extension/client/notifications', method: 'get', route: '/client/notifications' },
+  { name: 'notifications:receipts', in: 'notifications-poll.js', literal: '${ENDPOINT}/receipts',                 method: 'post', route: '/client/notifications/receipts' },
   { name: 'mockups:studio',         in: 'background.js',        literal: '/product-generation/studio',           method: 'get',    route: '/client/product-generation/studio' },
   { name: 'mockups:products',       in: 'background.js',        literal: '/product-generation/products',         method: 'get',    route: '/client/product-generation/products' },
   { name: 'mockups:batches:list',   in: 'background.js',        literal: '/product-generation/batches',          method: 'get',    route: '/client/product-generation/batches' },
@@ -92,8 +89,6 @@ const RUNTIME = [
   { name: 'mockups:catalog:refs',   in: 'background.js',        literal: '/product-generation/catalog/references', method: 'post', route: '/client/product-generation/catalog/references' },
   { name: 'assistant:health',       in: 'help-assistant.js',    literal: '/health',                              method: 'get',  route: '/assistant/health' },
 ];
-
-const RELAY_PENDING = '/services/email-relay-service/messages/pending';
 
 describe('backend contract · enrollment', () => {
   it('enrolls through POST /auth/extension-installation', () => {
@@ -150,20 +145,16 @@ describe('backend contract · project client endpoints', () => {
   });
 });
 
-describe('backend contract · scoped email-relay service', () => {
-  it('polls the standalone service and allows it through the API guard', {
-    skip: relayPollPath !== 'lib/email-relay-poll.js'
-      && 'relay poller renamed — notifications transport owns this contract now',
+describe('backend contract · notification producer correlation', () => {
+  it('keeps installation correlation and outbox insertion in the message service', {
+    skip: !hasRelayService,
   }, () => {
-    assert.ok(relayPoll.includes(RELAY_PENDING),
-      `extension ${relayPollPath} must call ${RELAY_PENDING}`);
-    assert.ok(installationAuth.includes(RELAY_PENDING),
-      'installation API guard must explicitly allow the scoped email-relay poll');
-  });
-
-  it('is exposed by the service to scoped clients', { skip: !hasRelayService }, () => {
-    assert.match(relayServicePy, /\(\s*["']GET["']\s*,\s*["']\/messages\/pending["']\s*\)/,
-      'email-relay service must expose GET /messages/pending to scoped clients');
+    assert.ok(relayServicePy.includes('_installation_id_from_payload'),
+      'outbound messages must accept the originating installation id');
+    assert.ok(relayServicePy.includes('_thread_installation_id'),
+      'inbound messages must inherit the installation from their thread');
+    assert.ok(relayServicePy.includes('ExtensionNotification'),
+      'inbound messages must enqueue into the shared installation outbox');
   });
 });
 
