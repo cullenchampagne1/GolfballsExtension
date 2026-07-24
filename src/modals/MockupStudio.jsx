@@ -899,12 +899,27 @@ function FullResultViewer({ job, onBack }) {
     ));
   }, []);
 
-  const onWheel = useCallback((event) => {
-    if (!asset?.dataUrl) return;
-    event.preventDefault();
-    const point = pointOf(event.clientX, event.clientY);
-    setView((current) => zoomToPoint(current, wheelZoom(current.zoom, event.deltaY), point));
-  }, [asset?.dataUrl]);
+  /* Registered natively with { passive: false }.
+   *
+   * React attaches wheel handlers to its root as PASSIVE, so preventDefault()
+   * from an onWheel prop is ignored and the CRM page keeps scrolling behind
+   * the modal while you zoom. Only a non-passive native listener can cancel
+   * it, and it has to be bound to the frame element itself. */
+  const ready = !!asset?.dataUrl;
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame || !ready) return undefined;
+    const handler = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const point = framePoint(frame.getBoundingClientRect(), event.clientX, event.clientY);
+      setView((current) => zoomToPoint(
+        current, wheelZoom(current.zoom, event.deltaY), point,
+      ));
+    };
+    frame.addEventListener('wheel', handler, { passive: false });
+    return () => frame.removeEventListener('wheel', handler);
+  }, [ready]);
 
   const onPointerDown = useCallback((event) => {
     if (zoom <= ZOOM_MIN || !asset?.dataUrl) return;
@@ -933,31 +948,23 @@ function FullResultViewer({ job, onBack }) {
   }, []);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.985 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.99 }}
-      transition={{ duration: 0.18 }}
-      style={{
-        position: 'absolute', inset: 0, zIndex: 12,
-        display: 'flex', flexDirection: 'column',
-        background: 'var(--gb-surface-float)',
-      }}
-    >
+    <div style={{
+      flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+      background: 'var(--gb-surface-canvas)',
+    }}>
       <div style={{
-        minHeight: 54, padding: '9px 12px',
+        minHeight: 46, padding: '8px 12px',
         display: 'flex', alignItems: 'center', gap: 10,
-        background: 'var(--gb-fill-inverse-strong)',
+        background: 'var(--gb-fill-inverse-medium)',
         borderBottom: '1px solid var(--gb-border-subtle)',
       }}>
-        <Btn
+        <IconBtn
           size="sm"
-          variant="secondary"
+          variant="ghost"
+          title="Back to all images"
           icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
           onClick={onBack}
-        >
-          All images
-        </Btn>
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: 11.5, fontWeight: 750, color: 'var(--gb-text-primary)',
@@ -1025,7 +1032,6 @@ function FullResultViewer({ job, onBack }) {
       }}>
         <div
           ref={frameRef}
-          onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
@@ -1034,7 +1040,9 @@ function FullResultViewer({ job, onBack }) {
             zoom > ZOOM_MIN ? reset() : zoomAt(2.5, event.clientX, event.clientY)
           )}
           style={{
-            width: 'min(560px, 100%)', maxHeight: '100%', aspectRatio: '1 / 1',
+            // Driven from HEIGHT so the square shrinks to fit a short panel
+            // instead of keeping its width and clipping the bottom off.
+            height: 'min(100%, 620px)', aspectRatio: '1 / 1', maxWidth: '100%',
             overflow: 'hidden', display: 'flex', position: 'relative',
             alignItems: 'center', justifyContent: 'center',
             touchAction: 'none',
@@ -1083,17 +1091,21 @@ function FullResultViewer({ job, onBack }) {
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 /**
- * One gallery tile.
+ * One gallery tile — a square, and nothing but a square.
  *
- * The card itself is no longer a giant button. Opening the viewer and saving
- * the file are separate, explicitly labelled actions, so clicking a card to
- * read its caption cannot dump you into a full-screen view, and grabbing a
- * file no longer requires opening one first.
+ * Caption and actions are glass overlays ON the artwork rather than a column
+ * stacked beneath it: stacking them made a 186px-wide card ~260px tall, so a
+ * row of results read as a column of tall slabs. Overlaying keeps the tile
+ * itself 1:1, which is also the aspect every generated mockup is rendered at.
+ *
+ * Opening and downloading stay separate labelled actions, so reading a caption
+ * cannot dump you into the full view and saving a file does not require
+ * opening one first.
  */
 function ResultCard({ job, onOpen }) {
   const ready = job.status === 'completed' && job.result?.available;
@@ -1103,57 +1115,69 @@ function ResultCard({ job, onOpen }) {
     .filter(Boolean).join(' · ') || job.status_message;
   return (
     <div style={{
-      width: GALLERY_TILE, overflow: 'hidden',
-      display: 'flex', flexDirection: 'column',
+      width: GALLERY_TILE, aspectRatio: '1 / 1', position: 'relative',
+      overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
       borderRadius: 'var(--gb-r-lg)',
-      background: 'var(--gb-surface-1)',
+      background: 'var(--gb-fill-inverse-medium)',
       border: '1px solid var(--gb-border-default)',
       boxShadow: ready ? 'var(--gb-shadow-sm)' : 'none',
+      animation: pending ? 'gb-ms-breathe 2.4s ease-in-out infinite' : 'none',
     }}>
-      <div style={{
-        width: '100%', aspectRatio: '1 / 1', position: 'relative',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--gb-fill-inverse-medium)',
-        animation: pending ? 'gb-ms-breathe 2.4s ease-in-out infinite' : 'none',
-      }}>
-        <ResultArtwork job={job} />
+      <ResultArtwork job={job} />
+      {/* A finished image announces itself; only an unfinished one needs a
+          word for it, and running already has its own loading treatment. */}
+      {job.status !== 'completed' && (
         <span style={{ position: 'absolute', top: 7, right: 7 }}>
           <StatusPill status={job.status} />
         </span>
-      </div>
-      <div style={{ padding: '8px 9px 9px' }}>
-        <div
-          title={job.product?.name || ''}
-          style={{
-            fontSize: 10.5, fontWeight: 750, color: 'var(--gb-text-primary)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}
-        >
-          {job.product?.name || job.product?.id || 'Product mockup'}
-        </div>
-        <div
-          title={caption}
-          style={{
-            marginTop: 2, fontSize: 9, color: 'var(--gb-text-muted)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}
-        >
-          {caption}
-        </div>
+      )}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        padding: ready ? '14px 8px 8px' : '14px 8px 9px',
+        display: 'flex', alignItems: 'flex-end', gap: 7,
+        background: 'linear-gradient(to top,'
+          + 'color-mix(in srgb, var(--gb-backdrop) 88%, transparent) 35%,'
+          + 'transparent)',
+        pointerEvents: 'none',
+      }}>
+        <span style={{ flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
+          <span
+            title={job.product?.name || ''}
+            style={{
+              display: 'block', fontSize: 10, fontWeight: 750, color: '#fff',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              textShadow: '0 1px 3px rgba(0,0,0,.55)',
+            }}
+          >
+            {job.product?.name || job.product?.id || 'Product mockup'}
+          </span>
+          <span
+            title={caption}
+            style={{
+              display: 'block', marginTop: 1, fontSize: 8.5,
+              color: 'rgba(255,255,255,.76)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              textShadow: '0 1px 3px rgba(0,0,0,.55)',
+            }}
+          >
+            {caption}
+          </span>
+        </span>
         {ready && (
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Btn
-              size="xs"
-              variant="secondary"
-              icon={<I.eye />}
-              onClick={onOpen}
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              View full image
-            </Btn>
+          <span style={{
+            flexShrink: 0, display: 'flex', gap: 3, pointerEvents: 'auto',
+          }}>
             <IconBtn
               size="xs"
-              variant="ghost"
+              variant="secondary"
+              title="View full image"
+              icon={<I.eye />}
+              onClick={onOpen}
+            />
+            <IconBtn
+              size="xs"
+              variant="secondary"
               title="Download this image"
               icon={<I.download />}
               disabled={!asset?.dataUrl}
@@ -1161,7 +1185,7 @@ function ResultCard({ job, onOpen }) {
                 asset, job.result?.filename || `${job.job_id}.png`,
               )}
             />
-          </div>
+          </span>
         )}
       </div>
     </div>
@@ -1299,42 +1323,80 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
           </div>
         </div>
       </div>
-      <div className="gb-ms-scroll" style={{
-        flex: 1, minHeight: 0, overflowY: 'auto', padding: 16,
-        background: 'var(--gb-surface-canvas)',
-      }}>
-        {/* A FIXED column width, not 1fr: stretching one or two results to
-            330-400px made every tile a near-full-size preview and left the
-            dedicated viewer with nothing to add. Tiles stay a constant size
-            whatever the batch holds; the viewer is where an image gets big. */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(auto-fill, ${GALLERY_TILE}px)`,
-          justifyContent: 'center',
-          gap: 12,
-        }}>
-          {jobs.map((job) => (
-            <ResultCard
-              key={job.job_id}
-              job={job}
-              onOpen={() => setPreviewJobId(job.job_id)}
+      {/* Enlarging REPLACES the grid in place rather than floating another
+          layer over it. The batch header and footer stay put, so the stack
+          never reads as a modal inside a modal inside a modal. */}
+      <AnimatePresence initial={false} mode="popLayout">
+        {previewJob ? (
+          <motion.div
+            key="viewer"
+            initial={{ opacity: 0, x: 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 14 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            <FullResultViewer
+              job={previewJob}
+              onBack={() => setPreviewJobId('')}
             />
-          ))}
-        </div>
-      </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="grid"
+            className="gb-ms-scroll"
+            initial={{ opacity: 0, x: -14 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              flex: 1, minHeight: 0, overflowY: 'auto', padding: 16,
+              background: 'var(--gb-surface-canvas)',
+            }}
+          >
+            {/* A FIXED column width, not 1fr: stretching one or two results to
+                330-400px made every tile a near-full-size preview and left the
+                viewer with nothing to add. Tiles stay a constant square. */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(auto-fill, ${GALLERY_TILE}px)`,
+              justifyContent: 'center',
+              gap: 12,
+            }}>
+              {jobs.map((job) => (
+                <ResultCard
+                  key={job.job_id}
+                  job={job}
+                  onOpen={() => setPreviewJobId(job.job_id)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div style={{
         minHeight: 48, padding: '8px 12px',
         display: 'flex', alignItems: 'center', gap: 8,
         background: 'var(--gb-fill-inverse-strong)',
         borderTop: '1px solid var(--gb-border-subtle)',
       }}>
+        {previewJob && (
+          <Btn
+            variant="secondary"
+            size="sm"
+            icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+            onClick={() => setPreviewJobId('')}
+          >
+            All images
+          </Btn>
+        )}
         <span style={{
           flex: 1, minWidth: 0, fontSize: 9.5, color: 'var(--gb-text-muted)',
         }}>
           {total} square image{total === 1 ? '' : 's'}
           {readyJobs.length > 0 && ` · ${readyJobs.length} ready`}
         </span>
-        {readyJobs.length > 0 && (
+        {!previewJob && readyJobs.length > 0 && (
           <Btn
             variant="secondary"
             size="sm"
@@ -1367,14 +1429,6 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
           </Btn>
         )}
       </div>
-      <AnimatePresence>
-        {previewJob && (
-          <FullResultViewer
-            job={previewJob}
-            onBack={() => setPreviewJobId('')}
-          />
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }
