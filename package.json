@@ -242,6 +242,14 @@
       ]
     },
     {
+      "name": "guard \u00b7 product image job lifecycle",
+      "id": "guard-product-image-jobs",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_product_generation.py"
+      ]
+    },
+    {
       "name": "flow \u00b7 ASP.NET calendar form-state reconstruction",
       "file": "tests/unit/calendarFormState.test.mjs"
     },

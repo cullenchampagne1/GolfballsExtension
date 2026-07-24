@@ -48,3 +48,4 @@ dist/safari-stage/
 # `git rm --cached` (files remain on disk, so the backend keeps working).
 .revstack/
 /revstack.project.json
+.revstack-runtime/
