@@ -573,7 +573,11 @@ export function ActionsShelf({
 
   const availableWidth = Math.max(240, viewport.width - (variant === 'tab' ? 12 : rightOffset + 12));
   const panelWidth = Math.min(view === 'chat' ? 540 : 320, availableWidth);
-  const panelHeight = Math.min(660, Math.max(220, viewport.height - bottomOffset - 80));
+  // The cap, not the viewport, was what forced a long action list to scroll on
+  // a normal screen. Chat stays at a readable column height; the actions list
+  // is allowed to grow until the viewport itself is the constraint.
+  const viewportRoom = Math.max(220, viewport.height - bottomOffset - 80);
+  const panelHeight = Math.min(view === 'chat' ? 660 : 900, viewportRoom);
   const resolvedHeight = resolveShelfPanelHeight(view, actionsHeight, panelHeight);
   const constrainActions = shouldConstrainShelfActions(actionsHeight, panelHeight);
 

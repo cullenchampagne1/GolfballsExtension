@@ -365,6 +365,29 @@ class ProductPromptRegistryTests(unittest.TestCase):
         self.assertNotIn("prompt", public["variations"][0])
         self.assertNotIn("reference_image_url", public["variations"][0])
 
+    def test_option_prompts_never_reach_the_client(self):
+        """Options may carry a prompt; like every other prompt it is server-side."""
+        studio = configured_faceted_studio()
+        studio["products"][0]["option_groups"][0]["options"][0]["prompt"] = (
+            "Show the product on a clean studio background."
+        )
+        registry = PRODUCTS.ProductPromptRegistry(StaticConfig(studio))
+
+        internal = registry.product("embroidered-hat")["option_groups"][0]["options"][0]
+        self.assertEqual(
+            internal["prompt"], "Show the product on a clean studio background.",
+            "the normalizer must keep the option prompt for composition",
+        )
+
+        public = registry.public_products()[0]
+        option = public["option_groups"][0]["options"][0]
+        self.assertNotIn("prompt", option)
+        self.assertEqual(option["label"], "Studio", "labels still publish")
+        self.assertNotIn(
+            "clean studio background", json.dumps(public),
+            "no option prompt text may appear anywhere in the client payload",
+        )
+
 
 class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

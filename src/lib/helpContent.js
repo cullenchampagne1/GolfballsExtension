@@ -3892,7 +3892,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Choosing a product opens the editor. The left rail is the setup: identity, the variation axes, and the imprint placements. The main panel is the reference grid — one cell per combination of the enabled axes."
+            "text": "Choosing a product opens the editor. The left rail is the setup: identity, colors and scenes, then placements. The main panel is the reference grid — one cell per combination of the enabled axes."
           },
           {
             "type": "table",
@@ -3903,14 +3903,14 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Variation axis",
-                "An option group in the managed catalog",
-                "A catalog facet (Color, Size) or an axis you author yourself"
+                "Color",
+                "An option group, shown as swatches",
+                "The product's own catalog facet"
               ],
               [
-                "Authored axis",
-                "An option group you define",
-                "The + beside Variation axes — Scene is the usual one"
+                "Scene",
+                "An option group you author",
+                "The + beside Colors & scenes — 'on a model', 'flat studio'"
               ],
               [
                 "Grid cell",
@@ -3918,11 +3918,56 @@ export const HELP_CONTENT = {
                 "A photo you upload or an HTTPS link you paste"
               ],
               [
-                "Imprint placement",
+                "Placement",
                 "A variation (where the logo goes)",
                 "Collapsed section in the rail; defaults to a single Personalized logo"
               ]
             ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "title": "Describe each thing exactly once",
+            "text": "Every layer owns one prompt and they are combined at generation time, each labelled with the option it came from. Write the scene on the scene, the color on the color, the location on the placement, and leave the product prompt for what is true of every render. You never repeat a scene description across colors."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Prompt",
+              "Where you write it",
+              "Applies to"
+            ],
+            "rows": [
+              [
+                "Product",
+                "Bottom of the editor",
+                "Every render of this product"
+              ],
+              [
+                "Scene",
+                "Click a scene option in the rail",
+                "Every color rendered in that scene"
+              ],
+              [
+                "Color",
+                "Click a color option in the rail",
+                "Every scene rendered in that color"
+              ],
+              [
+                "Placement",
+                "Placements section",
+                "Every reference, for that logo location"
+              ],
+              [
+                "Per-cell",
+                "Select a grid cell",
+                "That one exact combination"
+              ]
+            ]
+          },
+          {
+            "type": "p",
+            "text": "An option with a prompt shows a small dot on its chip, and each axis header counts how many of its options carry one. Adding a scene repeats the colors inside it and carries the photos you have already uploaded across the new combinations, so nothing is lost; removing an axis collapses them back. An axis can be deleted outright with the bin icon on its card."
           },
           {
             "type": "callout",

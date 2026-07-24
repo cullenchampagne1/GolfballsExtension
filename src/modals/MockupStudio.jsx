@@ -1970,9 +1970,10 @@ export function MockupStudio({ onClose, bindClose }) {
                   background: 'var(--gb-surface-canvas)',
                 }}>
                   <div style={{
-                    padding: 16, borderBottom: '1px solid var(--gb-border-subtle)',
+                    padding: '11px 16px 12px',
+                    borderBottom: '1px solid var(--gb-border-subtle)',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
                       <div style={{
                         fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
                         textTransform: 'uppercase', color: 'var(--gb-text-muted)',
@@ -1989,10 +1990,13 @@ export function MockupStudio({ onClose, bindClose }) {
                         </span>
                       )}
                     </div>
+                    {/* Sized to leave the option groups below enough room to
+                        sit without a scrollbar; the reference is orientation
+                        context, not the subject. */}
                     <div style={{
                       position: 'relative', width: '100%',
-                      aspectRatio: '1 / 1',
-                      maxHeight: 180, overflow: 'hidden', margin: '0 auto',
+                      aspectRatio: '16 / 9',
+                      maxHeight: 118, overflow: 'hidden', margin: '0 auto',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       borderRadius: 'var(--gb-r-md)',
                       background: 'var(--gb-fill-soft)',

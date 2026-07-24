@@ -27,8 +27,8 @@ import { readCatalogCache, loadCatalog } from '../lib/giftCatalog.js';
 import {
   MAX_OPTION_GROUPS, MAX_SOURCES,
   axisFromCatalogProperty, buildCatalogProduct, combinationKey, combinationsOf,
-  draftFromCatalogProduct, mergeCatalogProduct, referenceNameFor, toOptionId,
-  toProductId,
+  draftFromCatalogProduct, mergeCatalogProduct, referenceNameFor, remapCells,
+  toOptionId, toProductId,
 } from '../lib/mockupCatalogDraft.js';
 import {
   readMockupCatalog, uploadMockupReference, writeMockupCatalog,
@@ -36,6 +36,9 @@ import {
 
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const SAVE_DEBOUNCE_MS = 700;
+// Short envelope, same curve as the shelf's view switch — the panel change
+// should read as a step forward, not as an effect.
+const PANEL_TRANSITION = { duration: 0.2, ease: [0.22, 1, 0.36, 1] };
 
 const mono = 'var(--gb-font-mono)';
 const cardStyle = {
@@ -512,6 +515,7 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
   const [managed, setManaged] = useState([]);
   const [draft, setDraft] = useState(null);
   const [selectedKey, setSelectedKey] = useState('');
+  const [openOptionKey, setOpenOptionKey] = useState({ axis: '', option: '' });
   const [busyKeys, setBusyKeys] = useState(new Set());
   const [saveState, setSaveState] = useState('idle');
   const [saveError, setSaveError] = useState('');
@@ -711,65 +715,90 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
     }
   }, [draft, patchCell, toast]);
 
-  const toggleAxis = useCallback((axisId) => {
+  /* Every axis edit runs through here.
+   *
+   * A cell's identity IS its combination, so ANY change to the enabled axes or
+   * their options renames the keys. remapCells carries the existing photos
+   * across: adding a scene fans each photo out over the new scenes, removing an
+   * axis collapses them back. Without this, adding a scene silently orphaned
+   * every reference already uploaded. */
+  const editAxes = useCallback((mutate) => {
     setDraft((previous) => {
       if (!previous) return previous;
-      const axes = previous.axes.map((axis) => (
-        axis.id === axisId ? { ...axis, enabled: axis.enabled === false } : axis
-      ));
-      const active = axes.filter((a) => a.enabled !== false);
-      if (active.length > MAX_OPTION_GROUPS) return previous;
-      return { ...previous, axes };
-    });
-    scheduleSave();
-  }, [scheduleSave]);
-
-  const toggleOption = useCallback((axisId, optionId) => {
-    setDraft((previous) => (previous ? {
-      ...previous,
-      axes: previous.axes.map((axis) => (axis.id !== axisId ? axis : {
-        ...axis,
-        options: axis.options.some((o) => o.id === optionId && o.hidden)
-          ? axis.options.map((o) => (o.id === optionId ? { ...o, hidden: false } : o))
-          : axis.options.map((o) => (o.id === optionId ? { ...o, hidden: true } : o)),
-      })),
-    } : previous));
-    scheduleSave();
-  }, [scheduleSave]);
-
-  const addAuthoredAxis = useCallback(() => {
-    setDraft((previous) => {
-      if (!previous) return previous;
-      const base = 'scene';
-      let id = base;
-      let n = 2;
-      while (previous.axes.some((axis) => axis.id === id)) { id = `${base}-${n}`; n += 1; }
+      const axes = mutate(previous.axes);
+      if (!axes) return previous;
+      const visible = (list) => list
+        .filter((axis) => axis.enabled !== false)
+        .map((axis) => ({ ...axis, options: axis.options.filter((o) => !o.hidden) }))
+        .filter((axis) => axis.options.length);
+      if (visible(axes).length > MAX_OPTION_GROUPS) return previous;
       return {
         ...previous,
-        axes: [...previous.axes, {
-          id,
-          label: id === base ? 'Scene' : `Scene ${n - 1}`,
-          presentation: 'thumbnail',
-          columns: 2,
-          enabled: true,
-          source: 'authored',
-          options: [{ id: 'studio', label: 'Studio' }],
-        }],
+        axes,
+        cells: remapCells(previous.cells, visible(previous.axes), visible(axes)),
       };
     });
-  }, []);
+    setSelectedKey('');
+    scheduleSave();
+  }, [scheduleSave]);
+
+  const toggleAxis = useCallback((axisId) => editAxes((axes) => axes.map((axis) => (
+    axis.id === axisId ? { ...axis, enabled: axis.enabled === false } : axis
+  ))), [editAxes]);
+
+  const removeAxis = useCallback((axisId) => editAxes(
+    (axes) => axes.filter((axis) => axis.id !== axisId),
+  ), [editAxes]);
+
+  const toggleOption = useCallback((axisId, optionId) => editAxes((axes) => axes.map(
+    (axis) => (axis.id !== axisId ? axis : {
+      ...axis,
+      options: axis.options.map((option) => (
+        option.id === optionId ? { ...option, hidden: !option.hidden } : option
+      )),
+    }),
+  )), [editAxes]);
+
+  const addAuthoredAxis = useCallback(() => editAxes((axes) => {
+    let id = 'scene';
+    let n = 2;
+    while (axes.some((axis) => axis.id === id)) { id = `scene-${n}`; n += 1; }
+    return [...axes, {
+      id,
+      label: id === 'scene' ? 'Scene' : `Scene ${n - 1}`,
+      description: '',
+      presentation: 'thumbnail',
+      columns: 2,
+      enabled: true,
+      source: 'authored',
+      options: [{ id: 'studio', label: 'Studio', prompt: '' }],
+    }];
+  }), [editAxes]);
 
   const addAxisOption = useCallback((axisId, label) => {
     const optionLabel = String(label || '').trim();
     if (!optionLabel) return;
+    editAxes((axes) => axes.map((axis) => {
+      if (axis.id !== axisId) return axis;
+      const id = toOptionId(optionLabel);
+      if (!id || axis.options.some((option) => option.id === id)) return axis;
+      return {
+        ...axis,
+        options: [...axis.options, { id, label: optionLabel, prompt: '' }],
+      };
+    }));
+  }, [editAxes]);
+
+  /** Author an option's own prompt — the scene described once. */
+  const patchOption = useCallback((axisId, optionId, patch) => {
     setDraft((previous) => (previous ? {
       ...previous,
-      axes: previous.axes.map((axis) => {
-        if (axis.id !== axisId) return axis;
-        const id = toOptionId(optionLabel);
-        if (!id || axis.options.some((option) => option.id === id)) return axis;
-        return { ...axis, options: [...axis.options, { id, label: optionLabel }] };
-      }),
+      axes: previous.axes.map((axis) => (axis.id !== axisId ? axis : {
+        ...axis,
+        options: axis.options.map((option) => (
+          option.id === optionId ? { ...option, ...patch } : option
+        )),
+      })),
     } : previous));
     scheduleSave();
   }, [scheduleSave]);
@@ -857,23 +886,44 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
           <IconBtn size="sm" variant="ghost" title="Close" icon={<I.close />} onClick={onClose} />
         </div>
 
+        {/* Panels cross-fade with a short directional slide — forward into the
+            editor, back to the picker — matching the shelf's view switch. */}
+        <AnimatePresence initial={false} mode="popLayout">
         {stage === 'picker' ? (
-          <ProductPicker
-            rows={rows}
-            query={query}
-            onQuery={setQuery}
-            onPick={openProduct}
-            loading={catalogLoading}
-            onRefresh={() => {
-              setCatalogLoading(true);
-              loadCatalog({ force: true })
-                .then(setCatalog)
-                .catch((error) => toast?.error?.(error?.message || 'Re-index failed'))
-                .finally(() => setCatalogLoading(false));
+          <motion.div
+            key="picker"
+            initial={{ opacity: 0, x: -14 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={PANEL_TRANSITION}
+            style={{
+              flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
             }}
-          />
+          >
+            <ProductPicker
+              rows={rows}
+              query={query}
+              onQuery={setQuery}
+              onPick={openProduct}
+              loading={catalogLoading}
+              onRefresh={() => {
+                setCatalogLoading(true);
+                loadCatalog({ force: true })
+                  .then(setCatalog)
+                  .catch((error) => toast?.error?.(error?.message || 'Re-index failed'))
+                  .finally(() => setCatalogLoading(false));
+              }}
+            />
+          </motion.div>
         ) : (
-          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <motion.div
+            key="editor"
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 12 }}
+            transition={PANEL_TRANSITION}
+            style={{ flex: 1, minHeight: 0, display: 'flex' }}
+          >
             {/* setup rail */}
             <div
               className="gb-ms-scroll"
@@ -920,7 +970,7 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
               </Rail>
 
               <Rail
-                title="Variation axes"
+                title="Colors & scenes"
                 count={`${activeAxes.length}/${MAX_OPTION_GROUPS}`}
                 action={(
                   <span
@@ -930,7 +980,7 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') { event.stopPropagation(); addAuthoredAxis(); }
                     }}
-                    title="Add an authored axis (scene, angle…)"
+                    title="Add a scene (on a model, flat studio…)"
                     style={{
                       display: 'flex', alignItems: 'center',
                       color: 'var(--gb-brand-label)', cursor: 'pointer',
@@ -941,77 +991,40 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
                 )}
               >
                 <div style={{ display: 'grid', gap: 7 }}>
+                  <div style={{
+                    fontSize: 9.5, lineHeight: 1.5, color: 'var(--gb-text-tertiary)',
+                  }}>
+                    Each option’s prompt is written once and applies everywhere it
+                    is selected. Adding a scene repeats the colors within it.
+                  </div>
                   {!draft?.axes?.length && (
                     <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)' }}>
-                      This product has no catalog facets. Add an authored axis to
-                      build a grid.
+                      This product publishes no catalog colors. Add a scene to
+                      start the grid.
                     </div>
                   )}
-                  {(draft?.axes || []).map((axis) => {
-                    const on = axis.enabled !== false;
-                    return (
-                      <div key={axis.id} style={{ ...cardStyle, padding: 7 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <Checkbox checked={on} onChange={() => toggleAxis(axis.id)} />
-                          <span style={{
-                            flex: 1, fontSize: 11, fontWeight: 650,
-                            color: on ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
-                          }}>
-                            {axis.label}
-                          </span>
-                          <span style={{
-                            fontSize: 9, fontFamily: mono, color: 'var(--gb-text-tertiary)',
-                          }}>
-                            {axis.source === 'catalog' ? 'catalog' : 'authored'}
-                            {' · '}
-                            {axis.options.length}
-                          </span>
-                        </div>
-                        {on && (
-                          <div style={{
-                            marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4,
-                          }}>
-                            {axis.options.map((option) => (
-                              <span
-                                key={option.id}
-                                onClick={() => toggleOption(axis.id, option.id)}
-                                style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  height: 19, padding: '0 6px', cursor: 'pointer',
-                                  borderRadius: 'var(--gb-r-pill)',
-                                  fontSize: 9.5, fontWeight: 650,
-                                  background: option.hidden
-                                    ? 'transparent' : 'var(--gb-fill-soft)',
-                                  color: option.hidden
-                                    ? 'var(--gb-text-tertiary)' : 'var(--gb-text-secondary)',
-                                  border: `1px solid ${option.hidden
-                                    ? 'var(--gb-border-subtle)' : 'var(--gb-border-default)'}`,
-                                  textDecoration: option.hidden ? 'line-through' : 'none',
-                                }}
-                              >
-                                {option.swatch && (
-                                  <span style={{
-                                    width: 7, height: 7, borderRadius: '50%',
-                                    background: option.swatch,
-                                    border: '1px solid var(--gb-border-default)',
-                                  }} />
-                                )}
-                                {option.label}
-                              </span>
-                            ))}
-                            {axis.source !== 'catalog' && (
-                              <AddOption onAdd={(label) => addAxisOption(axis.id, label)} />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {(draft?.axes || []).map((axis) => (
+                    <AxisCard
+                      key={axis.id}
+                      axis={axis}
+                      openOptionId={openOptionKey.axis === axis.id ? openOptionKey.option : ''}
+                      onToggleAxis={() => toggleAxis(axis.id)}
+                      onRemoveAxis={() => removeAxis(axis.id)}
+                      onToggleOption={(optionId) => toggleOption(axis.id, optionId)}
+                      onOpenOption={(optionId) => setOpenOptionKey(
+                        (previous) => (previous.axis === axis.id && previous.option === optionId
+                          ? { axis: '', option: '' }
+                          : { axis: axis.id, option: optionId }),
+                      )}
+                      onPatchOption={(optionId, patch) => patchOption(axis.id, optionId, patch)}
+                      onAddOption={(label) => addAxisOption(axis.id, label)}
+                    />
+                  ))}
                 </div>
               </Rail>
 
               <Rail
-                title="Imprint placements"
+                title="Placements"
                 count={(draft?.placements?.length || 0) || 1}
                 collapsible
                 open={placementsOpen}
@@ -1056,12 +1069,25 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
                 />
               </div>
               <div style={{
-                borderTop: '1px solid var(--gb-border-subtle)', padding: '10px 12px',
+                borderTop: '1px solid var(--gb-border-subtle)', padding: '9px 12px 10px',
               }}>
+                <div style={{
+                  marginBottom: 5, display: 'flex', alignItems: 'center', gap: 6,
+                  fontSize: 9, fontWeight: 800, letterSpacing: '0.07em',
+                  textTransform: 'uppercase', color: 'var(--gb-text-tertiary)',
+                }}>
+                  Product prompt
+                  <span style={{
+                    letterSpacing: 0, textTransform: 'none', fontWeight: 500,
+                    fontSize: 9.5, color: 'var(--gb-text-ghost)',
+                  }}>
+                    applies to every scene, color, and placement
+                  </span>
+                </div>
                 <Textarea
                   value={draft?.prompt || ''}
                   onChange={(value) => patchDraft({ prompt: value })}
-                  placeholder="Product prompt — how the logo should be applied to this product. Describe what to preserve from the reference and how the imprint should look."
+                  placeholder="How the logo is applied to this product, and what must be preserved from the reference photo. Leave scene, color, and placement detail to their own prompts."
                   rows={3}
                 />
               </div>
@@ -1082,10 +1108,142 @@ export function MockupCatalogAdmin({ onClose, onSaved }) {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
+  );
+}
+
+/**
+ * One variation axis: enable it, delete it, and author each option's prompt.
+ *
+ * Clicking an option opens its prompt box — that prompt is written ONCE here
+ * and composes into every reference that selects the option, which is what
+ * stops a scene from being retyped in each colour cell. The checkbox toggles
+ * whether the option participates in the grid at all.
+ */
+function AxisCard({
+  axis, openOptionId, onToggleAxis, onRemoveAxis, onToggleOption,
+  onOpenOption, onPatchOption, onAddOption,
+}) {
+  const on = axis.enabled !== false;
+  const authored = axis.source !== 'catalog';
+  const prompted = axis.options.filter((option) => String(option.prompt || '').trim()).length;
+  return (
+    <div style={{ ...cardStyle, padding: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <Checkbox checked={on} onChange={onToggleAxis} />
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 11, fontWeight: 650,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          color: on ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+        }}>
+          {axis.label}
+        </span>
+        <span
+          title={prompted ? `${prompted} option prompt${prompted === 1 ? '' : 's'}` : undefined}
+          style={{ fontSize: 9, fontFamily: mono, color: 'var(--gb-text-tertiary)' }}
+        >
+          {authored ? 'authored' : 'catalog'}
+          {' · '}
+          {axis.options.length}
+          {prompted > 0 && ` · ${prompted}✎`}
+        </span>
+        <IconBtn
+          size="sm" variant="ghost" title={`Remove the ${axis.label} axis`}
+          icon={<I.trash />} onClick={onRemoveAxis}
+        />
+      </div>
+      {on && (
+        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {axis.options.map((option) => {
+            const hasPrompt = !!String(option.prompt || '').trim();
+            const open = openOptionId === option.id;
+            return (
+              <span
+                key={option.id}
+                onClick={() => onOpenOption(option.id)}
+                title={option.hidden ? 'Hidden from the grid' : 'Edit this option’s prompt'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  height: 19, padding: '0 6px', cursor: 'pointer',
+                  borderRadius: 'var(--gb-r-pill)',
+                  fontSize: 9.5, fontWeight: 650,
+                  background: option.hidden ? 'transparent'
+                    : open ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-soft)',
+                  color: option.hidden ? 'var(--gb-text-tertiary)'
+                    : open ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                  border: `1px solid ${option.hidden ? 'var(--gb-border-subtle)'
+                    : open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+                  textDecoration: option.hidden ? 'line-through' : 'none',
+                }}
+              >
+                {option.swatch && (
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%', background: option.swatch,
+                    border: '1px solid var(--gb-border-default)',
+                  }} />
+                )}
+                {option.label}
+                {hasPrompt && (
+                  <span style={{
+                    width: 4, height: 4, borderRadius: '50%',
+                    background: 'var(--gb-brand-label)',
+                  }} />
+                )}
+              </span>
+            );
+          })}
+          {authored && <AddOption onAdd={onAddOption} />}
+        </div>
+      )}
+      <AnimatePresence initial={false}>
+        {on && openOptionId && (
+          <motion.div
+            key={openOptionId}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            {(() => {
+              const option = axis.options.find((row) => row.id === openOptionId);
+              if (!option) return null;
+              return (
+                <div style={{ paddingTop: 7, display: 'grid', gap: 5 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontSize: 9, fontFamily: mono, color: 'var(--gb-text-tertiary)',
+                  }}>
+                    {axis.label} · {option.label}
+                    <span style={{ flex: 1 }} />
+                    <span
+                      onClick={() => onToggleOption(option.id)}
+                      style={{ cursor: 'pointer', color: 'var(--gb-text-muted)' }}
+                    >
+                      {option.hidden ? 'Show' : 'Hide'}
+                    </span>
+                  </div>
+                  <Textarea
+                    value={option.prompt || ''}
+                    onChange={(value) => onPatchOption(option.id, { prompt: value })}
+                    placeholder={
+                      axis.id.startsWith('scene')
+                        ? 'Describe this scene once — e.g. worn by a person, natural posture'
+                        : `Describe what “${option.label}” must preserve or change`
+                    }
+                    rows={2}
+                  />
+                </div>
+              );
+            })()}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

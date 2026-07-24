@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import {
   MAX_SOURCES, MIN_PRODUCT_PROMPT,
   axisFromCatalogProperty, buildCatalogProduct, combinationKey, combinationsOf,
-  draftFromCatalogProduct, mergeCatalogProduct, referenceNameFor, toOptionId,
+  draftFromCatalogProduct, mergeCatalogProduct, referenceNameFor, remapCells, toOptionId,
   toProductId,
 } from '../../src/lib/mockupCatalogDraft.js';
 
@@ -214,6 +214,108 @@ describe('catalog draft · blocking issues', () => {
       placements: [{ id: 'personalized-logo', label: 'Personalized logo', prompt: '' }],
     }));
     assert.deepEqual(issues, []);
+  });
+});
+
+describe('catalog draft · option prompts', () => {
+  it('carries an option prompt so a scene is described once', () => {
+    const scene = {
+      ...SCENE,
+      options: [
+        { id: 'studio', label: 'Studio', prompt: 'Clean seamless white background.' },
+        { id: 'grass', label: 'Golf course', prompt: 'Hanging from a bag on the course.' },
+      ],
+    };
+    const { product, issues } = buildCatalogProduct(draft({ axes: [scene, COLOR] }));
+
+    assert.deepEqual(issues, []);
+    const options = product.option_groups[0].options;
+    assert.equal(options[0].prompt, 'Clean seamless white background.');
+    assert.equal(options[1].prompt, 'Hanging from a bag on the course.');
+    assert.equal(
+      product.sources.filter((s) => s.option_values.scene === 'studio').length, 3,
+      'one scene prompt covers every colour that selects it',
+    );
+  });
+
+  it('omits an empty option prompt rather than emitting a blank key', () => {
+    const { product } = buildCatalogProduct(draft());
+    assert.equal(Object.hasOwn(product.option_groups[0].options[0], 'prompt'), false);
+  });
+
+  it('round-trips an option prompt back into the editor', () => {
+    const scene = {
+      ...SCENE,
+      options: [
+        { id: 'studio', label: 'Studio', prompt: 'Clean seamless white.' },
+        { id: 'grass', label: 'Golf course' },
+      ],
+    };
+    const { product } = buildCatalogProduct(draft({ axes: [scene, COLOR] }));
+    const restored = draftFromCatalogProduct(product);
+    assert.equal(restored.axes[0].options[0].prompt, 'Clean seamless white.');
+    assert.equal(restored.axes[0].options[1].prompt, '');
+  });
+});
+
+describe('catalog draft · axis changes keep the photos', () => {
+  const COLOR_ONLY = [COLOR];
+  const cells = {
+    black: { referenceUrl: `${REF}/black.png` },
+    blue: { referenceUrl: `${REF}/blue.png` },
+    white: { referenceUrl: `${REF}/white.png` },
+  };
+
+  it('fans every photo across a newly added scene axis', () => {
+    const next = remapCells(cells, COLOR_ONLY, [COLOR, SCENE]);
+
+    assert.deepEqual(Object.keys(next).sort(), [
+      'black-grass', 'black-studio', 'blue-grass', 'blue-studio',
+      'white-grass', 'white-studio',
+    ]);
+    assert.equal(next['black-studio'].referenceUrl, `${REF}/black.png`);
+    assert.equal(next['black-grass'].referenceUrl, `${REF}/black.png`,
+      'the existing photo seeds both scenes rather than orphaning');
+  });
+
+  it('keeps photos when an axis is removed', () => {
+    const twoAxis = remapCells(cells, COLOR_ONLY, [COLOR, SCENE]);
+    const collapsed = remapCells(twoAxis, [COLOR, SCENE], COLOR_ONLY);
+
+    assert.deepEqual(Object.keys(collapsed).sort(), ['black', 'blue', 'white']);
+    assert.equal(collapsed.black.referenceUrl, `${REF}/black.png`);
+  });
+
+  it('rewrites keys when axes are reordered', () => {
+    const forward = remapCells(cells, COLOR_ONLY, [COLOR, SCENE]);
+    const swapped = remapCells(forward, [COLOR, SCENE], [SCENE, COLOR]);
+
+    assert.equal(swapped['studio-black'].referenceUrl, `${REF}/black.png`);
+    assert.equal(Object.hasOwn(swapped, 'black-studio'), false);
+  });
+
+  it('preserves a per-cell prompt through the remap', () => {
+    const withPrompt = { black: { referenceUrl: `${REF}/black.png`, prompt: 'Note.' } };
+    const next = remapCells(withPrompt, COLOR_ONLY, [COLOR, SCENE]);
+    assert.equal(next['black-studio'].prompt, 'Note.');
+  });
+
+  it('drops nothing and invents nothing when the axes are unchanged', () => {
+    assert.deepEqual(remapCells(cells, COLOR_ONLY, COLOR_ONLY), cells);
+  });
+
+  it('survives removing the last axis', () => {
+    assert.deepEqual(remapCells(cells, COLOR_ONLY, []), {});
+  });
+
+  it('keeps the product buildable straight after adding an axis', () => {
+    const next = remapCells(cells, COLOR_ONLY, [COLOR, SCENE]);
+    const { product, issues } = buildCatalogProduct(
+      draft({ axes: [COLOR, SCENE], cells: next }),
+    );
+    assert.deepEqual(issues, []);
+    assert.equal(product.sources.length, 6,
+      'every fanned-out combination is a usable source');
   });
 });
 

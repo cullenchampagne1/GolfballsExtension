@@ -186,6 +186,118 @@ class ValidateDocumentTests(unittest.TestCase):
                 registry().validate_document(candidate)
 
 
+class OptionPromptCompositionTests(unittest.TestCase):
+    """A trait is described once, on the layer that owns it, then composed.
+
+    Before per-option prompts existed, a scene ("worn by a person") had to be
+    repeated in every colour cell that used it. These pin that an option prompt
+    is authored once, reaches the render direction labelled by its group, and
+    never leaks to the client.
+    """
+
+    PRODUCT = {
+        "option_groups": [
+            {
+                "id": "scene", "label": "Scene",
+                "options": [
+                    {"id": "model", "label": "On a model",
+                     "prompt": "Show the polo worn by a person."},
+                    {"id": "flat", "label": "Flat studio",
+                     "prompt": "Lay the polo flat on seamless white."},
+                ],
+            },
+            {
+                "id": "color", "label": "Color",
+                "options": [
+                    {"id": "navy", "label": "Navy",
+                     "prompt": "Preserve the exact navy dye."},
+                    {"id": "white", "label": "White", "prompt": ""},
+                ],
+            },
+        ],
+    }
+    VARIATION = {"id": "left-chest", "label": "Left chest",
+                 "prompt": "Embroider at the left chest."}
+    ASPECT = {"prompt": "Compose for a square 1:1 frame."}
+
+    def direction(self, values, source_prompt=""):
+        source = {
+            "id": "s", "label": "Selected", "option_values": values,
+            "prompt": source_prompt,
+        }
+        return PRODUCTS._selection_direction(
+            self.PRODUCT, source, self.VARIATION, self.ASPECT
+        )
+
+    def test_a_scene_prompt_reaches_every_colour_that_selects_it(self):
+        navy = self.direction({"scene": "model", "color": "navy"})
+        white = self.direction({"scene": "model", "color": "white"})
+        for text in (navy, white):
+            self.assertIn("Show the polo worn by a person.", text)
+        self.assertIn("Preserve the exact navy dye.", navy)
+        self.assertNotIn("Preserve the exact navy dye.", white)
+
+    def test_each_line_is_labelled_by_its_group_and_option(self):
+        text = self.direction({"scene": "model", "color": "navy"})
+        self.assertIn("Scene — On a model:", text)
+        self.assertIn("Color — Navy:", text)
+        self.assertIn("Placement — Left chest:", text)
+
+    def test_a_different_scene_swaps_only_the_scene_line(self):
+        text = self.direction({"scene": "flat", "color": "navy"})
+        self.assertIn("Lay the polo flat on seamless white.", text)
+        self.assertNotIn("worn by a person", text)
+        self.assertIn("Preserve the exact navy dye.", text)
+
+    def test_options_compose_before_the_narrower_source_prompt(self):
+        text = self.direction(
+            {"scene": "model", "color": "navy"}, source_prompt="One-off note."
+        )
+        self.assertLess(
+            text.index("worn by a person"), text.index("One-off note."),
+            "general direction must be read before the narrower override",
+        )
+
+    def test_placement_and_aspect_still_compose_last(self):
+        text = self.direction({"scene": "flat", "color": "white"})
+        self.assertLess(
+            text.index("Embroider at the left chest."),
+            text.index("Compose for a square 1:1 frame."),
+        )
+
+    def test_an_empty_option_prompt_contributes_no_line(self):
+        text = self.direction({"scene": "flat", "color": "white"})
+        self.assertNotIn("Color — White", text)
+
+    def test_a_product_without_option_groups_still_composes(self):
+        text = PRODUCTS._selection_direction(
+            {}, {"id": "s", "label": "S", "prompt": "Only note."},
+            self.VARIATION, self.ASPECT,
+        )
+        self.assertIn("Only note.", text)
+        self.assertIn("Embroider at the left chest.", text)
+
+    def test_the_normalizer_accepts_and_keeps_an_option_prompt(self):
+        doc = document()
+        doc["products"][0]["option_groups"][0]["options"][0]["prompt"] = (
+            "Show the towel on a clean studio background."
+        )
+        _, _, products = registry()._normalize_v3(doc)
+        group = products["venture-towel"]["option_groups"][0]
+        self.assertEqual(
+            group["options"][0]["prompt"],
+            "Show the towel on a clean studio background.",
+        )
+        self.assertEqual(group["options"][1]["prompt"], "",
+                         "an unset option prompt normalizes to empty")
+
+    def test_an_over_long_option_prompt_is_rejected(self):
+        doc = document()
+        doc["products"][0]["option_groups"][0]["options"][0]["prompt"] = "x" * 2_001
+        with self.assertRaises(PRODUCTS.ProductConfigurationError):
+            registry().validate_document(doc)
+
+
 class CatalogLinkTests(unittest.TestCase):
     """The corporate-catalog back-link is optional but must survive."""
 
