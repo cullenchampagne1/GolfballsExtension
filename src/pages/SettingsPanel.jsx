@@ -30,9 +30,15 @@ import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/cred
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { listProductStores, revokeProductStore } from '../lib/customItems.js';
-import { shouldShowManagedSection } from '../lib/manageSections.js';
 import {
-  IDENTITY_NOTICE_KEY, identityNoticeSignature, shouldShowIdentityConfirmation,
+  retainManagedRowsOnFailure,
+  settingsJsonFallbackMessage,
+  shouldShowManagedSection,
+} from '../lib/manageSections.js';
+import {
+  IDENTITY_NOTICE_KEY,
+  identityNoticeSignature,
+  installationIdentityNoticeView,
 } from '../lib/installationIdentityNotice.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -284,8 +290,6 @@ function SettingsLinksManager({ onPresetLoad }) {
   const [presetName, setPresetName] = useState('');
   const [importUrl, setImportUrl] = useState('');
   const [busy, setBusy] = useState(false);
-  const [serverUnavailable, setServerUnavailable] = useState(false);
-  const [serverError, setServerError] = useState('');
   // Default: full state — every scope checked (save dialog).
   const [chosenScopes, setChosenScopes] = useState(() => new Set(PRESET_SCOPES.map((s) => s.id)));
   // Which scopes to APPLY when loading the selected preset (defaults to all it
@@ -303,12 +307,8 @@ function SettingsLinksManager({ onPresetLoad }) {
     try {
       const response = await sendBackgroundMessage('settingsShareList');
       setShares(response.shares || []);
-      setServerUnavailable(false);
-      setServerError('');
-    } catch (error) {
-      setShares([]);
-      setServerUnavailable(true);
-      setServerError(error.message || 'Unable to list settings links');
+    } catch {
+      setShares(retainManagedRowsOnFailure);
     }
   }
 
@@ -360,8 +360,8 @@ function SettingsLinksManager({ onPresetLoad }) {
     setBusy(true);
     try {
       const scopes = await gatherScopes([...chosenScopes]);
-      // Always retry the link service. A previous list/create failure is a
-      // status signal, not a permanent JSON-only mode for this panel session.
+      // Always retry the link service. A previous list/create failure never
+      // turns this panel into a permanent JSON-only mode.
       const response = await sendBackgroundMessage('settingsShareCreate', {
         name: presetName.trim(), scopes,
       });
@@ -369,8 +369,6 @@ function SettingsLinksManager({ onPresetLoad }) {
       setShares((current) => [share, ...current.filter((item) => item.id !== share.id)]);
       setSelectedId(share.id);
       setSelectedShare(share);
-      setServerUnavailable(false);
-      setServerError('');
       setPresetName('');
       setShowSaveDialog(false);
       let copied = false;
@@ -386,17 +384,16 @@ function SettingsLinksManager({ onPresetLoad }) {
       window.__gbToast?.success(
         copied ? `Created "${share.name}" and copied its URL` : `Created "${share.name}"`,
       );
-    } catch (error) {
+    } catch {
       try {
+        const fallbackName = presetName.trim();
         const scopes = await gatherScopes([...chosenScopes]);
-        downloadSettingsFallback(presetName, scopes);
-        setServerUnavailable(true);
-        setServerError(error.message || 'Unable to create settings link');
+        downloadSettingsFallback(fallbackName, scopes);
         setPresetName('');
         setShowSaveDialog(false);
-        window.__gbToast?.success('Server unavailable — downloaded a JSON settings template instead');
-      } catch (fallbackError) {
-        window.__gbToast?.error(fallbackError.message || error.message || 'Unable to share settings');
+        window.__gbToast?.success(settingsJsonFallbackMessage(fallbackName));
+      } catch {
+        window.__gbToast?.error('Unable to download the JSON settings template');
       }
     } finally { setBusy(false); }
   }
@@ -429,7 +426,6 @@ function SettingsLinksManager({ onPresetLoad }) {
         } catch {
           // Applying the local data succeeded. Server-side history is optional
           // and must never turn that success into an import failure.
-          setServerUnavailable(true);
         }
       }
       setImportCandidate(null);
@@ -452,8 +448,8 @@ function SettingsLinksManager({ onPresetLoad }) {
       setSelectedId(null);
       setSelectedShare(null);
       window.__gbToast?.success('Settings link revoked');
-    } catch (error) {
-      window.__gbToast?.error(error.message || 'Unable to revoke settings link');
+    } catch {
+      window.__gbToast?.error('Unable to revoke settings link');
     } finally { setBusy(false); }
   }
 
@@ -465,9 +461,8 @@ function SettingsLinksManager({ onPresetLoad }) {
     try {
       const response = await sendBackgroundMessage('settingsShareGet', { shareId: id });
       setSelectedShare(normalizePreset(response.share));
-    } catch (error) {
-      setServerUnavailable(true);
-      window.__gbToast?.error(error.message || 'Unable to open settings link');
+    } catch {
+      window.__gbToast?.error('Unable to open settings link');
     } finally { setBusy(false); }
   }
 
@@ -478,12 +473,9 @@ function SettingsLinksManager({ onPresetLoad }) {
       const response = await sendBackgroundMessage('settingsShareGet', { url: importUrl.trim() });
       const share = normalizePreset(response.share);
       setImportCandidate(share);
-      setServerUnavailable(false);
-      setServerError('');
       window.__gbToast?.success(`Loaded "${share.name}" — choose what to import`);
-    } catch (error) {
-      setServerUnavailable(true);
-      window.__gbToast?.error(error.message || 'Unable to open settings link');
+    } catch {
+      window.__gbToast?.error('Unable to open settings link');
     } finally { setBusy(false); }
   }
 
@@ -493,8 +485,8 @@ function SettingsLinksManager({ onPresetLoad }) {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable');
       await navigator.clipboard.writeText(selectedShare.url);
       window.__gbToast?.success('Settings URL copied');
-    } catch (error) {
-      window.__gbToast?.error(error.message || 'Unable to copy settings URL');
+    } catch {
+      window.__gbToast?.error('Unable to copy settings URL');
     }
   }
 
@@ -535,11 +527,6 @@ function SettingsLinksManager({ onPresetLoad }) {
       )}>
         Shared Settings Templates
       </SectionLabel>
-      {serverUnavailable && (
-        <Callout tone="warning" style={{ marginBottom: 10 }}>
-          Link sharing is currently unavailable{serverError ? ` — ${serverError}` : ''}. The next save will retry; JSON export and import remain available.
-        </Callout>
-      )}
       <AnimatePresence>
         {showImportPanel && (
           <motion.div
@@ -980,7 +967,7 @@ function EmailLinksSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try { const r = await sendBackgroundMessage('emailShareList'); setLinks(Array.isArray(r?.shares) ? r.shares : []); }
-    catch { setLinks([]); }
+    catch { setLinks(retainManagedRowsOnFailure); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -991,8 +978,8 @@ function EmailLinksSection() {
       await sendBackgroundMessage('emailShareRevoke', { shareId: id });
       setLinks((prev) => prev.filter((l) => l.id !== id));
       window.__gbToast?.success?.('Email link revoked');
-    } catch (error) {
-      window.__gbToast?.error?.(error?.message || 'Unable to revoke email link');
+    } catch {
+      window.__gbToast?.error?.('Unable to revoke email link');
     } finally { setBusyId(null); }
   };
 
@@ -1045,7 +1032,7 @@ function ProductStoresSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try { const list = await listProductStores(); setStores(list); }
-    catch { setStores([]); }
+    catch { setStores(retainManagedRowsOnFailure); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1061,8 +1048,8 @@ function ProductStoresSection() {
       await revokeProductStore(id);
       setStores((prev) => prev.filter((s) => s.id !== id));
       window.__gbToast?.success?.('Store revoked');
-    } catch (error) {
-      window.__gbToast?.error?.(error?.message || 'Unable to revoke store');
+    } catch {
+      window.__gbToast?.error?.('Unable to revoke store');
     } finally { setBusyId(null); }
   };
 
@@ -1112,7 +1099,7 @@ function SupportTicketsSection() {
       const response = await sendBackgroundMessage('supportTicketList');
       setTickets(Array.isArray(response?.tickets) ? response.tickets : []);
     } catch {
-      if (!quiet) setTickets([]);
+      if (!quiet) setTickets(retainManagedRowsOnFailure);
     } finally {
       if (!quiet) setLoading(false);
     }
@@ -1209,18 +1196,14 @@ function InstallationIdentityNotice() {
   }, []);
 
   const load = useCallback(async () => {
-    setError('');
     try {
       const response = await sendBackgroundMessage('getInstallationIdentity');
       applyIdentity(response.identity);
-    } catch (loadError) {
-      setError(loadError?.message || 'Unable to load registration status');
-      throw loadError;
-    }
+    } catch { /* cached settings remain usable while identity sync is offline */ }
   }, [applyIdentity]);
 
   useEffect(() => {
-    load().catch(() => {});
+    load();
     try {
       chrome.storage.local.get(IDENTITY_NOTICE_KEY, (stored) => {
         setNoticeSeen(String(stored?.[IDENTITY_NOTICE_KEY] || ''));
@@ -1260,7 +1243,7 @@ function InstallationIdentityNotice() {
     const displayName = name.trim().replace(/\s+/g, ' ');
     if (!displayName) {
       setError('Enter your name so shared items can be attributed to you.');
-      throw new Error('A name is required');
+      return false;
     }
     setError('');
     try {
@@ -1269,19 +1252,23 @@ function InstallationIdentityNotice() {
       );
       applyIdentity(response.identity);
       window.__gbToast?.success?.(`Extension registered to ${response.identity.displayName}`);
-    } catch (saveError) {
-      setError(saveError?.message || 'Unable to save your name');
-      throw saveError;
+      return true;
+    } catch {
+      // Registration is server-owned. Keep the prompt available for a later
+      // retry, but do not turn a temporary outage into persistent page chrome.
+      setError('');
+      return false;
     }
   };
 
-  const signature = identityNoticeSignature(identity);
-  const showRegistered = noticeReady && shouldShowIdentityConfirmation(identity, noticeSeen);
-  const showPrompt = !!(identity && !identity.registered);
-  const showError = !identity && !!error;
+  const noticeView = installationIdentityNoticeView(
+    identity, noticeSeen, noticeReady,
+  );
+  const showRegistered = noticeView === 'confirmation';
+  const showPrompt = noticeView === 'prompt';
   return (
     <AnimatePresence initial={false}>
-      {(showError || showPrompt || showRegistered) && (
+      {(showPrompt || showRegistered) && (
         <motion.section
           layout
           initial={{ opacity: 0, y: -8, height: 0 }}
@@ -1290,14 +1277,7 @@ function InstallationIdentityNotice() {
           transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}
           style={{ overflow: 'hidden' }}
         >
-          {showError ? (
-            <Callout tone="error" icon={<I.user />} title="Registration status unavailable">
-              <div>{error}</div>
-              <Btn variant="tinted" status="error" size="xs" onClick={load} style={{ marginTop: 8 }}>
-                Retry
-              </Btn>
-            </Callout>
-          ) : showPrompt ? (
+          {showPrompt ? (
             <Callout tone="warning" icon={<I.user />} title="Tell RevStack who uses this extension">
               <div style={{ marginBottom: 9 }}>
                 Your existing API key stays in place. This name labels API access,
@@ -1313,7 +1293,7 @@ function InstallationIdentityNotice() {
                   leading={<I.user />}
                   autoComplete="name"
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter') save().catch(() => {});
+                    if (event.key === 'Enter') void save();
                   }}
                 />
                 <Btn variant="tinted" status="warning" size="sm" onClick={save}>
@@ -1481,8 +1461,8 @@ export function SettingsPanel({ remotePolicy }) {
       document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
       window.__gbToast?.success?.('Power Automate flow downloaded');
-    } catch (error) {
-      window.__gbToast?.error?.(error?.message || 'Could not download the flow');
+    } catch {
+      window.__gbToast?.error?.('Could not download the flow');
     } finally { setFlowBusy(false); }
   };
 
