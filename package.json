@@ -86,6 +86,10 @@
       "file": "tests/unit/mockupCatalogDraft.test.mjs"
     },
     {
+      "name": "modal \u00b7 shared Three.js runtime accessor",
+      "file": "tests/unit/threeRuntime.test.mjs"
+    },
+    {
       "name": "modal \u00b7 order-date calendar relay",
       "file": "tests/unit/submitOrderDates.test.mjs"
     },
@@ -324,6 +328,10 @@
     {
       "name": "guard \u00b7 browser-store ZIP safety and determinism",
       "file": "tests/integration/store-packaging.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 shared Three.js production runtime",
+      "file": "tests/integration/three-runtime.test.mjs"
     },
     {
       "name": "guard \u00b7 security policy allowlists",

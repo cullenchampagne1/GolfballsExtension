@@ -29,6 +29,30 @@ const mode = isWatch ? 'development' : 'production';
 // base (so the committed full react-dist is never overwritten).
 const OUT_BASE = process.env.GB_OUT_BASE || 'react-dist';
 
+const THREE_DUPLICATE_DIAGNOSTIC =
+  "warn( 'WARNING: Multiple instances of Three.js being imported.' );";
+
+/* The extension intentionally owns the shared Three runtime. Strip only
+   Three's duplicate-instance diagnostic as a final guard against a content
+   script being reinjected; all other Three warnings remain untouched. */
+function silenceThreeDuplicateInstanceDiagnostic() {
+  return {
+    name: 'golfballs-silence-three-duplicate-instance-diagnostic',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.includes('/node_modules/three/')) return null;
+      if (!code.includes(THREE_DUPLICATE_DIAGNOSTIC)) return null;
+      return {
+        code: code.replaceAll(
+          THREE_DUPLICATE_DIAGNOSTIC,
+          '/* Shared runtime owns duplicate-instance handling. */',
+        ),
+        map: null,
+      };
+    },
+  };
+}
+
 // Each surface = one src dir → one react-dist dir. The first three are
 // React components (.jsx → IIFE); the fourth is ES-module bridge entries
 // (`*.entry.js`) used to expose pure-JS engine modules to legacy vanilla
@@ -67,7 +91,7 @@ for (const { srcDir, outDir, suffix, stripSuffix } of surfaces) {
         'process.env.NODE_ENV': JSON.stringify(mode),
         __ADMIN__: JSON.stringify(IS_ADMIN_BUILD),
       },
-      plugins: [react()],
+      plugins: [silenceThreeDuplicateInstanceDiagnostic(), react()],
       /* Emit ASCII-only output (escape every non-ASCII char to \uXXXX).
          Chrome's content-script loader runs strict UTF-8 validation that
          rejects Unicode NONCHARACTERS (e.g. U+FFFF) and C1 controls

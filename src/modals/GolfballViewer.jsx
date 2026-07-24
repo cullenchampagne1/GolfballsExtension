@@ -4,16 +4,17 @@ import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 import { getAssetURL } from '../lib/assetStore.js';
+import { getThreeRuntime } from '../lib/threeRuntime.js';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
    an image projected onto its top pole as a decal.
 
-   ALL of Three.js (core + OBJLoader + OrbitControls + DecalGeometry)
-   is dynamic-imported the first time this component mounts, so the
-   ~600KB engine + 4.7MB model don't weigh down the playground
-   bundle. First mount shows a spinner while loading; subsequent
-   mounts reuse the cached module + parsed model.
+   Three.js, its loaders, and cannon-es are provided by one shared
+   extension runtime loaded before every content surface. This keeps
+   independent IIFE bundles from importing duplicate Three instances.
+   The 4.7MB model remains lazy-loaded on first mount and subsequent
+   mounts reuse the cached runtime + parsed model.
 
    Public props:
      decalDataUrl   data: URL (or any image URL) to paint as the decal
@@ -31,9 +32,8 @@ import { getAssetURL } from '../lib/assetStore.js';
 ─────────────────────────────────────────────────────────────── */
 
 // Module-level cache so opening 3D view multiple times in one session
-// doesn't refetch / reparse the OBJ. Three.js itself is cached by the
-// dynamic import system; we just need our own cache for the parsed
-// model geometry. Lazy-initialized on first mount.
+// doesn't refetch / reparse the OBJ. The engine comes from the shared
+// runtime bridge; model geometry remains lazy-initialized on first mount.
 const cache = {
   three: null,           // resolved { THREE, OBJLoader, DecalGeometry, CANNON }
   models: {},            // shape -> in-flight or resolved Promise<THREE.Mesh>
@@ -79,19 +79,8 @@ const MODEL_VERSION = '20250607-15-markerflat';
 const BALL_NORMALIZE_RADIUS = 100;
 
 async function loadThreeAndModel(shape = 'ball', makeProgress) {
-  // Parallel-load engine + helpers once so first-mount latency is dominated by
-  // whichever is slowest, not the sum. cannon-es is pulled in here too so throw
-  // mode has zero extra wait when toggled.
   if (!cache.three) {
-    const [THREE, { OBJLoader }, { DecalGeometry }, { EXRLoader }, { RoomEnvironment }, CANNON] = await Promise.all([
-      import('three'),
-      import('three/examples/jsm/loaders/OBJLoader.js'),
-      import('three/examples/jsm/geometries/DecalGeometry.js'),
-      import('three/examples/jsm/loaders/EXRLoader.js'),
-      import('three/examples/jsm/environments/RoomEnvironment.js'),
-      import('cannon-es'),
-    ]);
-    cache.three = { THREE, OBJLoader, DecalGeometry, EXRLoader, RoomEnvironment, CANNON };
+    cache.three = getThreeRuntime();
   }
   const { OBJLoader } = cache.three;
 

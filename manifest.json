@@ -88,6 +88,7 @@
       ],
       "js": [
         "theme.js",
+        "react-dist/vanilla/three-runtime.js",
         "src/vanilla/smart-detection.js",
         "react-dist/vanilla/page-engine.js",
         "src/vanilla/variable-resolution.js",
