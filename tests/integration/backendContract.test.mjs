@@ -23,7 +23,10 @@ const installationAuth = await read('lib/installation-auth.js');
 const background = await read('background.js');
 const remotePolicy = await read('lib/remote-settings-policy.js');
 const runtimeBootstrap = await read('lib/runtime-bootstrap.js');
+const notificationActions = await read('lib/notification-actions.js');
+const nativeNotifications = await read('lib/notifications-native.js');
 const notificationPoll = await read('lib/notifications-poll.js');
+const manifest = JSON.parse(await read('manifest.json'));
 const helpAssistant = await read('help/help-assistant.js');
 const sources = {
   'installation-auth.js': installationAuth,
@@ -146,6 +149,17 @@ describe('backend contract · project client endpoints', () => {
 });
 
 describe('backend contract · notification producer correlation', () => {
+  it('loads registered actions before native delivery and requests Chrome notification access', () => {
+    assert.ok(manifest.permissions.includes('notifications'));
+    const actionsAt = background.indexOf("'lib/notification-actions.js'");
+    const nativeAt = background.indexOf("'lib/notifications-native.js'");
+    const pollAt = background.indexOf("'lib/notifications-poll.js'");
+    assert.ok(actionsAt >= 0 && nativeAt > actionsAt && pollAt > nativeAt);
+    assert.ok(notificationActions.includes('registerHandler'));
+    assert.ok(nativeNotifications.includes('chrome.notifications.create'));
+    assert.ok(notificationPoll.includes('GBNativeNotifications?.show'));
+  });
+
   it('keeps installation correlation and outbox insertion in the message service', {
     skip: !hasRelayService,
   }, () => {
@@ -153,8 +167,12 @@ describe('backend contract · notification producer correlation', () => {
       'outbound messages must accept the originating installation id');
     assert.ok(relayServicePy.includes('_thread_installation_id'),
       'inbound messages must inherit the installation from their thread');
-    assert.ok(relayServicePy.includes('ExtensionNotification'),
-      'inbound messages must enqueue into the shared installation outbox');
+    assert.ok(relayServicePy.includes('ExtensionNotificationService'),
+      'inbound messages must use the shared registered-action outbox API');
+    assert.ok(relayServicePy.includes('"delivery": "native"'),
+      'inbound replies must fire a Chrome-native notification');
+    assert.ok(relayServicePy.includes('"type": "open_contact"'),
+      'inbound replies must register a local CRM contact action');
   });
 });
 

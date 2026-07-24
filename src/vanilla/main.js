@@ -51,49 +51,73 @@ function __gbAccessAllowed(st, now) {
     } catch { /* worker unavailable during navigation */ }
   }
 
-  function __gbOpenNotification(notification, options = {}) {
-    const acknowledge = options.receipt !== false;
-    const receipt = (state) => {
-      if (acknowledge) __gbNotificationReceipt(notification, state);
-    };
-    const action = notification?.action;
-    if (!action || typeof action !== 'object') {
-      window.__gbShowNotificationsModal?.();
-      receipt('read');
+  const __gbNotificationActions = window.GBNotificationActions;
+  __gbNotificationActions?.registerHandler?.(
+    'open_mockup_batch',
+    'content',
+    (action) => {
+      const batchId = String(action.arguments?.batch_id || '');
+      if (
+        !/^batch_[a-f0-9]{32}$/.test(batchId)
+        || typeof window.__gbOpenMockupStudio !== 'function'
+      ) return false;
+      window.__gbOpenMockupStudio(batchId);
       return true;
-    }
-    if (
-      action.type === 'open_mockup_batch'
-      && /^batch_[a-f0-9]{32}$/.test(String(action.batchId || ''))
-      && typeof window.__gbOpenMockupStudio === 'function'
-    ) {
-      receipt('acted');
-      window.__gbOpenMockupStudio(action.batchId);
-      return true;
-    }
-    if (action.type === 'open_contact') {
-      const url = String(notification.localActionUrl || '');
-      if (/^https:\/\/api\.golfballs\.com\/golfballs\/adminnew\//i.test(url)) {
-        receipt('acted');
-        window.location.assign(url);
-        return true;
+    },
+  );
+  __gbNotificationActions?.registerHandler?.(
+    'open_contact',
+    'content',
+    (_action, context) => {
+      const url = String(context.notification?.localActionUrl || '');
+      if (!/^https:\/\/api\.golfballs\.com\/golfballs\/adminnew\//i.test(url)) {
+        window.__gbToast?.info?.(
+          'No matching contact is available on this device yet',
+          { duration: 4000 },
+        );
+        return false;
       }
-      window.__gbToast?.info?.(
-        'No matching contact is available on this device yet',
-        { duration: 4000 },
-      );
-      return false;
-    }
-    if (
-      action.type === 'open_support_ticket'
-      && /^GBT-[A-Z0-9]{6,16}$/.test(String(action.ticketId || ''))
-    ) {
-      receipt('acted');
+      window.location.assign(url);
+      return true;
+    },
+  );
+  __gbNotificationActions?.registerHandler?.(
+    'open_support_ticket',
+    'content',
+    (action) => {
+      if (!/^GBT-[A-Z0-9]{6,16}$/.test(
+        String(action.arguments?.ticket_id || ''),
+      )) return false;
       chrome.runtime.sendMessage({
         action: 'openEditor',
         openSettings: true,
         settingsTarget: 'support-tickets',
       });
+      return true;
+    },
+  );
+
+  function __gbOpenNotification(notification, options = {}) {
+    const acknowledge = options.receipt !== false;
+    const receipt = (state) => {
+      if (acknowledge) __gbNotificationReceipt(notification, state);
+    };
+    const rawAction = notification?.action;
+    if (!rawAction || typeof rawAction !== 'object') {
+      window.__gbShowNotificationsModal?.();
+      receipt('read');
+      return true;
+    }
+    let handled = false;
+    try {
+      handled = __gbNotificationActions?.execute?.(
+        rawAction,
+        'content',
+        { notification },
+      ) === true;
+    } catch { handled = false; }
+    if (handled) {
+      receipt('acted');
       return true;
     }
     window.__gbToast?.warning?.('This notification action is unavailable', {
@@ -102,6 +126,26 @@ function __gbAccessAllowed(st, now) {
     return false;
   }
   window.__gbRunNotificationAction = __gbOpenNotification;
+
+  // Native clicks survive service-worker suspension by leaving one bounded
+  // launch intent for the next supported page. main.js is the last content
+  // script, so every modal/action handler is available before this executes.
+  try {
+    chrome.storage.local.get('gbNotificationLaunchIntent', (bag) => {
+      const intent = bag?.gbNotificationLaunchIntent;
+      if (!intent || Number(intent.expiresAt || 0) < Date.now()) {
+        if (intent) chrome.storage.local.remove('gbNotificationLaunchIntent');
+        return;
+      }
+      const handled = intent.openCenter === true
+        ? (
+          typeof window.__gbShowNotificationsModal === 'function'
+          && (window.__gbShowNotificationsModal(), true)
+        )
+        : __gbOpenNotification(intent.notification);
+      if (handled) chrome.storage.local.remove('gbNotificationLaunchIntent');
+    });
+  } catch { /* storage unavailable during teardown */ }
 
   let __gbAutoPushUpdate = null;
   function __gbHandleIframeMessage(payload) {
@@ -440,6 +484,12 @@ function __gbAccessAllowed(st, now) {
 
     if (msg.action === 'showNotificationsModal') {
       if (typeof window.__gbShowNotificationsModal === 'function') window.__gbShowNotificationsModal();
+      return true;
+    }
+
+    if (msg.action === 'runNotificationAction') {
+      const handled = __gbOpenNotification(msg.notification);
+      sendResponse({ ok: handled === true });
       return true;
     }
 

@@ -12,7 +12,8 @@
     "tabs",
     "clipboardWrite",
     "declarativeNetRequest",
-    "alarms"
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://www.golfballs.com/*",
@@ -88,6 +89,7 @@
       ],
       "js": [
         "theme.js",
+        "lib/notification-actions.js",
         "react-dist/vanilla/three-runtime.js",
         "src/vanilla/smart-detection.js",
         "react-dist/vanilla/page-engine.js",

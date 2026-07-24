@@ -1,7 +1,8 @@
 """Per-installation notification outbox tests."""
 
-import importlib.util
+import importlib
 import sys
+import types
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -14,13 +15,18 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location(
-    "golfballs_extension_notifications_test",
-    ROOT / ".revstack" / "logic" / "notifications.py",
+BACKEND = ROOT.parent / "revstack-backend"
+package = sys.modules.setdefault(
+    "revstack-backend", types.ModuleType("revstack-backend")
 )
-NOTIFICATIONS = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = NOTIFICATIONS
-SPEC.loader.exec_module(NOTIFICATIONS)
+package.__path__ = [str(BACKEND)]
+logic_package = sys.modules.setdefault(
+    "revstack-backend.logic", types.ModuleType("revstack-backend.logic")
+)
+logic_package.__path__ = [str(BACKEND / "logic")]
+NOTIFICATIONS = importlib.import_module(
+    "revstack-backend.logic.ExtensionNotificationManager"
+)
 
 
 class Base(DeclarativeBase):
@@ -53,6 +59,7 @@ class Notification(Base):
     title = Column(String(160), nullable=False)
     body = Column(Text, nullable=False)
     action = Column(JSON, nullable=True)
+    presentation = Column(JSON, nullable=True)
     source = Column(String(48), nullable=False)
     dedup_key = Column(String(180), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -114,8 +121,12 @@ class ExtensionNotificationTests(unittest.TestCase):
         self.assertEqual(payload["count"], 1)
         self.assertEqual(payload["notifications"][0]["id"], first["id"])
         self.assertEqual(
-            payload["notifications"][0]["action"]["batch_id"],
+            payload["notifications"][0]["action"]["arguments"]["batch_id"],
             "batch_" + ("1" * 32),
+        )
+        self.assertEqual(
+            payload["notifications"][0]["presentation"]["delivery"],
+            "native",
         )
 
     def test_deduplication_and_receipts_are_idempotent(self):

@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const root = new URL('../../', import.meta.url);
+const actionSource = readFileSync(
+  new URL('lib/notification-actions.js', root), 'utf8',
+);
 const source = readFileSync(new URL('lib/notifications-store.js', root), 'utf8');
 const BATCH_ID = `batch_${'a'.repeat(32)}`;
 
@@ -32,6 +35,9 @@ function harness(initial = {}) {
     RegExp, Error, TypeError, Map, Set,
   });
   context.globalThis = context;
+  new vm.Script(
+    actionSource, { filename: 'notification-actions.js' },
+  ).runInContext(context);
   new vm.Script(source, { filename: 'notifications-store.js' }).runInContext(context);
   return { store: context.GBNotifications, stored, badges };
 }
@@ -62,8 +68,10 @@ describe('notification outbox cache', () => {
     assert.equal(normalized.remoteId, 12);
     assert.equal(normalized.status, 'unread');
     assert.equal(normalized.action.type, 'open_mockup_batch');
-    assert.equal(normalized.action.batchId, BATCH_ID);
+    assert.equal(normalized.action.version, 1);
+    assert.equal(normalized.action.arguments.batch_id, BATCH_ID);
     assert.equal(normalized.action.label, 'Open gallery');
+    assert.equal(normalized.presentation.delivery, 'native');
 
     const rejected = store.normalizeRemote(remote({
       id: 13,
@@ -118,5 +126,32 @@ describe('notification outbox cache', () => {
     const allowed = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=42';
     await store.setActionUrl(12, allowed);
     assert.equal(stored.gbNotifications[0].localActionUrl, allowed);
+  });
+
+  it('keeps registered action arguments and client display location', () => {
+    const { store } = harness();
+    const normalized = store.normalizeRemote(remote({
+      action: {
+        type: 'open_contact',
+        version: 1,
+        label: 'Read reply',
+        arguments: {
+          contact_email: 'Person@Example.com',
+          message_id: 'message-12',
+        },
+      },
+      presentation: {
+        delivery: 'both',
+        require_interaction: true,
+      },
+    }));
+
+    assert.equal(
+      normalized.action.arguments.contact_email,
+      'person@example.com',
+    );
+    assert.equal(normalized.action.arguments.message_id, 'message-12');
+    assert.equal(normalized.presentation.delivery, 'both');
+    assert.equal(normalized.presentation.requireInteraction, true);
   });
 });

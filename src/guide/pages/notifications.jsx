@@ -57,7 +57,7 @@ export function NotificationsPage() {
       <div className="reference-split">
         <NotificationPreview />
         <div>
-          <p>The popup has a <strong>Notifications</strong> button with the unread count. Chrome’s toolbar icon carries the same badge, capped at 99+. New updates can also show an action card on the active Golfballs page.</p>
+          <p>The popup has a <strong>Notifications</strong> button with the unread count. Chrome’s toolbar icon carries the same badge, capped at 99+. A sender can choose a native Chrome notification, an action card on the active Golfballs page, both surfaces, or the notification center only.</p>
           <p>The center has <strong>Unread / All / Archived</strong> filters and full-message search. Mark an item read to clear its badge, archive it when you are finished, or use its action link to open the relevant supported surface.</p>
         </div>
       </div>
@@ -78,7 +78,7 @@ export function NotificationsPage() {
         <span className="dn-ico"><I.eye size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Actions stay constrained</div>
-          <p>Notifications cannot run arbitrary code or open arbitrary links. The extension accepts only registered action types, validates their identifiers, and reconstructs the action locally.</p>
+          <p>Notifications cannot run arbitrary code or open arbitrary links. Backend tools select a registered action type and provide validated arguments; the extension reconstructs the matching local handler. Current actions can open a CRM contact, a completed mockup batch, or a support ticket.</p>
         </div>
       </div>
 
