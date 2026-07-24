@@ -54,6 +54,10 @@ export function normalizeStudioBootstrap(payload) {
     },
     products: asArray(source.products).map((product) => ({
       ...product,
+      option_groups: asArray(product?.option_groups).map((group) => ({
+        ...group,
+        options: asArray(group?.options),
+      })),
       sources: asArray(product?.sources),
       variations: asArray(product?.variations),
     })),
@@ -67,6 +71,54 @@ export function createProductGenerationRequestId(now = Date.now(), random = Math
     .toString(36)
     .padStart(7, '0');
   return `mockup:${time}:${nonce}`;
+}
+
+export function createDefaultProductGenerationSelection(product) {
+  const firstSource = asArray(product?.sources)[0];
+  const firstVariation = asArray(product?.variations)[0];
+  return {
+    sourceIds: firstSource?.id ? [cleanId(firstSource.id)] : [],
+    variationIds: firstVariation?.id ? [cleanId(firstVariation.id)] : [],
+    optionValues: { ...(firstSource?.option_values || {}) },
+  };
+}
+
+export function resolveProductGenerationFacet({
+  product, currentOptionValues, groupId, optionId,
+}) {
+  const groups = asArray(product?.option_groups);
+  const sources = asArray(product?.sources);
+  const normalizedGroup = cleanId(groupId);
+  const normalizedOption = cleanId(optionId);
+  const groupIndex = groups.findIndex(
+    (group) => cleanId(group?.id) === normalizedGroup,
+  );
+  if (groupIndex < 0) return null;
+  const desired = {
+    ...(currentOptionValues || {}),
+    [normalizedGroup]: normalizedOption,
+  };
+  let source = sources.find((candidate) => groups.every((group) => {
+    const id = cleanId(group?.id);
+    return desired[id]
+      && cleanId(candidate?.option_values?.[id]) === cleanId(desired[id]);
+  }));
+  if (!source) {
+    const lockedGroups = groups.slice(0, groupIndex);
+    source = sources.find((candidate) => (
+      cleanId(candidate?.option_values?.[normalizedGroup]) === normalizedOption
+      && lockedGroups.every((group) => {
+        const id = cleanId(group?.id);
+        return !desired[id]
+          || cleanId(candidate?.option_values?.[id]) === cleanId(desired[id]);
+      })
+    ));
+  }
+  if (!source) return null;
+  return {
+    sourceId: cleanId(source.id),
+    optionValues: { ...(source.option_values || {}) },
+  };
 }
 
 export function buildProductGenerationBatchRequest({

@@ -9,6 +9,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   bootstrapProductGenerationStudio,
   cancelProductGenerationBatch,
+  createDefaultProductGenerationSelection,
   createProductGenerationBatch,
   createProductGenerationRequestId,
   deleteProductGenerationBatch,
@@ -16,6 +17,7 @@ import {
   isActiveProductGenerationBatch,
   listProductGenerationBatches,
   prepareProductGenerationLogo,
+  resolveProductGenerationFacet,
 } from '../lib/productGenerationClient.js';
 
 const Camera = (props) => (
@@ -406,95 +408,203 @@ function ReferenceGrid({
   );
 }
 
-function LogoPicker({
-  logo, busy, inputRef, onChoose, onClear,
+function ArtworkDropzone({
+  busy, inputRef, onChoose,
 }) {
-  const preview = logo
-    ? `data:${logo.mediaType};base64,${logo.dataBase64}`
-    : '';
+  const [dragging, setDragging] = useState(false);
+  const acceptFile = (file) => {
+    setDragging(false);
+    if (file) onChoose(file);
+  };
+  return (
+    <div style={{
+      height: '100%', minHeight: 360, display: 'flex',
+      alignItems: 'center', justifyContent: 'center', padding: 30,
+    }}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(event) => acceptFile(event.target.files?.[0] || null)}
+        style={{ display: 'none' }}
+      />
+      <motion.button
+        type="button"
+        animate={{
+          scale: dragging ? 1.012 : 1,
+          borderColor: dragging
+            ? 'var(--gb-brand-border)' : 'var(--gb-brand-tint-border)',
+          background: dragging
+            ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)',
+        }}
+        transition={{ duration: 0.16 }}
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          acceptFile(event.dataTransfer?.files?.[0] || null);
+        }}
+        style={{
+          width: 'min(560px, 100%)', minHeight: 300, padding: 34,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', cursor: 'pointer', textAlign: 'center',
+          fontFamily: 'inherit', color: 'inherit',
+          borderRadius: 'var(--gb-r-xl)', border: '1px dashed',
+          boxShadow: '0 18px 44px rgba(0,0,0,.08)',
+        }}
+      >
+        <span style={{
+          width: 74, height: 74, borderRadius: 'var(--gb-r-xl)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--gb-surface-float)',
+          border: '1px solid var(--gb-border-default)',
+          color: 'var(--gb-brand-label)', boxShadow: 'var(--gb-shadow-md)',
+        }}>
+          {busy ? (
+            <span style={{
+              width: 25, height: 25, borderRadius: '50%',
+              border: '2.5px solid var(--gb-brand-tint-border)',
+              borderTopColor: 'var(--gb-brand-label)',
+              animation: 'gb-ms-spin .75s linear infinite',
+            }}
+            />
+          ) : <I.plus size={26} />}
+        </span>
+        <span style={{
+          marginTop: 20, fontSize: 18, fontWeight: 750,
+          color: 'var(--gb-text-primary)',
+        }}>
+          {busy ? 'Preparing your artwork…' : 'Add customer logo artwork'}
+        </span>
+        <span style={{
+          marginTop: 8, maxWidth: 390, fontSize: 11.5,
+          lineHeight: 1.6, color: 'var(--gb-text-muted)',
+        }}>
+          Drag an image here or click to choose one. Products and their
+          configured scene and color options appear after the artwork is ready.
+        </span>
+        <span style={{
+          marginTop: 17, padding: '5px 9px', borderRadius: 'var(--gb-r-pill)',
+          background: 'var(--gb-fill-inverse-medium)',
+          border: '1px solid var(--gb-border-default)',
+          color: 'var(--gb-text-tertiary)', fontSize: 9.5,
+          fontFamily: 'var(--gb-font-mono)',
+        }}>
+          PNG · JPEG · WebP · 12 MB max
+        </span>
+      </motion.button>
+    </div>
+  );
+}
+
+function FacetGrid({
+  group, product, selection, onChange,
+}) {
+  const currentValues = selection?.optionValues || {};
+  const presentation = ['thumbnail', 'swatch', 'button'].includes(group.presentation)
+    ? group.presentation : 'button';
+  const columns = Math.max(
+    1,
+    Math.min(6, Number(group.columns) || Math.min(group.options?.length || 1, 3)),
+  );
+  const showsThumbnails = presentation === 'thumbnail';
+  const showsSwatches = presentation === 'swatch';
   return (
     <div>
       <div style={{
         marginBottom: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.75,
         textTransform: 'uppercase', color: 'var(--gb-text-muted)',
       }}>
-        Logo artwork
+        {group.label}
       </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        onChange={(event) => onChoose(event.target.files?.[0] || null)}
-        style={{ display: 'none' }}
-      />
-      <motion.button
-        type="button"
-        whileTap={{ scale: 0.99 }}
-        onClick={() => inputRef.current?.click()}
-        style={{
-          width: '100%', minHeight: 72, display: 'flex', alignItems: 'center',
-          gap: 10, padding: 8, cursor: 'pointer', textAlign: 'left',
-          fontFamily: 'inherit', color: 'inherit',
-          borderRadius: 'var(--gb-r-md)',
-          background: logo ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)',
-          border: `1px ${logo ? 'solid' : 'dashed'} ${logo
-            ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
-        }}
-      >
-        <span style={{
-          width: 54, height: 54, flexShrink: 0, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-          borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)',
-          border: '1px solid var(--gb-border-subtle)',
+      {group.description && (
+        <div style={{
+          margin: '-2px 0 8px', fontSize: 9.5, lineHeight: 1.4,
+          color: 'var(--gb-text-muted)',
         }}>
-          {busy ? (
-            <span style={{
-              width: 17, height: 17, borderRadius: '50%',
-              border: '2px solid var(--gb-border-default)',
-              borderTopColor: 'var(--gb-brand-label)',
-              animation: 'gb-ms-spin .75s linear infinite',
-            }}
-            />
-          ) : preview ? (
-            <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          ) : <I.plus size={18} style={{ color: 'var(--gb-text-ghost)' }} />}
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{
-            display: 'block', fontSize: 10.5, fontWeight: 700,
-            color: logo ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {busy ? 'Preparing artwork…' : logo?.filename || 'Choose customer logo'}
-          </span>
-          <span style={{
-            display: 'block', marginTop: 3, fontSize: 9,
-            color: 'var(--gb-text-muted)', lineHeight: 1.35,
-          }}>
-            PNG, JPEG, or WebP · up to 12 MB
-          </span>
-        </span>
-        {logo && !busy && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(event) => { event.stopPropagation(); onClear(); }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                event.stopPropagation();
-                onClear();
-              }
-            }}
-            style={{
-              display: 'flex', padding: 5, color: 'var(--gb-text-muted)',
-              borderRadius: 'var(--gb-r-sm)',
-            }}
-          >
-            <I.close size={12} />
-          </span>
-        )}
-      </motion.button>
+          {group.description}
+        </div>
+      )}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gap: 7,
+      }}>
+        {(group.options || []).map((option) => {
+          const resolved = resolveProductGenerationFacet({
+            product,
+            currentOptionValues: currentValues,
+            groupId: group.id,
+            optionId: option.id,
+          });
+          const source = (product.sources || []).find(
+            (candidate) => candidate.id === resolved?.sourceId,
+          );
+          const selected = currentValues[group.id] === option.id;
+          return (
+            <motion.button
+              type="button"
+              key={option.id}
+              whileTap={source ? { scale: 0.96 } : undefined}
+              disabled={!source}
+              onClick={() => source && onChange(group.id, option.id)}
+              style={{
+                minWidth: 0, minHeight: showsThumbnails ? 76 : 43,
+                padding: showsThumbnails ? 5 : 7,
+                display: 'flex', flexDirection: showsThumbnails ? 'column' : 'row',
+                alignItems: 'center', justifyContent: 'center', gap: 6,
+                borderRadius: 'var(--gb-r-md)', cursor: source ? 'pointer' : 'not-allowed',
+                opacity: source ? 1 : 0.35, fontFamily: 'inherit',
+                background: selected
+                  ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
+                border: `1px solid ${selected
+                  ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+                color: selected ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+              }}
+            >
+              {showsThumbnails && source?.thumbnail_url ? (
+                <span style={{
+                  width: '100%', height: 48, overflow: 'hidden',
+                  borderRadius: 'calc(var(--gb-r-md) - 3px)',
+                  border: '1px solid var(--gb-border-subtle)',
+                  background: 'var(--gb-fill-soft)',
+                }}>
+                  <img
+                    src={source.thumbnail_url}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </span>
+              ) : showsSwatches && option.swatch ? (
+                <span style={{
+                  width: 15, height: 15, borderRadius: '50%', flexShrink: 0,
+                  background: option.swatch,
+                  border: '1px solid rgba(127,127,127,.38)',
+                  boxShadow: selected ? '0 0 0 2px var(--gb-brand-tint-border)' : 'none',
+                }}
+                />
+              ) : null}
+              <span style={{
+                maxWidth: '100%', fontSize: 9.5, fontWeight: 700,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {option.label}
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -758,10 +868,7 @@ export function MockupStudio({ onClose }) {
     setSelectedIds([...selectedIds, productId]);
     setSelections((rows) => ({
       ...rows,
-      [productId]: {
-        sourceIds: product.sources?.[0]?.id ? [product.sources[0].id] : [],
-        variationIds: product.variations?.[0]?.id ? [product.variations[0].id] : [],
-      },
+      [productId]: createDefaultProductGenerationSelection(product),
     }));
     setFocusedProductId(productId);
   };
@@ -776,6 +883,29 @@ export function MockupStudio({ onClose }) {
       return {
         ...rows,
         [productId]: { ...current, [key]: nextValues },
+      };
+    });
+  };
+
+  const selectFacet = (product, groupId, optionId) => {
+    setSelections((rows) => {
+      const current = rows[product.id] || {
+        sourceIds: [], variationIds: [], optionValues: {},
+      };
+      const resolved = resolveProductGenerationFacet({
+        product,
+        currentOptionValues: current.optionValues,
+        groupId,
+        optionId,
+      });
+      if (!resolved) return rows;
+      return {
+        ...rows,
+        [product.id]: {
+          ...current,
+          sourceIds: [resolved.sourceId],
+          optionValues: resolved.optionValues,
+        },
       };
     });
   };
@@ -1014,12 +1144,78 @@ export function MockupStudio({ onClose }) {
               exit={{ opacity: 0, y: -5 }}
               style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             >
+              {logo && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 66 }}
+                  transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                  style={{
+                    flexShrink: 0, padding: '8px 14px',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    overflow: 'hidden',
+                    background: 'var(--gb-brand-tint-soft)',
+                    borderBottom: '1px solid var(--gb-brand-tint-border)',
+                  }}
+                >
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => chooseLogo(event.target.files?.[0] || null)}
+                    style={{ display: 'none' }}
+                  />
+                  <span style={{
+                    width: 48, height: 48, flexShrink: 0, overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-float)',
+                    border: '1px solid var(--gb-border-default)',
+                    boxShadow: 'var(--gb-shadow-sm)',
+                  }}>
+                    <img
+                      src={`data:${logo.mediaType};base64,${logo.dataBase64}`}
+                      alt=""
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      fontSize: 10.5, fontWeight: 750,
+                      color: 'var(--gb-brand-label)',
+                    }}>
+                      <I.check size={11} />
+                      Artwork uploaded
+                    </span>
+                    <span style={{
+                      display: 'block', marginTop: 3, fontSize: 10,
+                      color: 'var(--gb-text-muted)', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {logo.filename} · {(Number(logo.sizeBytes || 0) / 1024).toFixed(0)} KB
+                    </span>
+                  </span>
+                  <Btn
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    Replace
+                  </Btn>
+                  <IconBtn
+                    size="sm"
+                    variant="ghost"
+                    title="Remove artwork"
+                    icon={<I.close />}
+                    onClick={clearLogo}
+                  />
+                </motion.div>
+              )}
               <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
                 <div style={{
                   flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-                  borderRight: '1px solid var(--gb-border-subtle)',
+                  borderRight: logo ? '1px solid var(--gb-border-subtle)' : 0,
                 }}>
-                  <div style={{
+                  {logo && <div style={{
                     padding: '12px 16px', display: 'flex', alignItems: 'center',
                     gap: 10, borderBottom: '1px solid var(--gb-border-subtle)',
                     background: 'var(--gb-fill-inverse-medium)',
@@ -1053,11 +1249,18 @@ export function MockupStudio({ onClose }) {
                     }}>
                       {selectedIds.length}/{maxProducts}
                     </span>
-                  </div>
+                  </div>}
                   <div className="gb-ms-scroll" style={{
-                    flex: 1, minHeight: 0, overflowY: 'auto', padding: 10,
+                    flex: 1, minHeight: 0, overflowY: 'auto',
+                    padding: logo ? 10 : 0,
                   }}>
-                    {products.length === 0 ? (
+                    {!logo ? (
+                      <ArtworkDropzone
+                        busy={logoBusy}
+                        inputRef={logoInputRef}
+                        onChoose={chooseLogo}
+                      />
+                    ) : products.length === 0 ? (
                       <div style={{
                         height: '100%', minHeight: 330,
                         display: 'flex', flexDirection: 'column',
@@ -1198,7 +1401,7 @@ export function MockupStudio({ onClose }) {
 
                 <div style={{
                   width: 370, flexShrink: 0, minHeight: 0,
-                  display: 'flex', flexDirection: 'column',
+                  display: logo ? 'flex' : 'none', flexDirection: 'column',
                   background: 'var(--gb-surface-canvas)',
                 }}>
                   <div style={{
@@ -1257,13 +1460,6 @@ export function MockupStudio({ onClose }) {
                     flex: 1, minHeight: 0, overflowY: 'auto',
                     padding: 16, display: 'flex', flexDirection: 'column', gap: 16,
                   }}>
-                    <LogoPicker
-                      logo={logo}
-                      busy={logoBusy}
-                      inputRef={logoInputRef}
-                      onChoose={chooseLogo}
-                      onClear={clearLogo}
-                    />
                     <AspectGrid
                       label="Aspect ratio"
                       options={studio?.aspects || []}
@@ -1271,26 +1467,53 @@ export function MockupStudio({ onClose }) {
                       onChange={setAspectId}
                     />
                     {focusedProduct ? (
-                      <>
-                        <ReferenceGrid
-                          label="Product sources"
-                          helper="Choose the product colors or reference photos to mock up."
-                          options={focusedProduct.sources || []}
-                          values={focusedSelection.sourceIds}
-                          onToggle={(optionId) => toggleOption(
-                            focusedProduct.id, 'sourceIds', optionId,
-                          )}
-                        />
-                        <ReferenceGrid
-                          label="Imprint variations"
-                          helper="Choose where the uploaded logo should be applied."
-                          options={focusedProduct.variations || []}
-                          values={focusedSelection.variationIds}
-                          onToggle={(optionId) => toggleOption(
-                            focusedProduct.id, 'variationIds', optionId,
-                          )}
-                        />
-                      </>
+                      focusedProduct.option_groups?.length ? (
+                        <>
+                          {focusedProduct.option_groups.map((group) => (
+                            <FacetGrid
+                              key={group.id}
+                              group={group}
+                              product={focusedProduct}
+                              selection={focusedSelection}
+                              onChange={(groupId, optionId) => selectFacet(
+                                focusedProduct, groupId, optionId,
+                              )}
+                            />
+                          ))}
+                          <div style={{
+                            padding: '10px 11px', borderRadius: 'var(--gb-r-md)',
+                            background: 'var(--gb-success-tint-medium)',
+                            border: '1px solid var(--gb-success-tint-border)',
+                            color: 'var(--gb-success-fg)', fontSize: 9.5,
+                            lineHeight: 1.45,
+                          }}>
+                            The selected scene and color resolve to one exact
+                            YAML reference image. Your uploaded logo is routed
+                            with it as Image 2.
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <ReferenceGrid
+                            label="Product sources"
+                            helper="Choose the product colors or reference photos to mock up."
+                            options={focusedProduct.sources || []}
+                            values={focusedSelection.sourceIds}
+                            onToggle={(optionId) => toggleOption(
+                              focusedProduct.id, 'sourceIds', optionId,
+                            )}
+                          />
+                          <ReferenceGrid
+                            label="Imprint variations"
+                            helper="Choose where the uploaded logo should be applied."
+                            options={focusedProduct.variations || []}
+                            values={focusedSelection.variationIds}
+                            onToggle={(optionId) => toggleOption(
+                              focusedProduct.id, 'variationIds', optionId,
+                            )}
+                          />
+                        </>
+                      )
                     ) : (
                       <div style={{
                         padding: '24px 16px', textAlign: 'center',
@@ -1300,8 +1523,8 @@ export function MockupStudio({ onClose }) {
                         color: 'var(--gb-text-muted)', fontSize: 10.5,
                         lineHeight: 1.55,
                       }}>
-                        Select a product to choose its YAML-configured source
-                        photos and imprint variations.
+                        Select a product to choose its YAML-configured options
+                        and reference image.
                       </div>
                     )}
                   </div>
@@ -1312,6 +1535,11 @@ export function MockupStudio({ onClose }) {
                 padding: '10px 16px', display: 'flex', alignItems: 'center',
                 gap: 10, background: 'var(--gb-fill-inverse-strong)',
                 borderTop: '1px solid var(--gb-border-subtle)',
+                visibility: logo ? 'visible' : 'hidden',
+                height: logo ? 'auto' : 0,
+                paddingTop: logo ? 10 : 0,
+                paddingBottom: logo ? 10 : 0,
+                overflow: 'hidden',
               }}>
                 <div style={{
                   flex: 1, minWidth: 0, display: 'flex',
@@ -1351,24 +1579,52 @@ export function MockupStudio({ onClose }) {
                             <I.close size={9} />
                           </button>
                         </span>
-                        <span style={{
-                          padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
-                          background: 'var(--gb-info-tint-medium)',
-                          border: '1px solid var(--gb-info-tint-border)',
-                          color: 'var(--gb-info-fg)', fontSize: 9.5, fontWeight: 700,
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {selection.sourceIds?.length || 0} source{selection.sourceIds?.length === 1 ? '' : 's'}
-                        </span>
-                        <span style={{
-                          padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
-                          background: 'var(--gb-warning-tint-medium)',
-                          border: '1px solid var(--gb-warning-tint-border)',
-                          color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 700,
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {selection.variationIds?.length || 0} placement{selection.variationIds?.length === 1 ? '' : 's'}
-                        </span>
+                        {product.option_groups?.length ? (
+                          product.option_groups.map((group, index) => {
+                            const valueId = selection.optionValues?.[group.id];
+                            const value = group.options?.find(
+                              (option) => option.id === valueId,
+                            );
+                            if (!value) return null;
+                            return (
+                              <span key={group.id} style={{
+                                padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                                background: index % 2
+                                  ? 'var(--gb-warning-tint-medium)'
+                                  : 'var(--gb-info-tint-medium)',
+                                border: `1px solid ${index % 2
+                                  ? 'var(--gb-warning-tint-border)'
+                                  : 'var(--gb-info-tint-border)'}`,
+                                color: index % 2
+                                  ? 'var(--gb-warning-fg)' : 'var(--gb-info-fg)',
+                                fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap',
+                              }}>
+                                {group.label}: {value.label}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <>
+                            <span style={{
+                              padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                              background: 'var(--gb-info-tint-medium)',
+                              border: '1px solid var(--gb-info-tint-border)',
+                              color: 'var(--gb-info-fg)', fontSize: 9.5, fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {selection.sourceIds?.length || 0} source{selection.sourceIds?.length === 1 ? '' : 's'}
+                            </span>
+                            <span style={{
+                              padding: '4px 7px', borderRadius: 'var(--gb-r-pill)',
+                              background: 'var(--gb-warning-tint-medium)',
+                              border: '1px solid var(--gb-warning-tint-border)',
+                              color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {selection.variationIds?.length || 0} placement{selection.variationIds?.length === 1 ? '' : 's'}
+                            </span>
+                          </>
+                        )}
                       </React.Fragment>
                     );
                   })}

@@ -196,6 +196,53 @@ def configured_studio():
     }
 
 
+def configured_faceted_studio():
+    value = json.loads(json.dumps(configured_studio()))
+    product = value["products"][0]
+    product["prompt_version"] = "hat-faceted-v1"
+    product["prompt"] = (
+        "Edit Image 1 by placing the logo from Image 2 inside the marked "
+        "decoration area while preserving everything outside that area."
+    )
+    product["option_groups"] = [{
+        "id": "scene",
+        "label": "Scene",
+        "presentation": "thumbnail",
+        "columns": 2,
+        "options": [{
+            "id": "studio",
+            "label": "Studio",
+        }],
+    }, {
+        "id": "color",
+        "label": "Color",
+        "presentation": "swatch",
+        "columns": 3,
+        "options": [{
+            "id": "navy",
+            "label": "Navy",
+            "swatch": "#12264a",
+        }, {
+            "id": "white",
+            "label": "White",
+            "swatch": "#f5f5f0",
+        }],
+    }]
+    product["sources"][0]["option_values"] = {
+        "scene": "studio", "color": "navy",
+    }
+    product["sources"][1]["option_values"] = {
+        "scene": "studio", "color": "white",
+    }
+    product["variations"] = [{
+        "id": "personalized-logo",
+        "label": "Personalized logo",
+        "description": "Logo placed in the marked source-image area.",
+        "prompt": "",
+    }]
+    return value
+
+
 def logo_payload():
     return {
         "filename": "customer-logo.png",
@@ -296,6 +343,30 @@ class ProductPromptRegistryTests(unittest.TestCase):
         refreshed = registry.public_products()[0]
         self.assertEqual(refreshed["prompt_version"], "hat-v2")
         self.assertNotEqual(registry.status()["revision"], first_revision)
+
+    def test_faceted_sources_publish_safe_option_groups_and_exact_mappings(self):
+        registry = PRODUCTS.ProductPromptRegistry(
+            StaticConfig(configured_faceted_studio())
+        )
+        public = registry.public_products()[0]
+        self.assertEqual(
+            [group["id"] for group in public["option_groups"]],
+            ["scene", "color"],
+        )
+        self.assertEqual(
+            public["option_groups"][0]["presentation"], "thumbnail"
+        )
+        self.assertEqual(public["option_groups"][0]["columns"], 2)
+        self.assertEqual(
+            public["sources"][1]["option_values"],
+            {"scene": "studio", "color": "white"},
+        )
+        self.assertEqual(
+            public["option_groups"][1]["options"][0]["swatch"],
+            "#12264a",
+        )
+        self.assertNotIn("prompt", public["variations"][0])
+        self.assertNotIn("reference_image_url", public["variations"][0])
 
 
 class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
@@ -547,6 +618,48 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             f"{hashlib.sha256(url.encode('utf-8')).hexdigest()}.png",
         )
 
+    async def test_faceted_source_without_separate_placement_uses_image_one_and_two(self):
+        reference_fetcher = FakeReferenceFetcher()
+        provider = FakeProvider()
+        manager = PRODUCTS.ProductImageJobManager(
+            engine=self.engine,
+            batch_model=ImageBatch,
+            job_model=ImageJob,
+            project_dir=ROOT,
+            config_reader=StaticConfig(configured_faceted_studio()),
+            provider=provider,
+            reference_fetcher=reference_fetcher,
+            storage_root=self.root / "faceted-artifacts",
+        )
+        queued = await manager.start_batch(
+            owner_id="api_key:key-a",
+            owner_credential_id="key-a",
+            request_id="request:faceted:0001",
+            name="Faceted mockup",
+            selections=[{
+                "product_id": "embroidered-hat",
+                "source_ids": ["white"],
+                "variation_ids": ["personalized-logo"],
+            }],
+            aspect_id="square",
+            logo=logo_payload(),
+        )
+        await manager.wait(queued["jobs"][0]["job_id"])
+        completed = manager.get_batch(
+            owner_id="api_key:key-a", batch_id=queued["batch_id"]
+        )
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(provider.input_files, [
+            "logo.png", "product-reference.png",
+        ])
+        self.assertIn("Image 1:", provider.prompt)
+        self.assertIn("Image 2:", provider.prompt)
+        self.assertNotIn("Imprint-location example:", provider.prompt)
+        self.assertEqual(
+            reference_fetcher.urls,
+            ["https://assets.example/hat/white.png"],
+        )
+
     async def test_active_batch_can_be_cancelled_then_deleted(self):
         provider = BlockingProvider()
         reference_fetcher = FakeReferenceFetcher()
@@ -690,6 +803,20 @@ class ProductGenerationRegistrationTests(unittest.TestCase):
         )
         self.assertIn(
             '@router.get("/client/product-generation/health")', routes
+        )
+        self.assertIn(
+            '@router.get("/product-generation/references/{asset_path:path}")',
+            routes,
+        )
+        self.assertIn(
+            {
+                "method": "GET",
+                "path": (
+                    "/projects/golfballs-extension/"
+                    "product-generation/references/*"
+                ),
+            },
+            manifest["public_routes"],
         )
         self.assertIn(
             '@router.get("/product-generation/admin/jobs")', routes

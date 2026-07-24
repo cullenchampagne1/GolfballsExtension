@@ -3,11 +3,13 @@ import { describe, it } from 'node:test';
 
 import {
   buildProductGenerationBatchRequest,
+  createDefaultProductGenerationSelection,
   createProductGenerationRequestId,
   isActiveProductGenerationBatch,
   isTerminalProductGenerationBatch,
   normalizeStudioBootstrap,
   prepareProductGenerationLogo,
+  resolveProductGenerationFacet,
 } from '../../src/lib/productGenerationClient.js';
 
 const studio = {
@@ -27,6 +29,28 @@ const logo = {
   filename: 'logo.png',
   mediaType: 'image/png',
   dataBase64: 'aGVsbG8=',
+};
+const towel = {
+  id: 'venture-towel',
+  option_groups: [{
+    id: 'scene',
+    presentation: 'thumbnail',
+    columns: 2,
+    options: [{ id: 'studio' }, { id: 'grass' }],
+  }, {
+    id: 'color',
+    presentation: 'swatch',
+    columns: 3,
+    options: [{ id: 'black' }, { id: 'blue' }, { id: 'white' }],
+  }],
+  sources: [
+    { id: 'studio-black', option_values: { scene: 'studio', color: 'black' } },
+    { id: 'studio-blue', option_values: { scene: 'studio', color: 'blue' } },
+    { id: 'studio-white', option_values: { scene: 'studio', color: 'white' } },
+    { id: 'grass-black', option_values: { scene: 'grass', color: 'black' } },
+    { id: 'grass-blue', option_values: { scene: 'grass', color: 'blue' } },
+  ],
+  variations: [{ id: 'personalized-logo' }],
 };
 
 describe('product mockup studio client contract', () => {
@@ -80,6 +104,41 @@ describe('product mockup studio client contract', () => {
       aspectId: 'square',
       logo,
     });
+  });
+
+  it('resolves ordered YAML option groups to the exact product reference', () => {
+    const initial = createDefaultProductGenerationSelection(towel);
+    assert.deepEqual(initial, {
+      sourceIds: ['studio-black'],
+      variationIds: ['personalized-logo'],
+      optionValues: { scene: 'studio', color: 'black' },
+    });
+    const blue = resolveProductGenerationFacet({
+      product: towel,
+      currentOptionValues: initial.optionValues,
+      groupId: 'color',
+      optionId: 'blue',
+    });
+    assert.deepEqual(blue, {
+      sourceId: 'studio-blue',
+      optionValues: { scene: 'studio', color: 'blue' },
+    });
+    const grass = resolveProductGenerationFacet({
+      product: towel,
+      currentOptionValues: blue.optionValues,
+      groupId: 'scene',
+      optionId: 'grass',
+    });
+    assert.deepEqual(grass, {
+      sourceId: 'grass-blue',
+      optionValues: { scene: 'grass', color: 'blue' },
+    });
+    assert.equal(resolveProductGenerationFacet({
+      product: towel,
+      currentOptionValues: grass.optionValues,
+      groupId: 'color',
+      optionId: 'white',
+    }), null);
   });
 
   it('counts every selected source × imprint variation toward the output limit', () => {
