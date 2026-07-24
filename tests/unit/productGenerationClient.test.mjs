@@ -7,6 +7,8 @@ import {
   createProductGenerationRequestId,
   isActiveProductGenerationBatch,
   isTerminalProductGenerationBatch,
+  mergeProductGenerationBatch,
+  normalizeProductGenerationBatchId,
   normalizeStudioBootstrap,
   prepareProductGenerationLogo,
   resolveProductGenerationFacet,
@@ -225,5 +227,27 @@ describe('product mockup studio client contract', () => {
     assert.equal(isActiveProductGenerationBatch({ status: 'running' }), true);
     assert.equal(isActiveProductGenerationBatch({ status: 'completed' }), false);
     assert.equal(isTerminalProductGenerationBatch({ status: 'partial' }), true);
+  });
+
+  it('validates notification batch ids and merges refreshed gallery details', () => {
+    const batchId = `batch_${'a'.repeat(32)}`;
+    assert.equal(normalizeProductGenerationBatchId(` ${batchId} `), batchId);
+    assert.equal(normalizeProductGenerationBatchId('batch_not-safe'), '');
+
+    const refreshed = {
+      batch_id: batchId,
+      status: 'completed',
+      jobs: [{ job_id: `img_${'b'.repeat(32)}` }],
+    };
+    assert.deepEqual(
+      mergeProductGenerationBatch([
+        { batch_id: `batch_${'c'.repeat(32)}`, status: 'running' },
+        { batch_id: batchId, status: 'queued', jobs: [] },
+      ], refreshed),
+      [
+        refreshed,
+        { batch_id: `batch_${'c'.repeat(32)}`, status: 'running' },
+      ],
+    );
   });
 });

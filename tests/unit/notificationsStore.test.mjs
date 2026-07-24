@@ -48,7 +48,7 @@ function remote(overrides = {}) {
     action: {
       type: 'open_mockup_batch',
       batch_id: BATCH_ID,
-      label: 'Open studio',
+      label: 'Open gallery',
     },
     ...overrides,
   };
@@ -63,7 +63,7 @@ describe('notification outbox cache', () => {
     assert.equal(normalized.status, 'unread');
     assert.equal(normalized.action.type, 'open_mockup_batch');
     assert.equal(normalized.action.batchId, BATCH_ID);
-    assert.equal(normalized.action.label, 'Open studio');
+    assert.equal(normalized.action.label, 'Open gallery');
 
     const rejected = store.normalizeRemote(remote({
       id: 13,

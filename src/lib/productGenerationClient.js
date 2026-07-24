@@ -5,6 +5,11 @@ const TERMINAL_BATCH_STATUSES = new Set([
 const MAX_LOGO_BYTES = 12 * 1024 * 1024;
 const LOGO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const RESULT_ASSET_CACHE = new Map();
+const BATCH_ID_RE = /^batch_[a-f0-9]{32}$/;
+
+export const PRODUCT_GENERATION_OPEN_BATCH_EVENT = (
+  'gb:product-generation:open-batch'
+);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -12,6 +17,20 @@ function asArray(value) {
 
 function cleanId(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+export function normalizeProductGenerationBatchId(value) {
+  const batchId = String(value || '').trim();
+  return BATCH_ID_RE.test(batchId) ? batchId : '';
+}
+
+export function mergeProductGenerationBatch(rows, batch) {
+  const batchId = normalizeProductGenerationBatchId(batch?.batch_id);
+  if (!batchId) return asArray(rows);
+  return [
+    batch,
+    ...asArray(rows).filter((row) => row?.batch_id !== batchId),
+  ];
 }
 
 function runtimeMessage(message) {
@@ -279,9 +298,13 @@ export function createProductGenerationBatch(input) {
 }
 
 export function getProductGenerationBatch(batchId) {
+  const normalized = normalizeProductGenerationBatchId(batchId);
+  if (!normalized) {
+    return Promise.reject(new Error('Invalid product mockup batch'));
+  }
   return runtimeMessage({
     action: 'productGenerationGetBatch',
-    batchId: String(batchId || ''),
+    batchId: normalized,
   });
 }
 

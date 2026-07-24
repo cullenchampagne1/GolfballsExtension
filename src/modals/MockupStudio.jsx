@@ -20,7 +20,10 @@ import {
   getProductGenerationResult,
   isActiveProductGenerationBatch,
   listProductGenerationBatches,
+  mergeProductGenerationBatch,
+  normalizeProductGenerationBatchId,
   prepareProductGenerationLogo,
+  PRODUCT_GENERATION_OPEN_BATCH_EVENT,
   resolveProductGenerationFacet,
   updateProductGenerationFacetSelection,
 } from '../lib/productGenerationClient.js';
@@ -1281,7 +1284,8 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             <div style={{
               marginTop: 3, fontSize: 10.5, color: 'var(--gb-text-muted)',
             }}>
-              {batch.status_message} · {formatWhen(batch.created_at)}
+              {[batch.status_message, formatWhen(batch.created_at)]
+                .filter(Boolean).join(' · ')}
             </div>
           </div>
           <IconBtn
@@ -1354,23 +1358,41 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
               background: 'var(--gb-surface-canvas)',
             }}
           >
-            {/* A FIXED column width, not 1fr: stretching one or two results to
-                330-400px made every tile a near-full-size preview and left the
-                viewer with nothing to add. Tiles stay a constant square. */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(auto-fill, ${GALLERY_TILE}px)`,
-              justifyContent: 'center',
-              gap: 12,
-            }}>
-              {jobs.map((job) => (
-                <ResultCard
-                  key={job.job_id}
-                  job={job}
-                  onOpen={() => setPreviewJobId(job.job_id)}
+            {batch.loading ? (
+              <div style={{
+                height: '100%', minHeight: 180,
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 10,
+                color: 'var(--gb-text-muted)', fontSize: 11,
+              }}>
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  border: '2.5px solid var(--gb-brand-tint-border)',
+                  borderTopColor: 'var(--gb-brand-label)',
+                  animation: 'gb-ms-spin .7s linear infinite',
+                }}
                 />
-              ))}
-            </div>
+                Loading your mockup gallery…
+              </div>
+            ) : (
+              /* A FIXED column width, not 1fr: stretching one or two results to
+                 330-400px made every tile a near-full-size preview and left the
+                 viewer with nothing to add. Tiles stay a constant square. */
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(auto-fill, ${GALLERY_TILE}px)`,
+                justifyContent: 'center',
+                gap: 12,
+              }}>
+                {jobs.map((job) => (
+                  <ResultCard
+                    key={job.job_id}
+                    job={job}
+                    onOpen={() => setPreviewJobId(job.job_id)}
+                  />
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1409,7 +1431,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
               : `Download all (${readyJobs.length})`}
           </Btn>
         )}
-        {active ? (
+        {batch.loading ? null : active ? (
           <Btn
             variant="danger"
             size="sm"
@@ -1480,8 +1502,11 @@ function BatchModal({
   );
 }
 
-export function MockupStudio({ onClose, bindClose }) {
+export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
   const toast = useToast();
+  const initialBatchIdRef = useRef(
+    normalizeProductGenerationBatchId(initialBatchId),
+  );
   const [visible, setVisible] = useState(true);
   const [state, setState] = useState('loading');
   const [error, setError] = useState('');
@@ -1495,7 +1520,12 @@ export function MockupStudio({ onClose, bindClose }) {
   const [logo, setLogo] = useState(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
-  const [currentBatchId, setCurrentBatchId] = useState(null);
+  const [currentBatchId, setCurrentBatchId] = useState(
+    initialBatchIdRef.current || null,
+  );
+  const [batchOpenBusy, setBatchOpenBusy] = useState(
+    Boolean(initialBatchIdRef.current),
+  );
   // Admin build only: the lazily-loaded catalog authoring sub-modal.
   const [CatalogAdmin, setCatalogAdmin] = useState(null);
   const [catalogAdminOpen, setCatalogAdminOpen] = useState(false);
@@ -1504,20 +1534,33 @@ export function MockupStudio({ onClose, bindClose }) {
   const trayRef = useRef(null);
   const trayButtonRef = useRef(null);
   const closeRequestedRef = useRef(false);
+  const batchesRef = useRef([]);
+  const openBatchRequestRef = useRef(0);
+  const initialBatchHandledRef = useRef(false);
+
+  const closeCurrentBatch = useCallback(() => {
+    openBatchRequestRef.current += 1;
+    setBatchOpenBusy(false);
+    setCurrentBatchId(null);
+  }, []);
 
   const requestClose = useCallback(() => {
     if (closeRequestedRef.current) return;
     closeRequestedRef.current = true;
     setTrayOpen(false);
-    setCurrentBatchId(null);
+    closeCurrentBatch();
     setVisible(false);
-  }, []);
+  }, [closeCurrentBatch]);
 
   useEffect(() => {
     bindClose?.(requestClose);
   }, [bindClose, requestClose]);
 
   useEffect(() => { ensureStyles(); }, []);
+
+  useEffect(() => {
+    batchesRef.current = batches;
+  }, [batches]);
 
   useEffect(() => {
     if (!trayOpen) return undefined;
@@ -1533,6 +1576,41 @@ export function MockupStudio({ onClose, bindClose }) {
       document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
     };
   }, [trayOpen]);
+
+  const openBatchById = useCallback(async (value) => {
+    const batchId = normalizeProductGenerationBatchId(value);
+    if (!batchId) return false;
+    const request = ++openBatchRequestRef.current;
+    const known = batchesRef.current.some(
+      (batch) => batch?.batch_id === batchId,
+    );
+    setTrayOpen(false);
+    setCurrentBatchId(batchId);
+    setBatchOpenBusy(!known);
+    try {
+      const batch = await getProductGenerationBatch(batchId);
+      if (request !== openBatchRequestRef.current) return false;
+      setBatches((rows) => mergeProductGenerationBatch(rows, batch));
+      setBatchOpenBusy(false);
+      setCurrentBatchId(batchId);
+      return true;
+    } catch (openError) {
+      if (request !== openBatchRequestRef.current) return false;
+      setBatchOpenBusy(false);
+      const durableSnapshot = batchesRef.current.some(
+        (batch) => batch?.batch_id === batchId,
+      );
+      if (!known && !durableSnapshot) {
+        setCurrentBatchId(null);
+        toast?.error?.(
+          openError?.status === 404
+            ? 'That mockup batch is no longer available'
+            : 'Unable to open that mockup gallery',
+        );
+      }
+      return false;
+    }
+  }, [toast]);
 
   const load = useCallback(async () => {
     if (loadingRef.current) return;
@@ -1554,6 +1632,32 @@ export function MockupStudio({ onClose, bindClose }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (
+      state === 'loading'
+      || initialBatchHandledRef.current
+      || !initialBatchIdRef.current
+    ) return;
+    initialBatchHandledRef.current = true;
+    void openBatchById(initialBatchIdRef.current);
+  }, [openBatchById, state]);
+
+  useEffect(() => {
+    const handleOpenBatch = (event) => {
+      void openBatchById(event?.detail?.batchId);
+    };
+    window.addEventListener(
+      PRODUCT_GENERATION_OPEN_BATCH_EVENT,
+      handleOpenBatch,
+    );
+    return () => {
+      window.removeEventListener(
+        PRODUCT_GENERATION_OPEN_BATCH_EVENT,
+        handleOpenBatch,
+      );
+    };
+  }, [openBatchById]);
 
   // Admin build only: fetch the authoring sub-modal on first use, so opening
   // the studio never pays for code most sessions will not touch.
@@ -1578,12 +1682,24 @@ export function MockupStudio({ onClose, bindClose }) {
     const poll = async () => {
       try {
         const next = await listProductGenerationBatches();
-        if (!cancelled) setBatches(next);
+        if (!cancelled) {
+          setBatches((rows) => {
+            const selected = rows.find(
+              (batch) => batch?.batch_id === currentBatchId,
+            );
+            const selectedIsListed = next.some(
+              (batch) => batch?.batch_id === currentBatchId,
+            );
+            return selected && !selectedIsListed
+              ? mergeProductGenerationBatch(next, selected)
+              : next;
+          });
+        }
       } catch { /* retain the last durable snapshot during a transient outage */ }
     };
     const timer = setInterval(poll, 2_500);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [hasActive]);
+  }, [currentBatchId, hasActive]);
 
   useEffect(() => {
     if (!currentBatchId || !hasActive) return undefined;
@@ -1602,7 +1718,20 @@ export function MockupStudio({ onClose, bindClose }) {
     return () => { cancelled = true; clearInterval(timer); };
   }, [currentBatchId, hasActive]);
 
-  const currentBatch = batches.find((batch) => batch.batch_id === currentBatchId) || null;
+  const currentBatch = batches.find(
+    (batch) => batch.batch_id === currentBatchId,
+  ) || (currentBatchId && batchOpenBusy ? {
+    batch_id: currentBatchId,
+    loading: true,
+    name: 'Opening mockup gallery',
+    status: 'running',
+    status_message: 'Loading the latest batch details',
+    progress: {
+      queued: 0, running: 0, completed: 0, failed: 0,
+      cancelled: 0, processed: 0, total: 0, percent: 0,
+    },
+    jobs: [],
+  } : null);
   const maxProducts = studio?.constraints?.max_products || 5;
   const maxImages = studio?.constraints?.max_images || 20;
   const selected = products.filter((product) => selectedIds.includes(product.id));
@@ -1747,6 +1876,7 @@ export function MockupStudio({ onClose, bindClose }) {
       setQuery('');
       clearLogo();
       setCurrentBatchId(batch.batch_id);
+      setBatchOpenBusy(false);
       setTrayOpen(false);
     } catch (createError) {
       toast.error(createError?.message || 'Unable to create the mockup batch');
@@ -1768,7 +1898,7 @@ export function MockupStudio({ onClose, bindClose }) {
     try {
       await deleteProductGenerationBatch(batchId);
       setBatches((rows) => rows.filter((row) => row.batch_id !== batchId));
-      if (currentBatchId === batchId) setCurrentBatchId(null);
+      if (currentBatchId === batchId) closeCurrentBatch();
     } catch (deleteError) {
       toast.error(deleteError?.message || 'Unable to delete the batch');
     }
@@ -1856,6 +1986,8 @@ export function MockupStudio({ onClose, bindClose }) {
               <BatchTray
                 batches={batches}
                 onOpen={(batchId) => {
+                  openBatchRequestRef.current += 1;
+                  setBatchOpenBusy(false);
                   setCurrentBatchId(batchId);
                   setTrayOpen(false);
                 }}
@@ -2443,7 +2575,7 @@ export function MockupStudio({ onClose, bindClose }) {
           {currentBatch && (
             <BatchModal
               batch={currentBatch}
-              onClose={() => setCurrentBatchId(null)}
+              onClose={closeCurrentBatch}
               onCancel={cancelBatch}
               onDelete={deleteBatch}
             />

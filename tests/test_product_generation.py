@@ -611,6 +611,10 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             [(event, payload["batch_id"]) for event, payload in events],
             [("batch.completed", queued["batch_id"])],
         )
+        self.assertEqual(
+            events[0][1]["owner_credential_id"],
+            "key-a",
+        )
         self.assertEqual(len(reference_fetcher.urls), 4)
         archive, media_type, filename = manager.archive_path(
             owner_id="api_key:key-a", batch_id=queued["batch_id"]
