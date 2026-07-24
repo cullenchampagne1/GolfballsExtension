@@ -79,6 +79,12 @@ const RUNTIME = [
   { name: 'mockups:batch:cancel',   in: 'background.js',        literal: '/cancel',                              method: 'post',   route: '/client/product-generation/batches/{batch_id}/cancel' },
   { name: 'mockups:batch:delete',   in: 'background.js',        literal: 'productGenerationDeleteBatch',         method: 'delete', route: '/client/product-generation/batches/{batch_id}' },
   { name: 'mockups:job:result',     in: 'background.js',        literal: '/product-generation/jobs/${jobId}/result', method: 'get',  route: '/client/product-generation/jobs/{job_id}/result' },
+  // Admin-only catalog authoring. These live under /client/... rather than
+  // /product-generation/admin/... because apiFetch blocks admin paths; the
+  // dashboard session cookie is what actually authorizes them.
+  { name: 'mockups:catalog:read',   in: 'background.js',        literal: '/product-generation/catalog',          method: 'get',    route: '/client/product-generation/catalog' },
+  { name: 'mockups:catalog:write',  in: 'background.js',        literal: '/product-generation/catalog',          method: 'post',   route: '/client/product-generation/catalog' },
+  { name: 'mockups:catalog:refs',   in: 'background.js',        literal: '/product-generation/catalog/references', method: 'post', route: '/client/product-generation/catalog/references' },
   { name: 'assistant:health',       in: 'help-assistant.js',    literal: '/health',                              method: 'get',  route: '/assistant/health' },
 ];
 

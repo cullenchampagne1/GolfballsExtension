@@ -1,0 +1,87 @@
+{
+  "section": "Core Features / Gifting",
+  "articles": [
+    {
+      "slug": "mockup-catalog-authoring",
+      "title": "Mockup Catalog Authoring",
+      "icon": "cube",
+      "tiers": ["advanced"],
+      "keywords": [
+        "mockup catalog",
+        "authoring",
+        "reference photo",
+        "option group",
+        "scene",
+        "variation axis",
+        "yaml",
+        "product workflow"
+      ],
+      "summary": "Admin-build editor that turns a corporate-catalog custom-logo product into a managed mockup workflow — pick the variation axes, attach a reference photo per combination, and write the managed catalog without touching YAML.",
+      "feature": "mockup-catalog-authoring",
+      "flag": "mockupStudioEnabled",
+      "covers": ["mockup-catalog-admin"],
+      "body": {
+        "advanced": [
+          {
+            "type": "callout",
+            "kind": "warning",
+            "title": "Admin build only",
+            "text": "This editor is compiled only into the admin build, and the backend additionally requires an active dashboard administrator session. An installation key on its own can never reach the authoring endpoints."
+          },
+          {
+            "type": "p",
+            "text": "Open the Product Mockup Studio, then use the Add button beside the product search. The first screen lists every custom-logo product in the corporate catalog with its SKU, category, and the variation facets that product already publishes. Products that already have a mockup workflow are marked Configured and open for editing rather than creating a duplicate."
+          },
+          {
+            "type": "p",
+            "text": "Choosing a product opens the editor. The left rail is the setup: identity, the variation axes, and the imprint placements. The main panel is the reference grid — one cell per combination of the enabled axes."
+          },
+          {
+            "type": "table",
+            "headers": ["Concept", "What it becomes", "Where it comes from"],
+            "rows": [
+              ["Variation axis", "An option group in the managed catalog", "A catalog facet (Color, Size) or an axis you author yourself"],
+              ["Authored axis", "An option group you define", "The + beside Variation axes — Scene is the usual one"],
+              ["Grid cell", "One source with its reference image", "A photo you upload or an HTTPS link you paste"],
+              ["Imprint placement", "A variation (where the logo goes)", "Collapsed section in the rail; defaults to a single Personalized logo"]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "title": "The grid is meant to be sparse",
+            "text": "A cell with no reference photo is simply not offered in the studio. That is normal, not an error — the shipped Venture Towel publishes 11 sources across a 2x6 grid because there is no golf-course photo of the white towel."
+          },
+          {
+            "type": "p",
+            "text": "Drop an image straight onto a cell, or select the cell and use Upload to store it in the managed reference directory. Uploads are named after the combination (studio-black.png) under the product's own folder. A per-cell prompt is optional and marked with a dot on the cell; use it when one colour or scene needs an instruction the product prompt cannot express."
+          },
+          {
+            "type": "p",
+            "text": "The product prompt at the bottom is the main instruction and must be at least 20 characters. Describe what to preserve from the reference photo and how the imprint should look. Everything above it — the axes, the grid, the placements — only decides which reference image a given selection resolves to."
+          },
+          {
+            "type": "table",
+            "headers": ["Limit", "Value", "What happens when you exceed it"],
+            "rows": [
+              ["Variation axes", "6", "Additional axes cannot be enabled"],
+              ["Options per axis", "20", "Extra catalog values are dropped when the axis is built"],
+              ["References per product", "20", "The header count turns red and the draft refuses to save until you remove options"],
+              ["Product prompt", "20 – 16,000 characters", "The draft is held until the prompt is long enough"]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "title": "Saving is live, and validated first",
+            "text": "Every committed change is saved automatically once the draft is valid. The backend re-validates the whole document through the studio's own catalog loader before writing, so a rejected draft leaves the live catalog untouched. The studio re-reads the managed document on every request, so a successful save is visible immediately with no restart."
+          },
+          {
+            "type": "p",
+            "text": "Each authored product also records the corporate-catalog SKU and id it came from, so a mockup workflow and its catalog product can be correlated later without guessing from the title."
+          }
+        ]
+      }
+    }
+  ]
+}

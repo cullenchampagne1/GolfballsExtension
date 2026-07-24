@@ -42,6 +42,14 @@ const Wand = (props) => (
   </Icon>
 );
 
+// Admin-only: the catalog authoring sub-modal ships only in the admin build.
+// The lazy import lives inside an `__ADMIN__` branch, so the served build
+// (__ADMIN__ === false → null) never references MockupCatalogAdmin and esbuild
+// leaves the whole module — and its authoring transport — out of the bundle.
+const LOAD_CATALOG_ADMIN = __ADMIN__
+  ? () => import('./MockupCatalogAdmin.jsx').then((m) => m.MockupCatalogAdmin)
+  : null;
+
 const ACTIVE = new Set(['queued', 'running']);
 const TONES = {
   queued: ['var(--gb-warning-tint-medium)', 'var(--gb-warning-fg)', 'var(--gb-warning-tint-border)'],
@@ -1258,6 +1266,9 @@ export function MockupStudio({ onClose, bindClose }) {
   const [logoBusy, setLogoBusy] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState(null);
+  // Admin build only: the lazily-loaded catalog authoring sub-modal.
+  const [CatalogAdmin, setCatalogAdmin] = useState(null);
+  const [catalogAdminOpen, setCatalogAdminOpen] = useState(false);
   const loadingRef = useRef(false);
   const logoInputRef = useRef(null);
   const trayRef = useRef(null);
@@ -1313,6 +1324,22 @@ export function MockupStudio({ onClose, bindClose }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Admin build only: fetch the authoring sub-modal on first use, so opening
+  // the studio never pays for code most sessions will not touch.
+  const openCatalogAdmin = useCallback(async () => {
+    if (!__ADMIN__) return;
+    setCatalogAdminOpen(true);
+    if (CatalogAdmin) return;
+    try {
+      const component = await LOAD_CATALOG_ADMIN();
+      // Wrap: setState treats a bare function argument as an updater.
+      setCatalogAdmin(() => component);
+    } catch {
+      setCatalogAdminOpen(false);
+      toast?.error?.('Catalog authoring is unavailable');
+    }
+  }, [CatalogAdmin, toast]);
 
   const hasActive = batches.some(isActiveProductGenerationBatch);
   useEffect(() => {
@@ -1778,6 +1805,15 @@ export function MockupStudio({ onClose, bindClose }) {
                     }}>
                       {selectedIds.length}/{maxProducts}
                     </span>
+                    {__ADMIN__ && (
+                      <IconBtn
+                        size="sm"
+                        variant="ghost"
+                        title="Add a product workflow to the mockup catalog"
+                        icon={<I.plus />}
+                        onClick={openCatalogAdmin}
+                      />
+                    )}
                   </div>}
                   <div className="gb-ms-scroll" style={{
                     flex: 1, minHeight: 0, overflowY: 'auto',
@@ -2179,6 +2215,16 @@ export function MockupStudio({ onClose, bindClose }) {
             />
           )}
         </AnimatePresence>
+        {__ADMIN__ && (
+          <AnimatePresence>
+            {catalogAdminOpen && CatalogAdmin && (
+              <CatalogAdmin
+                onClose={() => setCatalogAdminOpen(false)}
+                onSaved={load}
+              />
+            )}
+          </AnimatePresence>
+        )}
       </motion.div>
     </motion.div>
   );

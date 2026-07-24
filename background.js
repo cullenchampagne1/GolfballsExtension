@@ -1071,6 +1071,70 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  /* @admin:start */
+  // ── Mockup catalog authoring (admin build only) ────────────────────────
+  // Authoring writes the managed image-generation catalog and its reference
+  // images. The backend authorizes on a dashboard ADMINISTRATOR session, so a
+  // consumer install could not use these even if the code shipped — it is
+  // stripped from the served build regardless.
+  if (msg.action === 'mockupCatalogRead') {
+    gbProductGenerationReply(
+      GBInstallationAuth.catalogAdminJson(
+        `${GBInstallationAuth.CLIENT_BASE}/product-generation/catalog`,
+      ),
+      sendResponse,
+      'Unable to load the mockup catalog',
+    );
+    return true;
+  }
+  if (msg.action === 'mockupCatalogWrite') {
+    if (!Array.isArray(msg.products) || msg.products.length > 25) {
+      sendResponse({ ok: false, error: 'Invalid mockup catalog draft' });
+      return true;
+    }
+    gbProductGenerationReply(
+      GBInstallationAuth.catalogAdminJson(
+        `${GBInstallationAuth.CLIENT_BASE}/product-generation/catalog`,
+        { method: 'POST', body: JSON.stringify({ products: msg.products }) },
+      ),
+      sendResponse,
+      'Unable to save the mockup catalog',
+    );
+    return true;
+  }
+  if (msg.action === 'mockupCatalogUploadReference') {
+    const productId = String(msg.productId || '').trim().toLowerCase();
+    const name = String(msg.name || '').trim().toLowerCase();
+    const mediaType = String(msg.mediaType || '').trim().toLowerCase();
+    const dataBase64 = String(msg.dataBase64 || '');
+    if (!GB_PRODUCT_OPTION_ID_RE.test(productId)
+        || !/^[a-z0-9][a-z0-9._-]{0,99}$/.test(name)
+        || !['image/png', 'image/jpeg', 'image/webp'].includes(mediaType)
+        || !/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)
+        || dataBase64.length > 42_000_000) {
+      sendResponse({ ok: false, error: 'Invalid reference image' });
+      return true;
+    }
+    gbProductGenerationReply(
+      GBInstallationAuth.catalogAdminJson(
+        `${GBInstallationAuth.CLIENT_BASE}/product-generation/catalog/references`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            product_id: productId,
+            name,
+            media_type: mediaType,
+            data_base64: dataBase64,
+          }),
+        },
+      ),
+      sendResponse,
+      'Unable to upload the reference image',
+    );
+    return true;
+  }
+  /* @admin:end */
+
   // ── Installation-authenticated Help Companion ──────────────────────────
   // The content shelf never receives the installation credential and never
   // calls the backend directly. All run state is persisted by this worker, so

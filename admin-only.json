@@ -1,5 +1,5 @@
 {
-  "_doc": "Admin-only code excluded from the SERVED (consumer) build. The dev/full build (npm run build, GB_ADMIN default) keeps everything; the store/publish build (GB_ADMIN=0) skips 'entries', drops 'rootFiles' + 'contentScripts', strips /* @admin:start */.../* @admin:end */ regions from raw files, and regenerates the settings registry without 'configKeys'. 'leakTokens' must NOT appear anywhere in the packaged consumer output — the packager fails if they do.",
+  "_doc": "Admin-only code excluded from the SERVED (consumer) build. The dev/full build (npm run build, GB_ADMIN default) keeps everything; the store/publish build (GB_ADMIN=0) skips 'entries', drops 'rootFiles' + 'contentScripts', strips /* @admin:start */.../* @admin:end */ regions from raw files, and regenerates the settings registry without 'configKeys'. 'leakTokens' must NOT appear anywhere in the packaged consumer output \u2014 the packager fails if they do.",
   "entries": [
     "src/content/notifications.jsx"
   ],
@@ -15,10 +15,12 @@
     "emailRelay.notifications"
   ],
   "helpDocs": [
-    "notifications.json"
+    "notifications.json",
+    "mockup-catalog.json"
   ],
   "adminModals": [
-    "notifications"
+    "notifications",
+    "mockup-catalog-admin"
   ],
   "adminTutorials": [
     "handle-customer-reply"
@@ -35,6 +37,15 @@
     "notifications-store",
     "importHpgCatalog",
     "importSnugzCatalog",
-    "fetchHpgList"
+    "fetchHpgList",
+    "MockupCatalogAdmin",
+    "mockupCatalogRead",
+    "mockupCatalogWrite",
+    "mockupCatalogUploadReference",
+    "catalogAdminJson",
+    "readMockupCatalog",
+    "writeMockupCatalog",
+    "uploadMockupReference",
+    "product-generation/catalog"
   ]
 }

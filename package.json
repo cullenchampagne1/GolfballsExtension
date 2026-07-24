@@ -82,6 +82,10 @@
       "file": "tests/unit/productGenerationClient.test.mjs"
     },
     {
+      "name": "modal \u00b7 mockup catalog draft \u2192 managed document",
+      "file": "tests/unit/mockupCatalogDraft.test.mjs"
+    },
+    {
       "name": "modal \u00b7 order-date calendar relay",
       "file": "tests/unit/submitOrderDates.test.mjs"
     },
@@ -251,6 +255,14 @@
       "command": [
         "../.venv/bin/python",
         "tests/test_product_generation.py"
+      ]
+    },
+    {
+      "name": "guard \u00b7 mockup catalog authoring",
+      "id": "guard-mockup-catalog",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_mockup_catalog_authoring.py"
       ]
     },
     {
