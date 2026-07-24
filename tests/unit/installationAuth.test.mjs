@@ -155,6 +155,25 @@ describe('installation auth · authenticated requests', () => {
     assert.equal(requests.at(-1).options.credentials, 'omit');
   });
 
+  it('allows credentialed deletes only for a concrete product-generation batch', async () => {
+    const response = await client.apiJson(
+      `${client.CLIENT_BASE}/product-generation/batches/batch_${'a'.repeat(32)}`,
+      { method: 'DELETE' },
+    );
+    assert.equal(response.ok, true);
+    assert.equal(requests.at(-1).options.method, 'DELETE');
+    assert.equal(
+      requests.at(-1).options.headers.get('Authorization'),
+      `Bearer ${API_KEY}`,
+    );
+    await assert.rejects(
+      client.apiFetch(`${client.CLIENT_BASE}/settings-shares/share_${'b'.repeat(32)}`, {
+        method: 'DELETE',
+      }),
+      /Blocked non-extension API path/,
+    );
+  });
+
   it('keeps local response-guard options out of the fetch call', async () => {
     const status = await client.apiJson('/projects/golfballs-extension/assistant/status', {
       responseLimit: 512 * 1024,
@@ -187,7 +206,7 @@ describe('installation auth · guardrails', () => {
       /Blocked non-extension API path/,
     );
     await assert.rejects(
-      client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'DELETE' }),
+      client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'PATCH' }),
       /Blocked extension API method/,
     );
   });

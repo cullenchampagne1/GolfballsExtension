@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.4.2",
-  "generatedAt": "2026-07-23",
+  "generatedAt": "2026-07-24",
   "tree": [
     {
       "title": "Getting Started",
@@ -128,6 +128,9 @@ export const HELP_CONTENT = {
           "items": [
             {
               "article": "gift-catalog"
+            },
+            {
+              "article": "product-mockup-studio"
             },
             {
               "article": "customizing-item"
@@ -2982,6 +2985,112 @@ export const HELP_CONTENT = {
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
     {
+      "slug": "product-mockup-studio",
+      "title": "Product Mockup Studio",
+      "icon": "image",
+      "tiers": [
+        "beginner",
+        "intermediate"
+      ],
+      "keywords": [
+        "mockup",
+        "image generation",
+        "AI image",
+        "batch",
+        "render",
+        "scene",
+        "lighting",
+        "aspect ratio",
+        "variations"
+      ],
+      "summary": "Build product-image render batches from the Actions Shelf and keep track of them after the studio closes.",
+      "feature": "mockup-studio",
+      "flag": "mockupStudioEnabled",
+      "covers": [
+        "mockup-studio"
+      ],
+      "body": {
+        "beginner": [
+          {
+            "type": "p",
+            "text": "Open Mockup Studio from the Actions Shelf on any supported page. The studio loads its product list and render choices from RevStack, so there is no account or order page requirement."
+          },
+          {
+            "type": "heading",
+            "text": "Create a render batch"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Choose up to 5 configured products.",
+              "Pick the scene, image shape, lighting, and 1–4 variations per product.",
+              "The image count updates before you submit and is capped at 20 images per batch.",
+              "Select Generate to create the server-owned batch. You can close the studio while it runs and reopen it later from Batches."
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "note",
+            "text": "A new installation may show an empty catalog. That is a valid ready state: an administrator still needs to configure public product recipes and their reference images. The diagnostic cat test is intentionally admin-only and never appears as a product."
+          }
+        ],
+        "intermediate": [
+          {
+            "type": "heading",
+            "text": "Batch status and controls"
+          },
+          {
+            "type": "p",
+            "text": "The Batches tray is your durable render history. Open a batch to see each product variation and its current stage. Queued and running batches can be cancelled; finished, failed, partial, and cancelled batches can be deleted."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Status",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "Queued",
+                "RevStack accepted the batch and its image jobs are waiting for a render slot."
+              ],
+              [
+                "Running",
+                "At least one image job is being generated."
+              ],
+              [
+                "Completed",
+                "Every image job completed successfully."
+              ],
+              [
+                "Partial",
+                "The batch finished with a mix of successful and unsuccessful jobs."
+              ],
+              [
+                "Failed",
+                "No image completed successfully."
+              ],
+              [
+                "Cancelled",
+                "The active work was stopped before completion."
+              ]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "tip",
+            "text": "Progress is stage-based rather than streamed pixel-by-pixel. Treat the completed state from RevStack as authoritative; the extension never fakes a finished image while a job is still running."
+          }
+        ]
+      },
+      "related": [
+        "gift-catalog",
+        "customizing-item",
+        "3d-product-viewer"
+      ],
+      "sectionLabel": "Core Features / Gifting & Proposals"
+    },
+    {
       "slug": "customizing-item",
       "title": "Customizing an Item",
       "icon": "edit",
@@ -4761,6 +4870,11 @@ export const HELP_CONTENT = {
                 "Gifting catalog, customization, and monograms."
               ],
               [
+                "Mockup Studio",
+                "On",
+                "Generate product mockups in durable image batches."
+              ],
+              [
                 "Quick Actions Shelf",
                 "On",
                 "Floating bottom-right quick-actions shelf (Shift×2)."
@@ -4770,6 +4884,7 @@ export const HELP_CONTENT = {
               "flagKeys": [
                 "imagePreviewEnabled",
                 "giftCatalogEnabled",
+                "mockupStudioEnabled",
                 "actionsShelfEnabled"
               ]
             }
@@ -8182,6 +8297,26 @@ export const HELP_CONTENT = {
       "flag": "giftCatalogEnabled"
     },
     {
+      "id": "article:product-mockup-studio",
+      "category": "Articles",
+      "title": "Product Mockup Studio",
+      "keywords": [
+        "mockup",
+        "image generation",
+        "AI image",
+        "batch",
+        "render",
+        "scene",
+        "lighting",
+        "aspect ratio",
+        "variations"
+      ],
+      "description": "Build product-image render batches from the Actions Shelf and keep track of them after the studio closes.",
+      "article": "product-mockup-studio",
+      "shortcut": null,
+      "flag": "mockupStudioEnabled"
+    },
+    {
       "id": "article:customizing-item",
       "category": "Articles",
       "title": "Customizing an Item",
@@ -9250,6 +9385,18 @@ export const HELP_CONTENT = {
       "description": "Gifting catalog, customization, and monograms.",
       "article": "feature-toggles",
       "flag": "giftCatalogEnabled"
+    },
+    {
+      "id": "flag:mockupStudioEnabled",
+      "category": "Settings",
+      "title": "Mockup Studio",
+      "keywords": [
+        "mockupStudioEnabled",
+        "Tools"
+      ],
+      "description": "Generate product mockups in durable image batches.",
+      "article": "feature-toggles",
+      "flag": "mockupStudioEnabled"
     },
     {
       "id": "flag:actionsShelfEnabled",

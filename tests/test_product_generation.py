@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -39,12 +40,38 @@ class Base(DeclarativeBase):
     pass
 
 
+class ImageBatch(Base):
+    __tablename__ = "extension_product_image_batches"
+
+    id = Column(String(40), primary_key=True)
+    owner_id = Column(String(96), nullable=False, index=True)
+    owner_credential_id = Column(String(36), nullable=True, index=True)
+    request_id = Column(String(80), nullable=False)
+    name = Column(String(120), nullable=False)
+    configuration_revision = Column(String(64), nullable=False)
+    scene_id = Column(String(40), nullable=False)
+    aspect_id = Column(String(40), nullable=False)
+    lighting_id = Column(String(40), nullable=False)
+    variation_count = Column(Integer, nullable=False)
+    product_count = Column(Integer, nullable=False)
+    job_count = Column(Integer, nullable=False)
+    status = Column(String(32), nullable=False, index=True)
+    status_message = Column(String(300), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+
 class ImageJob(Base):
     __tablename__ = "extension_product_image_jobs"
 
     id = Column(String(40), primary_key=True)
     owner_id = Column(String(96), nullable=False, index=True)
     owner_credential_id = Column(String(36), nullable=True, index=True)
+    batch_id = Column(String(40), nullable=True, index=True)
+    batch_position = Column(Integer, nullable=True)
+    variation_index = Column(Integer, nullable=True)
     request_id = Column(String(80), nullable=False)
     product_id = Column(String(100), nullable=False, index=True)
     product_name = Column(String(160), nullable=False)
@@ -90,6 +117,37 @@ class StaticConfig:
         return "yaml", source, self.value
 
 
+def configured_studio():
+    return {
+        "schema_version": 2,
+        "studio": PRODUCTS._DEFAULT_STUDIO,
+        "recipes": [{
+            "id": "embroidered-hat",
+            "name": "Embroidered hat",
+            "description": "A structured cap mockup.",
+            "enabled": True,
+            "mode": "generate",
+            "prompt_version": "hat-v1",
+            "accepts_source_image": False,
+            "prompt": (
+                "Create a photoreal product mockup of the registered structured "
+                "cap while preserving its construction and materials."
+            ),
+        }],
+        "products": [{
+            "id": "embroidered-hat",
+            "title": "Performance Rope Cap",
+            "brand": "Ahead",
+            "category": "Headwear",
+            "description": "Structured performance cap.",
+            "thumbnail_url": "",
+            "recipe_id": "embroidered-hat",
+            "enabled": True,
+            "sort": 10,
+        }],
+    }
+
+
 class FakeProvider:
     def status(self):
         return {
@@ -128,11 +186,18 @@ class BlockingProvider(FakeProvider):
 
 
 class ProductPromptRegistryTests(unittest.TestCase):
-    def test_missing_managed_file_uses_bounded_diagnostic_recipe(self):
+    def test_missing_managed_file_keeps_diagnostic_private_and_catalog_empty(self):
         registry = PRODUCTS.ProductPromptRegistry(MissingConfig())
         products = registry.public_products()
-        self.assertEqual([row["id"] for row in products], ["diagnostic-cat"])
-        self.assertNotIn("prompt", products[0])
+        self.assertEqual(products, [])
+        diagnostic = registry.product(
+            "diagnostic-cat", allow_diagnostic=True
+        )
+        self.assertIn("prompt", diagnostic)
+        with self.assertRaises(PRODUCTS.ProductNotFound):
+            registry.product("diagnostic-cat")
+        self.assertEqual(registry.studio()["product_count"], 0)
+        self.assertEqual(registry.studio()["constraints"]["max_images"], 20)
         self.assertEqual(registry.status()["source"], "builtin")
 
     def test_invalid_managed_file_fails_closed(self):
@@ -165,7 +230,7 @@ class ProductPromptRegistryTests(unittest.TestCase):
         first_revision = registry.status()["revision"]
         config.value["products"][0]["prompt_version"] = "hat-v2"
         refreshed = registry.public_products()[0]
-        self.assertEqual(refreshed["prompt_version"], "hat-v2")
+        self.assertEqual(refreshed["recipe_version"], "hat-v2")
         self.assertNotEqual(registry.status()["revision"], first_revision)
 
 
@@ -181,6 +246,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.provider = FakeProvider()
         self.manager = PRODUCTS.ProductImageJobManager(
             engine=self.engine,
+            batch_model=ImageBatch,
             job_model=ImageJob,
             project_dir=ROOT,
             config_reader=MissingConfig(),
@@ -204,6 +270,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             request_id="request:cat:0001",
             product_id="diagnostic-cat",
             brief="Make the cat a cheerful orange tabby.",
+            allow_diagnostic=True,
         )
         completed = await self.manager.wait(first["job_id"])
         repeated = await self.manager.start(
@@ -212,6 +279,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             request_id="request:cat:0001",
             product_id="diagnostic-cat",
             brief="This different brief must not duplicate the request.",
+            allow_diagnostic=True,
         )
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(repeated["job_id"], first["job_id"])
@@ -240,6 +308,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             request_id="request:cat:0002",
             product_id="diagnostic-cat",
             brief="Create the test image.",
+            allow_diagnostic=True,
         )
         await self.manager.wait(queued["job_id"])
         with self.assertRaises(PRODUCTS.ProductJobNotFound):
@@ -255,6 +324,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         provider = BlockingProvider()
         manager = PRODUCTS.ProductImageJobManager(
             engine=self.engine,
+            batch_model=ImageBatch,
             job_model=ImageJob,
             project_dir=ROOT,
             config_reader=MissingConfig(),
@@ -267,6 +337,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             request_id="request:cat:0003",
             product_id="diagnostic-cat",
             brief="Create the cancellable test image.",
+            allow_diagnostic=True,
         )
         await asyncio.wait_for(provider.started.wait(), timeout=2)
         cancelled = await manager.cancel(
@@ -285,6 +356,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             request_id="request:cat:0005",
             product_id="diagnostic-cat",
             brief="Create the never-started test image.",
+            allow_diagnostic=True,
         )
         cancelled = await self.manager.cancel(
             owner_id="api_key:key-a", job_id=queued["job_id"]
@@ -300,6 +372,7 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
             request_id="request:cat:0004",
             product_id="diagnostic-cat",
             brief="Create another test image.",
+            allow_diagnostic=True,
         )
         await self.manager.wait(queued["job_id"])
         status = self.manager.status()
@@ -307,6 +380,106 @@ class ProductImageJobManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(status["provider"]["streaming"])
         self.assertEqual(status["jobs"]["completed"], 1)
         self.assertEqual(status["jobs"]["active"], 0)
+
+    async def test_batch_expands_persists_archives_and_is_idempotent(self):
+        manager = PRODUCTS.ProductImageJobManager(
+            engine=self.engine,
+            batch_model=ImageBatch,
+            job_model=ImageJob,
+            project_dir=ROOT,
+            config_reader=StaticConfig(configured_studio()),
+            provider=FakeProvider(),
+            storage_root=self.root / "batch-artifacts",
+        )
+        queued = await manager.start_batch(
+            owner_id="api_key:key-a",
+            owner_credential_id="key-a",
+            request_id="request:batch:0001",
+            name="David spring hats",
+            product_ids=["embroidered-hat"],
+            scene_id="studio",
+            aspect_id="square",
+            lighting_id="soft",
+            variations=2,
+        )
+        for job in queued["jobs"]:
+            await manager.wait(job["job_id"])
+        completed = manager.get_batch(
+            owner_id="api_key:key-a", batch_id=queued["batch_id"]
+        )
+        repeated = await manager.start_batch(
+            owner_id="api_key:key-a",
+            owner_credential_id="key-a",
+            request_id="request:batch:0001",
+            name="This name must not create another batch",
+            product_ids=["embroidered-hat"],
+            scene_id="fairway",
+            aspect_id="portrait",
+            lighting_id="dramatic",
+            variations=1,
+        )
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["progress"]["completed"], 2)
+        self.assertEqual(completed["progress"]["percent"], 100)
+        self.assertEqual(repeated["batch_id"], queued["batch_id"])
+        self.assertEqual(
+            [job["variation_index"] for job in completed["jobs"]], [0, 1]
+        )
+        archive, media_type, filename = manager.archive_path(
+            owner_id="api_key:key-a", batch_id=queued["batch_id"]
+        )
+        self.assertEqual(media_type, "application/zip")
+        self.assertEqual(filename, "David-spring-hats.zip")
+        with zipfile.ZipFile(archive) as bundle:
+            self.assertEqual(len(bundle.namelist()), 2)
+            self.assertTrue(all(name.endswith(".png") for name in bundle.namelist()))
+        with self.assertRaises(PRODUCTS.ProductJobNotFound):
+            manager.get_batch(
+                owner_id="api_key:key-b", batch_id=queued["batch_id"]
+            )
+
+    async def test_active_batch_can_be_cancelled_then_deleted(self):
+        provider = BlockingProvider()
+        manager = PRODUCTS.ProductImageJobManager(
+            engine=self.engine,
+            batch_model=ImageBatch,
+            job_model=ImageJob,
+            project_dir=ROOT,
+            config_reader=StaticConfig(configured_studio()),
+            provider=provider,
+            storage_root=self.root / "cancelled-batch-artifacts",
+        )
+        queued = await manager.start_batch(
+            owner_id="api_key:key-a",
+            owner_credential_id="key-a",
+            request_id="request:batch:0002",
+            name="Cancelled batch",
+            product_ids=["embroidered-hat"],
+            scene_id="desk",
+            aspect_id="landscape",
+            lighting_id="golden",
+            variations=2,
+        )
+        await asyncio.wait_for(provider.started.wait(), timeout=2)
+        with self.assertRaises(PRODUCTS.ProductJobConflict):
+            manager.delete_batch(
+                owner_id="api_key:key-a", batch_id=queued["batch_id"]
+            )
+        cancelled = await manager.cancel_batch(
+            owner_id="api_key:key-a", batch_id=queued["batch_id"]
+        )
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertEqual(cancelled["progress"]["cancelled"], 2)
+        deleted = manager.delete_batch(
+            owner_id="api_key:key-a", batch_id=queued["batch_id"]
+        )
+        self.assertEqual(deleted, {
+            "deleted": True, "batch_id": queued["batch_id"],
+        })
+        with self.assertRaises(PRODUCTS.ProductJobNotFound):
+            manager.get_batch(
+                owner_id="api_key:key-a", batch_id=queued["batch_id"]
+            )
 
 
 class CodexLocalProviderTests(unittest.IsolatedAsyncioTestCase):
@@ -381,6 +554,12 @@ class ProductGenerationRegistrationTests(unittest.TestCase):
             "POST /client/product-generation/jobs", docs
         )
         self.assertIn(
+            "POST /client/product-generation/batches", docs
+        )
+        self.assertIn(
+            "DELETE /client/product-generation/batches/{batch_id}", docs
+        )
+        self.assertIn(
             "POST /product-generation/admin/test", docs
         )
         self.assertIn(
@@ -389,7 +568,11 @@ class ProductGenerationRegistrationTests(unittest.TestCase):
         self.assertIn(
             '@router.get("/product-generation/admin/jobs")', routes
         )
+        self.assertIn(
+            '@router.get("/product-generation/admin/batches")', routes
+        )
         self.assertIn('"product-image-jobs"', blocks)
+        self.assertIn('"product-image-batches"', blocks)
         self.assertIn("product-image-test", blocks)
         registrations = {
             item.get("id"): item for item in package.get("tests", [])

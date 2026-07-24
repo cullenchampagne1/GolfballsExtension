@@ -94,6 +94,7 @@
         "react-dist/content/image-preview.js",
         "react-dist/content/submit-proof.js",
         "react-dist/content/gift-catalog.js",
+        "react-dist/content/mockup-studio.js",
         "src/vanilla/modals/charge-modal.js",
         "src/vanilla/modals/order-edit-modal.js",
         "src/vanilla/page-utils.js",

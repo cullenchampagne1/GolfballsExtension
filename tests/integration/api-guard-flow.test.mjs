@@ -3,7 +3,7 @@
  * GBInstallationAuth.apiFetch.
  *
  * Real installation-auth.js in a vm sandbox with a pre-enrolled credential.
- * Happy GET/POST calls must carry the installation Bearer key with
+ * Happy GET/POST and the one batch DELETE call must carry the installation Bearer key with
  * credentials:'omit'; anything off the fixed origin/path/method surface must
  * be rejected before fetch() is ever invoked.
  */
@@ -238,7 +238,11 @@ describe('extension API guard', () => {
   it('rejects disallowed methods and GET requests that carry a body', async () => {
     const { client, requests } = makeSandbox();
     await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'PUT' }), /Blocked extension API method/);
-    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'DELETE' }), /Blocked extension API method/);
+    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'DELETE' }), /Blocked non-extension API path/);
+    await assert.rejects(
+      client.apiFetch(`${CLIENT_BASE}/product-generation/batches/not-a-batch`, { method: 'DELETE' }),
+      /Blocked non-extension API path/,
+    );
     await assert.rejects(
       client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'GET', body: '{"x":1}' }),
       /GET extension API requests cannot contain a body/,
@@ -248,5 +252,15 @@ describe('extension API guard', () => {
       /Extension API body must be a bounded serialized string/,
     );
     assert.equal(requests.length, 0, 'blocked methods must never reach fetch');
+  });
+
+  it('allows DELETE only for a concrete product-generation batch id', async () => {
+    const { client, requests } = makeSandbox();
+    const batchPath = `${CLIENT_BASE}/product-generation/batches/batch_${'a'.repeat(32)}`;
+    const response = await client.apiFetch(batchPath, { method: 'DELETE' });
+    assert.equal(response.status, 200);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].method, 'DELETE');
+    assert.equal(requests[0].options.headers.get('Authorization'), `Bearer ${API_KEY}`);
   });
 });

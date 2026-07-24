@@ -846,6 +846,20 @@ function gbHelpReply(promise, sendResponse, fallback) {
     }));
 }
 
+const GB_PRODUCT_BATCH_ID_RE = /^batch_[a-f0-9]{32}$/;
+const GB_PRODUCT_REQUEST_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/;
+const GB_PRODUCT_OPTION_ID_RE = /^[a-z0-9][a-z0-9._-]{0,99}$/;
+
+function gbProductGenerationReply(promise, sendResponse, fallback) {
+  Promise.resolve(promise)
+    .then((payload) => sendResponse({ ok: true, payload }))
+    .catch((error) => sendResponse({
+      ok: false,
+      error: error?.message || fallback,
+      status: Number(error?.status || 0),
+    }));
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   /* Only service messages from this extension's own contexts (content
@@ -885,6 +899,105 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         ok: false,
         error: error?.message || 'Unable to register extension identity',
       }));
+    return true;
+  }
+
+  // ── Installation-authenticated Product Mockup Studio ──────────────────
+  // The content modal receives only bounded JSON. Its installation credential
+  // remains in this worker, just like Help Companion and share workflows.
+  if (msg.action === 'productGenerationBootstrap') {
+    gbProductGenerationReply(Promise.all([
+      GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-generation/studio`),
+      GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-generation/products`),
+      GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/product-generation/batches`),
+    ]).then(([studio, products, batches]) => ({
+      studio,
+      products: Array.isArray(products?.products) ? products.products : [],
+      batches: Array.isArray(batches?.batches) ? batches.batches : [],
+    })), sendResponse, 'Unable to load Product Mockup Studio');
+    return true;
+  }
+  if (msg.action === 'productGenerationListBatches') {
+    gbProductGenerationReply(
+      GBInstallationAuth.apiJson(
+        `${GBInstallationAuth.CLIENT_BASE}/product-generation/batches`,
+      ),
+      sendResponse,
+      'Unable to load mockup batches',
+    );
+    return true;
+  }
+  if (msg.action === 'productGenerationCreateBatch') {
+    const requestId = String(msg.requestId || '').trim();
+    const name = String(msg.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    const productIds = Array.isArray(msg.productIds)
+      ? [...new Set(msg.productIds.map((value) => String(value || '').trim().toLowerCase()))]
+      : [];
+    const sceneId = String(msg.sceneId || '').trim().toLowerCase();
+    const aspectId = String(msg.aspectId || '').trim().toLowerCase();
+    const lightingId = String(msg.lightingId || '').trim().toLowerCase();
+    const variations = Number(msg.variations);
+    const brief = String(msg.brief || '').trim().slice(0, 2_000);
+    if (
+      !GB_PRODUCT_REQUEST_ID_RE.test(requestId)
+      || productIds.length < 1 || productIds.length > 10
+      || productIds.some((value) => !GB_PRODUCT_OPTION_ID_RE.test(value))
+      || !GB_PRODUCT_OPTION_ID_RE.test(sceneId)
+      || !GB_PRODUCT_OPTION_ID_RE.test(aspectId)
+      || !GB_PRODUCT_OPTION_ID_RE.test(lightingId)
+      || !Number.isInteger(variations) || variations < 1 || variations > 8
+    ) {
+      sendResponse({ ok: false, error: 'Invalid product mockup batch' });
+      return true;
+    }
+    gbProductGenerationReply(
+      GBInstallationAuth.apiJson(
+        `${GBInstallationAuth.CLIENT_BASE}/product-generation/batches`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            request_id: requestId,
+            name: name || 'Mockup batch',
+            product_ids: productIds,
+            scene_id: sceneId,
+            aspect_id: aspectId,
+            lighting_id: lightingId,
+            variations,
+            brief,
+          }),
+        },
+      ),
+      sendResponse,
+      'Unable to create the mockup batch',
+    );
+    return true;
+  }
+  if ([
+    'productGenerationGetBatch',
+    'productGenerationCancelBatch',
+    'productGenerationDeleteBatch',
+  ].includes(msg.action)) {
+    const batchId = String(msg.batchId || '').trim();
+    if (!GB_PRODUCT_BATCH_ID_RE.test(batchId)) {
+      sendResponse({ ok: false, error: 'Invalid product mockup batch' });
+      return true;
+    }
+    const base = (
+      `${GBInstallationAuth.CLIENT_BASE}/product-generation/batches/${batchId}`
+    );
+    const path = msg.action === 'productGenerationCancelBatch'
+      ? `${base}/cancel` : base;
+    const method = msg.action === 'productGenerationCancelBatch'
+      ? 'POST' : msg.action === 'productGenerationDeleteBatch' ? 'DELETE' : 'GET';
+    gbProductGenerationReply(
+      GBInstallationAuth.apiJson(path, { method }),
+      sendResponse,
+      msg.action === 'productGenerationDeleteBatch'
+        ? 'Unable to delete the mockup batch'
+        : msg.action === 'productGenerationCancelBatch'
+          ? 'Unable to cancel the mockup batch'
+          : 'Unable to load the mockup batch',
+    );
     return true;
   }
 

@@ -36,6 +36,7 @@ export const FEATURE_DEFAULTS = {
   // ── Features that previously had no flag (now toggleable) ──
   actionsShelfEnabled:      true,   // the bottom-right quick-actions shelf itself
   giftCatalogEnabled:       true,   // Gifting Catalog (+ Customize + Monogram)
+  mockupStudioEnabled:      true,   // AI product mockup batches
   callLogEnabled:           true,   // Call Log modal + Call/Log-call shelf actions
   quickTaskEnabled:         true,   // Quick Task modal + shelf action
   crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
@@ -95,6 +96,7 @@ export const FEATURE_FLAGS = [
   // ── Tools ──
   { key: 'imagePreviewEnabled', section: 'Tools', name: 'Image Viewer',         desc: 'View / extract logo images + the 3D ball preview.', icon: 'eye' },
   { key: 'giftCatalogEnabled',  section: 'Tools', name: 'Gifting Catalog',      desc: 'Gifting catalog, customization, and monograms.',    icon: 'card' },
+  { key: 'mockupStudioEnabled', section: 'Tools', name: 'Mockup Studio',        desc: 'Generate product mockups in durable image batches.', icon: 'eye' },
   { key: 'actionsShelfEnabled', section: 'Tools', name: 'Quick Actions Shelf',  desc: 'Floating bottom-right quick-actions shelf (Shift×2).', icon: 'bolt' },
 ];
 

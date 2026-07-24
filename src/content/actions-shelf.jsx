@@ -696,6 +696,22 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
         },
       },
     },
+    {
+      flag: 'mockupStudioEnabled',
+      def: {
+        id: 'gb-open-mockup-studio',
+        label: 'Mockup Studio',
+        icon: <I.sparkle size={13} />,
+        hint: 'Generate product mockups in durable batches',
+        handler: () => {
+          if (typeof window.__gbOpenMockupStudio === 'function') {
+            window.__gbOpenMockupStudio();
+          } else {
+            window.__gbToast?.error?.('Mockup Studio not loaded on this page', { duration: 2400 });
+          }
+        },
+      },
+    },
   ];
   const _alwaysUnsubs = new Map(); // key → unsub fn
   function applyAlwaysActions(flags) {

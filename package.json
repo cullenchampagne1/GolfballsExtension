@@ -78,6 +78,10 @@
       "file": "tests/unit/quickOrderNote.test.mjs"
     },
     {
+      "name": "modal \u00b7 product mockup studio client contract",
+      "file": "tests/unit/productGenerationClient.test.mjs"
+    },
+    {
       "name": "modal \u00b7 order-date calendar relay",
       "file": "tests/unit/submitOrderDates.test.mjs"
     },

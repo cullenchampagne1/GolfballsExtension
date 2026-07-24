@@ -71,6 +71,13 @@ const RUNTIME = [
   { name: 'product-store:get',      in: 'background.js',        literal: '/product-stores/${',                   method: 'get',  route: '/client/product-stores/{store_id}' },
   { name: 'product-store:revoke',   in: 'background.js',        literal: '/revoke',                              method: 'post', route: '/client/product-stores/{store_id}/revoke' },
   { name: 'email-exchange-flow',    in: 'background.js',        literal: '/email-exchange-flow',                 method: 'get',  route: '/client/email-exchange-flow' },
+  { name: 'mockups:studio',         in: 'background.js',        literal: '/product-generation/studio',           method: 'get',    route: '/client/product-generation/studio' },
+  { name: 'mockups:products',       in: 'background.js',        literal: '/product-generation/products',         method: 'get',    route: '/client/product-generation/products' },
+  { name: 'mockups:batches:list',   in: 'background.js',        literal: '/product-generation/batches',          method: 'get',    route: '/client/product-generation/batches' },
+  { name: 'mockups:batches:create', in: 'background.js',        literal: '/product-generation/batches',          method: 'post',   route: '/client/product-generation/batches' },
+  { name: 'mockups:batch:read',     in: 'background.js',        literal: '/product-generation/batches/${',       method: 'get',    route: '/client/product-generation/batches/{batch_id}' },
+  { name: 'mockups:batch:cancel',   in: 'background.js',        literal: '/cancel',                              method: 'post',   route: '/client/product-generation/batches/{batch_id}/cancel' },
+  { name: 'mockups:batch:delete',   in: 'background.js',        literal: 'productGenerationDeleteBatch',         method: 'delete', route: '/client/product-generation/batches/{batch_id}' },
   { name: 'assistant:health',       in: 'help-assistant.js',    literal: '/health',                              method: 'get',  route: '/assistant/health' },
 ];
 
@@ -146,13 +153,15 @@ describe('backend contract · scoped email-relay service', () => {
 });
 
 describe('backend contract · apiFetch security guard', () => {
-  it('confines requests to the API origin and project client path, GET/POST only', () => {
+  it('confines requests to the API origin and project client path with one narrow DELETE route', () => {
     assert.ok(installationAuth.includes('url.pathname.startsWith(`${CLIENT_BASE}/`)'),
       'apiFetch must confine product requests to the project client path prefix');
     assert.ok(/url\.origin !== API_ORIGIN/.test(installationAuth),
       'apiFetch must confine requests to the API origin');
     assert.ok(/\['GET', 'POST'\]\.includes\(method\)/.test(installationAuth),
-      'apiFetch must allow only GET/POST methods');
+      'ordinary client routes must allow only GET/POST methods');
+    assert.ok(installationAuth.includes('/product-generation/batches/batch_[a-f0-9]{32}$'),
+      'DELETE must be confined to a concrete product-generation batch id');
     assert.ok(installationAuth.includes("const ENROLLMENT_URL = `${API_ORIGIN}/auth/extension-installation`"),
       'ENROLLMENT_URL must resolve against the API origin');
   });

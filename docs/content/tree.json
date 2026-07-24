@@ -62,6 +62,7 @@
           "icon": "card",
           "items": [
             { "article": "gift-catalog" },
+            { "article": "product-mockup-studio" },
             { "article": "customizing-item" },
             { "article": "gift-sets" },
             { "article": "proposal-panel" },
