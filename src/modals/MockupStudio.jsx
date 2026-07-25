@@ -3,7 +3,9 @@ import React, {
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 
-import { Btn, IconBtn, Input } from '../ui/index.js';
+import {
+  Btn, IconBtn, Input, ModalHeader, ModalFooter,
+} from '../ui/index.js';
 import {
   ZOOM_MAX, ZOOM_MIN, ZOOM_BUTTON_STEP, framePoint, wheelZoom, zoomToPoint,
 } from '../lib/imageZoom.js';
@@ -299,7 +301,8 @@ function BatchTray({
       exit={{ opacity: 0, y: -5, scale: 0.98 }}
       transition={{ duration: 0.17 }}
       style={{
-        position: 'absolute', top: 52, right: 48, zIndex: 30, width: 360,
+        position: 'absolute', top: 'calc(100% - 4px)', right: 42,
+        zIndex: 30, width: 360,
         maxHeight: 500, display: 'flex', flexDirection: 'column',
         background: 'var(--gb-surface-float)',
         border: '1px solid var(--gb-border-default)',
@@ -327,7 +330,13 @@ function BatchTray({
         >
           View all
         </Btn>
-        <IconBtn size="xs" icon={<I.close />} onClick={onClose} />
+        <IconBtn
+          size="sm"
+          icon={<I.close />}
+          title="Close batch menu"
+          aria-label="Close batch menu"
+          onClick={onClose}
+        />
       </div>
       <div className="gb-ms-scroll" style={{ overflowY: 'auto', padding: 7 }}>
         {batches.length === 0 ? (
@@ -1256,61 +1265,29 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
         display: 'flex', flexDirection: 'column',
       }}
     >
+      <ModalHeader
+        icon={active ? (
+          <span style={{
+            width: 14, height: 14, borderRadius: '50%',
+            border: '2px solid var(--gb-brand-tint-border)',
+            borderTopColor: 'var(--gb-brand-label)',
+            animation: 'gb-ms-spin .7s linear infinite',
+          }}
+          />
+        ) : batch.status === 'completed' ? <I.check /> : <I.alert />}
+        title={batch.name || 'Mockup gallery'}
+        subtitle={[batch.status_message, formatWhen(batch.created_at)]
+          .filter(Boolean).join(' · ')}
+        right={<StatusPill status={batch.status} />}
+        onClose={onBack}
+      />
       <div style={{
-        padding: '13px 16px 12px',
+        padding: '9px 12px',
+        display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 7,
+        flexShrink: 0,
+        background: 'var(--gb-surface-1)',
         borderBottom: '1px solid var(--gb-border-subtle)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <div style={{
-            width: 38, height: 38, flexShrink: 0,
-            borderRadius: 'var(--gb-r-md)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: statusTone(batch.status)[0],
-            border: `1px solid ${statusTone(batch.status)[2]}`,
-            color: statusTone(batch.status)[1],
-          }}>
-            {active ? (
-              <span style={{
-                width: 18, height: 18, borderRadius: '50%',
-                border: '2.5px solid var(--gb-brand-tint-border)',
-                borderTopColor: 'var(--gb-brand-label)',
-                animation: 'gb-ms-spin .7s linear infinite',
-              }}
-              />
-            ) : batch.status === 'completed'
-              ? <I.check size={18} /> : <I.alert size={18} />}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 14, fontWeight: 750, color: 'var(--gb-text-primary)',
-            }}>
-              <span style={{
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {batch.name}
-              </span>
-              <StatusPill status={batch.status} />
-            </div>
-            <div style={{
-              marginTop: 3, fontSize: 10.5, color: 'var(--gb-text-muted)',
-            }}>
-              {[batch.status_message, formatWhen(batch.created_at)]
-                .filter(Boolean).join(' · ')}
-            </div>
-          </div>
-          <IconBtn
-            size="md"
-            variant="ghost"
-            title="Close batch details"
-            icon={<I.close />}
-            onClick={onBack}
-          />
-        </div>
-        <div style={{
-          marginTop: 11, display: 'flex', alignItems: 'stretch',
-          flexWrap: 'wrap', gap: 7,
-        }}>
           <BatchStat label="Ready" value={progress.completed || 0} tone="var(--gb-success-fg)" />
           <BatchStat label="Generating" value={progress.running || 0} tone="var(--gb-brand-label)" />
           <BatchStat label="Waiting" value={progress.queued || 0} tone="var(--gb-warning-fg)" />
@@ -1336,7 +1313,6 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             </div>
             <ProgressBar value={progress.percent || 0} status={batch.status} />
           </div>
-        </div>
       </div>
       {/* Enlarging REPLACES the grid in place rather than floating another
           layer over it. The batch header and footer stay put, so the stack
@@ -1366,7 +1342,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             style={{
               flex: 1, minHeight: 0, overflowY: 'auto', padding: 14,
-              background: 'var(--gb-surface-canvas)',
+              background: 'var(--gb-surface-2)',
             }}
           >
             {batch.loading ? (
@@ -1409,12 +1385,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
           </motion.div>
         )}
       </AnimatePresence>
-      <div style={{
-        minHeight: 48, padding: '8px 12px',
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: 'var(--gb-fill-inverse-strong)',
-        borderTop: '1px solid var(--gb-border-subtle)',
-      }}>
+      <ModalFooter style={{ minHeight: 50, padding: '9px 12px' }}>
         {previewJob && (
           <Btn
             variant="secondary"
@@ -1463,7 +1434,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
             Delete
           </Btn>
         )}
-      </div>
+      </ModalFooter>
     </motion.div>
   );
 }
@@ -1482,11 +1453,11 @@ function BatchModal({
         if (event.target === event.currentTarget) onClose();
       }}
       style={{
-        position: 'absolute', inset: 0, zIndex: 45, padding: 28,
+        position: 'absolute', inset: 0, zIndex: 45, padding: 20,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'color-mix(in srgb, var(--gb-backdrop) 78%, transparent)',
-        backdropFilter: 'blur(7px)',
-        WebkitBackdropFilter: 'blur(7px)',
+        background: 'var(--gb-overlay-strong)',
+        backdropFilter: 'var(--gb-blur-subtle)',
+        WebkitBackdropFilter: 'blur(4px)',
       }}
     >
       <motion.div
@@ -1495,12 +1466,12 @@ function BatchModal({
         exit={{ opacity: 0, scale: 0.97, y: 9 }}
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         style={{
-          width: 'min(900px, 100%)', height: 'min(650px, 100%)',
+          width: 'min(1000px, 100%)', height: 'min(680px, 100%)',
           minHeight: 0, display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
-          background: 'var(--gb-surface-float)',
+          background: 'var(--gb-surface-canvas)',
           border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-xl)',
+          borderRadius: 'var(--gb-r-lg)',
           boxShadow: 'var(--gb-shadow-modal)',
         }}
       >
@@ -1931,9 +1902,9 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
       style={{
         position: 'fixed', inset: 0, zIndex: 999990, padding: 24,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--gb-backdrop)',
-        backdropFilter: 'var(--gb-backdrop-blur)',
-        WebkitBackdropFilter: 'var(--gb-backdrop-blur)',
+        background: 'var(--gb-overlay-strong)',
+        backdropFilter: 'var(--gb-blur-subtle)',
+        WebkitBackdropFilter: 'blur(4px)',
       }}
     >
       <motion.div
@@ -1954,46 +1925,31 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
           fontFamily: 'var(--gb-font-sans)',
           background: 'var(--gb-surface-canvas)',
           border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-xl)',
+          borderRadius: 'var(--gb-r-lg)',
           boxShadow: 'var(--gb-shadow-modal)',
         }}
       >
-        <div style={{
-          position: 'relative', padding: '14px 16px',
-          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
-          background: 'var(--gb-fill-inverse-strong)',
-          borderBottom: '1px solid var(--gb-border-subtle)',
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 'var(--gb-r-md)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--gb-brand-tint-medium)',
-            border: '1px solid var(--gb-brand-tint-border)',
-            color: 'var(--gb-brand-label)',
-          }}>
-            <Camera size={17} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
-              Product Mockup Studio
-            </div>
-            <div style={{ marginTop: 2, fontSize: 11, color: 'var(--gb-text-muted)' }}>
-              Config-driven product mockups · {products.length} products available
-            </div>
-          </div>
-          <span ref={trayButtonRef} style={{ display: 'inline-flex' }}>
-            <Btn
-              size="md"
-              variant={trayOpen ? 'tinted' : 'secondary'}
-              icon={<Stack />}
-              badge={batches.length || null}
-              badgePulse={hasActive}
-              onClick={() => setTrayOpen((value) => !value)}
-            >
-              Batches
-            </Btn>
-          </span>
-          <IconBtn size="md" icon={<I.close />} onClick={requestClose} />
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <ModalHeader
+            icon={<Camera />}
+            title="Product Mockup Studio"
+            subtitle={`Config-driven product mockups · ${products.length} products available`}
+            right={(
+              <span ref={trayButtonRef} style={{ display: 'inline-flex' }}>
+                <Btn
+                  size="sm"
+                  variant={trayOpen ? 'tinted' : 'secondary'}
+                  icon={<Stack />}
+                  badge={batches.length || null}
+                  badgePulse={hasActive}
+                  onClick={() => setTrayOpen((value) => !value)}
+                >
+                  Batches
+                </Btn>
+              </span>
+            )}
+            onClose={requestClose}
+          />
           <AnimatePresence>
             {trayOpen && (
               <BatchTray

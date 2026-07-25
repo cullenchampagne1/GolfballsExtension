@@ -94,6 +94,14 @@
       "file": "tests/unit/notificationsStore.test.mjs"
     },
     {
+      "name": "ui \u00b7 notification center stable filtering",
+      "file": "tests/unit/notificationsPresentation.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 mockup gallery modal parity",
+      "file": "tests/unit/mockupStudioPresentation.test.mjs"
+    },
+    {
       "name": "flow \u00b7 shared extension action language",
       "file": "tests/unit/actionLanguage.test.mjs"
     },

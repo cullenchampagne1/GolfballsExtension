@@ -3,7 +3,8 @@ import React, {
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, Input, Segmented, formatHumanDate, I,
+  FloatingPanel, ModalHeader, ModalFooter, EmptyState, Btn, IconBtn,
+  Input, Segmented, formatHumanDate, Icon, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
@@ -14,9 +15,15 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 const STORAGE_KEY = 'gbNotifications';
 const FILTERS = [
   { key: 'unread', label: 'Unread' },
-  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
   { key: 'dismissed', label: 'Archived' },
 ];
+const NotificationBell = (props) => (
+  <Icon {...props}>
+    <path d="M18 8a6 6 0 00-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+    <path d="M10 21h4" />
+  </Icon>
+);
 const hasChromeStorage = (() => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
   catch { return false; }
@@ -109,39 +116,76 @@ function FilterLabel({ text, count, active }) {
   );
 }
 
-function EmptyState({ filter }) {
+function NotificationEmptyState({ filter, searching }) {
+  if (searching) {
+    return (
+      <EmptyState
+        icon={<I.search size={19} />}
+        title="No matching notifications"
+        subtitle="Try a different title, message, or topic."
+        style={{ height: '100%', justifyContent: 'center', padding: '28px 24px' }}
+      />
+    );
+  }
   const copy = filter === 'dismissed'
     ? { title: 'Nothing archived', body: 'Dismissed notifications stay here for reference.' }
-    : filter === 'all'
+    : filter === 'active'
       ? { title: 'No notifications yet', body: 'Updates from your tools will appear here.' }
       : { title: 'You’re all caught up', body: 'New updates will appear here when they arrive.' };
   return (
+    <EmptyState
+      icon={filter === 'unread' ? <I.check size={20} /> : <I.alert size={19} />}
+      title={copy.title}
+      subtitle={copy.body}
+      style={{ height: '100%', justifyContent: 'center', padding: '28px 24px' }}
+    />
+  );
+}
+
+function NotificationSkeleton() {
+  return (
     <div style={{
-      minHeight: 290,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      padding: '44px 24px',
-      textAlign: 'center',
-    }}
-    >
-      <div style={{
-        width: 42,
-        height: 42,
-        borderRadius: 'var(--gb-r-md)',
-        display: 'grid',
-        placeItems: 'center',
-        color: 'var(--gb-brand-label)',
-        background: 'var(--gb-brand-tint-soft)',
-        border: '1px solid var(--gb-brand-tint-border)',
-      }}
-      >
-        <I.alert size={17} />
-      </div>
-      <strong style={{ color: 'var(--gb-text-primary)', fontSize: 13 }}>{copy.title}</strong>
-      <span style={{ color: 'var(--gb-text-tertiary)', fontSize: 11.5 }}>{copy.body}</span>
+      height: '100%', padding: 10, display: 'flex',
+      flexDirection: 'column', gap: 7,
+    }}>
+      {[0, 1, 2].map((index) => (
+        <motion.div
+          key={index}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0.45, 0.8, 0.45] }}
+          transition={{
+            duration: 1.35, repeat: Infinity, delay: index * 0.08,
+          }}
+          style={{
+            height: 76, padding: 10, display: 'flex', gap: 10,
+            borderRadius: 'var(--gb-r-md)',
+            background: 'var(--gb-surface-1)',
+            border: '1px solid var(--gb-border-subtle)',
+          }}
+        >
+          <span style={{
+            width: 28, height: 28, flexShrink: 0,
+            borderRadius: 'var(--gb-r-sm)',
+            background: 'var(--gb-fill-soft)',
+          }} />
+          <span style={{ flex: 1 }}>
+            <span style={{
+              display: 'block', width: `${52 + index * 9}%`, height: 8,
+              margin: '2px 0 10px', borderRadius: 999,
+              background: 'var(--gb-fill-soft)',
+            }} />
+            <span style={{
+              display: 'block', width: '84%', height: 7,
+              marginBottom: 6, borderRadius: 999,
+              background: 'var(--gb-fill-subtle)',
+            }} />
+            <span style={{
+              display: 'block', width: '58%', height: 7,
+              borderRadius: 999, background: 'var(--gb-fill-subtle)',
+            }} />
+          </span>
+        </motion.div>
+      ))}
     </div>
   );
 }
@@ -191,42 +235,6 @@ function LevelIcon({ level }) {
   );
 }
 
-function IconButton({
-  title, children, onClick, tone = 'neutral',
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      onClick={onClick}
-      style={{
-        width: 27,
-        height: 27,
-        display: 'grid',
-        placeItems: 'center',
-        borderRadius: 'var(--gb-r-sm)',
-        border: '1px solid transparent',
-        color: tone === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-        background: tone === 'brand' ? 'var(--gb-brand-tint-soft)' : 'transparent',
-        cursor: 'pointer',
-      }}
-      onMouseEnter={(event) => {
-        event.currentTarget.style.borderColor = tone === 'brand'
-          ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)';
-        if (tone !== 'brand') event.currentTarget.style.background = 'var(--gb-fill-subtle)';
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.borderColor = 'transparent';
-        event.currentTarget.style.background = tone === 'brand'
-          ? 'var(--gb-brand-tint-soft)' : 'transparent';
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 function NotificationRow({
   item, onOpen, onRead, onDismiss,
 }) {
@@ -252,6 +260,8 @@ function NotificationRow({
         border: `1px solid ${hovered ? 'var(--gb-border-default)' : 'var(--gb-border-subtle)'}`,
         background: unread ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
         opacity: archived ? 0.68 : 1,
+        boxShadow: hovered ? 'var(--gb-shadow-sm)' : 'none',
+        transition: 'background .15s, border-color .15s, box-shadow .15s, opacity .15s',
       }}
     >
       {unread && (
@@ -350,13 +360,23 @@ function NotificationRow({
         }}
         >
           {unread && (
-            <IconButton title="Mark read" onClick={() => onRead(item)}>
-              <I.check size={12} />
-            </IconButton>
+            <IconBtn
+              size="sm"
+              variant="ghost"
+              title="Mark read"
+              aria-label="Mark read"
+              icon={<I.check />}
+              onClick={() => onRead(item)}
+            />
           )}
-          <IconButton title="Archive" onClick={() => onDismiss(item)}>
-            <I.close size={11} />
-          </IconButton>
+          <IconBtn
+            size="sm"
+            variant="ghost"
+            title="Archive"
+            aria-label="Archive"
+            icon={<I.close />}
+            onClick={() => onDismiss(item)}
+          />
         </div>
       )}
     </motion.li>
@@ -438,7 +458,7 @@ export function Notifications({ onClosed, bindClose }) {
 
   const counts = useMemo(() => ({
     unread: items.filter((item) => item.status === 'unread').length,
-    all: items.length,
+    active: items.filter((item) => item.status !== 'dismissed').length,
     dismissed: items.filter((item) => item.status === 'dismissed').length,
   }), [items]);
 
@@ -446,7 +466,7 @@ export function Notifications({ onClosed, bindClose }) {
     const query = search.trim().toLowerCase();
     return items
       .filter((item) => {
-        if (filter === 'all') return item.status !== 'dismissed';
+        if (filter === 'active') return item.status !== 'dismissed';
         return item.status === filter;
       })
       .filter((item) => !query
@@ -464,17 +484,22 @@ export function Notifications({ onClosed, bindClose }) {
   return (
     <FloatingPanel
       width={580}
+      height={620}
       backdrop
       draggable={false}
       onClose={onClosed}
       bindClose={handleBindClose}
     >
-      <ModalHeader accent icon={<I.alert size={14} />} title="Notifications" subtitle={subtitle} />
+      <ModalHeader
+        icon={<NotificationBell />}
+        title="Notifications"
+        subtitle={subtitle}
+      />
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(250px, .9fr) minmax(230px, 1.1fr)',
         gap: 8,
-        padding: '11px 14px',
+        padding: '10px 12px',
         flexShrink: 0,
         background: 'var(--gb-surface-1)',
         borderBottom: '1px solid var(--gb-border-subtle)',
@@ -501,73 +526,99 @@ export function Notifications({ onClosed, bindClose }) {
           onChange={setSearch}
           placeholder="Search notifications…"
           leading={<I.search size={12} />}
+          trailing={search ? (
+            <IconBtn
+              size="xs"
+              variant="ghost"
+              title="Clear search"
+              aria-label="Clear search"
+              icon={<I.close />}
+              onClick={() => setSearch('')}
+              style={{ marginRight: -4 }}
+            />
+          ) : null}
         />
       </div>
       <div
-        className="gb-thin-scroll"
         style={{
-          minHeight: 320,
-          maxHeight: 'min(58vh, 500px)',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: 9,
+          flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden',
           background: 'var(--gb-surface-2)',
         }}
       >
-        <AnimatePresence mode="popLayout" initial={false}>
-          {loaded && visible.length === 0 && (
+        <AnimatePresence mode="wait" initial={false}>
+          {!loaded ? (
             <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              key="loading"
+              style={{ position: 'absolute', inset: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12 }}
             >
-              <EmptyState filter={filter} />
+              <NotificationSkeleton />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={filter}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.14 }}
+              className="gb-thin-scroll"
+              style={{
+                position: 'absolute', inset: 0,
+                overflowY: 'auto', overflowX: 'hidden', padding: 10,
+              }}
+            >
+              {visible.length === 0 ? (
+                <NotificationEmptyState
+                  filter={filter}
+                  searching={Boolean(search.trim())}
+                />
+              ) : (
+                <motion.ul
+                  layout
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 7,
+                    margin: 0,
+                    padding: 0,
+                    listStyle: 'none',
+                  }}
+                >
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {visible.map((item) => (
+                      <NotificationRow
+                        key={item.id}
+                        item={item}
+                        onOpen={runAction}
+                        onRead={(row) => update(row, 'read')}
+                        onDismiss={(row) => update(row, 'dismissed')}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </motion.ul>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
-        <motion.ul
-          layout
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            margin: 0,
-            padding: 0,
-            listStyle: 'none',
-          }}
-        >
-          <AnimatePresence initial={false} mode="popLayout">
-            {visible.map((item) => (
-              <NotificationRow
-                key={item.id}
-                item={item}
-                onOpen={runAction}
-                onRead={(row) => update(row, 'read')}
-                onDismiss={(row) => update(row, 'dismissed')}
-              />
-            ))}
-          </AnimatePresence>
-        </motion.ul>
       </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '8px 14px',
-        flexShrink: 0,
-        color: 'var(--gb-text-muted)',
-        background: 'var(--gb-surface-1)',
-        borderTop: '1px solid var(--gb-border-subtle)',
-        fontSize: 10.25,
-      }}
-      >
-        <I.check size={11} />
-        Read and archived updates remain available while you’re offline.
+      <ModalFooter style={{ padding: '9px 12px' }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          minWidth: 0, color: 'var(--gb-text-muted)', fontSize: 10.25,
+        }}>
+          <I.check size={11} />
+          {counts.active} active · {counts.dismissed} archived
+        </span>
         <span style={{ flex: 1 }} />
-        <Btn size="xs" variant="ghost" onClick={onClosed}>Close</Btn>
-      </div>
+        <Btn
+          size="sm"
+          variant="secondary"
+          onClick={() => closeRef.current?.()}
+        >
+          Done
+        </Btn>
+      </ModalFooter>
     </FloatingPanel>
   );
 }
