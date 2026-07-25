@@ -7,21 +7,22 @@ const source = await readFile(
   'utf8',
 );
 
-describe('mockup gallery modal presentation', () => {
-  it('uses the shared header and footer controls for studio and gallery chrome', () => {
-    assert.match(source, /title="Product Mockup Studio"/);
-    assert.match(source, /title=\{batch\.name \|\| 'Mockup gallery'\}/);
+describe('mockup gallery in-studio presentation', () => {
+  it('reuses the studio chrome and provides an obvious route back to products', () => {
+    assert.match(source, /title=\{currentBatch\?\.name \|\| 'Product Mockup Studio'\}/);
+    assert.match(source, />\s*Back to products\s*</);
     assert.match(source, /onClose=\{requestClose\}/);
-    assert.match(source, /onClose=\{onBack\}/);
+    assert.match(source, /onClick=\{closeCurrentBatch\}/);
     assert.match(source, /<ModalFooter style=\{\{ minHeight: 50/);
-    assert.doesNotMatch(source, /title="Close batch details"/);
+    assert.doesNotMatch(source, /function BatchModal/);
   });
 
-  it('gives the gallery a consistent centered-modal surface and four-tile room', () => {
-    assert.match(source, /width: 'min\(1000px, 100%\)'/);
-    assert.match(source, /height: 'min\(680px, 100%\)'/);
-    assert.match(source, /background: 'var\(--gb-overlay-strong\)'/);
-    assert.match(source, /borderRadius: 'var\(--gb-r-lg\)'/);
+  it('slides between product selection and the selected batch in the same content area', () => {
+    assert.match(source, /key=\{`batch:\$\{currentBatch\.batch_id\}`\}/);
+    assert.match(source, /initial=\{\{ opacity: 0, x: 28 \}\}/);
+    assert.match(source, /key="studio"[\s\S]*initial=\{\{ opacity: 0, x: -28 \}\}/);
+    assert.match(source, /<BatchView[\s\S]*batch=\{currentBatch\}/);
     assert.match(source, /background: 'var\(--gb-surface-2\)'/);
+    assert.doesNotMatch(source, /zIndex: 45/);
   });
 });

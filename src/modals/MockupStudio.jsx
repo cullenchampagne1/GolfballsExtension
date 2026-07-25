@@ -1215,7 +1215,7 @@ function ResultCard({ job, onOpen }) {
   );
 }
 
-function BatchView({ batch, onBack, onCancel, onDelete }) {
+function BatchView({ batch, onCancel, onDelete }) {
   const [previewJobId, setPreviewJobId] = useState('');
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadedCount, setDownloadedCount] = useState(0);
@@ -1255,32 +1255,12 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
   const total = progress.total || batch.job_count || 0;
   const issueCount = (progress.failed || 0) + (progress.cancelled || 0);
   return (
-    <motion.div
-      key={batch.batch_id}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
+    <div
       style={{
         flex: 1, minHeight: 0, position: 'relative',
         display: 'flex', flexDirection: 'column',
       }}
     >
-      <ModalHeader
-        icon={active ? (
-          <span style={{
-            width: 14, height: 14, borderRadius: '50%',
-            border: '2px solid var(--gb-brand-tint-border)',
-            borderTopColor: 'var(--gb-brand-label)',
-            animation: 'gb-ms-spin .7s linear infinite',
-          }}
-          />
-        ) : batch.status === 'completed' ? <I.check /> : <I.alert />}
-        title={batch.name || 'Mockup gallery'}
-        subtitle={[batch.status_message, formatWhen(batch.created_at)]
-          .filter(Boolean).join(' · ')}
-        right={<StatusPill status={batch.status} />}
-        onClose={onBack}
-      />
       <div style={{
         padding: '9px 12px',
         display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 7,
@@ -1435,54 +1415,7 @@ function BatchView({ batch, onBack, onCancel, onDelete }) {
           </Btn>
         )}
       </ModalFooter>
-    </motion.div>
-  );
-}
-
-function BatchModal({
-  batch, onClose, onCancel, onDelete,
-}) {
-  return (
-    <motion.div
-      key={batch.batch_id}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-      style={{
-        position: 'absolute', inset: 0, zIndex: 45, padding: 20,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--gb-overlay-strong)',
-        backdropFilter: 'var(--gb-blur-subtle)',
-        WebkitBackdropFilter: 'blur(4px)',
-      }}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.955, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 9 }}
-        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        style={{
-          width: 'min(1000px, 100%)', height: 'min(680px, 100%)',
-          minHeight: 0, display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-          background: 'var(--gb-surface-canvas)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-lg)',
-          boxShadow: 'var(--gb-shadow-modal)',
-        }}
-      >
-        <BatchView
-          batch={batch}
-          onBack={onClose}
-          onCancel={onCancel}
-          onDelete={onDelete}
-        />
-      </motion.div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -1931,10 +1864,25 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
       >
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <ModalHeader
-            icon={<Camera />}
-            title="Product Mockup Studio"
-            subtitle={`Config-driven product mockups · ${products.length} products available`}
-            right={(
+            icon={currentBatch ? <Stack /> : <Camera />}
+            title={currentBatch?.name || 'Product Mockup Studio'}
+            subtitle={currentBatch
+              ? [currentBatch.status_message, formatWhen(currentBatch.created_at)]
+                .filter(Boolean).join(' · ')
+              : `Config-driven product mockups · ${products.length} products available`}
+            right={currentBatch ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Btn
+                  size="sm"
+                  variant="secondary"
+                  icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+                  onClick={closeCurrentBatch}
+                >
+                  Back to products
+                </Btn>
+                <StatusPill status={currentBatch.status} />
+              </span>
+            ) : (
               <span ref={trayButtonRef} style={{ display: 'inline-flex' }}>
                 <Btn
                   size="sm"
@@ -1951,7 +1899,7 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
             onClose={requestClose}
           />
           <AnimatePresence>
-            {trayOpen && (
+            {!currentBatch && trayOpen && (
               <BatchTray
                 batches={batches}
                 onOpen={(batchId) => {
@@ -1969,8 +1917,26 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
           </AnimatePresence>
         </div>
 
-        <AnimatePresence mode="wait">
-          {state === 'loading' ? (
+        <AnimatePresence initial={false} mode="wait">
+          {currentBatch ? (
+            <motion.div
+              key={`batch:${currentBatch.batch_id}`}
+              initial={{ opacity: 0, x: 28 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 28 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                flex: 1, minHeight: 0,
+                display: 'flex', flexDirection: 'column',
+              }}
+            >
+              <BatchView
+                batch={currentBatch}
+                onCancel={cancelBatch}
+                onDelete={deleteBatch}
+              />
+            </motion.div>
+          ) : state === 'loading' ? (
             <motion.div
               key="loading"
               initial={{ opacity: 0 }}
@@ -2026,9 +1992,10 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
           ) : (
             <motion.div
               key="studio"
-              initial={{ opacity: 0, y: 7 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
+              initial={{ opacity: 0, x: -28 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -28 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
               style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             >
               <TopLogoBar
@@ -2485,16 +2452,6 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                 </Btn>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {currentBatch && (
-            <BatchModal
-              batch={currentBatch}
-              onClose={closeCurrentBatch}
-              onCancel={cancelBatch}
-              onDelete={deleteBatch}
-            />
           )}
         </AnimatePresence>
         {__ADMIN__ && (
