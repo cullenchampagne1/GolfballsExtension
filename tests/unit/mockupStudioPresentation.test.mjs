@@ -22,6 +22,10 @@ const viewerSource = source.slice(
   source.indexOf('function FullResultViewer'),
   source.indexOf('function ResultCard'),
 );
+const artworkSource = source.slice(
+  source.indexOf('function ResultArtwork'),
+  source.indexOf('function BatchCollage'),
+);
 const batchViewSource = source.slice(
   source.indexOf('function BatchView'),
   source.indexOf('export function MockupStudio'),
@@ -113,5 +117,12 @@ describe('mockup gallery in-studio presentation', () => {
     assert.match(viewerSource, /saveResultAsset\(\s*asset,/);
     assert.doesNotMatch(viewerSource, /aspectRatio: '1 \/ 1'/);
     assert.doesNotMatch(viewerSource, /height: 'min\(100%, 620px\)'/);
+  });
+
+  it('gives gallery artwork the same masked checkerboard presentation', () => {
+    assert.match(artworkSource, /useCornerTransparentPreview\(asset\?\.dataUrl \|\| ''\)/);
+    assert.match(artworkSource, /PREVIEW_GRID/);
+    assert.match(artworkSource, /src=\{displayUrl\}/);
+    assert.doesNotMatch(artworkSource, /src=\{asset\.dataUrl\}/);
   });
 });

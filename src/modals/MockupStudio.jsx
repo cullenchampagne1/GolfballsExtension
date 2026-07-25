@@ -235,20 +235,23 @@ function ResultArtwork({
   job, compact = false, enabled = true,
 }) {
   const { asset, loading, error } = useResultAsset(job, enabled);
+  const displayUrl = useCornerTransparentPreview(asset?.dataUrl || '');
   const ready = job?.status === 'completed' && job?.result?.available;
   return (
     <div style={{
       width: '100%', height: '100%', position: 'relative',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden',
-      background: ready
-        ? 'var(--gb-fill-soft)' : 'var(--gb-fill-inverse-medium)',
+      ...(ready
+        ? PREVIEW_GRID
+        : { background: 'var(--gb-fill-inverse-medium)' }),
     }}>
       {asset?.dataUrl ? (
         <motion.img
+          key={`${job.job_id}:${displayUrl === asset.dataUrl ? 'original' : 'masked'}`}
           initial={{ opacity: 0, scale: 1.025 }}
           animate={{ opacity: 1, scale: 1 }}
-          src={asset.dataUrl}
+          src={displayUrl}
           alt=""
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
