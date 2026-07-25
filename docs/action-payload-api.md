@@ -26,6 +26,18 @@ Both callers already route through it. **Two gaps remain:**
    *which* contact," "apply a note to *which* order." This is the dimension the
    design must be built around, and it is what §4 adds.
 
+### Implementation status (live in source)
+
+| Increment | State | What shipped |
+|---|---|---|
+| **Phase 1** — parameterised open | ✅ shipped | `openParamRules.js` + planner/executor wiring; params ride in `options` as key=value; `crm_search {query,type}` runs the search, `task_list {filter,status,priority}` opens filtered, plus `image_preview`, `mockup_studio`, `gift_catalog`, `watch_list`, `margin_calc`. |
+| **Phase 2** — ambient composer verbs | ✅ shipped (3 of ~6) | `quick_task`, `call_log`, `quick_order_note` take a `subject` that prefills the shared composer for the current contact/order (resolved by the modal), opened auto‑composing; the rep submits in the native UI — that submit is the confirmation, no direct CRM write from the executor. |
+| **Phase 2** — direct‑execute verbs | ⏸ held | `find_phone`, `categorize_case`, `create_contact` need the "confirmation card that shows the resolved object" UI (§4.4/§4.5) and, for find_phone, extraction from the shelf. No composer to reuse. |
+| **Phase 3** — `commit_order_dates` (money) | ⏸ held | Not a clean composer‑open: the calendar only saves through the order‑iframe handshake (needs the scraped `calendarUrl`) and commits via an ASP.NET offset postback that can't be runtime‑verified here. Needs human validation + the §9 admin gate. |
+
+The compiled Solr‑`fq` `filter` for `crm_search` is in the schema but not yet
+consumed — a raw fq from a payload needs field/operator allowlisting first.
+
 **Near‑term scope (this revision).** Deliberately narrow, per the product
 decisions below:
 - **In:** state verbs; parameterised *open* (search/filter/view); `do` verbs that
