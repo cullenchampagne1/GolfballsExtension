@@ -2488,17 +2488,14 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                 ? `${batches.length} render batch${batches.length === 1 ? '' : 'es'} · full history`
                 : `Config-driven product mockups · ${products.length} products available`}
             right={currentBatch ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Btn
-                  size="sm"
-                  variant="secondary"
-                  icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
-                  onClick={closeCurrentBatch}
-                >
-                  {batchHistoryOpen ? 'Back to batches' : 'Back to products'}
-                </Btn>
-                <StatusPill status={currentBatch.status} />
-              </span>
+              <Btn
+                size="sm"
+                variant="secondary"
+                icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+                onClick={closeCurrentBatch}
+              >
+                {batchHistoryOpen ? 'Back to batches' : 'Back to products'}
+              </Btn>
             ) : batchHistoryOpen ? (
               <Btn
                 size="sm"

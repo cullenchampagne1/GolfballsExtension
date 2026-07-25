@@ -22,6 +22,14 @@ const batchViewSource = source.slice(
   source.indexOf('function BatchView'),
   source.indexOf('export function MockupStudio'),
 );
+const studioHeaderStart = source.indexOf(
+  '<ModalHeader',
+  source.indexOf('export function MockupStudio'),
+);
+const studioHeaderSource = source.slice(
+  studioHeaderStart,
+  source.indexOf('<AnimatePresence>', studioHeaderStart),
+);
 
 describe('mockup gallery in-studio presentation', () => {
   it('reuses the studio chrome and provides an obvious route back to products', () => {
@@ -32,6 +40,7 @@ describe('mockup gallery in-studio presentation', () => {
     assert.match(source, /onClick=\{closeCurrentBatch\}/);
     assert.match(source, /<ModalFooter style=\{\{ minHeight: 50/);
     assert.doesNotMatch(source, /function BatchModal/);
+    assert.doesNotMatch(studioHeaderSource, /StatusPill/);
   });
 
   it('slides between product selection and the selected batch in the same content area', () => {
