@@ -273,7 +273,7 @@ async function apiGetTaskContactId(id) {
   return String(t.contactID || 0);
 }
 
-export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
+export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial }) {
   const toast      = useToast();
   const draggable  = useDevSetting('taskList.draggable') ?? false;
   /* One global force-mock switch now (forceMockData) instead of a
@@ -348,6 +348,21 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   const [busyVersion, bumpBusy] = useState(0);
   const markBusy = (id) => { busyRowsRef.current.add(id); bumpBusy((n) => n + 1); };
   const clearBusy = (id) => { busyRowsRef.current.delete(id); bumpBusy((n) => n + 1); };
+
+  /* Pre-configured open (payload API): seed the filters from a friendly enum
+     onto the internal codes so "open my urgent tasks" lands filtered. The list
+     itself still loads on mount; this only sets which slice is shown. */
+  const appliedInitialRef = useRef(false);
+  useEffect(() => {
+    if (appliedInitialRef.current || !initial) return;
+    appliedInitialRef.current = true;
+    const statusCode = { new: '1', completed: '3', all: '0' }[initial.status];
+    const priorityCode = { high: '1', med: '2', low: '3', '': '' }[initial.priority];
+    if (statusCode) setStatusFilter(statusCode);
+    if (priorityCode !== undefined) setPriorityFilter(priorityCode);
+    if (initial.filter === 'urgent' || initial.filter === 'all') setDueFilter(initial.filter);
+    if (initial.query) setQuery(String(initial.query).trim());
+  }, [initial]);
 
   useEffect(() => { loadTaskTemplates().then(setTaskTpls).catch(() => setTaskTpls([])); }, []);
 

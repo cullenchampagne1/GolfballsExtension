@@ -22,10 +22,12 @@ if (!window.__gbTaskListModalLoaded) {
   ensureTheme();
 
   const HOST_ID = '__gb-tl';
-  window.__gbShowTaskListModal = function () {
+  // `initial` (payload API) pre-configures the filters: { filter, status,
+  // priority, query }. Absent for a plain user open.
+  window.__gbShowTaskListModal = function (initial) {
     mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
-        <TaskList onClosed={onClosed} bindClose={bindClose} />
+        <TaskList onClosed={onClosed} bindClose={bindClose} initial={initial} />
       </ToastHost>
     ));
   };

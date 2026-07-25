@@ -134,7 +134,7 @@ const rowToCampaignContact = (row, useMock) => {
   };
 };
 
-export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
+export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }) {
   const toast = useToast();
   const draggable = useDevSetting('crmSearch.draggable') ?? true;
   /* One global force-mock switch now (forceMockData) instead of a
@@ -726,6 +726,26 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     setActiveIdx(-1);
     if (v === '' && mode === 'server') setMode('indexed');
   };
+
+  /* Pre-configured open (payload API): seed the query/type and run the search
+     once, so "open CRM Search for Acme accounts" lands on results rather than an
+     empty box. runSearch takes explicit args, so we pass the initial values
+     directly and avoid a set-state timing race. The compiled-`filter` param is
+     deliberately not honoured yet — a raw Solr fq needs field/operator
+     allowlisting before it is trusted from a payload. */
+  const appliedInitialRef = useRef(false);
+  useEffect(() => {
+    if (appliedInitialRef.current || !initial) return;
+    appliedInitialRef.current = true;
+    const q = String(initial.query || '').trim();
+    const t = ['all', 'contact', 'account'].includes(initial.type) ? initial.type : 'all';
+    if (t !== 'all') setType(t);
+    if (q) {
+      setQuery(q);
+      setMode('server');
+      runSearch(q, qbFilter, t);
+    }
+  }, [initial, runSearch, qbFilter]);
   /* Keyboard nav inside the search input:
      - Tab from the input blurs the input AND moves the highlight to
        the first row. Blurring is intentional so the action shelf's

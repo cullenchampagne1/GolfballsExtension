@@ -30,10 +30,12 @@ if (!window.__gbCrmSearchModalLoaded) {
   ensureTheme();
 
   const HOST_ID = '__gb-csm';
-  window.__gbShowCrmSearchModal = function () {
+  // `initial` (payload API) pre-configures the modal: { query, type }. Absent
+  // for a plain user open, so the default is unchanged.
+  window.__gbShowCrmSearchModal = function (initial) {
     mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
-        <CRMSearch onClosed={onClosed} bindClose={bindClose} />
+        <CRMSearch onClosed={onClosed} bindClose={bindClose} initial={initial} />
       </ToastHost>
     ));
   };
