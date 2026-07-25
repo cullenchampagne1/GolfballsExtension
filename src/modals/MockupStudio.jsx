@@ -2219,7 +2219,11 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                               }
                             }}
                             style={{
-                            width: 22, height: 22, borderRadius: 'var(--gb-r-sm)',
+                            width: 22, height: 22, flexShrink: 0, marginRight: 5,
+                            borderRadius: 'var(--gb-r-sm)',
+                            // The box is shorter than the row, so it already has
+                            // ~15px of vertical breathing room; matching that on
+                            // the right stops it reading as jammed to the edge.
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             background: selectedProduct
                               ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)',
