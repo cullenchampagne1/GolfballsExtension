@@ -59,6 +59,7 @@ const LOAD_CATALOG_ADMIN = __ADMIN__
   : null;
 
 const ACTIVE = new Set(['queued', 'running']);
+const RECENT_BATCH_LIMIT = 3;
 // Gallery tiles are a constant size regardless of how many a batch holds.
 // The card is wider than its image band is tall, so a row of results reads as
 // a row rather than a column of portrait slabs.
@@ -291,8 +292,9 @@ function BatchCollage({ batch }) {
 }
 
 function BatchTray({
-  batches, onOpen, onCancel, onDelete, onClose, panelRef,
+  batches, onOpen, onViewAll, onCancel, onDelete, onClose, panelRef,
 }) {
+  const recentBatches = batches.slice(0, RECENT_BATCH_LIMIT);
   return (
     <motion.div
       ref={panelRef}
@@ -318,15 +320,16 @@ function BatchTray({
       }}>
         <Stack size={14} style={{ color: 'var(--gb-brand-label)' }} />
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
-          Render batches
+          Recent batches
         </span>
         <span style={{ flex: 1 }} />
         <Btn
           size="xs"
           variant="ghost"
-          icon={<Stack />}
-          disabled
-          title="Full batch history is coming soon"
+          icon={<I.history />}
+          badge={batches.length || null}
+          title="Browse every render batch"
+          onClick={onViewAll}
         >
           View all
         </Btn>
@@ -339,14 +342,14 @@ function BatchTray({
         />
       </div>
       <div className="gb-ms-scroll" style={{ overflowY: 'auto', padding: 7 }}>
-        {batches.length === 0 ? (
+        {recentBatches.length === 0 ? (
           <div style={{
             padding: '28px 18px', textAlign: 'center',
             color: 'var(--gb-text-muted)', fontSize: 11.5, lineHeight: 1.55,
           }}>
             No batches yet. Your render history will live here.
           </div>
-        ) : batches.map((batch) => {
+        ) : recentBatches.map((batch) => {
           const progress = batch.progress || {};
           const active = ACTIVE.has(batch.status);
           return (
@@ -1215,6 +1218,352 @@ function ResultCard({ job, onOpen }) {
   );
 }
 
+function BatchHistoryMetric({
+  icon, label, value, tone = 'var(--gb-text-primary)',
+}) {
+  return (
+    <div style={{
+      minWidth: 0, padding: '10px 12px',
+      display: 'flex', alignItems: 'center', gap: 9,
+      borderRadius: 'var(--gb-r-md)',
+      background: 'var(--gb-surface-float)',
+      border: '1px solid var(--gb-border-subtle)',
+      boxShadow: 'var(--gb-shadow-sm)',
+    }}>
+      <span style={{
+        width: 29, height: 29, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 'var(--gb-r-sm)',
+        color: tone, background: 'var(--gb-fill-subtle)',
+        border: '1px solid var(--gb-border-subtle)',
+      }}>
+        {icon}
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{
+          display: 'block', fontSize: 15, lineHeight: 1,
+          fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: tone,
+        }}>
+          {value}
+        </span>
+        <span style={{
+          display: 'block', marginTop: 4,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 8.5, fontWeight: 750, letterSpacing: 0.55,
+          textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+        }}>
+          {label}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function BatchHistoryCard({
+  batch, index, onOpen, onCancel, onDelete,
+}) {
+  const progress = batch.progress || {};
+  const active = ACTIVE.has(batch.status);
+  const total = progress.total || batch.job_count || 0;
+  const ready = progress.completed || 0;
+  const working = (progress.running || 0) + (progress.queued || 0);
+  const issues = (progress.failed || 0) + (progress.cancelled || 0);
+  const [toneBackground, toneColor, toneBorder] = statusTone(batch.status);
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.22, delay: Math.min(index, 8) * 0.025,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+      whileHover={{ y: -3 }}
+      style={{
+        minWidth: 0, overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+        borderRadius: 'var(--gb-r-lg)',
+        background: 'var(--gb-surface-1)',
+        border: '1px solid var(--gb-border-default)',
+        boxShadow: 'var(--gb-shadow-sm)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => onOpen(batch.batch_id)}
+        style={{
+          flex: 1, minWidth: 0, padding: 14,
+          display: 'flex', flexDirection: 'column', gap: 13,
+          cursor: 'pointer', textAlign: 'left',
+          color: 'inherit', fontFamily: 'inherit',
+          background: 'transparent', border: 0,
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+          <span style={{
+            width: 42, height: 42, flexShrink: 0, position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--gb-r-md)',
+            background: toneBackground, color: toneColor,
+            border: `1px solid ${toneBorder}`,
+          }}>
+            <span style={{
+              position: 'absolute', width: 20, height: 13,
+              top: 8, left: 9, borderRadius: 3,
+              border: `1px solid ${toneBorder}`, opacity: 0.48,
+              transform: 'rotate(-7deg)',
+            }}
+            />
+            <Stack size={18} style={{ position: 'relative' }} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span
+              title={batch.name || 'Mockup batch'}
+              style={{
+                display: 'block', overflow: 'hidden',
+                whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                fontSize: 12.5, fontWeight: 780,
+                color: 'var(--gb-text-primary)',
+              }}
+            >
+              {batch.name || 'Mockup batch'}
+            </span>
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: 5, marginTop: 4,
+              fontSize: 9.5, color: 'var(--gb-text-muted)',
+            }}>
+              <I.clock size={10} />
+              {formatWhen(batch.created_at) || 'Time unavailable'}
+            </span>
+          </span>
+          <StatusPill status={batch.status} />
+        </span>
+
+        <span style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          overflow: 'hidden', borderRadius: 'var(--gb-r-md)',
+          background: 'var(--gb-fill-subtle)',
+          border: '1px solid var(--gb-border-subtle)',
+        }}>
+          {[
+            ['Ready', ready, 'var(--gb-success-fg)'],
+            ['Working', working, 'var(--gb-brand-label)'],
+            ['Issues', issues, issues ? 'var(--gb-error-fg)' : 'var(--gb-text-ghost)'],
+          ].map(([label, value, color], metricIndex) => (
+            <span
+              key={label}
+              style={{
+                minWidth: 0, padding: '8px 9px',
+                borderLeft: metricIndex
+                  ? '1px solid var(--gb-border-subtle)' : 0,
+              }}
+            >
+              <span style={{
+                display: 'block', fontSize: 12, lineHeight: 1,
+                fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color,
+              }}>
+                {value}
+              </span>
+              <span style={{
+                display: 'block', marginTop: 4,
+                fontSize: 8, fontWeight: 700, letterSpacing: 0.45,
+                textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+              }}>
+                {label}
+              </span>
+            </span>
+          ))}
+        </span>
+
+        <span>
+          <span style={{
+            display: 'flex', alignItems: 'center',
+            marginBottom: 6, fontSize: 9, color: 'var(--gb-text-muted)',
+          }}>
+            <span>{batch.status_message || 'Render progress'}</span>
+            <span style={{
+              marginLeft: 'auto', paddingLeft: 8,
+              fontWeight: 750, fontFamily: 'var(--gb-font-mono)',
+              color: 'var(--gb-text-primary)',
+            }}>
+              {progress.processed || 0}/{total}
+            </span>
+          </span>
+          <ProgressBar value={progress.percent || 0} status={batch.status} />
+        </span>
+      </button>
+
+      <div style={{
+        minHeight: 39, padding: '6px 7px 6px 13px',
+        display: 'flex', alignItems: 'center', gap: 7,
+        background: 'var(--gb-fill-inverse-medium)',
+        borderTop: '1px solid var(--gb-border-subtle)',
+      }}>
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 9.5,
+          color: 'var(--gb-text-muted)',
+        }}>
+          {total} image{total === 1 ? '' : 's'}
+          {ready > 0 && ` · ${ready} ready`}
+        </span>
+        <Btn
+          size="xs"
+          variant="ghost"
+          icon={<I.chevr />}
+          onClick={() => onOpen(batch.batch_id)}
+        >
+          Open batch
+        </Btn>
+        <IconBtn
+          size="xs"
+          variant="ghost"
+          icon={active ? <I.close /> : <I.trash />}
+          title={active ? 'Cancel batch' : 'Delete batch'}
+          onClick={() => {
+            if (active) onCancel(batch.batch_id);
+            else onDelete(batch.batch_id);
+          }}
+        />
+      </div>
+    </motion.article>
+  );
+}
+
+function BatchHistoryView({
+  batches, onOpen, onBack, onCancel, onDelete,
+}) {
+  const activeCount = batches.filter((batch) => ACTIVE.has(batch.status)).length;
+  const readyCount = batches.filter((batch) => batch.status === 'completed').length;
+  const imageCount = batches.reduce(
+    (total, batch) => total + Number(
+      batch.progress?.total || batch.job_count || 0,
+    ),
+    0,
+  );
+  return (
+    <div style={{
+      flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+      background: 'var(--gb-surface-2)',
+    }}>
+      <div style={{
+        flexShrink: 0, padding: '14px 16px',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 0.72fr) minmax(0, 1.7fr)',
+        alignItems: 'stretch', gap: 12,
+        background: 'linear-gradient(135deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 58%, var(--gb-fill-inverse-medium))',
+        borderBottom: '1px solid var(--gb-border-subtle)',
+      }}>
+        <div style={{
+          minWidth: 0, padding: '4px 3px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        }}>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            fontSize: 9, fontWeight: 800, letterSpacing: 0.85,
+            textTransform: 'uppercase', color: 'var(--gb-brand-label)',
+          }}>
+            <I.history size={12} />
+            Render archive
+          </span>
+          <span style={{
+            marginTop: 7, maxWidth: 380,
+            fontSize: 11, lineHeight: 1.5, color: 'var(--gb-text-muted)',
+          }}>
+            Reopen a complete batch, monitor work in progress, or clean up
+            renders you no longer need.
+          </span>
+        </div>
+        <div style={{
+          minWidth: 0, display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 7,
+        }}>
+          <BatchHistoryMetric
+            icon={<Stack size={13} />}
+            label="Batches"
+            value={batches.length}
+          />
+          <BatchHistoryMetric
+            icon={<I.refresh size={13} />}
+            label="Rendering"
+            value={activeCount}
+            tone="var(--gb-brand-label)"
+          />
+          <BatchHistoryMetric
+            icon={<I.check size={13} />}
+            label="Complete"
+            value={readyCount}
+            tone="var(--gb-success-fg)"
+          />
+          <BatchHistoryMetric
+            icon={<Camera size={13} />}
+            label="Images"
+            value={imageCount}
+            tone="var(--gb-warning-fg)"
+          />
+        </div>
+      </div>
+
+      <div className="gb-ms-scroll" style={{
+        flex: 1, minHeight: 0, overflowY: 'auto', padding: 16,
+      }}>
+        {batches.length ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+            alignItems: 'stretch', gap: 12,
+          }}>
+            {batches.map((batch, index) => (
+              <BatchHistoryCard
+                key={batch.batch_id}
+                batch={batch}
+                index={index}
+                onOpen={onOpen}
+                onCancel={onCancel}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        ) : (
+          <div style={{
+            minHeight: 330, height: '100%',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            textAlign: 'center', color: 'var(--gb-text-muted)',
+          }}>
+            <span style={{
+              width: 54, height: 54,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 'var(--gb-r-lg)',
+              background: 'var(--gb-brand-tint-soft)',
+              border: '1px solid var(--gb-brand-tint-border)',
+              color: 'var(--gb-brand-label)',
+            }}>
+              <Stack size={22} />
+            </span>
+            <span style={{
+              marginTop: 13, fontSize: 14, fontWeight: 780,
+              color: 'var(--gb-text-primary)',
+            }}>
+              No render batches yet
+            </span>
+            <span style={{ marginTop: 5, maxWidth: 340, fontSize: 10.5, lineHeight: 1.5 }}>
+              Choose a product and upload customer artwork to create the first batch.
+            </span>
+            <Btn
+              size="sm"
+              variant="secondary"
+              icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+              onClick={onBack}
+              style={{ marginTop: 13 }}
+            >
+              Back to products
+            </Btn>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BatchView({ batch, onCancel, onDelete }) {
   const [previewJobId, setPreviewJobId] = useState('');
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -1437,6 +1786,7 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
   const [logo, setLogo] = useState(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
+  const [batchHistoryOpen, setBatchHistoryOpen] = useState(false);
   const [currentBatchId, setCurrentBatchId] = useState(
     initialBatchIdRef.current || null,
   );
@@ -1465,6 +1815,7 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
     if (closeRequestedRef.current) return;
     closeRequestedRef.current = true;
     setTrayOpen(false);
+    setBatchHistoryOpen(false);
     closeCurrentBatch();
     setVisible(false);
   }, [closeCurrentBatch]);
@@ -1494,7 +1845,9 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
     };
   }, [trayOpen]);
 
-  const openBatchById = useCallback(async (value) => {
+  const openBatchById = useCallback(async (
+    value, { returnToHistory = false } = {},
+  ) => {
     const batchId = normalizeProductGenerationBatchId(value);
     if (!batchId) return false;
     const request = ++openBatchRequestRef.current;
@@ -1502,6 +1855,7 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
       (batch) => batch?.batch_id === batchId,
     );
     setTrayOpen(false);
+    setBatchHistoryOpen(returnToHistory);
     setCurrentBatchId(batchId);
     setBatchOpenBusy(!known);
     try {
@@ -1795,6 +2149,7 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
       setCurrentBatchId(batch.batch_id);
       setBatchOpenBusy(false);
       setTrayOpen(false);
+      setBatchHistoryOpen(false);
     } catch (createError) {
       toast.error(createError?.message || 'Unable to create the mockup batch');
     }
@@ -1864,12 +2219,15 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
       >
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <ModalHeader
-            icon={currentBatch ? <Stack /> : <Camera />}
-            title={currentBatch?.name || 'Product Mockup Studio'}
+            icon={currentBatch || batchHistoryOpen ? <Stack /> : <Camera />}
+            title={currentBatch?.name
+              || (batchHistoryOpen ? 'Batch gallery' : 'Product Mockup Studio')}
             subtitle={currentBatch
               ? [currentBatch.status_message, formatWhen(currentBatch.created_at)]
                 .filter(Boolean).join(' · ')
-              : `Config-driven product mockups · ${products.length} products available`}
+              : batchHistoryOpen
+                ? `${batches.length} render batch${batches.length === 1 ? '' : 'es'} · full history`
+                : `Config-driven product mockups · ${products.length} products available`}
             right={currentBatch ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <Btn
@@ -1878,10 +2236,19 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                   icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
                   onClick={closeCurrentBatch}
                 >
-                  Back to products
+                  {batchHistoryOpen ? 'Back to batches' : 'Back to products'}
                 </Btn>
                 <StatusPill status={currentBatch.status} />
               </span>
+            ) : batchHistoryOpen ? (
+              <Btn
+                size="sm"
+                variant="secondary"
+                icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+                onClick={() => setBatchHistoryOpen(false)}
+              >
+                Back to products
+              </Btn>
             ) : (
               <span ref={trayButtonRef} style={{ display: 'inline-flex' }}>
                 <Btn
@@ -1903,10 +2270,11 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
               <BatchTray
                 batches={batches}
                 onOpen={(batchId) => {
-                  openBatchRequestRef.current += 1;
-                  setBatchOpenBusy(false);
-                  setCurrentBatchId(batchId);
+                  void openBatchById(batchId);
+                }}
+                onViewAll={() => {
                   setTrayOpen(false);
+                  setBatchHistoryOpen(true);
                 }}
                 onCancel={cancelBatch}
                 onDelete={deleteBatch}
@@ -1932,6 +2300,28 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
             >
               <BatchView
                 batch={currentBatch}
+                onCancel={cancelBatch}
+                onDelete={deleteBatch}
+              />
+            </motion.div>
+          ) : batchHistoryOpen ? (
+            <motion.div
+              key="batch-history"
+              initial={{ opacity: 0, y: 10, scale: 0.992 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 7, scale: 0.994 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                flex: 1, minHeight: 0,
+                display: 'flex', flexDirection: 'column',
+              }}
+            >
+              <BatchHistoryView
+                batches={batches}
+                onOpen={(batchId) => {
+                  void openBatchById(batchId, { returnToHistory: true });
+                }}
+                onBack={() => setBatchHistoryOpen(false)}
                 onCancel={cancelBatch}
                 onDelete={deleteBatch}
               />

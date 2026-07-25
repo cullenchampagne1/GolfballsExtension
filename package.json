@@ -98,7 +98,7 @@
       "file": "tests/unit/notificationsPresentation.test.mjs"
     },
     {
-      "name": "ui \u00b7 mockup gallery modal parity",
+      "name": "ui \u00b7 mockup batch history navigation",
       "file": "tests/unit/mockupStudioPresentation.test.mjs"
     },
     {
