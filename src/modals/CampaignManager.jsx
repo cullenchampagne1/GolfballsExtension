@@ -7,6 +7,7 @@ import {
 } from '../ui/index.js';
 import { CampaignConditions } from '../ui/components/template-rules/CampaignConditions.jsx';
 import { CodeVarEditor } from '../ui/components/CodeVarEditor.jsx';
+import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, newStep, uid, subscribeCampaigns,
@@ -1103,6 +1104,32 @@ function ImportCampaignsModal({ onClose, onDone }) {
 }
 
 /* ── Root ── */
+/* Steps ⇆ Code segmented toggle — the campaign editor's authoring mode.
+   Steps = the visual timeline; Code = the code-first automation panel. */
+function EditorModeToggle({ codeMode, onChange }) {
+  const Item = ({ id, Ic, label }) => {
+    const on = (id === 'code') === codeMode;
+    return (
+      <button type="button" onClick={() => onChange(id === 'code')}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 11px', borderRadius: 7, border: 'none', cursor: 'pointer',
+          fontSize: 11.5, fontWeight: 700, transition: 'background .14s ease, color .14s ease',
+          background: on ? 'var(--gb-surface-1)' : 'transparent', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+          boxShadow: on ? '0 1px 2px rgba(0,0,0,.12)' : 'none' }}>
+        <Ic size={13} /> {label}
+      </button>
+    );
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 2, background: 'var(--gb-fill-subtle)', padding: 2, borderRadius: 9 }}>
+        <Item id="steps" Ic={I.task} label="Steps" />
+        <Item id="code" Ic={I.code} label="Code" />
+      </div>
+      {codeMode && <span style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>beta · simulate-only, no live sends yet</span>}
+    </div>
+  );
+}
+
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignKeyframes();
   const toast = useToast();
@@ -1145,6 +1172,8 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [templateLib, setTemplateLib] = useState({ email: [], call: [], task: [] });
   const [dryRun, setDryRun] = useState(false);
   const [runMode, setRunMode] = useState(false);
+  // Authoring mode: false = visual step timeline, true = code-first panel.
+  const [codeMode, setCodeMode] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const runner = useCampaignRunner();
   const simTimer = useRef(null);
@@ -1247,6 +1276,22 @@ export function CampaignManager({ onClose, contacts = [] }) {
     if (!audienceKeyed.length) { setSimContactKey(null); return; }
     setSimContactKey((k) => (audienceKeyed.some((c) => c._key === k) ? k : audienceKeyed[0]._key));
   }, [audienceKeyed]);
+
+  // Land in Code mode for a code-authored campaign (has automation, no steps),
+  // otherwise the visual timeline. Keyed on campaign identity so switching
+  // campaigns re-picks, but toggling within a campaign is preserved.
+  useEffect(() => {
+    setCodeMode(!!(campaign.automation && campaign.automation.trim()) && !campaign.steps.length);
+  }, [campaign.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The read-only `page` model the code panel simulates against — the live
+  // audience selection, so `page.contacts` / `page.contact` resolve for real.
+  const simPage = useMemo(() => ({
+    contacts: audienceKeyed,
+    contact: audienceKeyed.find((c) => c._key === simContactKey) || audienceKeyed[0] || {},
+    count: audienceKeyed.length,
+  }), [audienceKeyed, simContactKey]);
+  const setAutomation = (src) => patchCampaign({ ...campaign, automation: src });
 
   // Shared deps for a real (paced) run AND the dry-run simulation.
   const buildRunDeps = async () => {
@@ -1363,14 +1408,24 @@ export function CampaignManager({ onClose, contacts = [] }) {
         <>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
-            <Timeline steps={steps} selectedId={selectedId} sim={timelineSim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
-          </div>
-          <div style={{ width: 500, flexShrink: 0, background: 'var(--gb-surface-modal)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            {selected
-              ? <StepInspector step={selected} allSteps={steps} templateLib={templateLib} onChange={updateStep} onDelete={deleteStep} />
-              : <CampaignInspector campaign={campaign} onChange={patchCampaign} />}
-          </div>
+          {codeMode ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <EditorModeToggle codeMode onChange={setCodeMode} />
+              <CodeAutomationPanel value={campaign.automation || ''} onChange={setAutomation} page={simPage} />
+            </div>
+          ) : (
+            <>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
+                <EditorModeToggle codeMode={false} onChange={setCodeMode} />
+                <Timeline steps={steps} selectedId={selectedId} sim={timelineSim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
+              </div>
+              <div style={{ width: 500, flexShrink: 0, background: 'var(--gb-surface-modal)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                {selected
+                  ? <StepInspector step={selected} allSteps={steps} templateLib={templateLib} onChange={updateStep} onDelete={deleteStep} />
+                  : <CampaignInspector campaign={campaign} onChange={patchCampaign} />}
+              </div>
+            </>
+          )}
         </div>
         <StatsStrip steps={steps} campaign={campaign} selectedId={selectedId} onClearSelection={() => setSelectedId(null)} dirty={dirty} onSave={save} />
         </>
