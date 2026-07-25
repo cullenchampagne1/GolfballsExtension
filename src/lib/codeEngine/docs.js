@@ -1,0 +1,130 @@
+/* ───────────────────────────────────────────────────────────────
+   codeEngine/docs — contextual documentation for the code editor.
+
+   The right sidebar shows the doc for whatever the cursor is on. This is
+   the pure lookup: a token (an identifier chain like "actions.sendEmail",
+   a namespace like "user", or a keyword like "for") → a doc card
+   { title, kind, summary, rows[], examples[] }. Action docs are derived
+   from the live contract registry so they never drift.
+─────────────────────────────────────────────────────────────── */
+
+import { CONTRACTS, GATE_BY_EFFECT } from './contracts.js';
+
+const paramLine = (c) => Object.entries(c.params)
+  .map(([k, r]) => (r.options ? `${k}: ${r.options.join('|')}` : k))
+  .join(', ');
+
+function actionDoc(c) {
+  return {
+    title: `actions.${c.name}()`,
+    kind: 'action',
+    gate: GATE_BY_EFFECT[c.effect],
+    summary: `${c.summary}. Takes ${c.accepts}.`,
+    rows: [
+      ['accepts', c.accepts],
+      ['params', paramLine(c) || '—'],
+      ['gate', `${GATE_BY_EFFECT[c.effect]} · ${c.effect}`],
+    ],
+    examples: c.name === 'sendEmail'
+      ? ['await actions.sendEmail(user.email("Win-back"))', 'await actions.sendEmail({ subject: "Hi", body: "…" })']
+      : c.name === 'createTask'
+        ? ['await actions.createTask(user.task("Follow up"))', 'await actions.createTask({ subject: "Call", daysOut: 2 })']
+        : ['await actions.logCall(user.call("Left VM"))'],
+  };
+}
+
+const STATIC = {
+  overview: {
+    title: 'Campaign code',
+    kind: 'topic',
+    summary: 'Write plain JS. Each send/create is a step; if/else are branches. It runs per contact and the blocks light up as it goes.',
+    rows: [
+      ['page', 'the contact being run'],
+      ['user', 'your saved emails / tasks / calls'],
+      ['actions', 'send email · create task · log call'],
+    ],
+    examples: ['if (page.contact.daysCold > 30)\n  await actions.sendEmail(user.email("Win-back"))'],
+  },
+  page: {
+    title: 'page.*',
+    kind: 'data',
+    summary: 'The read-only audience model for this run.',
+    rows: [
+      ['page.contact', 'the contact being simulated (name, email, …)'],
+      ['page.contacts', 'the whole selected audience (array)'],
+      ['page.count', 'how many contacts are selected'],
+    ],
+    examples: ['const c = page.contact;', 'for (const c of page.contacts) { … }'],
+  },
+  user: {
+    title: 'user.*',
+    kind: 'data',
+    summary: 'Your saved templates — drop one straight into a send.',
+    rows: [
+      ['user.emails', 'saved emails (array of { id, name, subject })'],
+      ['user.email(name)', 'look one up by name or id (or null)'],
+      ['user.tasks / user.task()', 'saved tasks + lookup'],
+      ['user.calls / user.call()', 'saved calls + lookup'],
+    ],
+    examples: ['await actions.sendEmail(user.email("Win-back"))', 'user.tasks.find(t => t.name === "Follow up")'],
+  },
+  actions: {
+    title: 'actions.*',
+    kind: 'topic',
+    summary: 'The callable steps. Each becomes a block and runs behind its gate on a real run.',
+    rows: [
+      ['sendEmail(email)', 'send a saved or custom email'],
+      ['createTask(task)', 'create a CRM task'],
+      ['logCall(call)', 'log a call activity'],
+    ],
+    examples: ['await actions.sendEmail(user.email("Win-back"))'],
+  },
+  control: {
+    title: 'Branches & loops',
+    kind: 'flow',
+    summary: 'Control flow becomes branches and loops in the blocks — the untaken path greys out as skipped, exactly like the old timeline.',
+    rows: [
+      ['if / else', 'a branch — only the taken side runs'],
+      ['for / for…of', 'a loop — one pass per item'],
+      ['while', 'loop while a condition holds'],
+      ['switch', 'a multi-way branch'],
+    ],
+    examples: ['if (page.contact.ytd > 1000) { … } else { … }', 'for (const c of page.contacts) { … }'],
+  },
+  setvar: {
+    title: 'Variables',
+    kind: 'data',
+    summary: 'const / let define a value — shown as its own "set" block.',
+    rows: [['const name = value', 'compute something once and reuse it']],
+    examples: ['const c = page.contact;', 'const cold = c.daysCold > 30;'],
+  },
+};
+
+const KEYWORDS = new Set(['if', 'else', 'for', 'while', 'switch', 'case', 'do']);
+const DECL = new Set(['const', 'let', 'var']);
+
+/**
+ * Resolve a cursor token to a doc card.
+ * @param {string} token  identifier chain ("actions.sendEmail"), namespace
+ *   ("user"), or keyword ("for"). Empty/unknown → the overview.
+ */
+export function resolveDoc(token) {
+  const t = String(token || '').trim();
+  if (!t) return STATIC.overview;
+  const head = t.split('.')[0];
+  const member = t.split('.')[1];
+
+  if (head === 'actions') {
+    if (member && CONTRACTS[member]) return actionDoc(CONTRACTS[member]);
+    return STATIC.actions;
+  }
+  if (head === 'user') return STATIC.user;
+  if (head === 'page') return STATIC.page;
+  if (KEYWORDS.has(head)) return STATIC.control;
+  if (DECL.has(head)) return STATIC.setvar;
+  // a bare contract name (e.g. cursor on "sendEmail")
+  if (CONTRACTS[head]) return actionDoc(CONTRACTS[head]);
+  return STATIC.overview;
+}
+
+export const DOC_OVERVIEW = STATIC.overview;

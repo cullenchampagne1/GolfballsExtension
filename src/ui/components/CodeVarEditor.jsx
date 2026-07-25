@@ -143,10 +143,26 @@ const GB_FILL_THEME = EditorView.theme({
   '.cm-scroller': { overflow: 'auto' },
 });
 
-export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false }) {
+/* The identifier chain under the cursor (e.g. "actions.sendEmail"), for the
+   live docs panel. Expands over word + dot chars around the caret. */
+function tokenAt(state) {
+  const pos = state.selection.main.head;
+  const line = state.doc.lineAt(pos);
+  const text = line.text;
+  const col = pos - line.from;
+  const isIdent = (ch) => ch && /[\w$.]/.test(ch);
+  let start = col; let end = col;
+  while (start > 0 && isIdent(text[start - 1])) start -= 1;
+  while (end < text.length && isIdent(text[end])) end += 1;
+  return text.slice(start, end).replace(/^\.+|\.+$/g, '');
+}
+
+export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false, onContext }) {
   const hostRef    = useRef(null);
   const viewRef    = useRef(null);
   const onChangeRef = useRef(onChange);
+  const onContextRef = useRef(onContext);
+  onContextRef.current = onContext;
   const valueRef   = useRef(value || '');
   const ctxOptsRef = useRef(typeId === 'account' ? CTX_OPTIONS : []);
   const varNamesRef = useRef(varNames);
@@ -228,10 +244,15 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
             ...historyKeymap,
           ]),
           EditorView.updateListener.of((u) => {
-            if (!u.docChanged) return;
-            const next = u.state.doc.toString();
-            valueRef.current = next;
-            onChangeRef.current?.(next);
+            if (u.docChanged) {
+              const next = u.state.doc.toString();
+              valueRef.current = next;
+              onChangeRef.current?.(next);
+            }
+            // Report the token under the caret so the docs panel can follow along.
+            if ((u.docChanged || u.selectionSet) && onContextRef.current) {
+              onContextRef.current(tokenAt(u.state));
+            }
           }),
         ],
       }),
