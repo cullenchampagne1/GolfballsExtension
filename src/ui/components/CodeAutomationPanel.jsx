@@ -174,6 +174,7 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
             blocks={blocks}
             trace={shownTrace}
             runningId={runningId}
+            done={sim.status === 'done'}
             emptyHint={(
               <span>No blocks yet.<br />Switch to <b>Code</b>, write against <code>page.*</code> + <code>actions.*</code>, then <b>Simulate</b>.</span>
             )}

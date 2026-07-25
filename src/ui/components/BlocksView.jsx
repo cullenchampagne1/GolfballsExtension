@@ -1,233 +1,298 @@
 import React from 'react';
-import { I, Icon } from '../icons.jsx';
-import { indexTrace, describeBlock, blockStatus } from '../../lib/codeEngine/blockView.js';
+import { I } from '../icons.jsx';
+import { Tag } from './Tag.jsx';
+import {
+  indexTrace, describeBlock, runStatus, subtreeRan,
+} from '../../lib/codeEngine/blockView.js';
 
 /* ───────────────────────────────────────────────────────────────
-   BlocksView — the read-only visual projection of the code IR.
+   BlocksView — the run UI for code-authored campaigns.
 
-   Code is the source of truth; translate.js turns it into a block
-   tree and simulate.js runs it into a node-keyed trace. This renders
-   that tree as an indented flow of cards — action leaves plus
-   if / for / switch containers — and lights each one by its run
-   status ('pending' | 'running' | 'ran' | 'failed'). It never edits
-   the IR and never executes anything; it's a mirror of the code the
-   rep is typing, animated by whatever trace the simulator produced.
-
-   Props:
-     blocks     block[]  — translateProgram(source).blocks
-     trace      []        — simulateProgram(...).trace (node-keyed)
-     runningId  string    — the block id currently replaying (pulse)
-     emptyHint  node      — shown when there are no blocks yet
+   Same shape and animation as the old step timeline: sending an email
+   is a step, creating a task is a step, if/else are branches that fan
+   out with hooked connectors, and once a run finishes the paths that
+   weren't taken are greyed as "skipped". The only difference from the
+   old design is that these steps are INTERPRETED from code rather than
+   hand-built — so every construct (action, set-variable, comment,
+   branch, loop, switch, raw code) gets its own block, and the trace
+   from simulate.js drives the exact same running/ran/skipped states.
 ─────────────────────────────────────────────────────────────── */
 
-/* Status → visual tone. Mirrors the timeline's language so the two
-   views read the same: brand = live, success = fired, error = failed. */
+const KF_ID = '__gb-blocks-kf';
+function ensureKeyframes() {
+  if (typeof document === 'undefined' || document.getElementById(KF_ID)) return;
+  const s = document.createElement('style');
+  s.id = KF_ID;
+  s.textContent = `
+    @keyframes gbb-step-in    { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    @keyframes gbb-flow       { to   { stroke-dashoffset: -28; } }
+    @keyframes gbb-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 6px transparent; } }
+    @keyframes gbb-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
+  `;
+  (document.head || document.documentElement).appendChild(s);
+}
+
+/* ── Connector between blocks (animated when the run is on this edge) ── */
+function Connector({ active, height = 30, tone = 'default', hookRight, hookLeft }) {
+  const stroke = active ? 'var(--gb-brand-label)'
+    : tone === 'branch' ? 'var(--gb-warning-fg)' : 'var(--gb-border-strong)';
+  const dash = active ? '4 4' : '0';
+  const anim = active ? { animation: 'gbb-flow 1.2s linear infinite' } : null;
+  return (
+    <div style={{ position: 'relative', height, width: 26, marginLeft: 15, display: 'flex', justifyContent: 'center' }}>
+      <svg width={26} height={height} style={{ overflow: 'visible' }}>
+        {hookRight
+          ? <path d={`M13 0 L13 ${height - 10} Q13 ${height} 23 ${height}`} fill="none" stroke={stroke} strokeWidth={1.5} strokeDasharray={dash} style={anim} />
+          : hookLeft
+            ? <path d={`M23 0 Q13 0 13 10 L13 ${height}`} fill="none" stroke={stroke} strokeWidth={1.5} strokeDasharray={dash} style={anim} />
+            : <path d={`M13 0 L13 ${height}`} fill="none" stroke={stroke} strokeWidth={1.5} strokeDasharray={dash} style={anim} />}
+        {active && <circle r="3" fill={stroke}><animate attributeName="cy" from="0" to={height} dur="1.2s" repeatCount="indefinite" /></circle>}
+      </svg>
+    </div>
+  );
+}
+
+/* tone palette per block family. */
 const TONE = {
-  pending: { fg: 'var(--gb-text-muted)', border: 'var(--gb-border-default)', bg: 'transparent', rail: 'var(--gb-border-strong)' },
-  running: { fg: 'var(--gb-brand-label)', border: 'var(--gb-brand-tint-border, var(--gb-brand-label))', bg: 'var(--gb-brand-tint-soft)', rail: 'var(--gb-brand-label)' },
-  ran:     { fg: 'var(--gb-success-fg)', border: 'var(--gb-success-tint-border)', bg: 'var(--gb-success-tint-soft)', rail: 'var(--gb-success-fg)' },
-  failed:  { fg: 'var(--gb-error-fg)', border: 'var(--gb-error-tint-border)', bg: 'var(--gb-error-tint-soft)', rail: 'var(--gb-error-fg)' },
+  brand:   { badgeBg: 'var(--gb-brand-tint-medium)', badgeFg: 'var(--gb-brand-label)', run: 'var(--gb-brand-label)' },
+  info:    { badgeBg: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', badgeFg: 'var(--gb-info-fg, var(--gb-text-secondary))', run: 'var(--gb-brand-label)' },
+  warning: { badgeBg: 'var(--gb-warning-tint-medium)', badgeFg: 'var(--gb-warning-fg)', run: 'var(--gb-warning-fg)' },
+  neutral: { badgeBg: 'var(--gb-fill-strong)', badgeFg: 'var(--gb-text-secondary)', run: 'var(--gb-brand-label)' },
 };
-/* Effect gate → chip. auto = silent, confirm = shows a preview + click,
-   hard = money / explicit human confirm. */
-const GATE_CHIP = {
-  auto:    { label: 'auto',    fg: 'var(--gb-info-fg)',    bg: 'var(--gb-info-tint-soft)' },
-  confirm: { label: 'confirm', fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-soft)' },
-  hard:    { label: 'gated',   fg: 'var(--gb-error-fg)',   bg: 'var(--gb-error-tint-soft)' },
-};
+const CONTRACT_TONE = { sendEmail: 'brand', createTask: 'info', logCall: 'info' };
+const GATE_LABEL = { auto: 'auto', confirm: 'confirm', hard: 'gated' };
 
-function toneFor(status, id, runningId) {
-  if (runningId && id === runningId) return TONE.running;
-  return TONE[status] || TONE.pending;
+/* Which kinds are "steps" that get a numbered badge + run status. */
+const isStep = (b) => b.kind === 'action' || b.kind === 'branch' || b.kind === 'loop' || b.kind === 'cases';
+
+/** Precompute display indices: top-level steps 1,2,3; nested 2a,2b… */
+function indexSteps(blocks, prefix = '', map = {}) {
+  let n = 0;
+  for (const b of blocks) {
+    if (!isStep(b)) continue;
+    n += 1;
+    const label = prefix ? `${prefix}${String.fromCharCode(96 + n)}` : `${n}`;
+    map[b.id] = label;
+    const kids = [];
+    if (b.then) kids.push(...b.then);
+    if (b.else) kids.push(...b.else);
+    if (b.body) kids.push(...b.body);
+    if (b.cases) for (const c of b.cases) kids.push(...(c.body || []));
+    indexSteps(kids, label, map);
+  }
+  return map;
 }
 
-function StatusBadge({ status, runs }) {
-  if (status === 'ran') {
-    return (
-      <span title={runs > 1 ? `ran ${runs}×` : 'ran'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--gb-success-fg)', fontSize: 10.5, fontWeight: 700 }}>
-        <Icon size={12}><path d="M20 6L9 17l-5-5" /></Icon>{runs > 1 ? `${runs}×` : ''}
-      </span>
-    );
-  }
-  if (status === 'failed') {
-    return (
-      <span title="contract validation failed — would not send" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--gb-error-fg)', fontSize: 10.5, fontWeight: 700 }}>
-        <I.alert size={12} /> stop
-      </span>
-    );
-  }
-  return null;
-}
-
-/* A leaf action card. */
-function ActionRow({ block, traceById, runningId }) {
-  const d = describeBlock(block, traceById);
-  const tone = toneFor(d.status, block.id, runningId);
-  const NIcon = I[d.icon] || I.code;
-  const gate = GATE_CHIP[d.gate] || null;
-  const pulsing = runningId && block.id === runningId;
+/* ── The card chrome shared by every step-like block ── */
+function Card({ tone = 'neutral', status, idx, icon, title, sublabel, tag, right, children }) {
+  const t = TONE[tone] || TONE.neutral;
+  const live = status === 'running';
+  const ran = status === 'ran';
+  const failed = status === 'failed';
+  const skipped = status === 'skipped';
+  const cut = status === 'cut';
+  const Ic = icon;
+  const border = live ? t.run
+    : ran ? 'var(--gb-success-tint-border)'
+    : failed ? 'var(--gb-error-tint-border)'
+    : 'var(--gb-border-default)';
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'flex-start', gap: 9, padding: '8px 10px',
-        border: `1px solid ${tone.border}`, borderRadius: 10, background: tone.bg,
-        transition: 'border-color .18s ease, background .18s ease',
-        boxShadow: pulsing ? '0 0 0 3px var(--gb-brand-tint-soft), 0 0 14px var(--gb-brand-tint-strong)' : 'none',
-      }}
-    >
-      <span style={{ display: 'inline-flex', width: 22, height: 22, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 6, background: 'var(--gb-fill-subtle)', color: tone.fg }}>
-        <NIcon size={13} />
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <StatusBadge status={d.status} runs={d.runs} />
-            {gate && (
-              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.02em', padding: '1px 6px', borderRadius: 999, color: gate.fg, background: gate.bg, textTransform: 'uppercase' }}>{gate.label}</span>
-            )}
-          </span>
+    <div style={{
+      background: 'var(--gb-surface-1)', border: `1px solid ${border}`, borderRadius: 'var(--gb-r-lg)',
+      boxShadow: '0 1px 0 rgba(0,0,0,.12)', overflow: 'hidden',
+      opacity: cut ? 0.42 : skipped ? 0.62 : 1,
+      transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim), opacity var(--gb-anim)',
+      animation: live ? 'gbb-running 1.4s ease-in-out infinite' : 'gbb-step-in .3s cubic-bezier(.34,1.4,.64,1)',
+    }}>
+      <div style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: '26px 1fr auto', gap: 11, alignItems: 'flex-start' }}>
+        <div style={{
+          position: 'relative', width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
+          background: ran ? 'var(--gb-success-tint-medium)' : t.badgeBg,
+          border: '1px solid ' + (ran ? 'var(--gb-success-tint-border)' : 'var(--gb-border-default)'),
+          color: ran ? 'var(--gb-success-fg)' : t.badgeFg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
+        }}>
+          {ran ? <I.check size={13} /> : skipped ? '–' : (idx != null ? idx : (Ic ? <Ic size={13} /> : null))}
+          {live && <span style={{ position: 'absolute', inset: -3, borderRadius: 8, border: `1.5px solid ${t.run}`, animation: 'gbb-pulse-ring 1.2s ease-in-out infinite' }} />}
         </div>
-        {d.detail ? (
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.detail}</div>
-        ) : null}
-        {d.errors.length ? (
-          <div style={{ fontSize: 10, color: 'var(--gb-error-fg)', marginTop: 3 }}>{d.errors[0]}</div>
-        ) : null}
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+            {Ic && idx != null ? <Ic size={12} style={{ color: t.badgeFg, flexShrink: 0 }} /> : null}
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+            {tag}
+            <div style={{ flex: 1 }} />
+            {ran && <Tag tone="success" size="xs">RAN</Tag>}
+            {failed && <Tag tone="error" size="xs">FAILED</Tag>}
+            {skipped && <Tag tone="neutral" size="xs">SKIPPED</Tag>}
+            {cut && <Tag tone="neutral" size="xs">NOT REACHED</Tag>}
+            {right}
+          </div>
+          {sublabel != null && (
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{sublabel}</div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );
 }
 
-/* A container header (if / for / switch) with a colored rail into its body. */
-function ContainerRow({ block, traceById, runningId, children }) {
-  const d = describeBlock(block, traceById);
-  const tone = toneFor(d.status, block.id, runningId);
-  const NIcon = I[d.icon] || I.branch;
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 9px', border: `1px dashed ${tone.border}`, borderRadius: 9, background: tone.bg }}>
-        <NIcon size={13} style={{ color: tone.fg, flexShrink: 0 }} />
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
-      </div>
-      <div style={{ marginLeft: 12, paddingLeft: 12, borderLeft: `2px solid ${tone.rail}`, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function GroupLabel({ text }) {
-  return <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--gb-text-muted)', margin: '2px 0 -1px' }}>{text}</div>;
-}
-
-function BlockList({ blocks, traceById, runningId }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {blocks.map((b) => (
-        <Block key={b.id} block={b} traceById={traceById} runningId={runningId} />
-      ))}
-    </div>
-  );
-}
-
-/* A comment — a quiet note between blocks, deliberately NOT a card/step. */
-function CommentRow({ block }) {
+/* ── a quiet comment note (deliberately NOT a step) ── */
+function CommentNote({ block }) {
   const d = describeBlock(block);
   if (!d.title) return null;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '1px 2px 1px 6px', borderLeft: '2px solid var(--gb-border-subtle)' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 2px 3px 30px' }}>
       <span style={{ fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', fontSize: 11, color: 'var(--gb-text-ghost)', lineHeight: 1.5 }}>//</span>
       <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>{d.title}</span>
     </div>
   );
 }
 
-/* A "set variable" — its own compact chip, distinct from an action leaf. */
-function SetVarRow({ block, traceById }) {
-  const d = describeBlock(block, traceById);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px solid var(--gb-info-tint-border)', borderRadius: 9, background: 'var(--gb-info-tint-soft)' }}>
-      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', padding: '2px 6px', borderRadius: 5, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-medium)', textTransform: 'uppercase', flexShrink: 0 }}>set</span>
-      <code style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', flexShrink: 0 }}>{d.title}</code>
-      {d.detail ? (
-        <>
-          <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>=</span>
-          <code style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.detail}</code>
-        </>
-      ) : null}
-    </div>
-  );
+/* ── recursive block renderer ── */
+function renderList(blocks, ctx, tone, forceStatus) {
+  // A connector precedes each step-like block after the first one on this level.
+  let firstStepSeen = false;
+  const out = [];
+  blocks.forEach((b, i) => {
+    if (b.kind === 'comment') {
+      out.push(<CommentNote key={b.id} block={b} />);
+      return;
+    }
+    const step = isStep(b);
+    if (step && firstStepSeen) {
+      // The edge lights up while the block it leads into is the one running.
+      const active = !!ctx.runningId && b.id === ctx.runningId;
+      out.push(<Connector key={`c-${b.id}`} height={22} tone={tone === 'warning' ? 'branch' : 'default'} active={active} />);
+    }
+    if (step) firstStepSeen = true;
+    out.push(<BlockNode key={b.id} block={b} ctx={ctx} tone={tone} forceStatus={forceStatus} />);
+  });
+  return out;
 }
 
-function Block({ block, traceById, runningId }) {
-  if (block.kind === 'action') return <ActionRow block={block} traceById={traceById} runningId={runningId} />;
-  if (block.kind === 'comment') return <CommentRow block={block} />;
-  if (block.kind === 'setVar') return <SetVarRow block={block} traceById={traceById} />;
+function BlockNode({ block, ctx, tone, forceStatus }) {
+  const { traceById, done, runningId, indices } = ctx;
+  const status = runStatus(block, traceById, { done, runningId, force: forceStatus });
+  const idx = indices[block.id];
+
+  if (block.kind === 'action') {
+    const d = describeBlock(block, traceById);
+    const at = CONTRACT_TONE[block.contract] || 'neutral';
+    const IcMap = { mail: I.mail, task: I.task, phone: I.phone, code: I.code };
+    const gate = GATE_LABEL[d.gate];
+    return (
+      <Card tone={at} status={status} idx={idx} icon={IcMap[d.icon] || I.code}
+        title={d.title} sublabel={d.detail || null}
+        right={gate ? <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.03em', padding: '1px 6px', borderRadius: 999, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', textTransform: 'uppercase', flexShrink: 0 }}>{gate}</span> : null}>
+        {d.errors.length ? <div style={{ fontSize: 10, color: 'var(--gb-error-fg)' }}>{d.errors[0]}</div> : null}
+      </Card>
+    );
+  }
+
+  if (block.kind === 'setVar') {
+    const d = describeBlock(block, traceById);
+    return (
+      <Card tone="neutral" status={forceStatus || 'pending'} icon={I.code}
+        title={d.title}
+        tag={<span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', padding: '1px 6px', borderRadius: 5, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-soft)', textTransform: 'uppercase', flexShrink: 0 }}>set</span>}
+        sublabel={d.detail ? `= ${d.detail}` : null} />
+    );
+  }
 
   if (block.kind === 'branch') {
-    const hasElse = Array.isArray(block.else) && block.else.length > 0;
+    const thenRan = block.then.some((k) => subtreeRan(k, traceById));
+    const elseRan = (block.else || []).some((k) => subtreeRan(k, traceById));
+    const thenForce = done && !thenRan && elseRan ? 'skipped' : forceStatus;
+    const elseForce = done && !elseRan && thenRan ? 'skipped' : forceStatus;
+    const d = describeBlock(block, traceById);
     return (
-      <ContainerRow block={block} traceById={traceById} runningId={runningId}>
-        {block.then.length ? <BlockList blocks={block.then} traceById={traceById} runningId={runningId} /> : <EmptyBranch />}
-        {hasElse && (
-          <>
-            <GroupLabel text="else" />
-            <BlockList blocks={block.else} traceById={traceById} runningId={runningId} />
-          </>
+      <div>
+        <Card tone="warning" status={status} idx={idx} icon={I.branch}
+          title={d.title} tag={<Tag tone="warning" size="xs">IF</Tag>} />
+        <BranchArm label="then" tone="warning" active={runningId && thenRan}>
+          {block.then.length ? renderList(block.then, ctx, 'warning', thenForce) : <EmptyArm />}
+        </BranchArm>
+        {(block.else && block.else.length > 0) && (
+          <BranchArm label="else" tone="default" active={runningId && elseRan}>
+            {renderList(block.else, ctx, 'default', elseForce)}
+          </BranchArm>
         )}
-      </ContainerRow>
+      </div>
     );
   }
 
   if (block.kind === 'loop') {
+    const d = describeBlock(block, traceById);
     return (
-      <ContainerRow block={block} traceById={traceById} runningId={runningId}>
-        {block.body.length ? <BlockList blocks={block.body} traceById={traceById} runningId={runningId} /> : <EmptyBranch />}
-      </ContainerRow>
+      <div>
+        <Card tone="info" status={status} idx={idx} icon={I.refresh}
+          title={d.title} tag={<Tag tone="neutral" size="xs">LOOP</Tag>} />
+        <BranchArm label="each" tone="info" active={runningId && subtreeRan(block, traceById)}>
+          {block.body.length ? renderList(block.body, ctx, 'info', forceStatus) : <EmptyArm />}
+        </BranchArm>
+      </div>
     );
   }
 
   if (block.kind === 'cases') {
+    const d = describeBlock(block, traceById);
     return (
-      <ContainerRow block={block} traceById={traceById} runningId={runningId}>
-        {block.cases.map((c) => (
-          <div key={c.id}>
-            <GroupLabel text={c.test == null ? 'default' : `case ${c.test}`} />
-            {c.body.length ? <BlockList blocks={c.body} traceById={traceById} runningId={runningId} /> : <EmptyBranch />}
-          </div>
-        ))}
-      </ContainerRow>
-    );
-  }
-
-  // Raw code block — shown verbatim so nothing is hidden from the rep.
-  const status = blockStatus(block, traceById);
-  const tone = toneFor(status, block.id, runningId);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: `1px solid ${tone.border}`, borderRadius: 9, background: 'var(--gb-fill-subtle)' }}>
-      <I.code size={12} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
-      <code style={{ fontSize: 11, color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{describeBlock(block, traceById).title}</code>
-    </div>
-  );
-}
-
-function EmptyBranch() {
-  return <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontStyle: 'italic', padding: '2px 2px' }}>— nothing —</div>;
-}
-
-export function BlocksView({ blocks = [], trace = [], runningId = null, emptyHint = null }) {
-  const traceById = React.useMemo(() => indexTrace(trace), [trace]);
-  if (!blocks.length) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--gb-text-muted)', fontSize: 12, textAlign: 'center', padding: 24 }}>
-        {emptyHint || 'Write code on the left — it becomes blocks here.'}
+      <div>
+        <Card tone="warning" status={status} idx={idx} icon={I.branch}
+          title={d.title} tag={<Tag tone="warning" size="xs">SWITCH</Tag>} />
+        {block.cases.map((c) => {
+          const caseRan = (c.body || []).some((k) => subtreeRan(k, traceById));
+          const caseForce = done && !caseRan ? 'skipped' : forceStatus;
+          return (
+            <BranchArm key={c.id} label={c.test == null ? 'default' : `case ${c.test}`} tone="warning" active={runningId && caseRan}>
+              {c.body.length ? renderList(c.body, ctx, 'warning', caseForce) : <EmptyArm />}
+            </BranchArm>
+          );
+        })}
       </div>
     );
   }
+
+  // generic custom code block — still a styled block, never a raw dump
+  const d = describeBlock(block, traceById);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12 }}>
-      <BlockList blocks={blocks} traceById={traceById} runningId={runningId} />
+    <Card tone="neutral" status={forceStatus || 'pending'} icon={I.code}
+      title={d.title || 'code'}
+      tag={<span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', padding: '1px 6px', borderRadius: 5, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', textTransform: 'uppercase', flexShrink: 0 }}>code</span>} />
+  );
+}
+
+/* An indented arm (branch then/else, loop body, switch case) with a rail. */
+function BranchArm({ label, tone, active, children }) {
+  const rail = active ? 'var(--gb-brand-label)' : tone === 'warning' ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-strong)';
+  return (
+    <div style={{ marginLeft: 13, marginTop: 6, paddingLeft: 16, borderLeft: `2px solid ${rail}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gb-text-muted)', margin: '0 0 -1px' }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+function EmptyArm() {
+  return <div style={{ fontSize: 10.5, fontStyle: 'italic', color: 'var(--gb-text-muted)', padding: '1px 2px' }}>— nothing —</div>;
+}
+
+export function BlocksView({ blocks = [], trace = [], runningId = null, done = false, emptyHint = null }) {
+  ensureKeyframes();
+  const traceById = React.useMemo(() => indexTrace(trace), [trace]);
+  const indices = React.useMemo(() => indexSteps(blocks), [blocks]);
+  if (!blocks.length) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--gb-text-muted)', fontSize: 12, textAlign: 'center', padding: 24 }}>
+        {emptyHint || 'Write code — it becomes a flow of blocks here.'}
+      </div>
+    );
+  }
+  const ctx = { traceById, done, runningId, indices };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', padding: '16px 18px 40px' }}>
+      {renderList(blocks, ctx, 'default', null)}
     </div>
   );
 }

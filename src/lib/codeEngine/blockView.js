@@ -60,6 +60,50 @@ export function blockStatus(block, traceById = {}) {
   return saw;
 }
 
+/** Did this block (or any descendant action) actually fire in the trace? */
+export function subtreeRan(block, traceById = {}) {
+  if (!block) return false;
+  if (block.kind === 'action') {
+    const e = traceById[block.id];
+    return !!(e && e.length && e.some((x) => x.status !== 'failed'));
+  }
+  return childBlocks(block).some((k) => subtreeRan(k, traceById));
+}
+
+/** Did any descendant action fail its contract preflight? */
+export function subtreeFailed(block, traceById = {}) {
+  if (!block) return false;
+  if (block.kind === 'action') {
+    const e = traceById[block.id];
+    return !!(e && e.some((x) => x.status === 'failed'));
+  }
+  return childBlocks(block).some((k) => subtreeFailed(k, traceById));
+}
+
+/**
+ * Run status for a step-like block, matching the old timeline vocabulary:
+ *   'running' — currently replaying (runningId)
+ *   'ran'     — fired  ·  'failed' — contract preflight failed
+ *   'skipped' — reached-but-not-taken / not run once the run is done
+ *   'cut'     — forced un-reached (an ancestor branch/side didn't run)
+ *   'pending' — not yet replayed (mid-run) or neutral (idle)
+ * `force` is set to 'skipped'/'cut' when an ancestor decides this whole
+ * subtree didn't run (the greyed untaken branch).
+ */
+export function runStatus(block, traceById, { done = false, runningId = null, force = null } = {}) {
+  if (runningId && block.id === runningId) return 'running';
+  if (block.kind === 'action') {
+    const entries = traceById[block.id];
+    if (entries && entries.length) return entries.some((e) => e.status === 'failed') ? 'failed' : 'ran';
+    if (force) return force;
+    return done ? 'skipped' : 'pending';
+  }
+  // container — 'ran' if a descendant fired, else inherit the forced/greyed state
+  if (subtreeRan(block, traceById)) return subtreeFailed(block, traceById) ? 'failed' : 'ran';
+  if (force) return force;
+  return done ? 'skipped' : 'pending';
+}
+
 const firstLine = (text) => String(text ?? '').split('\n').map((l) => l.trim()).find(Boolean) || '';
 
 function loopTitle(block) {
