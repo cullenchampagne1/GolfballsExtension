@@ -38,8 +38,11 @@ if (!window.__gbCallLogModalLoaded) {
 
   const HOST_ID = '__gb-cl-modal';
 
-  window.__gbShowCallLogModal = async function (overrides = {}) {
+  window.__gbShowCallLogModal = async function (opts = {}) {
     if ((window.__gbFeatureFlags || {}).callLogEnabled === false) return;
+    // `autoCompose`/`draft` (payload API) prefill the composer; the rest are
+    // context overrides. Pull them out so they don't pollute the CRM context.
+    const { autoCompose = false, draft = null, ...overrides } = opts;
     // Read context BEFORE mounting so the modal can put the right
     // phone in the subtitle from the first frame. readCallContext is
     // safe to call anywhere (returns mostly-empty outside a contact
@@ -57,6 +60,8 @@ if (!window.__gbCallLogModalLoaded) {
              empty AND the caller passed an already-formatted
              override. */
           phone={overrides.phone || ctx.phone || ''}
+          autoCompose={autoCompose}
+          draft={draft}
           onSubmit={(template) => submitCallLog({ template, context: ctx })}
           onClosed={onClosed}
           bindClose={bindClose}

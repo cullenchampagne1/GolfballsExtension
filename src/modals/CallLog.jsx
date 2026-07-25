@@ -103,6 +103,8 @@ export function CallLog({
   contactType = 'contact',
   phone = '',
   onSubmit,
+  autoCompose = false,
+  draft = null,
   onClosed,
   bindClose,
 }) {
@@ -133,9 +135,12 @@ export function CallLog({
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => composerRef.current?.focus(), 60);
+    const id = setTimeout(() => {
+      if (autoCompose) composerRef.current?.startCompose(draft || undefined);
+      else composerRef.current?.focus();
+    }, 60);
     return () => clearTimeout(id);
-  }, []);
+  }, [autoCompose, draft]);
 
   const fireTemplate = async (tpl) => {
     if (!tpl || busy) return;

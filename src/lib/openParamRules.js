@@ -54,6 +54,16 @@ export const OPEN_PARAM_RULES = Object.freeze({
     query: { type: 'string', max: 200 },
   },
   margin_calc: {}, // openable, no parameters
+  // Ambient composer verbs (Phase 2): a `subject` prefills the composer for the
+  // CURRENT contact (resolved by the modal, not the payload); the rep reviews
+  // and submits in the native UI — that submit is the confirmation. Only the
+  // subject text is seeded; category/priority/due stay with the rep.
+  quick_task: {
+    subject: { type: 'string', max: 120 },
+  },
+  call_log: {
+    subject: { type: 'string', max: 120 },
+  },
 });
 
 function coerce(rule, raw, key) {

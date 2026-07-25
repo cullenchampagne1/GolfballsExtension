@@ -36,7 +36,10 @@ if (!window.__gbQuickTaskModalLoaded) {
 
   window.__gbShowQuickTaskModal = async function (opts = {}) {
     if ((window.__gbFeatureFlags || {}).quickTaskEnabled === false) return;
-    const { autoCompose = false, returnData = false, onComposed, onCreated, ...overrides } = opts;
+    const {
+      autoCompose = false, draft = null, returnData = false,
+      onComposed, onCreated, ...overrides
+    } = opts;
     const pageCtx = await readTaskContext();
     const ctx = { ...pageCtx, ...overrides };
 
@@ -54,6 +57,7 @@ if (!window.__gbQuickTaskModalLoaded) {
           contactName={ctx.contactName || 'Contact'}
           contactType={ctx.contactType || 'contact'}
           autoCompose={autoCompose}
+          draft={draft}
           onComposed={handleComposed}
           onSubmit={async (template) => {
             const r = await submitQuickTask({ template, context: ctx });

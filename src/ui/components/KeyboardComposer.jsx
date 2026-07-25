@@ -330,8 +330,19 @@ export const KeyboardComposer = React.forwardRef(function KeyboardComposer({
     reset,
     focus() { (composing ? subjectRef : filterRef).current?.focus(); },
     /* Drop into compose mode ready to type a custom entry, WITHOUT auto-
-       popping the / category menu (autoCompose callers use this). */
-    startCompose() { setMode('compose'); setFilter(''); setMenuOpen(false); focus(subjectRef); },
+       popping the / category menu (autoCompose callers use this). An optional
+       prefill seeds the subject/body — the payload API uses it to open the
+       composer with the AI's proposed text already filled in, leaving the rep
+       to review and submit in the native UI (that submit IS the confirmation).
+       Tokens (category/priority) are left for the rep, never auto-set. */
+    startCompose(prefill) {
+      setMode('compose'); setFilter(''); setMenuOpen(false);
+      if (prefill && typeof prefill === 'object') {
+        if (prefill.subject != null) setSubject(String(prefill.subject).slice(0, 500));
+        if (prefill.body != null) setBody(String(prefill.body).slice(0, 4000));
+      }
+      focus(subjectRef);
+    },
   }));
 
   const items = menuItems(schema, menuFilter, tokens);

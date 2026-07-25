@@ -113,6 +113,33 @@ describe('open params · mockup_studio', () => {
   });
 });
 
+describe('open params · ambient composer verbs', () => {
+  it('accepts a subject to prefill the task composer', () => {
+    assert.deepEqual(
+      planOpenParams(rules('quick_task'), ['subject=Follow up on the pricing quote']),
+      { subject: 'Follow up on the pricing quote' },
+    );
+  });
+
+  it('accepts a subject to prefill the call composer', () => {
+    assert.deepEqual(
+      planOpenParams(rules('call_log'), ['subject=Left voicemail about reorder']),
+      { subject: 'Left voicemail about reorder' },
+    );
+  });
+
+  it('rejects a content field the composer keeps for the rep (category/priority)', () => {
+    assert.throws(() => planOpenParams(rules('quick_task'), ['priority=high']),
+      /Unknown open parameter "priority"/);
+    assert.throws(() => planOpenParams(rules('call_log'), ['category=Sales']),
+      /Unknown open parameter "category"/);
+  });
+
+  it('opens with no prefill when no subject is given', () => {
+    assert.deepEqual(planOpenParams(rules('quick_task'), []), {});
+  });
+});
+
 describe('open params · shape & guards', () => {
   it('returns empty params for no tokens or no rules', () => {
     assert.deepEqual(planOpenParams(rules('margin_calc'), []), {});
@@ -122,12 +149,12 @@ describe('open params · shape & guards', () => {
 
   it('reports which targets accept parameters', () => {
     for (const target of ['crm_search', 'task_list', 'image_preview', 'mockup_studio',
-      'gift_catalog', 'watch_list', 'margin_calc']) {
+      'gift_catalog', 'watch_list', 'margin_calc', 'quick_task', 'call_log']) {
       assert.equal(targetAcceptsOpenParams(target), true, `${target} should accept params`);
     }
     // Parameterless targets are absent from the rules and take no arguments.
     assert.equal(targetAcceptsOpenParams('notifications'), false);
-    assert.equal(targetAcceptsOpenParams('call_log'), false);
+    assert.equal(targetAcceptsOpenParams('quick_order_note'), false);
     assert.equal(targetAcceptsOpenParams(''), false);
   });
 

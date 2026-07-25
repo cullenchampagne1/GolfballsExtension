@@ -101,6 +101,7 @@ export function QuickTask({
   onSubmit,
   onComposed,
   autoCompose = false,
+  draft = null,
   onClosed,
   bindClose,
 }) {
@@ -136,11 +137,11 @@ export function QuickTask({
      (the "add a task" entry), else land in the filter bar. */
   useEffect(() => {
     const id = setTimeout(() => {
-      if (autoCompose) composerRef.current?.startCompose();
+      if (autoCompose) composerRef.current?.startCompose(draft || undefined);
       else composerRef.current?.focus();
     }, 60);
     return () => clearTimeout(id);
-  }, [autoCompose]);
+  }, [autoCompose, draft]);
 
   /* Normalise a template (preset or composed) into the plain task
      payload the return-to-caller (onComposed) path hands back. */

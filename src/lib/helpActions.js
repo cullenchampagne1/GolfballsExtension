@@ -64,6 +64,11 @@ const OPEN_ADAPTERS = Object.freeze({
     query: p.query, special: p.special, sort: p.sort, view: p.view,
   }],
   watch_list: (p) => [{ filter: p.filter, query: p.query }],
+  // Ambient composer verbs: open the composer prefilled and auto-composing.
+  // The contact is resolved by the modal itself (readTaskContext/readCallContext);
+  // the rep submits. Passing a subject implies auto-compose.
+  quick_task: (p) => [{ autoCompose: true, draft: p.subject ? { subject: p.subject } : null }],
+  call_log: (p) => [{ autoCompose: true, draft: p.subject ? { subject: p.subject } : null }],
 });
 
 function storageGet(keys) {
