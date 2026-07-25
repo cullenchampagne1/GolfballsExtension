@@ -131,8 +131,39 @@ function BlockList({ blocks, traceById, runningId }) {
   );
 }
 
+/* A comment — a quiet note between blocks, deliberately NOT a card/step. */
+function CommentRow({ block }) {
+  const d = describeBlock(block);
+  if (!d.title) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '1px 2px 1px 6px', borderLeft: '2px solid var(--gb-border-subtle)' }}>
+      <span style={{ fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', fontSize: 11, color: 'var(--gb-text-ghost)', lineHeight: 1.5 }}>//</span>
+      <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>{d.title}</span>
+    </div>
+  );
+}
+
+/* A "set variable" — its own compact chip, distinct from an action leaf. */
+function SetVarRow({ block, traceById }) {
+  const d = describeBlock(block, traceById);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px solid var(--gb-info-tint-border)', borderRadius: 9, background: 'var(--gb-info-tint-soft)' }}>
+      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', padding: '2px 6px', borderRadius: 5, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-medium)', textTransform: 'uppercase', flexShrink: 0 }}>set</span>
+      <code style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', flexShrink: 0 }}>{d.title}</code>
+      {d.detail ? (
+        <>
+          <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>=</span>
+          <code style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.detail}</code>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function Block({ block, traceById, runningId }) {
   if (block.kind === 'action') return <ActionRow block={block} traceById={traceById} runningId={runningId} />;
+  if (block.kind === 'comment') return <CommentRow block={block} />;
+  if (block.kind === 'setVar') return <SetVarRow block={block} traceById={traceById} />;
 
   if (block.kind === 'branch') {
     const hasElse = Array.isArray(block.else) && block.else.length > 0;

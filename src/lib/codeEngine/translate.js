@@ -78,6 +78,11 @@ function statementToBlock(src, stmt) {
   const id = nodeId(stmt.from, stmt.to);
   const text = slice(src, stmt.from, stmt.to);
 
+  // A comment is its own block kind — rendered as a note, not a step.
+  if (stmt.name === 'LineComment' || stmt.name === 'BlockComment') {
+    return { id, kind: 'comment', text };
+  }
+
   // An expression statement whose expression is an action call → action block.
   if (stmt.name === 'ExpressionStatement' || stmt.name === 'VariableDeclaration') {
     const expr = stmt.name === 'ExpressionStatement'
@@ -100,6 +105,14 @@ function statementToBlock(src, stmt) {
         kind: 'action', contract: action.contract, argText: action.argText,
         assignTo, text,
       };
+    }
+    // A non-action `const/let/var x = …` → a distinct "set variable" block.
+    if (stmt.name === 'VariableDeclaration') {
+      const def = childByName(stmt, 'VariableDefinition');
+      const name = def ? slice(src, def.from, def.to) : '';
+      const eq = children(stmt).find((n) => n.name === 'Equals');
+      const valueText = eq ? slice(src, eq.to, stmt.to).replace(/;\s*$/, '').trim() : '';
+      return { id, kind: 'setVar', name, valueText, text };
     }
   }
 

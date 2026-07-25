@@ -56,6 +56,8 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
   // sim: idle → running (evaluating in the sandbox) → replaying (pulsing
   // the trace) → done. `error` holds a program/sandbox failure.
   const [sim, setSim] = useState({ status: 'idle', trace: [], replayIdx: -1, error: null });
+  // Physical view switch: the whole body is EITHER the code editor or the blocks.
+  const [view, setView] = useState('code');
   const runRef = useRef(0);
   const timerRef = useRef(null);
 
@@ -109,6 +111,7 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
       setSim({ status: 'error', trace: [], replayIdx: -1, error: res.error || 'Simulation failed.' });
       return;
     }
+    setView('blocks'); // flip to the blocks so the run animation is visible
     setSim({ status: 'replaying', trace: res.trace, replayIdx: 0, error: res.error || null });
   };
 
@@ -118,14 +121,9 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {/* Toolbar */}
+      {/* Toolbar: the Code ⇆ Blocks switch + simulate controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>
-          <I.code size={14} /> Code automation
-        </span>
-        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-          write JS · <code style={{ color: 'var(--gb-text-secondary)' }}>page.*</code> + <code style={{ color: 'var(--gb-text-secondary)' }}>actions.*</code> → blocks
-        </span>
+        <ViewSwitch view={view} onView={setView} blockCount={blocks.length} />
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           <SimStatus sim={sim} ranCount={ranCount} failCount={failCount} />
           {busy ? (
@@ -141,10 +139,10 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
         </div>
       </div>
 
-      {/* Split: editor | blocks */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, borderRight: '1px solid var(--gb-border-default)', minHeight: 0 }}>
-          {/* The editor fills the column; the legend + errors sit under it. */}
+      {/* Body: the whole panel is EITHER the editor or the blocks. */}
+      {view === 'code' ? (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, minHeight: 0 }}>
+          {/* The editor fills the body down to near the modal bottom. */}
           <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
             <CodeVarEditor
               value={code}
@@ -157,11 +155,11 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
             />
           </div>
           <div style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-            <b>page.*</b> is the read-only contact/order model. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>logCall</code> — are simulated here (no real sends); each runs behind its gate on a real run.
+            <b>page.*</b> is the read-only contact/order model. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>logCall</code> — are simulated (no real sends); each runs behind its gate on a real run.
           </div>
           {errors.length ? (
             <div style={{ flexShrink: 0, fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <I.alert size={12} /> Syntax error — the blocks pause until it's fixed.
+              <I.alert size={12} /> Syntax error — switch to Blocks pauses until it's fixed.
             </div>
           ) : null}
           {sim.error ? (
@@ -170,17 +168,43 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
             </div>
           ) : null}
         </div>
-        <div style={{ flex: '1 1 50%', minWidth: 0, overflow: 'auto', background: 'var(--gb-surface-modal)' }}>
+      ) : (
+        <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--gb-surface-modal)', minHeight: 0 }}>
           <BlocksView
             blocks={blocks}
             trace={shownTrace}
             runningId={runningId}
             emptyHint={(
-              <span>Write code on the left.<br />It becomes a live block flow here — then <b>Simulate</b> to watch it run.</span>
+              <span>No blocks yet.<br />Switch to <b>Code</b>, write against <code>page.*</code> + <code>actions.*</code>, then <b>Simulate</b>.</span>
             )}
           />
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
+
+/* Code ⇆ Blocks segmented switch — flips the whole body between the two. */
+function ViewSwitch({ view, onView, blockCount }) {
+  const Item = ({ id, Ic, label, badge }) => {
+    const on = view === id;
+    return (
+      <button type="button" onClick={() => onView(id)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+          fontSize: 11.5, fontWeight: 700, transition: 'background .14s ease, color .14s ease',
+          background: on ? 'var(--gb-surface-1)' : 'transparent', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+          boxShadow: on ? '0 1px 2px rgba(0,0,0,.14)' : 'none' }}>
+        <Ic size={13} /> {label}
+        {badge != null && badge > 0 ? (
+          <span style={{ fontSize: 9.5, fontWeight: 800, padding: '0 5px', borderRadius: 999, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{badge}</span>
+        ) : null}
+      </button>
+    );
+  };
+  return (
+    <div style={{ display: 'flex', gap: 2, background: 'var(--gb-fill-subtle)', padding: 2, borderRadius: 9 }}>
+      <Item id="code" Ic={I.code} label="Code" />
+      <Item id="blocks" Ic={I.branch} label="Blocks" badge={blockCount} />
     </div>
   );
 }

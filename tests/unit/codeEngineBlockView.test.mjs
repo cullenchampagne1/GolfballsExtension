@@ -84,6 +84,27 @@ describe('blockView · block descriptors', () => {
     assert.ok(d.errors.some((e) => e.includes('"to"')));
   });
 
+  it('renders a comment as its own block kind, stripped of the // marker', () => {
+    const [c] = translateProgram('// re-engage cold contacts').blocks;
+    assert.equal(c.kind, 'comment');
+    assert.equal(describeBlock(c).title, 're-engage cold contacts');
+  });
+
+  it('renders a non-action declaration as a setVar block with name + value', () => {
+    const [v] = translateProgram('const daysCold = 30;').blocks;
+    assert.equal(v.kind, 'setVar');
+    const d = describeBlock(v);
+    assert.equal(d.kind, 'setVar');
+    assert.equal(d.title, 'daysCold');
+    assert.equal(d.detail, '30');
+  });
+
+  it('still treats an assigned action call as an action, not a setVar', () => {
+    const [a] = translateProgram('const r = await actions.createTask({ subject: "x" });').blocks;
+    assert.equal(a.kind, 'action');
+    assert.equal(a.contract, 'createTask');
+  });
+
   it('titles control-flow blocks readably', () => {
     const [branch] = translateProgram('if (page.n > 3) { await actions.logCall({ subject: "x" }); }').blocks;
     assert.equal(describeBlock(branch).title, 'If page.n > 3');

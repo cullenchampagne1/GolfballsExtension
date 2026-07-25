@@ -106,6 +106,17 @@ export function describeBlock(block, traceById = {}) {
   if (block.kind === 'cases') {
     return { ...base, icon: 'branch', title: `Switch on ${block.onText || '…'}` };
   }
+  if (block.kind === 'comment') {
+    const clean = String(block.text || '')
+      .replace(/^\s*\/\/+\s?/, '')
+      .replace(/^\s*\/\*+/, '').replace(/\*+\/\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return { ...base, kind: 'comment', icon: 'code', title: clean };
+  }
+  if (block.kind === 'setVar') {
+    return { ...base, kind: 'setVar', icon: 'code', title: block.name || 'value', detail: block.valueText || '' };
+  }
   // raw code block
   return { ...base, icon: 'code', title: firstLine(block.text) || 'code', detail: '' };
 }
