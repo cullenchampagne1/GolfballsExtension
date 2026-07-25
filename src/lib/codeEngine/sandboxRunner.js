@@ -35,7 +35,12 @@
  */
 export function buildTraceBody(instrumentedCode) {
   return [
-    'const page = ctx;',
+    'const page = (ctx && ctx.page) || {};',
+    // Rebuild the user binding (functions can\'t cross the realm) from raw data.
+    'const __u = (ctx && ctx.user) || {};',
+    'const __find = (list) => (q) => (list || []).find((t) => t && (t.id === q || t.name === q)) || null;',
+    'const user = { emails: __u.emails || [], tasks: __u.tasks || [], calls: __u.calls || [],',
+    '  email: __find(__u.emails || []), task: __find(__u.tasks || []), call: __find(__u.calls || []) };',
     'const __gbTrace = [];',
     'const actions = { __trace(id, name, input) {',
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
@@ -63,8 +68,11 @@ export function makeSandboxRunner({ exec, doc } = {}) {
   if (typeof exec !== 'function') throw new Error('makeSandboxRunner requires an exec(body, ctx, vars, doc) sandbox executor');
   return async function sandboxRun(code, scope) {
     const page = (scope && scope.page) || {};
+    const u = (scope && scope.user) || {};
+    // Only the serializable arrays cross the realm; the sandbox rebuilds the finders.
+    const user = { emails: u.emails || [], tasks: u.tasks || [], calls: u.calls || [] };
     const record = scope && scope.actions && scope.actions.__trace;
-    const raw = await exec(buildTraceBody(code), page, {}, doc);
+    const raw = await exec(buildTraceBody(code), { page, user }, {}, doc);
     if (typeof record !== 'function') return;
     for (const entry of Array.isArray(raw) ? raw : []) {
       record(entry.id, entry.contract, entry.input);

@@ -18,6 +18,7 @@
 
 import { instrument } from './instrument.js';
 import { validateContractInput, describeContract } from './contracts.js';
+import { buildUserBinding } from './userBinding.js';
 
 /** A runner that executes instrumented code via AsyncFunction (Node/tests).
  *  The browser passes its own sandbox-backed runner instead. */
@@ -40,7 +41,7 @@ export function asyncFunctionRunner(code, scope) {
  *           where a `failed` entry is a contract-validation failure (bad/missing
  *           params), surfaced as a preflight without ever sending anything.
  */
-export async function simulateProgram(source, page = {}, { run = asyncFunctionRunner } = {}) {
+export async function simulateProgram(source, page = {}, { run = asyncFunctionRunner, user = {} } = {}) {
   const { code, calls } = instrument(source);
   const trace = [];
 
@@ -57,7 +58,7 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
     return { ok: check.ok, dry: true, simulated: true };
   };
 
-  const scope = { actions: { __trace: record }, page };
+  const scope = { actions: { __trace: record }, page, user: buildUserBinding(user) };
   try {
     await run(code, scope);
     return { ok: true, trace, calls, error: null };

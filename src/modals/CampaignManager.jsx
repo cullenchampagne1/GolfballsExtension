@@ -6,6 +6,8 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, subscribeCampaigns,
 } from '../lib/campaign/store.js';
+import { loadCallTemplates } from '../lib/callLog.js';
+import { loadTaskTemplates } from '../lib/quickTask.js';
 import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
@@ -277,6 +279,8 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [importOpen, setImportOpen] = useState(false);
   // Which audience member the code simulation runs against (page.contact).
   const [simContactKey, setSimContactKey] = useState(null);
+  // The rep's saved templates, exposed to code as user.emails / user.tasks / user.calls.
+  const [userData, setUserData] = useState({ emails: [], tasks: [], calls: [] });
 
   // Import result from the paste dialog: refresh the library, open the first
   // imported campaign, and surface anything the importer couldn't resolve.
@@ -303,6 +307,27 @@ export function CampaignManager({ onClose, contacts = [] }) {
     });
     const unsub = subscribeCampaigns((list) => { if (alive) setLibrary(list); });
     return () => { alive = false; unsub(); };
+  }, []);
+
+  // Load the rep's saved email / task / call templates for the user.* binding.
+  useEffect(() => {
+    let alive = true;
+    const emails = new Promise((res) => {
+      try {
+        chrome.storage.local.get('templates', (o) => res((o?.templates || [])
+          .filter((t) => t.enabled !== false && (!t.type || t.type === 'email' || t.type === 'account'))
+          .map((t) => ({ id: t.id, name: t.name, subject: t.subject || '' }))));
+      } catch { res([]); }
+    });
+    Promise.all([emails, loadTaskTemplates(), loadCallTemplates()]).then(([em, tasks, calls]) => {
+      if (!alive) return;
+      setUserData({
+        emails: em,
+        tasks: (tasks || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject || '', priority: t.priority, daysOut: t.daysOut })),
+        calls: (calls || []).map((c) => ({ id: c.id, name: c.name, subject: c.subject || '' })),
+      });
+    });
+    return () => { alive = false; };
   }, []);
 
   const patchCampaign = (next) => { setCampaign(next); setDirty(true); };
@@ -369,7 +394,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           onSave={save} onClose={requestClose} />
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
-          <CodeAutomationPanel value={campaign.automation || ''} onChange={setAutomation} page={simPage} />
+          <CodeAutomationPanel value={campaign.automation || ''} onChange={setAutomation} page={simPage} user={userData} />
         </div>
       </ModalShell>
       </motion.div>

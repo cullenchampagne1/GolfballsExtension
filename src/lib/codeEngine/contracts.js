@@ -29,6 +29,15 @@ export const GATE_BY_EFFECT = Object.freeze({
 const str = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 const clip = (value, max) => { const s = str(value); return s.length > max ? `${s.slice(0, max - 1)}…` : s; };
 
+/* A "template reference" is a saved email/task/call object (it carries id +
+   name), or an explicit { template } wrapper. Returns the template or null. */
+function templateOf(input) {
+  if (!input || typeof input !== 'object') return null;
+  if (input.id != null && input.name != null) return input;
+  if (input.template && typeof input.template === 'object') return input.template;
+  return null;
+}
+
 /**
  * The Phase-1 contracts (contact/order composer actions). Each is keyed by its
  * camelCase code name; `verb` is the snake_case JSON-payload parity name.
@@ -42,16 +51,28 @@ export const CONTRACTS = Object.freeze({
     object: 'email',
     effect: 'outward',
     summary: 'Send an email',
+    // Accepts a saved email (user.emails[…]) OR a custom { subject, body }.
+    // `to` defaults to the current contact; the signature is appended by the
+    // send engine after the body — never inside your text.
+    accepts: 'a saved email or { subject, body }',
     params: {
-      to: { type: 'string', required: true, max: 320 },
-      subject: { type: 'string', required: true, max: 300 },
-      htmlBody: { type: 'string', max: 200_000 },
+      subject: { type: 'string', max: 300 },
+      body: { type: 'string', max: 200_000 },
+      to: { type: 'string', max: 320 },
       from: { type: 'string', max: 320 },
     },
+    validate: (i) => {
+      const errors = [];
+      if (!templateOf(i) && !str(i.subject)) errors.push('sendEmail needs a saved email or a subject');
+      return { errors, value: i };
+    },
     describe: (i) => {
-      const to = clip(i?.to, 60) || 'recipient';
-      const subj = clip(i?.subject, 60);
-      return subj ? `Send email to ${to} — “${subj}”` : `Send email to ${to}`;
+      const tpl = templateOf(i);
+      const to = clip(i?.to, 46);
+      const who = to ? ` to ${to}` : '';
+      if (tpl) return `Send “${clip(tpl.name || tpl.subject, 46)}”${who}`;
+      const subj = clip(i?.subject, 52);
+      return subj ? `Send email “${subj}”${who}` : 'Send an email';
     },
   },
   createTask: {
@@ -60,16 +81,22 @@ export const CONTRACTS = Object.freeze({
     object: 'task',
     effect: 'remote',
     summary: 'Create a task for the current contact',
+    accepts: 'a saved task or { subject, body, priority, daysOut }',
     params: {
-      subject: { type: 'string', required: true, max: 500 },
+      subject: { type: 'string', max: 500 },
       body: { type: 'string', max: 4_000 },
       priority: { type: 'enum', options: ['high', 'med', 'low'] },
       daysOut: { type: 'number', min: 0, max: 3650 },
     },
+    validate: (i) => {
+      const errors = [];
+      if (!templateOf(i) && !str(i.subject)) errors.push('createTask needs a saved task or a subject');
+      return { errors, value: i };
+    },
     describe: (i) => {
-      const subj = clip(i?.subject, 70);
-      return subj ? `Create task “${subj}” for the current contact`
-        : 'Create a task for the current contact';
+      const tpl = templateOf(i);
+      const label = clip(tpl ? (tpl.name || tpl.subject) : i?.subject, 60);
+      return label ? `Create task “${label}”` : 'Create a task for the current contact';
     },
   },
   logCall: {
@@ -78,17 +105,23 @@ export const CONTRACTS = Object.freeze({
     object: 'call',
     effect: 'remote',
     summary: 'Log a call for the current contact',
+    accepts: 'a saved call or { subject, body, direction }',
     params: {
-      subject: { type: 'string', required: true, max: 500 },
+      subject: { type: 'string', max: 500 },
       body: { type: 'string', max: 4_000 },
       direction: { type: 'enum', options: ['outbound', 'inbound'] },
       voicemail: { type: 'bool' },
     },
+    validate: (i) => {
+      const errors = [];
+      if (!templateOf(i) && !str(i.subject)) errors.push('logCall needs a saved call or a subject');
+      return { errors, value: i };
+    },
     describe: (i) => {
-      const subj = clip(i?.subject, 70);
+      const tpl = templateOf(i);
+      const label = clip(tpl ? (tpl.name || tpl.subject) : i?.subject, 60);
       const dir = i?.direction === 'inbound' ? 'inbound' : 'outbound';
-      return subj ? `Log ${dir} call “${subj}” for the current contact`
-        : `Log an ${dir} call for the current contact`;
+      return label ? `Log ${dir} call “${label}”` : `Log an ${dir} call for the current contact`;
     },
   },
 });
@@ -131,6 +164,14 @@ export function validateContractInput(nameOrVerb, rawInput) {
   const c = contractFor(nameOrVerb);
   if (!c) return { ok: false, value: null, errors: [`Unknown action "${str(nameOrVerb)}"`] };
   const input = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? rawInput : {};
+
+  // A contract may own a shape-aware validator (template OR custom object).
+  if (typeof c.validate === 'function') {
+    const r = c.validate(input) || { errors: [] };
+    const errs = Array.isArray(r.errors) ? r.errors : [];
+    return { ok: errs.length === 0, value: errs.length ? null : (r.value ?? input), errors: errs };
+  }
+
   const errors = [];
   const value = {};
 

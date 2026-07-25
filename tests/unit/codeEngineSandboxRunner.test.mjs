@@ -26,7 +26,7 @@ async function fakeExec(body, ctx, vars = {}, _doc) {
 describe('sandboxRunner · body shape', () => {
   it('binds page, records via a local recorder, and returns the raw trace', () => {
     const body = buildTraceBody('await actions.__trace("n0_0","createTask",{ subject: "x" })');
-    assert.match(body, /const page = ctx;/);
+    assert.match(body, /const page = \(ctx && ctx\.page\)/);
     assert.match(body, /return __gbTrace;/);
     // Ends in a return, so the sandbox's wrapBody leaves it verbatim (no re-wrap).
     assert.ok(/return\b/.test(body));
@@ -54,12 +54,12 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
 
   it('carries a contract-validation failure through the replay', async () => {
     const { trace } = await simulateProgram(
-      'await actions.sendEmail({ subject: "no recipient" })',
+      'await actions.sendEmail({ from: "me@x.com" })',
       {},
       { run: makeSandboxRunner({ exec: fakeExec }) },
     );
     assert.equal(trace[0].status, 'failed');
-    assert.ok(trace[0].errors.some((e) => e.includes('"to"')));
+    assert.ok(trace[0].errors.some((e) => /saved email or a subject/.test(e)));
   });
 
   it('never executes a real effect — only the recorder sees the calls', async () => {

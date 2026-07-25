@@ -39,17 +39,17 @@ import { runInSandbox } from '../../lib/page-engine/sandbox-bridge.js';
      doc      Document      — document the sandbox's read helpers read
 ─────────────────────────────────────────────────────────────── */
 
-const STARTER = `// Write automation against page.* and actions.*
-// e.g. thank this year's high-value contacts, nurture the rest:
-for (const c of (page.contacts || [])) {
-  if (c.ytd > 1000) {
-    await actions.sendEmail({ to: c.email, subject: "Thanks for your business" });
-  } else {
-    await actions.createTask({ subject: "Re-engage " + c.name });
-  }
+const STARTER = `// page.contact = who you're simulating · user.* = your saved templates
+// Re-engage a cold contact with a SAVED email, else a saved task:
+const c = page.contact;
+
+if (c.daysCold > 30) {
+  await actions.sendEmail(user.email("Win-back"));   // a saved email
+} else {
+  await actions.createTask(user.task("Quick follow-up"));
 }`;
 
-export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
+export function CodeAutomationPanel({ value, onChange, page = {}, user = {}, doc }) {
   const code = value || '';
   const { blocks, errors } = useMemo(() => translateProgram(code), [code]);
 
@@ -100,6 +100,7 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
     try {
       res = await simulateProgram(code, page, {
         run: makeSandboxRunner({ exec: runInSandbox, doc: doc || (typeof document !== 'undefined' ? document : undefined) }),
+        user,
       });
     } catch (e) {
       if (myRun !== runRef.current) return;

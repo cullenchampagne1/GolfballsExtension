@@ -45,7 +45,7 @@ describe('blockView · trace indexing + status', () => {
   });
 
   it('propagates a contract-validation failure up through its loop', async () => {
-    const source = 'for (const c of page.c) { await actions.sendEmail({ subject: "no recipient" }); }';
+    const source = 'for (const c of page.c) { await actions.sendEmail({ from: "me@x.com" }); }';
     const loop = translateProgram(source).blocks[0];
     const { trace } = await simulateProgram(source, { c: [1] });
     assert.equal(blockStatus(loop, indexTrace(trace)), 'failed');
@@ -76,12 +76,12 @@ describe('blockView · block descriptors', () => {
   });
 
   it('surfaces contract errors on a failed action', async () => {
-    const source = 'await actions.sendEmail({ subject: "no recipient" })';
+    const source = 'await actions.sendEmail({ from: "me@x.com" })';
     const block = translateProgram(source).blocks[0];
     const { trace } = await simulateProgram(source);
     const d = describeBlock(block, indexTrace(trace));
     assert.equal(d.status, 'failed');
-    assert.ok(d.errors.some((e) => e.includes('"to"')));
+    assert.ok(d.errors.some((e) => /saved email or a subject/.test(e)));
   });
 
   it('renders a comment as its own block kind, stripped of the // marker', () => {

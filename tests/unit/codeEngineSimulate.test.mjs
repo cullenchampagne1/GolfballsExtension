@@ -24,10 +24,10 @@ describe('simulate · trace for the animation', () => {
   });
 
   it('flags a contract-validation failure as preflight, not a send', async () => {
-    // Missing the required `to` on sendEmail.
-    const { trace } = await simulateProgram('await actions.sendEmail({ subject: "Hi" })');
+    // Neither a saved email nor a subject → invalid, surfaced as a preflight.
+    const { trace } = await simulateProgram('await actions.sendEmail({ from: "me@x.com" })');
     assert.equal(trace[0].status, 'failed');
-    assert.ok(trace[0].errors.some((e) => e.includes('"to"')));
+    assert.ok(trace[0].errors.some((e) => /saved email or a subject/.test(e)));
   });
 
   it('threads a loop with a per-contact branch', async () => {

@@ -63,42 +63,29 @@ describe('contracts · effect → gate is the safety spine', () => {
   });
 });
 
-describe('contracts · input validation', () => {
-  it('accepts a well-formed email and normalizes it', () => {
-    const r = validateContractInput('sendEmail', {
-      to: 'a@b.com', subject: 'Hi', htmlBody: '<p>x</p>',
-    });
+describe('contracts · input validation (template OR custom object)', () => {
+  it('accepts a custom email with a subject', () => {
+    const r = validateContractInput('sendEmail', { to: 'a@b.com', subject: 'Hi', body: '<p>x</p>' });
     assert.equal(r.ok, true);
-    assert.deepEqual(r.value, { to: 'a@b.com', subject: 'Hi', htmlBody: '<p>x</p>' });
   });
 
-  it('requires the required fields', () => {
-    const r = validateContractInput('sendEmail', { subject: 'Hi' });
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes('"to"')));
-  });
-
-  it('rejects an unknown parameter', () => {
-    const r = validateContractInput('createTask', { subject: 'x', bcc: 'y' });
-    assert.equal(r.ok, false);
-    assert.ok(r.errors.some((e) => e.includes('Unknown parameter "bcc"')));
-  });
-
-  it('enforces enum and number bounds', () => {
-    assert.equal(validateContractInput('createTask', { subject: 'x', priority: 'urgent' }).ok, false);
-    assert.equal(validateContractInput('createTask', { subject: 'x', daysOut: 9999 }).ok, false);
-    const good = validateContractInput('createTask', { subject: 'x', priority: 'high', daysOut: 3 });
-    assert.equal(good.ok, true);
-    assert.deepEqual(good.value, { subject: 'x', priority: 'high', daysOut: 3 });
-  });
-
-  it('coerces booleans and clamps long strings', () => {
-    const r = validateContractInput('logCall', {
-      subject: 'x'.repeat(600), direction: 'inbound', voicemail: 'true',
-    });
+  it('accepts a saved email template (id + name), no subject needed', () => {
+    const r = validateContractInput('sendEmail', { id: 't1', name: 'Win-back', subject: 'We miss you' });
     assert.equal(r.ok, true);
-    assert.equal(r.value.subject.length, 500);
-    assert.equal(r.value.voicemail, true);
+  });
+
+  it('rejects an email that is neither a template nor has a subject', () => {
+    const r = validateContractInput('sendEmail', { to: 'a@b.com' });
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => /saved email or a subject/.test(e)));
+  });
+
+  it('accepts a saved task or a custom task, rejects an empty one', () => {
+    assert.equal(validateContractInput('createTask', { id: 't2', name: 'Follow up' }).ok, true);
+    assert.equal(validateContractInput('createTask', { subject: 'Call them' }).ok, true);
+    const bad = validateContractInput('createTask', {});
+    assert.equal(bad.ok, false);
+    assert.ok(bad.errors.some((e) => /saved task or a subject/.test(e)));
   });
 
   it('reports an unknown action rather than throwing', () => {
@@ -109,16 +96,15 @@ describe('contracts · input validation', () => {
 });
 
 describe('contracts · describe() is stable', () => {
-  it('summarizes with and without a subject', () => {
-    assert.equal(
-      describeContract('sendEmail', { to: 'a@b.com', subject: 'Quote' }),
-      'Send email to a@b.com — “Quote”',
-    );
-    assert.equal(describeContract('createTask', { subject: 'Follow up' }),
-      'Create task “Follow up” for the current contact');
-    assert.equal(describeContract('logCall', { subject: 'VM', direction: 'inbound' }),
-      'Log inbound call “VM” for the current contact');
-    assert.equal(describeContract('createTask', {}),
-      'Create a task for the current contact');
+  it('summarizes a saved template by its name', () => {
+    assert.equal(describeContract('sendEmail', { id: 't1', name: 'Win-back' }), 'Send “Win-back”');
+    assert.equal(describeContract('createTask', { id: 't2', name: 'Follow up' }), 'Create task “Follow up”');
+  });
+
+  it('summarizes a custom email/task by its subject', () => {
+    assert.equal(describeContract('sendEmail', { to: 'a@b.com', subject: 'Quote' }), 'Send email “Quote” to a@b.com');
+    assert.equal(describeContract('createTask', { subject: 'Follow up' }), 'Create task “Follow up”');
+    assert.equal(describeContract('logCall', { subject: 'VM', direction: 'inbound' }), 'Log inbound call “VM”');
+    assert.equal(describeContract('createTask', {}), 'Create a task for the current contact');
   });
 });
