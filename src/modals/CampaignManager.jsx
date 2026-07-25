@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, IconBtn, Tag, Dot, Input, Dropdown, ModalShell, I } from '../ui/index.js';
+import { Btn, IconBtn, Tag, Dot, Input, Dropdown, PillTag, ModalShell, I } from '../ui/index.js';
 import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
@@ -9,6 +9,10 @@ import {
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
+import { translateProgram, flattenBlocks } from '../lib/codeEngine/translate.js';
+import { simulateProgram } from '../lib/codeEngine/simulate.js';
+import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
+import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   CAMPAIGN_MANAGER_HEIGHT,
@@ -33,10 +37,12 @@ function ensureCampaignStyles() {
   if (typeof document === 'undefined' || document.getElementById(CMP_STYLE_ID)) return;
   const s = document.createElement('style');
   s.id = CMP_STYLE_ID;
-  // Hover-reveal the per-row delete button in the library sidebar.
+  // Hover-reveal the sidebar delete + the run-view animations.
   s.textContent = `
     .gb-cmp-row .gb-cmp-del { opacity: 0; transition: opacity .12s ease; }
     .gb-cmp-row:hover .gb-cmp-del { opacity: 1; }
+    @keyframes cm-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
+    @keyframes cm-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 6px transparent; } }
   `;
   (document.head || document.documentElement).appendChild(s);
 }
@@ -112,7 +118,9 @@ function fmtMoney(n) {
   return `$${Math.round(v)}`;
 }
 
-function TopBar({ campaign, onChange, dirty, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onSave, onClose }) {
+function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
+  const simBusy = sim.status === 'running' || sim.status === 'replaying';
+  const building = sim.status === 'running';
   const contactOptions = audience.map((c, i) => ({ id: c._key, label: c.contactName || c.name || c.contactId || `Contact ${i + 1}` }));
   return (
     <div style={{ padding: '12px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
@@ -120,7 +128,6 @@ function TopBar({ campaign, onChange, dirty, audience = [], simContactKey, onSim
         <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.megaphone size={17} /></div>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Campaign Manager</div>
-          {/* Plain transparent field — flush-left under the label, no box, grows to fill the bar. */}
           <input value={campaign.name} onChange={(e) => onChange({ ...campaign, name: e.target.value })}
             style={{ marginTop: 2, width: '100%', height: 24, background: 'transparent', border: 'none', outline: 'none', padding: 0, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 16, fontWeight: 800, letterSpacing: -.3 }} />
         </div>
@@ -131,8 +138,6 @@ function TopBar({ campaign, onChange, dirty, audience = [], simContactKey, onSim
           <span style={{ fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Audience</span>
           <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)' }}>{audienceCount}</span>
         </div>
-        {/* Total audience value — summed handed-off revenue. Hidden when the
-            selection carried no value (e.g. a Task List launch ⇒ $0). */}
         {audienceValue > 0 && (
           <>
             <div style={{ width: 1, height: 20, background: 'var(--gb-border-default)' }} />
@@ -143,16 +148,20 @@ function TopBar({ campaign, onChange, dirty, audience = [], simContactKey, onSim
           </>
         )}
       </div>
-      {/* Simulate against a chosen audience member (drives page.contact). */}
-      {contactOptions.length > 0 && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
-          <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)', flexShrink: 0 }}>Sim as</span>
-          <div style={{ width: 168 }}>
-            <Dropdown size="sm" value={simContactKey} options={contactOptions} searchable placeholder="Pick a contact…" onChange={onSimContactChange} />
+      {/* Simulate = run the code against one chosen contact, watch the blocks. */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
+        <IconBtn size="sm" variant="ghost" icon={<I.rewind />} title="Reset simulation" onClick={onSimReset} />
+        {contactOptions.length > 0 && (
+          <div style={{ width: 150 }}>
+            <Dropdown size="sm" value={simContactKey} options={contactOptions} searchable placeholder="Pick a contact…" disabled={simBusy} onChange={onSimContactChange} />
           </div>
-        </div>
-      )}
-      <Btn variant="primary" status="brand" size="sm" icon={<I.check />} onClick={onSave} disabled={!dirty}>{dirty ? 'Save' : 'Saved'}</Btn>
+        )}
+        <Btn variant={simBusy ? 'tinted' : 'secondary'} status={simBusy ? 'warning' : 'brand'} size="sm" icon={simBusy ? <I.pause /> : <I.play />} disabled={!contactOptions.length} state={building ? 'loading' : 'idle'} onClick={simBusy ? onSimStop : onSimStart}>{simBusy ? 'Stop sim' : 'Simulate'}</Btn>
+      </div>
+      <PillTag on={dryRun} onClick={() => onDryRunChange(!dryRun)}>
+        <Dot tone={dryRun ? 'warning' : 'muted'} /> Dry run
+      </PillTag>
+      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={simBusy}>{dryRun ? 'Dry run' : 'Run campaign'}</Btn>
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" icon={<I.close />} onClick={onClose} />
     </div>
@@ -243,6 +252,220 @@ function ImportCampaignsModal({ onClose, onDone }) {
 }
 
 /* ── Root ── */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* The `page` model for one contact — same shape the panel simulates against. */
+function pageFor(contact, audience) {
+  return { contact: contact || {}, contacts: audience, count: audience.length };
+}
+
+/* ── Run engine (code-driven) ───────────────────────────────────
+   Mirrors the old useCampaignRunner interface (rows / progress /
+   start / pause / stop / reset / again), but each contact is evaluated
+   by RUNNING THE CODE (simulateProgram) rather than the step engine —
+   the "evaluation is the same", the authoring is code. Dry by default;
+   real gated sends are the executor swap (next phase). */
+function useCodeRunner() {
+  const [running, setRunning] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [complete, setComplete] = useState(false);
+  const [rows, setRows] = useState({});
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const controlRef = useRef({ paused: false, stopped: false });
+  const lastArgsRef = useRef(null);
+
+  const start = async (args) => {
+    lastArgsRef.current = args;
+    const { code, audience, user, pace = 140 } = args;
+    controlRef.current = { paused: false, stopped: false };
+    setPaused(false); setComplete(false); setRunning(true);
+    const init = {};
+    audience.forEach((c) => { init[c._key] = { status: 'queued', label: '', ran: 0 }; });
+    setRows(init);
+    setProgress({ done: 0, total: audience.length });
+
+    const run = makeSandboxRunner({ exec: runInSandbox });
+    for (let i = 0; i < audience.length; i += 1) {
+      if (controlRef.current.stopped) break;
+      while (controlRef.current.paused && !controlRef.current.stopped) await sleep(150);
+      if (controlRef.current.stopped) break;
+      const c = audience[i];
+      setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } }));
+      let res;
+      try { res = await simulateProgram(code, pageFor(c, audience), { run, user }); }
+      catch (e) { res = { ok: false, trace: [], error: String(e?.message || e) }; }
+      const ran = res.trace.filter((t) => t.status === 'ran').length;
+      const failed = res.trace.some((t) => t.status === 'failed') || !res.ok;
+      const last = res.trace.length ? res.trace[res.trace.length - 1].summary : '';
+      setRows((r) => ({
+        ...r,
+        [c._key]: { ...(r[c._key] || {}), ran, label: last || (res.error || '—'), status: failed ? 'failed' : ran > 0 ? 'sent' : 'skipped' },
+      }));
+      setProgress({ done: i + 1, total: audience.length });
+      await sleep(pace);
+    }
+    setRunning(false); setComplete(!controlRef.current.stopped);
+  };
+
+  const pause = () => { controlRef.current.paused = true; setPaused(true); };
+  const resume = () => { controlRef.current.paused = false; setPaused(false); };
+  const stop = () => { controlRef.current.stopped = true; setRunning(false); };
+  const reset = () => { setRows({}); setProgress({ done: 0, total: 0 }); setComplete(false); };
+  const again = () => { if (lastArgsRef.current) start(lastArgsRef.current); };
+
+  return { running, paused, complete, rows, progress, start, pause, resume, stop, reset, again };
+}
+
+function RunInitials({ name, size = 28 }) {
+  const initials = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  return (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--gb-fill-strong)', color: 'var(--gb-text-secondary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', flexShrink: 0, border: '1px solid var(--gb-border-default)' }}>{initials}</span>
+  );
+}
+
+const RUN_STATUS_TONE = {
+  queued: { fg: 'var(--gb-text-muted)', bg: 'var(--gb-fill-subtle)', bd: 'var(--gb-border-default)', label: 'Queued' },
+  sending: { fg: 'var(--gb-brand-label)', bg: 'var(--gb-brand-tint-medium)', bd: 'var(--gb-brand-tint-border)', label: 'Running' },
+  sent: { fg: 'var(--gb-success-fg)', bg: 'var(--gb-success-tint-medium)', bd: 'var(--gb-success-tint-border)', label: 'Done' },
+  stopped: { fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-medium)', bd: 'var(--gb-warning-tint-border)', label: 'Branch · stop' },
+  skipped: { fg: 'var(--gb-text-muted)', bg: 'var(--gb-fill-subtle)', bd: 'var(--gb-border-default)', label: 'Skipped' },
+  failed: { fg: 'var(--gb-error-fg)', bg: 'var(--gb-error-tint-medium)', bd: 'var(--gb-error-tint-border)', label: 'Failed' },
+};
+
+function RunPipeline({ mainCount, ran, status }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+      {Array.from({ length: Math.max(1, mainCount) }).map((_, i) => {
+        const done = i < ran;
+        const active = status === 'sending' && i === ran;
+        const color = done || active ? 'var(--gb-brand-label)' : 'var(--gb-text-ghost)';
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && <span style={{ width: 10, height: 1.5, background: i <= ran ? 'var(--gb-brand-label)' : 'var(--gb-border-default)' }} />}
+            <span style={{ width: active ? 10 : 8, height: active ? 10 : 8, borderRadius: '50%', background: (done || active) ? color : 'transparent', border: `1.5px solid ${color}`, animation: active ? 'cm-pulse-ring 1.2s ease-in-out infinite' : 'none', flexShrink: 0 }} />
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit }) {
+  const { rows, progress, paused, complete, running, pause, resume, again } = runner;
+  const exit = () => { runner.stop(); onExit?.(); };
+  const counts = useMemo(() => {
+    const c = { queued: 0, sending: 0, sent: 0, stopped: 0, skipped: 0, failed: 0 };
+    audience.forEach((a) => { const s = rows[a._key]?.status || 'queued'; c[s] = (c[s] || 0) + 1; });
+    return c;
+  }, [rows, audience]);
+  const total = audience.length;
+  const audValue = useMemo(() => audience.reduce((s, c) => s + (Number(c.value) || 0), 0), [audience]);
+  const finished = counts.sent + counts.stopped + counts.skipped + counts.failed;
+  const pct = total > 0 ? (finished / total) * 100 : 0;
+  const Tally = ({ label, value, tone }) => (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 16.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: tone || 'var(--gb-text-secondary)', lineHeight: 1.1 }}>{value}</div>
+    </div>
+  );
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .3 }}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
+      <div style={{ padding: '14px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: (running && !paused) ? 'cm-running 1.8s ease-in-out infinite' : 'none' }}><I.send size={15} /></div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{dryRun ? 'Dry-run · nothing is sent' : 'Running campaign'}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--gb-text-primary)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{campaign.name}</span>
+            {paused && <Tag tone="warning" size="xs">Paused</Tag>}
+            {complete && <Tag tone="brand" size="xs">Complete</Tag>}
+            {dryRun && <Tag tone="neutral" size="xs">DRY RUN</Tag>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 18, paddingLeft: 18, borderLeft: '1px solid var(--gb-border-default)' }}>
+          <Tally label="Audience" value={total} />
+          {audValue > 0 && <Tally label="Value" value={fmtMoney(audValue)} tone="var(--gb-success-fg)" />}
+          <Tally label="Running" value={counts.sending} tone="var(--gb-brand-label)" />
+          <Tally label="Sent" value={counts.sent} tone="var(--gb-success-fg)" />
+          <Tally label="Skipped" value={counts.skipped} />
+          {counts.failed > 0 && <Tally label="Failed" value={counts.failed} tone="var(--gb-error-fg)" />}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
+          {paused
+            ? <Btn size="sm" variant="tinted" status="brand" icon={<I.play />} onClick={resume}>Resume</Btn>
+            : complete
+              ? <Btn size="sm" variant="tinted" status="brand" icon={<I.refresh />} onClick={again}>Run again</Btn>
+              : <Btn size="sm" variant="tinted" status="warning" icon={<I.pause />} onClick={pause}>Pause</Btn>}
+          <Btn size="sm" variant="ghost" icon={<I.close />} onClick={exit}>Stop &amp; edit</Btn>
+        </div>
+      </div>
+      <div style={{ height: 4, background: 'var(--gb-fill-inverse-medium)', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--gb-brand) 0%, var(--gb-brand-label) 100%)', boxShadow: '0 0 8px var(--gb-brand-label)', transition: 'width .35s ease' }} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '36px 1.4fr 1.1fr auto 1.1fr 120px', gap: 14, padding: '9px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-subtle)', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0 }}>
+        <div /><div>Contact</div><div>Email</div><div>Steps · {mainCount}</div><div>Last step</div><div style={{ textAlign: 'right' }}>State</div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {audience.map((c) => {
+          const st = rows[c._key] || { status: 'queued', label: '', ran: 0 };
+          const tone = RUN_STATUS_TONE[st.status] || RUN_STATUS_TONE.queued;
+          const inflight = st.status === 'sending';
+          return (
+            <div key={c._key} style={{ display: 'grid', gridTemplateColumns: '36px 1.4fr 1.1fr auto 1.1fr 120px', gap: 14, alignItems: 'center', padding: '10px 19px', borderBottom: '1px solid var(--gb-border-subtle)', borderLeft: `3px solid ${inflight ? 'var(--gb-brand-label)' : st.status === 'sent' ? 'color-mix(in srgb, var(--gb-brand-label) 30%, transparent)' : 'transparent'}`, background: inflight ? 'color-mix(in srgb, var(--gb-brand-tint-soft) 80%, transparent)' : 'transparent', opacity: st.status === 'sent' || st.status === 'skipped' ? 0.75 : 1, transition: 'background-color .35s, opacity .35s, border-left-color .25s' }}>
+              <RunInitials name={c.contactName || c.name} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.contactName || c.name || '(unknown)'}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.account || ''}</div>
+              </div>
+              <div style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email || ''}</div>
+              <RunPipeline mainCount={mainCount} ran={st.ran || 0} status={st.status} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label || (st.status === 'queued' ? 'Up next' : '—')}</div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 4, background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 10, fontWeight: 700, letterSpacing: .4, fontFamily: 'var(--gb-font-mono)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{tone.label}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ── Stats strip (footer) — code program summary + Save ── */
+function StatsStrip({ program, campaign, dirty, onSave }) {
+  const ratePerMin = Math.round(60 / Math.max(campaign.paceDelay || 12, 1));
+  const isValid = program.errors.length === 0 && program.actionCount > 0;
+  const Cell = ({ icon, k, v, sub, tone = 'neutral' }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 10px', flexShrink: 0 }}>
+      <div style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', background: tone === 'brand' ? 'var(--gb-brand-tint-medium)' : tone === 'warning' ? 'var(--gb-warning-tint-medium)' : tone === 'success' ? 'var(--gb-success-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: tone === 'brand' ? 'var(--gb-brand-label)' : tone === 'warning' ? 'var(--gb-warning-fg)' : tone === 'success' ? 'var(--gb-success-fg)' : 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(icon, { size: 13 })}</div>
+      <div>
+        <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{k}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 1 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: tone === 'warning' ? 'var(--gb-warning-fg)' : tone === 'success' ? 'var(--gb-success-fg)' : 'var(--gb-text-primary)' }}>{v}</span>
+          {sub && <span style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>{sub}</span>}
+        </div>
+      </div>
+    </div>
+  );
+  const Divider = () => <div style={{ width: 1, height: 32, background: 'var(--gb-border-subtle)', flexShrink: 0 }} />;
+  return (
+    <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minHeight: 56 }}>
+      <Cell icon={<I.zap />} tone="brand" k="Pacing" v={`~${ratePerMin}/min`} sub={`${campaign.paceDelay || 12}s`} />
+      <Divider />
+      <Cell icon={<I.flow />} k="Steps" v={program.actionCount} sub={program.branchCount ? `${program.branchCount} branch${program.branchCount !== 1 ? 'es' : ''}` : ''} />
+      <div style={{ flex: 1 }} />
+      <Cell icon={isValid ? <I.check /> : <I.alert />} tone={isValid ? 'success' : 'warning'} k={isValid ? 'Valid' : 'Issues'} v={isValid ? 'OK' : (program.errors.length || 'empty')} />
+      <Divider />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 6 }}>
+        <Btn variant="primary" size="sm" icon={<I.check />} onClick={onSave} disabled={!dirty}>{dirty ? 'Save campaign' : 'Saved'}</Btn>
+      </div>
+    </div>
+  );
+}
+
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignStyles();
   const toast = useToast();
@@ -366,13 +589,65 @@ export function CampaignManager({ onClose, contacts = [] }) {
     if (!audienceKeyed.length) { setSimContactKey(null); return; }
     setSimContactKey((k) => (audienceKeyed.some((c) => c._key === k) ? k : audienceKeyed[0]._key));
   }, [audienceKeyed]);
-  const simPage = useMemo(() => ({
-    contacts: audienceKeyed,
-    contact: audienceKeyed.find((c) => c._key === simContactKey) || audienceKeyed[0] || {},
-    count: audienceKeyed.length,
-  }), [audienceKeyed, simContactKey]);
   const setAutomation = (src) => patchCampaign({ ...campaign, automation: src });
   const audienceValue = useMemo(() => contacts.reduce((s, c) => s + (Number(c.value) || 0), 0), [contacts]);
+
+  // Translate the code once — feeds the blocks view + the stats footer.
+  const program = useMemo(() => {
+    const { blocks, errors } = translateProgram(campaign.automation || '');
+    const flat = flattenBlocks(blocks);
+    return { blocks, errors, actionCount: flat.filter((b) => b.kind === 'action').length, branchCount: flat.filter((b) => b.kind === 'branch').length };
+  }, [campaign.automation]);
+
+  const [view, setView] = useState('code');
+  const [dryRun, setDryRun] = useState(true);
+  const [runMode, setRunMode] = useState(false);
+  const runner = useCodeRunner();
+  // Single-contact simulation that animates the blocks (top-bar Simulate).
+  const [sim, setSim] = useState({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' });
+  const simRunRef = useRef(0);
+  const simTimer = useRef(null);
+
+  const runningId = sim.status === 'replaying' ? (sim.trace[sim.replayIdx]?.id || null) : null;
+  const shownTrace = sim.status === 'replaying' ? sim.trace.slice(0, sim.replayIdx + 1) : sim.trace;
+
+  const startSim = async () => {
+    if (!program.blocks.length) { toast?.warning?.('Write some code first.'); return; }
+    if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
+    const contact = audienceKeyed.find((c) => c._key === simContactKey) || audienceKeyed[0];
+    if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; }
+    const my = ++simRunRef.current;
+    setView('blocks');
+    setSim({ status: 'running', trace: [], replayIdx: -1, done: false, result: null, contactName: contact?.contactName || contact?.name || '(contact)' });
+    let res;
+    try { res = await simulateProgram(campaign.automation || '', pageFor(contact, audienceKeyed), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData }); }
+    catch (e) { if (my === simRunRef.current) { toast?.error?.('Simulate failed — ' + String(e?.message || e)); setSim((s) => ({ ...s, status: 'idle' })); } return; }
+    if (my !== simRunRef.current) return;
+    if (!res.ok && !res.trace.length) { toast?.error?.(res.error || 'Simulation failed.'); setSim((s) => ({ ...s, status: 'idle' })); return; }
+    setSim((s) => ({ ...s, status: 'replaying', trace: res.trace, replayIdx: 0, result: res.result }));
+  };
+  const stopSim = () => { simRunRef.current += 1; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim((s) => ({ ...s, status: s.trace.length ? 'done' : 'idle', done: true })); };
+  const resetSim = () => { simRunRef.current += 1; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' }); };
+
+  // Replay: advance one trace entry ~600ms, then settle on 'done'.
+  useEffect(() => {
+    if (sim.status !== 'replaying') return undefined;
+    if (sim.replayIdx >= sim.trace.length - 1) {
+      simTimer.current = setTimeout(() => setSim((s) => ({ ...s, status: 'done', done: true })), 650);
+      return () => { if (simTimer.current) clearTimeout(simTimer.current); };
+    }
+    simTimer.current = setTimeout(() => setSim((s) => ({ ...s, replayIdx: s.replayIdx + 1 })), 600);
+    return () => { if (simTimer.current) clearTimeout(simTimer.current); };
+  }, [sim.status, sim.replayIdx, sim.trace]);
+
+  const startRun = () => {
+    if (!audienceKeyed.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
+    if (!program.actionCount) { toast?.warning?.('Add a send/create step before running.'); return; }
+    if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
+    resetSim();
+    setRunMode(true);
+    runner.start({ code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140 });
+  };
 
   return (
     <AnimatePresence onExitComplete={onClose}>
@@ -388,14 +663,34 @@ export function CampaignManager({ onClose, contacts = [] }) {
           the scale/fade exit on close. */}
       <motion.div initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
       <ModalShell width={CAMPAIGN_MANAGER_WIDTH} height={CAMPAIGN_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
-        <TopBar campaign={campaign} onChange={patchCampaign}
+        <TopBar campaign={campaign} onChange={patchCampaign} sim={sim}
+          onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
-          dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue}
-          onSave={save} onClose={requestClose} />
+          audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
+          dryRun={dryRun} onDryRunChange={setDryRun} />
+        {runMode ? (
+          <AudienceRunView
+            campaign={campaign}
+            audience={audienceKeyed}
+            mainCount={program.actionCount}
+            runner={runner}
+            dryRun={dryRun}
+            onExit={() => { setRunMode(false); runner.reset(); }}
+          />
+        ) : (
+        <>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
-          <CodeAutomationPanel value={campaign.automation || ''} onChange={setAutomation} page={simPage} user={userData} />
+          <CodeAutomationPanel
+            value={campaign.automation || ''} onChange={setAutomation}
+            blocks={program.blocks} errors={program.errors}
+            view={view} onView={setView}
+            trace={shownTrace} runningId={runningId} done={sim.status === 'done'} result={sim.status === 'done' ? sim.result : null}
+            simStatus={sim.status} />
         </div>
+        <StatsStrip program={program} campaign={campaign} dirty={dirty} onSave={save} />
+        </>
+        )}
       </ModalShell>
       </motion.div>
       {importOpen && <ImportCampaignsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
