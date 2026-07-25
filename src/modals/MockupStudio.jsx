@@ -537,102 +537,105 @@ function ReferenceGrid({
   );
 }
 
-function ArtworkDropzone({
-  busy, inputRef, onChoose,
-}) {
+/**
+ * The persistent top bar of the product picker.
+ *
+ * It always occupies the same slot: once a logo is uploaded it confirms the
+ * artwork with Replace/Remove; until then it REQUESTS the logo in place — a
+ * compact drop target — instead of a full-page upload screen taking over the
+ * whole list. The product list stays visible (greyed) the entire time, so a
+ * rep can see what is available before committing artwork.
+ */
+function TopLogoBar({ logo, busy, inputRef, onChoose, onClear }) {
   const [dragging, setDragging] = useState(false);
-  const acceptFile = (file) => {
-    setDragging(false);
-    if (file) onChoose(file);
+  const accept = (file) => { setDragging(false); if (file) onChoose(file); };
+  const dropHandlers = logo ? {} : {
+    onDragEnter: (event) => { event.preventDefault(); setDragging(true); },
+    onDragOver: (event) => { event.preventDefault(); setDragging(true); },
+    onDragLeave: (event) => {
+      event.preventDefault();
+      if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
+    },
+    onDrop: (event) => { event.preventDefault(); accept(event.dataTransfer?.files?.[0] || null); },
   };
   return (
-    <div style={{
-      height: '100%', minHeight: 360, display: 'flex',
-      alignItems: 'center', justifyContent: 'center', padding: 30,
-    }}>
+    <div
+      {...dropHandlers}
+      style={{
+        flexShrink: 0, minHeight: 66, padding: '9px 14px',
+        display: 'flex', alignItems: 'center', gap: 11, overflow: 'hidden',
+        background: logo ? 'var(--gb-brand-tint-soft)'
+          : dragging ? 'var(--gb-brand-tint-medium)' : 'var(--gb-warning-tint-soft)',
+        borderBottom: `1px solid ${logo ? 'var(--gb-brand-tint-border)'
+          : dragging ? 'var(--gb-brand-border)' : 'var(--gb-warning-tint-border)'}`,
+        transition: 'background .16s, border-color .16s',
+      }}
+    >
       <input
         ref={inputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp"
-        onChange={(event) => acceptFile(event.target.files?.[0] || null)}
+        onChange={(event) => accept(event.target.files?.[0] || null)}
         style={{ display: 'none' }}
       />
-      <motion.button
-        type="button"
-        animate={{
-          scale: dragging ? 1.012 : 1,
-          borderColor: dragging
-            ? 'var(--gb-brand-border)' : 'var(--gb-brand-tint-border)',
-          background: dragging
-            ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)',
-        }}
-        transition={{ duration: 0.16 }}
+      <span style={{
+        width: 46, height: 46, flexShrink: 0, overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-float)',
+        border: `1px ${logo ? 'solid var(--gb-border-default)' : 'dashed var(--gb-warning-tint-border)'}`,
+        color: 'var(--gb-warning-fg)', boxShadow: logo ? 'var(--gb-shadow-sm)' : 'none',
+      }}>
+        {busy ? (
+          <span style={{
+            width: 18, height: 18, borderRadius: '50%',
+            border: '2px solid var(--gb-brand-tint-border)',
+            borderTopColor: 'var(--gb-brand-label)',
+            animation: 'gb-ms-spin .75s linear infinite',
+          }} />
+        ) : logo ? (
+          <img
+            src={`data:${logo.mediaType};base64,${logo.dataBase64}`}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        ) : <I.upload size={19} />}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 10.5, fontWeight: 750,
+          color: logo ? 'var(--gb-brand-label)' : 'var(--gb-warning-fg)',
+        }}>
+          {logo ? <I.check size={11} /> : <I.alert size={11} />}
+          {logo ? 'Artwork uploaded' : 'Add the customer logo to begin'}
+        </span>
+        <span style={{
+          display: 'block', marginTop: 3, fontSize: 10,
+          color: 'var(--gb-text-muted)', overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {logo
+            ? `${logo.filename} · ${(Number(logo.sizeBytes || 0) / 1024).toFixed(0)} KB`
+            : 'Drop artwork here or upload — every mockup is built from it. PNG · JPEG · WebP · 12 MB'}
+        </span>
+      </span>
+      <Btn
+        size="sm"
+        variant={logo ? 'secondary' : 'primary'}
+        icon={logo ? undefined : <I.upload />}
         onClick={() => inputRef.current?.click()}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false);
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          acceptFile(event.dataTransfer?.files?.[0] || null);
-        }}
-        style={{
-          width: 'min(560px, 100%)', minHeight: 300, padding: 34,
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', cursor: 'pointer', textAlign: 'center',
-          fontFamily: 'inherit', color: 'inherit',
-          borderRadius: 'var(--gb-r-xl)', border: '1px dashed',
-          boxShadow: '0 18px 44px rgba(0,0,0,.08)',
-        }}
       >
-        <span style={{
-          width: 74, height: 74, borderRadius: 'var(--gb-r-xl)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'var(--gb-surface-float)',
-          border: '1px solid var(--gb-border-default)',
-          color: 'var(--gb-brand-label)', boxShadow: 'var(--gb-shadow-md)',
-        }}>
-          {busy ? (
-            <span style={{
-              width: 25, height: 25, borderRadius: '50%',
-              border: '2.5px solid var(--gb-brand-tint-border)',
-              borderTopColor: 'var(--gb-brand-label)',
-              animation: 'gb-ms-spin .75s linear infinite',
-            }}
-            />
-          ) : <I.plus size={26} />}
-        </span>
-        <span style={{
-          marginTop: 20, fontSize: 18, fontWeight: 750,
-          color: 'var(--gb-text-primary)',
-        }}>
-          {busy ? 'Preparing your artwork…' : 'Add customer logo artwork'}
-        </span>
-        <span style={{
-          marginTop: 8, maxWidth: 390, fontSize: 11.5,
-          lineHeight: 1.6, color: 'var(--gb-text-muted)',
-        }}>
-          Drag an image here or click to choose one. Products and their
-          configured scene and color options appear after the artwork is ready.
-        </span>
-        <span style={{
-          marginTop: 17, padding: '5px 9px', borderRadius: 'var(--gb-r-pill)',
-          background: 'var(--gb-fill-inverse-medium)',
-          border: '1px solid var(--gb-border-default)',
-          color: 'var(--gb-text-tertiary)', fontSize: 9.5,
-          fontFamily: 'var(--gb-font-mono)',
-        }}>
-          PNG · JPEG · WebP · 12 MB max
-        </span>
-      </motion.button>
+        {logo ? 'Replace' : 'Upload artwork'}
+      </Btn>
+      {logo && (
+        <IconBtn
+          size="sm"
+          variant="ghost"
+          title="Remove artwork"
+          icon={<I.close />}
+          onClick={onClear}
+        />
+      )}
     </div>
   );
 }
@@ -2072,78 +2075,19 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
               exit={{ opacity: 0, y: -5 }}
               style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
             >
-              {logo && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 66 }}
-                  transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                  style={{
-                    flexShrink: 0, padding: '8px 14px',
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    overflow: 'hidden',
-                    background: 'var(--gb-brand-tint-soft)',
-                    borderBottom: '1px solid var(--gb-brand-tint-border)',
-                  }}
-                >
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(event) => chooseLogo(event.target.files?.[0] || null)}
-                    style={{ display: 'none' }}
-                  />
-                  <span style={{
-                    width: 48, height: 48, flexShrink: 0, overflow: 'hidden',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-float)',
-                    border: '1px solid var(--gb-border-default)',
-                    boxShadow: 'var(--gb-shadow-sm)',
-                  }}>
-                    <img
-                      src={`data:${logo.mediaType};base64,${logo.dataBase64}`}
-                      alt=""
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      fontSize: 10.5, fontWeight: 750,
-                      color: 'var(--gb-brand-label)',
-                    }}>
-                      <I.check size={11} />
-                      Artwork uploaded
-                    </span>
-                    <span style={{
-                      display: 'block', marginTop: 3, fontSize: 10,
-                      color: 'var(--gb-text-muted)', overflow: 'hidden',
-                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {logo.filename} · {(Number(logo.sizeBytes || 0) / 1024).toFixed(0)} KB
-                    </span>
-                  </span>
-                  <Btn
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => logoInputRef.current?.click()}
-                  >
-                    Replace
-                  </Btn>
-                  <IconBtn
-                    size="sm"
-                    variant="ghost"
-                    title="Remove artwork"
-                    icon={<I.close />}
-                    onClick={clearLogo}
-                  />
-                </motion.div>
-              )}
+              <TopLogoBar
+                logo={logo}
+                busy={logoBusy}
+                inputRef={logoInputRef}
+                onChoose={chooseLogo}
+                onClear={clearLogo}
+              />
               <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
                 <div style={{
                   flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
                   borderRight: logo ? '1px solid var(--gb-border-subtle)' : 0,
                 }}>
-                  {logo && <div style={{
+                  <div style={{
                     padding: '12px 16px', display: 'flex', alignItems: 'center',
                     gap: 10, borderBottom: '1px solid var(--gb-border-subtle)',
                     background: 'var(--gb-fill-inverse-medium)',
@@ -2186,18 +2130,11 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                         onClick={openCatalogAdmin}
                       />
                     )}
-                  </div>}
+                  </div>
                   <div className="gb-ms-scroll" style={{
-                    flex: 1, minHeight: 0, overflowY: 'auto',
-                    padding: logo ? 10 : 0,
+                    flex: 1, minHeight: 0, overflowY: 'auto', padding: 12,
                   }}>
-                    {!logo ? (
-                      <ArtworkDropzone
-                        busy={logoBusy}
-                        inputRef={logoInputRef}
-                        onChoose={chooseLogo}
-                      />
-                    ) : products.length === 0 ? (
+                    {products.length === 0 ? (
                       <div style={{
                         height: '100%', minHeight: 330,
                         display: 'flex', flexDirection: 'column',
@@ -2248,24 +2185,32 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                       </div>
                     ) : filteredProducts.map((product) => {
                       const selectedProduct = selectedIds.includes(product.id);
-                      const disabled = !selectedProduct && selectedIds.length >= maxProducts;
+                      // Until a logo is uploaded the whole list is inert and
+                      // greyed; a click on a greyed row opens the logo picker
+                      // rather than doing nothing, so it reads as the next step.
+                      const locked = !logo;
+                      const capped = !selectedProduct && selectedIds.length >= maxProducts;
+                      const disabled = locked || capped;
                       return (
                         <motion.button
                           type="button"
                           key={product.id}
                           whileTap={disabled ? undefined : { scale: 0.992 }}
                           onClick={() => {
-                            if (disabled) return;
+                            if (locked) { logoInputRef.current?.click(); return; }
+                            if (capped) return;
                             if (selectedProduct) setFocusedProductId(product.id);
                             else toggleProduct(product.id);
                           }}
-                          disabled={disabled}
+                          aria-disabled={disabled}
+                          title={locked ? 'Add the customer logo first' : undefined}
                           style={{
-                            width: '100%', minHeight: 68, marginBottom: 6,
-                            display: 'flex', alignItems: 'center', gap: 11,
-                            padding: 8, textAlign: 'left', fontFamily: 'inherit',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
-                            opacity: disabled ? 0.5 : 1,
+                            width: '100%', minHeight: 72, marginBottom: 8,
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: 10, textAlign: 'left', fontFamily: 'inherit',
+                            cursor: locked ? 'pointer' : capped ? 'not-allowed' : 'pointer',
+                            opacity: disabled ? 0.55 : 1,
+                            filter: locked ? 'grayscale(0.85)' : 'none',
                             color: 'inherit',
                             borderRadius: 'var(--gb-r-md)',
                             background: selectedProduct
@@ -2275,7 +2220,8 @@ export function MockupStudio({ initialBatchId = '', onClose, bindClose }) {
                           }}
                         >
                           <div style={{
-                            width: 52, height: 52, borderRadius: 'var(--gb-r-md)',
+                            width: 52, height: 52, flexShrink: 0,
+                            borderRadius: 'var(--gb-r-md)',
                             overflow: 'hidden', display: 'flex',
                             alignItems: 'center', justifyContent: 'center',
                             background: 'var(--gb-fill-soft)',
