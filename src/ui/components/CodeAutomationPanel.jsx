@@ -117,7 +117,7 @@ export function CodeAutomationPanel({ value, onChange, page = {}, user = {}, doc
       return;
     }
     setView('blocks'); // flip to the blocks so the run animation is visible
-    setSim({ status: 'replaying', trace: res.trace, replayIdx: 0, error: res.error || null });
+    setSim({ status: 'replaying', trace: res.trace, replayIdx: 0, error: res.error || null, result: res.result });
   };
 
   const busy = sim.status === 'running' || sim.status === 'replaying';
@@ -182,6 +182,7 @@ export function CodeAutomationPanel({ value, onChange, page = {}, user = {}, doc
             trace={shownTrace}
             runningId={runningId}
             done={sim.status === 'done'}
+            result={sim.status === 'done' ? sim.result : null}
             emptyHint={(
               <span>No blocks yet.<br />Switch to <b>Code</b>, write against <code>page.*</code> + <code>actions.*</code>, then <b>Simulate</b>.</span>
             )}

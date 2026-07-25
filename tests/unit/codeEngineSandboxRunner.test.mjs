@@ -27,7 +27,7 @@ describe('sandboxRunner · body shape', () => {
   it('binds page, records via a local recorder, and returns the raw trace', () => {
     const body = buildTraceBody('await actions.__trace("n0_0","createTask",{ subject: "x" })');
     assert.match(body, /const page = \(ctx && ctx\.page\)/);
-    assert.match(body, /return __gbTrace;/);
+    assert.match(body, /return \{ __gbTrace, __gbRet \};/);
     // Ends in a return, so the sandbox's wrapBody leaves it verbatim (no re-wrap).
     assert.ok(/return\b/.test(body));
   });

@@ -60,10 +60,11 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
 
   const scope = { actions: { __trace: record }, page, user: buildUserBinding(user) };
   try {
-    await run(code, scope);
-    return { ok: true, trace, calls, error: null };
+    // The runner returns the program's final value (the closing-step summary).
+    const result = await run(code, scope);
+    return { ok: true, trace, calls, error: null, result: result == null ? null : result };
   } catch (error) {
     // A thrown program error stops the trace where it happened — still useful.
-    return { ok: false, trace, calls, error: String(error?.message || error) };
+    return { ok: false, trace, calls, error: String(error?.message || error), result: null };
   }
 }

@@ -73,6 +73,32 @@ function asActionCall(src, node) {
   };
 }
 
+/** The key names of an ObjectExpression's `key: value` properties. */
+function objectKeys(src, objNode) {
+  const keys = [];
+  for (const p of children(objNode)) {
+    if (p.name !== 'Property') continue;
+    const k = children(p).find((n) => n.name === 'PropertyDefinition' || n.name === 'PropertyName');
+    if (k) keys.push(slice(src, k.from, k.to));
+  }
+  return keys;
+}
+
+/** The string-literal value of a property, or null (non-literal / absent). */
+function objectStringProp(src, objNode, key) {
+  for (const p of children(objNode)) {
+    if (p.name !== 'Property') continue;
+    const kids = children(p);
+    const k = kids.find((n) => n.name === 'PropertyDefinition' || n.name === 'PropertyName');
+    if (!k || slice(src, k.from, k.to) !== key) continue;
+    const colon = kids.find((n) => n.name === ':');
+    const val = colon ? kids.find((n) => n.from >= colon.to) : null;
+    if (val && val.name === 'String') return slice(src, val.from + 1, val.to - 1);
+    return null;
+  }
+  return null;
+}
+
 /** Statement node → one block (recursing into branch/loop/switch bodies). */
 function statementToBlock(src, stmt) {
   const id = nodeId(stmt.from, stmt.to);
@@ -106,12 +132,28 @@ function statementToBlock(src, stmt) {
         assignTo, text,
       };
     }
-    // A non-action `const/let/var x = …` → a distinct "set variable" block.
+    // A non-action `const/let/var x = …` → a "set variable" block, or a
+    // "compose" block when the value is an email/task-shaped object literal.
     if (stmt.name === 'VariableDeclaration') {
       const def = childByName(stmt, 'VariableDefinition');
       const name = def ? slice(src, def.from, def.to) : '';
       const eq = children(stmt).find((n) => n.name === 'Equals');
       const valueText = eq ? slice(src, eq.to, stmt.to).replace(/;\s*$/, '').trim() : '';
+      const valNode = eq ? children(stmt).filter((n) => n.from >= eq.to).find((n) => n.name === 'ObjectExpression') : null;
+      if (valNode) {
+        const keys = objectKeys(src, valNode);
+        const emailish = keys.includes('subject') || keys.includes('body') || keys.includes('htmlBody') || keys.includes('to');
+        const taskish = keys.includes('priority') || keys.includes('daysOut');
+        if (emailish || taskish) {
+          const objType = (taskish && !keys.includes('to') && !keys.includes('htmlBody')) ? 'task' : 'email';
+          return {
+            id, kind: 'compose', name, objType, keys,
+            subject: objectStringProp(src, valNode, 'subject'),
+            body: objectStringProp(src, valNode, 'body') || objectStringProp(src, valNode, 'htmlBody'),
+            text,
+          };
+        }
+      }
       return { id, kind: 'setVar', name, valueText, text };
     }
   }

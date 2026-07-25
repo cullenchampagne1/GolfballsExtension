@@ -172,10 +172,37 @@ function renderList(blocks, ctx, tone, forceStatus) {
   return out;
 }
 
+/* A "compose" block — an email/task object being built, with a compact
+   preview so you can see what's being created without it eating the panel. */
+function ComposeCard({ block }) {
+  const d = describeBlock(block);
+  const Ic = d.objType === 'task' ? I.task : I.mail;
+  const t = TONE[d.objType === 'task' ? 'info' : 'brand'] || TONE.brand;
+  return (
+    <div style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-surface-1)', overflow: 'hidden', boxShadow: '0 1px 0 rgba(0,0,0,.12)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'var(--gb-surface-2)', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        <span style={{ display: 'inline-flex', width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderRadius: 5, background: t.badgeBg, color: t.badgeFg, flexShrink: 0 }}><Ic size={12} /></span>
+        <code style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{d.title}</code>
+        <span style={{ marginLeft: 'auto', fontSize: 8.5, fontWeight: 800, letterSpacing: '.05em', padding: '1px 6px', borderRadius: 999, color: t.badgeFg, background: t.badgeBg, textTransform: 'uppercase' }}>new {d.objType}</span>
+      </div>
+      <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {d.subject ? d.subject : <span style={{ color: 'var(--gb-text-muted)', fontStyle: 'italic', fontWeight: 400 }}>computed subject</span>}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.45, maxHeight: 30, overflow: 'hidden' }}>
+          {d.body ? d.body : <span style={{ fontStyle: 'italic' }}>{(block.keys || []).join(' · ') || 'body'}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BlockNode({ block, ctx, tone, forceStatus }) {
   const { traceById, done, runningId, indices } = ctx;
   const status = runStatus(block, traceById, { done, runningId, force: forceStatus });
   const idx = indices[block.id];
+
+  if (block.kind === 'compose') return <ComposeCard block={block} />;
 
   if (block.kind === 'action') {
     const d = describeBlock(block, traceById);
@@ -278,7 +305,24 @@ function EmptyArm() {
   return <div style={{ fontSize: 10.5, fontStyle: 'italic', color: 'var(--gb-text-muted)', padding: '1px 2px' }}>— nothing —</div>;
 }
 
-export function BlocksView({ blocks = [], trace = [], runningId = null, done = false, emptyHint = null }) {
+/* The closing "returns …" summary — the program's final value, shown as the
+   last thing in the flow so a run reads end-to-end like the old timeline. */
+function ReturnNote({ result }) {
+  if (result == null || result === '') return null;
+  const text = typeof result === 'string' ? result : (() => { try { return JSON.stringify(result); } catch { return String(result); } })();
+  return (
+    <div style={{ marginTop: 8 }}>
+      <Connector height={20} tone="default" active={false} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-success-tint-soft)' }}>
+        <I.check size={13} style={{ color: 'var(--gb-success-fg)', flexShrink: 0 }} />
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--gb-success-fg)', flexShrink: 0 }}>returns</span>
+        <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{text}</span>
+      </div>
+    </div>
+  );
+}
+
+export function BlocksView({ blocks = [], trace = [], runningId = null, done = false, result = null, emptyHint = null }) {
   ensureKeyframes();
   const traceById = React.useMemo(() => indexTrace(trace), [trace]);
   const indices = React.useMemo(() => indexSteps(blocks), [blocks]);
@@ -293,6 +337,7 @@ export function BlocksView({ blocks = [], trace = [], runningId = null, done = f
   return (
     <div style={{ display: 'flex', flexDirection: 'column', padding: '16px 18px 40px' }}>
       {renderList(blocks, ctx, 'default', null)}
+      {done && <ReturnNote result={result} />}
     </div>
   );
 }

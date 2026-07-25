@@ -66,4 +66,12 @@ describe('simulate · trace for the animation', () => {
     assert.equal(ok, true);
     assert.deepEqual(trace, []);
   });
+
+  it('captures the program final return as the closing summary', async () => {
+    const { result } = await simulateProgram(`
+      await actions.createTask({ subject: "x" });
+      return "1 task queued";
+    `);
+    assert.equal(result, '1 task queued');
+  });
 });

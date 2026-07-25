@@ -46,10 +46,10 @@ export function buildTraceBody(instrumentedCode) {
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
     '  return { ok: true, dry: true, simulated: true };',
     '} };',
-    'await (async () => {',
+    'const __gbRet = await (async () => {',
     String(instrumentedCode ?? ''),
     '})();',
-    'return __gbTrace;',
+    'return { __gbTrace, __gbRet };',
   ].join('\n');
 }
 
@@ -73,9 +73,11 @@ export function makeSandboxRunner({ exec, doc } = {}) {
     const user = { emails: u.emails || [], tasks: u.tasks || [], calls: u.calls || [] };
     const record = scope && scope.actions && scope.actions.__trace;
     const raw = await exec(buildTraceBody(code), { page, user }, {}, doc);
-    if (typeof record !== 'function') return;
-    for (const entry of Array.isArray(raw) ? raw : []) {
-      record(entry.id, entry.contract, entry.input);
+    const entries = Array.isArray(raw) ? raw : (raw && raw.__gbTrace) || [];
+    if (typeof record === 'function') {
+      for (const entry of entries) record(entry.id, entry.contract, entry.input);
     }
+    // Surface the program's final return value (the closing "step" summary).
+    return Array.isArray(raw) ? undefined : (raw && raw.__gbRet);
   };
 }

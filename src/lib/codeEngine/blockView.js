@@ -161,6 +161,15 @@ export function describeBlock(block, traceById = {}) {
   if (block.kind === 'setVar') {
     return { ...base, kind: 'setVar', icon: 'code', title: block.name || 'value', detail: block.valueText || '' };
   }
+  if (block.kind === 'compose') {
+    return {
+      ...base, kind: 'compose', objType: block.objType,
+      icon: block.objType === 'task' ? 'task' : 'mail',
+      title: block.name || (block.objType === 'task' ? 'task' : 'email'),
+      subject: block.subject || '', body: block.body || '',
+      detail: block.subject ? `“${block.subject}”` : (block.keys || []).join(', '),
+    };
+  }
   // raw code block
   return { ...base, icon: 'code', title: firstLine(block.text) || 'code', detail: '' };
 }

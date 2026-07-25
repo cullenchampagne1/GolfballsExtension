@@ -99,6 +99,22 @@ describe('blockView · block descriptors', () => {
     assert.equal(d.detail, '30');
   });
 
+  it('detects an email-shaped object literal as a compose block with a preview', () => {
+    const [c] = translateProgram('const welcome = { subject: "Hi there", body: "Thanks!" };').blocks;
+    assert.equal(c.kind, 'compose');
+    assert.equal(c.objType, 'email');
+    const d = describeBlock(c);
+    assert.equal(d.title, 'welcome');
+    assert.equal(d.subject, 'Hi there');
+    assert.equal(d.body, 'Thanks!');
+  });
+
+  it('detects a task-shaped object literal as a compose block', () => {
+    const [c] = translateProgram('const t = { subject: "Call", priority: "high", daysOut: 2 };').blocks;
+    assert.equal(c.kind, 'compose');
+    assert.equal(c.objType, 'task');
+  });
+
   it('still treats an assigned action call as an action, not a setVar', () => {
     const [a] = translateProgram('const r = await actions.createTask({ subject: "x" });').blocks;
     assert.equal(a.kind, 'action');
