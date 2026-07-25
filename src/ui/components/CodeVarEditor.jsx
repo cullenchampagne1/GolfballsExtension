@@ -136,7 +136,14 @@ const GB_THEME = EditorView.theme({
   '.cm-lintRange-error': { textDecoration: 'underline wavy var(--gb-error-fg)' },
 }, { dark: true });
 
-export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false }) {
+/* `fill` mode: drop the intrinsic max-height cap and stretch the editor to
+   its (flex) container so the code box reaches the bottom of the panel. */
+const GB_FILL_THEME = EditorView.theme({
+  '&': { height: '100%', maxHeight: 'none' },
+  '.cm-scroller': { overflow: 'auto' },
+});
+
+export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false }) {
   const hostRef    = useRef(null);
   const viewRef    = useRef(null);
   const onChangeRef = useRef(onChange);
@@ -212,6 +219,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           cmPlaceholder(placeholder || 'e.g. h.fmt.title(ctx.contact.firstName)'),
           EditorView.lineWrapping,
           GB_THEME,
+          ...(fill ? [GB_FILL_THEME] : []),
           keymap.of([
             indentWithTab,
             ...closeBracketsKeymap,
@@ -268,8 +276,10 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div ref={hostRef} />
+    <div style={fill
+      ? { display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }
+      : { display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={hostRef} style={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined} />
 
       {/* Namespace legend + test action */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

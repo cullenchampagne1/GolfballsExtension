@@ -143,25 +143,29 @@ export function CodeAutomationPanel({ value, onChange, page = {}, doc }) {
 
       {/* Split: editor | blocks */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, borderRight: '1px solid var(--gb-border-default)', overflow: 'auto' }}>
-          <CodeVarEditor
-            value={code}
-            onChange={onChange}
-            typeId="account"
-            varNames={[]}
-            hideActions
-            placeholder={STARTER}
-          />
-          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+        <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, borderRight: '1px solid var(--gb-border-default)', minHeight: 0 }}>
+          {/* The editor fills the column; the legend + errors sit under it. */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <CodeVarEditor
+              value={code}
+              onChange={onChange}
+              typeId="account"
+              varNames={[]}
+              hideActions
+              fill
+              placeholder={STARTER}
+            />
+          </div>
+          <div style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
             <b>page.*</b> is the read-only contact/order model. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>logCall</code> — are simulated here (no real sends); each runs behind its gate on a real run.
           </div>
           {errors.length ? (
-            <div style={{ fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ flexShrink: 0, fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <I.alert size={12} /> Syntax error — the blocks pause until it's fixed.
             </div>
           ) : null}
           {sim.error ? (
-            <div style={{ fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
+            <div style={{ flexShrink: 0, fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
               <I.alert size={12} style={{ marginTop: 1, flexShrink: 0 }} /> {sim.error}
             </div>
           ) : null}
