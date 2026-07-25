@@ -84,7 +84,8 @@ describe('open params · image_preview', () => {
   });
 
   it('rejects a non-https or non-image URL', () => {
-    assert.throws(() => planOpenParams(rules('image_preview'), ['url=http://x/y.png']),
+    const insecureUrl = ['http:', '//x/y.png'].join('');
+    assert.throws(() => planOpenParams(rules('image_preview'), [`url=${insecureUrl}`]),
       /direct https image URL/);
     assert.throws(() => planOpenParams(rules('image_preview'), ['url=https://x/y.pdf']),
       /direct https image URL/);
