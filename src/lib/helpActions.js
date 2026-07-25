@@ -4,6 +4,7 @@ import {
   THEME_VARIANTS, loadTheme, applyTheme,
 } from './theme.js';
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
+import { OPEN_PARAM_RULES } from './openParamRules.js';
 import { buildAutomaticHelpState } from './helpAutomaticState.js';
 import {
   createSerialHelpActionRunner, helpActionReceiptDecision, helpActionReceiptId,
@@ -41,6 +42,28 @@ const MODAL_TARGETS = Object.freeze({
   quick_order_note: '__gbShowQuickOrderNoteModal',
   call_log: '__gbShowCallLogModal',
   image_preview: '__gbOpenImagePreview',
+  margin_calc: '__gbShowMarginCalcModal',
+  watch_list: '__gbShowWatchListModal',
+});
+
+/**
+ * Map validated open params onto each opener's native call shape. Openers have
+ * heterogeneous signatures — mockup_studio takes a bare batch-id string,
+ * image_preview an options object, others an initial-state object — so the
+ * mapping lives here, next to the invocation, not in the pure planner. A target
+ * without an adapter is opened with no arguments.
+ */
+const OPEN_ADAPTERS = Object.freeze({
+  mockup_studio: (p) => (p.batch_id ? [p.batch_id] : []),
+  image_preview: (p) => [{ url: p.url, orderId: p.order_id, customerId: p.customer_id }],
+  crm_search: (p) => [{ query: p.query, type: p.type, filter: p.filter }],
+  task_list: (p) => [{
+    query: p.query, filter: p.filter, status: p.status, priority: p.priority,
+  }],
+  gift_catalog: (p) => [{
+    query: p.query, special: p.special, sort: p.sort, view: p.view,
+  }],
+  watch_list: (p) => [{ filter: p.filter, query: p.query }],
 });
 
 function storageGet(keys) {
@@ -83,6 +106,7 @@ async function environment() {
     shareScopes,
     templates: Array.isArray(stored.templates) ? stored.templates : [],
     modalTargets: Object.keys(MODAL_TARGETS),
+    openParamRules: OPEN_PARAM_RULES,
     policy: stored.gbRemoteSettingsPolicy || {},
   };
 }
@@ -133,7 +157,9 @@ async function execute(action, receiptId) {
     if (typeof open !== 'function') {
       throw new Error('That modal is not available on this page');
     }
-    await open();
+    const adapt = OPEN_ADAPTERS[operation.target];
+    const args = adapt ? adapt(operation.params || {}) : [];
+    await open(...args);
     return {
       message: `Opened ${operation.target.replaceAll('_', ' ')}`,
     };

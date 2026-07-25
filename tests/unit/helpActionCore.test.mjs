@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { OPEN_PARAM_RULES } from '../../src/lib/openParamRules.js';
 import {
   createSerialHelpActionRunner, hasIssuedHelpActionReceipt, helpActionReceiptDecision,
   helpActionConfirmationCopy, helpActionConfirmationTypes, helpActionReceiptId,
@@ -17,7 +18,8 @@ const registry = {
   themeVariants: { dark: 'dark', nord: 'nord', slate: 'midnight', midnight: 'midnight' },
   shareScopes: ['settings-preferences', 'settings-appearance'],
   templates: [{ id: 'tpl-follow-up', name: 'Follow up', subject: 'Checking in' }],
-  modalTargets: ['mockup_studio'],
+  modalTargets: ['mockup_studio', 'crm_search', 'notifications'],
+  openParamRules: OPEN_PARAM_RULES,
   policy: { hiddenFeatures: {}, hiddenDeveloperSettings: {}, adminBypass: false },
 };
 
@@ -46,7 +48,26 @@ describe('Help Companion action policy', () => {
           value: '', options: [], label: 'Open Mockup Studio',
         }),
       }, registry),
-      { type: 'open_modal', target: 'mockup_studio' },
+      { type: 'open_modal', target: 'mockup_studio', params: {} },
+    );
+    // open_modal with validated parameters (crm_search: query + type).
+    assert.deepEqual(
+      planHelpAction({
+        type: 'open_modal', target: 'crm_search',
+        options: ['query=acme corp', 'type=account'],
+        label: 'Open CRM Search',
+      }, registry),
+      { type: 'open_modal', target: 'crm_search', params: { query: 'acme corp', type: 'account' } },
+    );
+    // a target with no schema still rejects stray options…
+    assert.throws(
+      () => planHelpAction({ type: 'open_modal', target: 'notifications', options: ['x=1'] }, registry),
+      /unsupported arguments/,
+    );
+    // …and a bad parameter is rejected, not silently opened.
+    assert.throws(
+      () => planHelpAction({ type: 'open_modal', target: 'crm_search', options: ['type=bogus'] }, registry),
+      /not an allowed value/,
     );
     assert.deepEqual(
       planHelpAction({

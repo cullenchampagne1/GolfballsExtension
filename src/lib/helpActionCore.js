@@ -3,6 +3,7 @@
 import {
   actionLanguageCommands, normalizeActionPayload, serializeActionPayload,
 } from './actionLanguage.js';
+import { planOpenParams } from './openParamRules.js';
 
 export const MUTATION_ACTION_TYPES = Object.freeze(new Set([
   'open_modal',
@@ -145,7 +146,7 @@ export function planHelpAction(action, registry = {}) {
   };
   const {
     featureRules = {}, settingRules = {}, themeVariants = [], shareScopes = [],
-    templates = [], modalTargets = [], policy = {},
+    templates = [], modalTargets = [], openParamRules = {}, policy = {},
   } = registry;
 
   if (!MUTATION_ACTION_TYPES.has(type)) fail('The assistant action is not executable');
@@ -155,10 +156,19 @@ export function planHelpAction(action, registry = {}) {
     if (!modalTargets.includes(target)) {
       fail('That modal is not registered in this build');
     }
-    if (payload.value !== '' || options.length) {
-      fail('The modal action contains unsupported arguments');
+    // A value never belongs on an open; parameters travel in `options` as
+    // key=value tokens and are validated against the target's schema. A target
+    // with no schema takes no parameters — reject any tokens, as before.
+    if (payload.value !== '') fail('The modal action contains unsupported arguments');
+    const rules = Object.hasOwn(openParamRules, target) ? openParamRules[target] : null;
+    if (!rules) {
+      if (options.length) fail('The modal action contains unsupported arguments');
+      return { type, target, params: {} };
     }
-    return { type, target };
+    let params;
+    try { params = planOpenParams(rules, options); }
+    catch (error) { fail(error?.message || 'The modal parameters are invalid'); }
+    return { type, target, params };
   }
 
   if (type === 'set_feature') {
