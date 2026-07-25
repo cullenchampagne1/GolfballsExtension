@@ -14,6 +14,14 @@ const historySource = source.slice(
   source.indexOf('function BatchHistoryMetric'),
   source.indexOf('function BatchView'),
 );
+const ringSource = source.slice(
+  source.indexOf('function BatchRingBurst'),
+  source.indexOf('function FullResultViewer'),
+);
+const batchViewSource = source.slice(
+  source.indexOf('function BatchView'),
+  source.indexOf('export function MockupStudio'),
+);
 
 describe('mockup gallery in-studio presentation', () => {
   it('reuses the studio chrome and provides an obvious route back to products', () => {
@@ -58,5 +66,24 @@ describe('mockup gallery in-studio presentation', () => {
     assert.match(source, /key="batch-history"/);
     assert.match(source, /openBatchById\(batchId, \{ returnToHistory: true \}\)/);
     assert.match(source, /setBatchHistoryOpen\(returnToHistory\)/);
+  });
+
+  it('uses the shared Quick Send motion language for batch progress', () => {
+    assert.match(ringSource, /counterpart to EmailRunner's HeroRing/);
+    assert.match(ringSource, /role="progressbar"/);
+    assert.match(ringSource, /strokeDasharray=\{BATCH_RING_CIRCUMFERENCE\}/);
+    assert.match(ringSource, /stroke-dashoffset \.55s cubic-bezier\(\.34,1\.4,\.64,1\)/);
+    assert.match(ringSource, /conic-gradient\(from 0deg/);
+    assert.match(ringSource, /gb-ms-ring-ripple/);
+    assert.match(ringSource, /<BatchRingBurst accent=\{accent\}/);
+  });
+
+  it('gives batch detail the archive header treatment without a long progress bar', () => {
+    assert.match(batchViewSource, /<BatchProgressRing batch=\{batch\}/);
+    assert.match(batchViewSource, /linear-gradient\(135deg, var\(--gb-brand-tint-soft\)/);
+    assert.match(batchViewSource, />\s*Batch progress\s*/);
+    assert.match(batchViewSource, /gridTemplateColumns: 'repeat\(4, minmax\(0, 1fr\)\)'/);
+    assert.match(batchViewSource, /label="Generating"/);
+    assert.doesNotMatch(batchViewSource, /<ProgressBar/);
   });
 });

@@ -60,6 +60,10 @@ const LOAD_CATALOG_ADMIN = __ADMIN__
 
 const ACTIVE = new Set(['queued', 'running']);
 const RECENT_BATCH_LIMIT = 3;
+const BATCH_RING_BOX = 108;
+const BATCH_RING_RADIUS = 44;
+const BATCH_RING_STROKE = 6;
+const BATCH_RING_CIRCUMFERENCE = 2 * Math.PI * BATCH_RING_RADIUS;
 // Gallery tiles are a constant size regardless of how many a batch holds.
 // The card is wider than its image band is tall, so a row of results reads as
 // a row rather than a column of portrait slabs.
@@ -80,6 +84,23 @@ function ensureStyles() {
   style.id = '__gb-mockup-studio-css';
   style.textContent = `
     @keyframes gb-ms-spin { to { transform: rotate(360deg); } }
+    @keyframes gb-ms-ring-rotate { to { transform: rotate(360deg); } }
+    @keyframes gb-ms-ring-breathe {
+      0%, 100% { opacity: .72; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.055); }
+    }
+    @keyframes gb-ms-ring-ripple {
+      from { transform: scale(.72); opacity: .78; }
+      to { transform: scale(1.48); opacity: 0; }
+    }
+    @keyframes gb-ms-ring-center-in {
+      from { transform: scale(.78); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    @keyframes gb-ms-ring-burst {
+      from { transform: translate(-50%, -50%) translate(0, 0) scale(1); opacity: .9; }
+      to { transform: translate(-50%, -50%) translate(var(--gb-ms-ring-x), var(--gb-ms-ring-y)) scale(.35); opacity: 0; }
+    }
     /* A pending tile breathes rather than sweeping a highlight across itself:
        a whole wall of shimmering cards reads as noise, and the sweep competes
        with the artwork that lands in the same box a moment later. */
@@ -872,27 +893,208 @@ function FacetedSelectionTags({
   });
 }
 
-function BatchStat({ label, value, tone }) {
+function BatchRingBurst({ accent }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none',
+      }}
+    >
+      {Array.from({ length: 8 }).map((_, index) => {
+        const angle = (index / 8) * Math.PI * 2;
+        const distance = 43 + (index % 2) * 7;
+        return (
+          <span
+            // The burst mirrors Quick Send's completed-state particles, but
+            // stays inside the compact batch summary ring.
+            key={index}
+            style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: 4, height: 4, borderRadius: '50%', background: accent,
+              '--gb-ms-ring-x': `${Math.cos(angle) * distance}px`,
+              '--gb-ms-ring-y': `${Math.sin(angle) * distance}px`,
+              animation: `gb-ms-ring-burst .68s cubic-bezier(.2,.7,.3,1) ${index * 0.035}s both`,
+            }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * Compact counterpart to EmailRunner's HeroRing, which is the progress
+ * signature shared by CRM Search and Task List. It carries the same glowing
+ * arc, rotating live sweep, per-item ripple, spring transition, and completed
+ * center state while fitting the shallower Mockup Studio summary band.
+ */
+function BatchProgressRing({ batch, progress, total }) {
+  const status = String(batch?.status || 'queued');
+  const active = ACTIVE.has(status);
+  const complete = status === 'completed';
+  const processed = Math.max(
+    0,
+    Number(progress?.processed)
+      || (Number(progress?.completed) || 0)
+      + (Number(progress?.failed) || 0)
+      + (Number(progress?.cancelled) || 0),
+  );
+  const explicitPercent = Number(progress?.percent);
+  const percent = Math.max(0, Math.min(
+    100,
+    complete
+      ? 100
+      : Number.isFinite(explicitPercent)
+        ? explicitPercent
+        : total > 0 ? (processed / total) * 100 : 0,
+  ));
+  const accent = complete
+    ? 'var(--gb-success)'
+    : status === 'failed'
+      ? 'var(--gb-error)'
+      : status === 'partial'
+        ? 'var(--gb-warning-fg)'
+        : status === 'cancelled'
+          ? 'var(--gb-text-muted)'
+          : 'var(--gb-brand-label)';
+  const glow = complete
+    ? 'var(--gb-success-tint-strong)'
+    : status === 'failed'
+      ? 'var(--gb-error-tint-medium)'
+      : 'var(--gb-brand-tint-strong)';
+  const offset = BATCH_RING_CIRCUMFERENCE * (1 - percent / 100);
   return (
     <div style={{
-      flex: '1 1 64px', minWidth: 62, padding: '7px 9px',
-      borderRadius: 'var(--gb-r-md)',
-      background: 'var(--gb-fill-subtle)',
-      border: '1px solid var(--gb-border-subtle)',
+      position: 'relative',
+      width: BATCH_RING_BOX, height: BATCH_RING_BOX, flexShrink: 0,
     }}>
-      <div style={{
-        fontSize: 14, lineHeight: 1, fontWeight: 800,
-        fontFamily: 'var(--gb-font-mono)', color: tone,
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute', inset: -8, borderRadius: '50%',
+          background: `radial-gradient(circle, ${glow} 0%, transparent 68%)`,
+          opacity: active ? 0.9 : complete ? 0.82 : 0.34,
+          filter: 'blur(6px)',
+          transition: 'opacity .5s ease, background .6s ease',
+          animation: active
+            ? 'gb-ms-ring-breathe 2.4s ease-in-out infinite' : 'none',
+        }}
+      />
+      {active && (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            background: 'conic-gradient(from 0deg, transparent 0deg, transparent 250deg, var(--gb-brand-label) 340deg, transparent 360deg)',
+            WebkitMask: 'radial-gradient(farthest-side, transparent 0 79%, #000 79.5% 92%, transparent 92.5%)',
+            mask: 'radial-gradient(farthest-side, transparent 0 79%, #000 79.5% 92%, transparent 92.5%)',
+            mixBlendMode: 'plus-lighter', opacity: 0.82,
+            animation: 'gb-ms-ring-rotate 1.5s linear infinite',
+          }}
+        />
+      )}
+      <svg
+        role="progressbar"
+        aria-label="Batch render progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+        width={BATCH_RING_BOX}
+        height={BATCH_RING_BOX}
+        viewBox={`0 0 ${BATCH_RING_BOX} ${BATCH_RING_BOX}`}
+        style={{
+          position: 'relative', zIndex: 1, transform: 'rotate(-90deg)',
+        }}
+      >
+        <circle
+          cx={BATCH_RING_BOX / 2}
+          cy={BATCH_RING_BOX / 2}
+          r={BATCH_RING_RADIUS}
+          fill="none"
+          stroke="var(--gb-surface-3)"
+          strokeWidth={BATCH_RING_STROKE}
+        />
+        <circle
+          cx={BATCH_RING_BOX / 2}
+          cy={BATCH_RING_BOX / 2}
+          r={BATCH_RING_RADIUS}
+          fill="none"
+          stroke={accent}
+          strokeWidth={BATCH_RING_STROKE}
+          strokeLinecap="round"
+          strokeDasharray={BATCH_RING_CIRCUMFERENCE}
+          strokeDashoffset={offset}
+          style={{
+            opacity: percent > 0 || complete ? 1 : 0,
+            filter: (active || complete)
+              ? `drop-shadow(0 0 5px ${accent})` : 'none',
+            transition: 'stroke-dashoffset .55s cubic-bezier(.34,1.4,.64,1), stroke .6s ease, opacity .25s ease',
+          }}
+        />
+      </svg>
+      {active && processed > 0 && (
+        <span
+          key={processed}
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 5, borderRadius: '50%',
+            border: '2px solid var(--gb-brand-label)',
+            animation: 'gb-ms-ring-ripple .7s cubic-bezier(.2,.7,.3,1) forwards',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+      {complete && <BatchRingBurst accent={accent} />}
+      <span style={{
+        position: 'absolute', inset: 0, zIndex: 2,
+        display: 'grid', placeItems: 'center',
       }}>
-        {value}
-      </div>
-      <div style={{
-        marginTop: 4, fontSize: 8.5, fontWeight: 700,
-        letterSpacing: 0.55, textTransform: 'uppercase',
-        color: 'var(--gb-text-muted)',
-      }}>
-        {label}
-      </div>
+        <span
+          key={complete ? 'complete' : status}
+          style={{
+            display: 'grid', placeItems: 'center',
+            animation: 'gb-ms-ring-center-in .4s cubic-bezier(.34,1.4,.64,1) both',
+          }}
+        >
+          {complete ? (
+            <span style={{
+              width: 43, height: 43, borderRadius: '50%',
+              display: 'grid', placeItems: 'center',
+              color: 'var(--gb-success)',
+              background: 'var(--gb-success-tint-medium)',
+              border: '1px solid var(--gb-success-tint-border)',
+            }}>
+              <I.check size={23} />
+            </span>
+          ) : (
+            <span style={{ textAlign: 'center', lineHeight: 1 }}>
+              <span style={{
+                display: 'block', fontSize: 25, fontWeight: 800,
+                fontFamily: 'var(--gb-font-mono)',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'var(--gb-text-primary)',
+              }}>
+                {Math.round(percent)}
+                <span style={{
+                  fontSize: 12, color: 'var(--gb-text-tertiary)',
+                }}>
+                  %
+                </span>
+              </span>
+              <span style={{
+                display: 'block', marginTop: 4,
+                fontSize: 9, fontWeight: 750,
+                fontFamily: 'var(--gb-font-mono)',
+                fontVariantNumeric: 'tabular-nums',
+                color: active ? 'var(--gb-brand-label)' : accent,
+              }}>
+                {processed} / {total}
+              </span>
+            </span>
+          )}
+        </span>
+      </span>
     </div>
   );
 }
@@ -1603,6 +1805,13 @@ function BatchView({ batch, onCancel, onDelete }) {
   ) || null;
   const total = progress.total || batch.job_count || 0;
   const issueCount = (progress.failed || 0) + (progress.cancelled || 0);
+  const processedCount = Math.max(
+    0,
+    Number(progress.processed)
+      || (Number(progress.completed) || 0)
+      + (Number(progress.failed) || 0)
+      + (Number(progress.cancelled) || 0),
+  );
   return (
     <div
       style={{
@@ -1611,37 +1820,87 @@ function BatchView({ batch, onCancel, onDelete }) {
       }}
     >
       <div style={{
-        padding: '9px 12px',
-        display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 7,
-        flexShrink: 0,
-        background: 'var(--gb-surface-1)',
+        padding: '12px 16px', flexShrink: 0,
+        display: 'grid', gridTemplateColumns: '124px minmax(0, 1fr)',
+        alignItems: 'center', gap: 15,
+        background: 'linear-gradient(135deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 58%, var(--gb-fill-inverse-medium))',
         borderBottom: '1px solid var(--gb-border-subtle)',
       }}>
-          <BatchStat label="Ready" value={progress.completed || 0} tone="var(--gb-success-fg)" />
-          <BatchStat label="Generating" value={progress.running || 0} tone="var(--gb-brand-label)" />
-          <BatchStat label="Waiting" value={progress.queued || 0} tone="var(--gb-warning-fg)" />
-          <BatchStat label="Issues" value={issueCount} tone={issueCount ? 'var(--gb-error-fg)' : 'var(--gb-text-ghost)'} />
-          <div style={{
-            flex: '2 1 160px', minWidth: 120, padding: '7px 10px',
-            display: 'flex', flexDirection: 'column', justifyContent: 'center',
-            borderRadius: 'var(--gb-r-md)',
-            background: 'var(--gb-fill-subtle)',
-            border: '1px solid var(--gb-border-subtle)',
-          }}>
+        <div style={{
+          minWidth: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <BatchProgressRing batch={batch} progress={progress} total={total} />
+        </div>
+        <div style={{
+          minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9,
+        }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{
-              display: 'flex', alignItems: 'center',
-              marginBottom: 6, fontSize: 9, color: 'var(--gb-text-muted)',
+              display: 'flex', alignItems: 'center', gap: 7,
+              fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
+              textTransform: 'uppercase', color: 'var(--gb-brand-label)',
             }}>
-              <span>Overall progress</span>
+              <I.refresh
+                size={11}
+                style={{
+                  animation: active ? 'gb-ms-spin 1.8s linear infinite' : 'none',
+                }}
+              />
+              Batch progress
               <span style={{
-                marginLeft: 'auto', fontFamily: 'var(--gb-font-mono)',
-                fontWeight: 750, color: 'var(--gb-text-primary)',
+                marginLeft: 'auto', paddingLeft: 8,
+                fontFamily: 'var(--gb-font-mono)',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'var(--gb-text-muted)',
               }}>
-                {progress.processed || 0}/{total}
+                {processedCount} of {total} images processed
               </span>
             </div>
-            <ProgressBar value={progress.percent || 0} status={batch.status} />
+            <div
+              title={batch.status_message || ''}
+              style={{
+                marginTop: 5, overflow: 'hidden',
+                whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                fontSize: 10.5, color: 'var(--gb-text-muted)',
+              }}
+            >
+              {batch.status_message || (
+                active ? 'Generating product mockups' : 'Batch processing finished'
+              )}
+            </div>
           </div>
+          <div style={{
+            minWidth: 0, display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 7,
+          }}>
+            <BatchHistoryMetric
+              icon={<I.check size={13} />}
+              label="Ready"
+              value={progress.completed || 0}
+              tone="var(--gb-success-fg)"
+            />
+            <BatchHistoryMetric
+              icon={<I.refresh size={13} />}
+              label="Generating"
+              value={progress.running || 0}
+              tone="var(--gb-brand-label)"
+            />
+            <BatchHistoryMetric
+              icon={<I.clock size={13} />}
+              label="Waiting"
+              value={progress.queued || 0}
+              tone="var(--gb-warning-fg)"
+            />
+            <BatchHistoryMetric
+              icon={<I.alert size={13} />}
+              label="Issues"
+              value={issueCount}
+              tone={issueCount
+                ? 'var(--gb-error-fg)' : 'var(--gb-text-ghost)'}
+            />
+          </div>
+        </div>
       </div>
       {/* Enlarging REPLACES the grid in place rather than floating another
           layer over it. The batch header and footer stay put, so the stack
