@@ -11,9 +11,19 @@ if (!window.__gbQuickOrderNoteLoaded) {
 
   window.__gbShowQuickOrderNoteModal = function (options = {}) {
     const orderId = options.orderId || window.location.href.match(/[?&]orderID=(\d+)/i)?.[1] || '';
+    // autoCompose/draft (payload API) prefill the note composer for the current
+    // order; the rep reviews and applies in the native UI.
+    const { autoCompose = false, draft = null } = options;
     mountFloating('__gb-quick-order-note-modal', ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
-        <QuickOrderNote orderId={orderId} onSubmit={submitOrderNote} onClosed={onClosed} bindClose={bindClose} />
+        <QuickOrderNote
+          orderId={orderId}
+          onSubmit={submitOrderNote}
+          autoCompose={autoCompose}
+          draft={draft}
+          onClosed={onClosed}
+          bindClose={bindClose}
+        />
       </ToastHost>
     ));
   };

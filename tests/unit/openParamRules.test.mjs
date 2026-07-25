@@ -135,6 +135,13 @@ describe('open params · ambient composer verbs', () => {
       /Unknown open parameter "category"/);
   });
 
+  it('accepts a subject to prefill the order-note composer', () => {
+    assert.deepEqual(
+      planOpenParams(rules('quick_order_note'), ['subject=Rush requested by customer']),
+      { subject: 'Rush requested by customer' },
+    );
+  });
+
   it('opens with no prefill when no subject is given', () => {
     assert.deepEqual(planOpenParams(rules('quick_task'), []), {});
   });
@@ -149,12 +156,13 @@ describe('open params · shape & guards', () => {
 
   it('reports which targets accept parameters', () => {
     for (const target of ['crm_search', 'task_list', 'image_preview', 'mockup_studio',
-      'gift_catalog', 'watch_list', 'margin_calc', 'quick_task', 'call_log']) {
+      'gift_catalog', 'watch_list', 'margin_calc', 'quick_task', 'call_log',
+      'quick_order_note']) {
       assert.equal(targetAcceptsOpenParams(target), true, `${target} should accept params`);
     }
     // Parameterless targets are absent from the rules and take no arguments.
     assert.equal(targetAcceptsOpenParams('notifications'), false);
-    assert.equal(targetAcceptsOpenParams('quick_order_note'), false);
+    assert.equal(targetAcceptsOpenParams('call_log'), true); // now a composer verb
     assert.equal(targetAcceptsOpenParams(''), false);
   });
 

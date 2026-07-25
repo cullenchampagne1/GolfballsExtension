@@ -64,6 +64,10 @@ export const OPEN_PARAM_RULES = Object.freeze({
   call_log: {
     subject: { type: 'string', max: 120 },
   },
+  quick_order_note: {
+    // order-scoped: the order id is resolved from the page URL by the opener.
+    subject: { type: 'string', max: 120 },
+  },
 });
 
 function coerce(rule, raw, key) {

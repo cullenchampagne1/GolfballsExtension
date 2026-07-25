@@ -48,7 +48,9 @@ function buildNoteSchema(templates) {
   };
 }
 
-export function QuickOrderNote({ orderId = '', onSubmit, onClosed, bindClose }) {
+export function QuickOrderNote({
+  orderId = '', onSubmit, autoCompose = false, draft = null, onClosed, bindClose,
+}) {
   const toast = useToast();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,9 +71,12 @@ export function QuickOrderNote({ orderId = '', onSubmit, onClosed, bindClose }) 
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => composerRef.current?.focus(), 60);
+    const id = setTimeout(() => {
+      if (autoCompose) composerRef.current?.startCompose(draft || undefined);
+      else composerRef.current?.focus();
+    }, 60);
     return () => clearTimeout(id);
-  }, []);
+  }, [autoCompose, draft]);
 
   const apply = async (template) => {
     if (!template || busy) return;

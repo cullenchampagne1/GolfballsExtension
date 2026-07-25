@@ -69,6 +69,7 @@ const OPEN_ADAPTERS = Object.freeze({
   // the rep submits. Passing a subject implies auto-compose.
   quick_task: (p) => [{ autoCompose: true, draft: p.subject ? { subject: p.subject } : null }],
   call_log: (p) => [{ autoCompose: true, draft: p.subject ? { subject: p.subject } : null }],
+  quick_order_note: (p) => [{ autoCompose: true, draft: p.subject ? { subject: p.subject } : null }],
 });
 
 function storageGet(keys) {
