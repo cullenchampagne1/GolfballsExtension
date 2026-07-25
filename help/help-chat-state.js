@@ -14,7 +14,7 @@
   const MAX_HISTORY = 12;
   const ACTIVE_STATUSES = new Set(['submitting', 'queued', 'running']);
   const ACTION_TYPES = new Set([
-    'open_guide', 'open_settings', 'show_shortcut', 'copy_text',
+    'open_guide', 'open_settings', 'open_modal', 'show_shortcut', 'copy_text',
     'set_feature', 'set_setting', 'set_theme_preset', 'set_theme_palette',
     'share_settings', 'share_email_template', 'request_data_access', 'submit_ticket',
   ]);
@@ -97,22 +97,26 @@
 
   function normalizeAction(value) {
     if (!value || typeof value !== 'object') return null;
-    const type = bounded(value.type, 40);
-    const target = bounded(value.target, type === 'copy_text' ? 4_000 : 500);
+    let payload;
+    try { payload = root.GBActionLanguage?.normalize?.(value); }
+    catch { return null; }
+    const type = bounded(payload?.command, 40);
+    const target = bounded(
+      payload?.target,
+      type === 'copy_text' ? 4_000 : 500,
+    );
     if (!ACTION_TYPES.has(type) || !target) return null;
     return {
       type,
       target,
-      value: bounded(value.value, 500),
-      options: Array.isArray(value.options)
-        ? value.options.map((item) => bounded(item, 120)).filter(Boolean).slice(0, 16)
-        : [],
-      label: bounded(value.label, 100) || 'Open',
+      value: bounded(payload.value, 500),
+      options: [...payload.options],
+      label: bounded(payload.label || value.label, 100) || 'Open',
       citationId: safeId(value.citation_id ?? value.citationId),
       receiptId: safeReceiptId(value.receipt_id ?? value.receiptId),
-      references: Array.isArray(value.references)
-        ? value.references.slice(0, 6).map(normalizeSourceReference).filter(Boolean)
-        : [],
+      references: payload.references
+        .map(normalizeSourceReference).filter(Boolean),
+      payload: root.GBActionLanguage.serialize(payload),
     };
   }
 

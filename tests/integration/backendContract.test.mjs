@@ -23,7 +23,8 @@ const installationAuth = await read('lib/installation-auth.js');
 const background = await read('background.js');
 const remotePolicy = await read('lib/remote-settings-policy.js');
 const runtimeBootstrap = await read('lib/runtime-bootstrap.js');
-const notificationActions = await read('lib/notification-actions.js');
+const actionLanguage = await read('lib/action-language.js');
+const actionRuntime = await read('lib/action-runtime.js');
 const notificationPoll = await read('lib/notifications-poll.js');
 const notificationCenter = await read('src/modals/Notifications.jsx');
 const helpAssistant = await read('help/help-assistant.js');
@@ -149,13 +150,15 @@ describe('backend contract · project client endpoints', () => {
 
 describe('backend contract · notification producer correlation', () => {
   it('loads the extension payload interpreter before top-right delivery', () => {
-    const actionsAt = background.indexOf("'lib/notification-actions.js'");
+    const languageAt = background.indexOf("'lib/action-language.js'");
+    const actionsAt = background.indexOf("'lib/action-runtime.js'");
     const pollAt = background.indexOf("'lib/notifications-poll.js'");
-    assert.ok(actionsAt >= 0 && pollAt > actionsAt);
+    assert.ok(languageAt >= 0 && actionsAt > languageAt && pollAt > actionsAt);
     assert.ok(!background.includes("'lib/notifications-native.js'"));
-    assert.ok(notificationActions.includes('registerCommand'));
-    assert.ok(notificationActions.includes('registerHandler'));
-    assert.ok(notificationActions.includes('canExecute'));
+    assert.ok(actionLanguage.includes("'set_feature'"));
+    assert.ok(actionLanguage.includes("'share_settings'"));
+    assert.ok(actionRuntime.includes('registerHandler'));
+    assert.ok(actionRuntime.includes('canExecute'));
     assert.ok(notificationPoll.includes('added.slice(0, MAX_TOASTS)'));
     assert.ok(!notificationPoll.includes('GBNativeNotifications'));
   });

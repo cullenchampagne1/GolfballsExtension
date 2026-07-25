@@ -102,6 +102,9 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "subtype:call_log",
             targets[("request_data_access", "note_templates")]["option_values"],
         )
+        self.assertEqual(
+            targets[("open_modal", "mockup_studio")]["value_type"], "none"
+        )
         source = next(chunk for chunk in self.chunks if chunk["kind"] == "source")
         self.assertIsInstance(source.get("line_start"), int)
         self.assertGreaterEqual(source.get("line_end"), source.get("line_start"))

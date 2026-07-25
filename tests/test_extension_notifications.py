@@ -103,9 +103,9 @@ class ExtensionNotificationTests(unittest.TestCase):
             action={
                 "label": "View batch",
                 "payload": (
-                    '{"command":"open_mockup_batch","batch_id":"batch_'
+                    '{"version":1,"command":"open_mockup_batch","target":"batch_'
                     + ("1" * 32)
-                    + '"}'
+                    + '","value":"","options":[]}'
                 ),
             },
             presentation={"type": "action"},
@@ -127,9 +127,9 @@ class ExtensionNotificationTests(unittest.TestCase):
         self.assertEqual(
             payload["notifications"][0]["action"]["payload"],
             (
-                '{"command":"open_mockup_batch","batch_id":"batch_'
+                '{"version":1,"command":"open_mockup_batch","target":"batch_'
                 + ("1" * 32)
-                + '"}'
+                + '","value":"","options":[]}'
             ),
         )
         self.assertEqual(

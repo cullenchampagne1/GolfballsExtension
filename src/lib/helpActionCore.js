@@ -1,6 +1,11 @@
 /** Pure, browser-API-free policy for Help Companion client actions. */
 
+import {
+  actionLanguageCommands, normalizeActionPayload, serializeActionPayload,
+} from './actionLanguage.js';
+
 export const MUTATION_ACTION_TYPES = Object.freeze(new Set([
+  'open_modal',
   'set_feature',
   'set_setting',
   'set_theme_preset',
@@ -24,8 +29,19 @@ export const CONFIRMATION_ACTION_TYPES = Object.freeze(new Set([
   'share_email_template',
 ]));
 
+export function helpActionCommand(action) {
+  try { return normalizeActionPayload(action).command; }
+  catch {
+    // Ordering and confirmation copy may run while a model response is still
+    // being assembled and before every command argument has been normalized.
+    // Execution always goes through planHelpAction's strict payload parser.
+    const candidate = String(action?.command || action?.type || '').trim().toLowerCase();
+    return actionLanguageCommands().includes(candidate) ? candidate : '';
+  }
+}
+
 export function helpActionRequiresConfirmation(action) {
-  return CONFIRMATION_ACTION_TYPES.has(String(action?.type || ''));
+  return CONFIRMATION_ACTION_TYPES.has(helpActionCommand(action));
 }
 
 export function helpActionConfirmationTypes() {
@@ -38,7 +54,7 @@ export function helpActionConfirmationTypes() {
  * target — a share action would otherwise read "Submit report".
  */
 export function helpActionConfirmationCopy(action) {
-  const type = String(action?.type || '');
+  const type = helpActionCommand(action);
   if (type === 'share_settings') {
     return {
       pending: 'Review this settings link before it is created and shared.',
@@ -112,33 +128,54 @@ function isHidden(target, policy, kind) {
  * Returns a small normalized operation; never returns arbitrary storage keys.
  */
 export function planHelpAction(action, registry = {}) {
-  if (!action || typeof action !== 'object') fail('The assistant action is invalid');
-  const type = String(action.type || '');
-  const target = String(action.target || '');
-  const options = Array.isArray(action.options) ? action.options.map(String) : [];
+  let payload;
+  try { payload = normalizeActionPayload(action); }
+  catch (error) { fail(error?.message || 'The assistant action is invalid'); }
+  const type = payload.command;
+  const target = payload.target;
+  const options = payload.options.map(String);
+  const normalizedAction = {
+    ...action,
+    type,
+    target,
+    value: payload.value,
+    options,
+    label: payload.label || action?.label,
+    references: payload.references,
+  };
   const {
     featureRules = {}, settingRules = {}, themeVariants = [], shareScopes = [],
-    templates = [], policy = {},
+    templates = [], modalTargets = [], policy = {},
   } = registry;
 
   if (!MUTATION_ACTION_TYPES.has(type)) fail('The assistant action is not executable');
   if (!SAFE_ID.test(target)) fail('The assistant action target is invalid');
 
+  if (type === 'open_modal') {
+    if (!modalTargets.includes(target)) {
+      fail('That modal is not registered in this build');
+    }
+    if (payload.value !== '' || options.length) {
+      fail('The modal action contains unsupported arguments');
+    }
+    return { type, target };
+  }
+
   if (type === 'set_feature') {
     if (!Object.hasOwn(featureRules, target)) fail('That feature is not registered in this build');
     if (isHidden(target, policy, 'feature')) fail('That feature is hidden by administrator policy');
-    return { type, target, value: boolValue(action.value) };
+    return { type, target, value: boolValue(normalizedAction.value) };
   }
 
   if (type === 'set_setting') {
     const rule = settingRules[target];
     if (!rule) fail('That setting is not registered in this build');
     if (isHidden(target, policy, 'setting')) fail('That setting is hidden by administrator policy');
-    return { type, target, value: settingValue(rule, action.value) };
+    return { type, target, value: settingValue(rule, normalizedAction.value) };
   }
 
   if (type === 'set_theme_preset') {
-    const requested = choiceKey(action.value);
+    const requested = choiceKey(normalizedAction.value);
     const value = Array.isArray(themeVariants)
       ? themeVariants.find((variant) => choiceKey(variant) === requested)
       : themeVariants?.[requested];
@@ -150,7 +187,7 @@ export function planHelpAction(action, registry = {}) {
     if (target !== 'brand' || options.length !== 4 || options.some((color) => !HEX.test(color))) {
       fail('The assistant palette must contain four valid colors');
     }
-    return { type, target, value: String(action.value || '').slice(0, 80), colors: options.map((color) => color.toLowerCase()) };
+    return { type, target, value: String(normalizedAction.value || '').slice(0, 80), colors: options.map((color) => color.toLowerCase()) };
   }
 
   if (type === 'share_settings') {
@@ -158,7 +195,7 @@ export function planHelpAction(action, registry = {}) {
     if (target !== 'settings' || unique.length < 1 || unique.some((id) => !shareScopes.includes(id))) {
       fail('The settings share contains an unregistered scope');
     }
-    const name = String(action.value || 'Help Companion settings').trim().slice(0, 120);
+    const name = String(normalizedAction.value || 'Help Companion settings').trim().slice(0, 120);
     if (!name) fail('The settings share needs a name');
     return { type, target, name, scopes: unique };
   }
@@ -167,11 +204,11 @@ export function planHelpAction(action, registry = {}) {
     if (!['bug', 'feature'].includes(target) || options.length) {
       fail('The assistant ticket type is invalid');
     }
-    const title = String(action.label || '').trim().slice(0, 120);
-    const description = String(action.value || '').trim().slice(0, 500);
+    const title = String(normalizedAction.label || '').trim().slice(0, 120);
+    const description = String(normalizedAction.value || '').trim().slice(0, 500);
     if (!title || !description) fail('The assistant ticket is missing its summary');
     const references = [];
-    for (const raw of Array.isArray(action.references) ? action.references.slice(0, 6) : []) {
+    for (const raw of normalizedAction.references.slice(0, 6)) {
       const path = String(raw?.path || '').trim();
       const lineStart = Math.max(1, Math.floor(Number(raw?.lineStart ?? raw?.line_start) || 0));
       const lineEnd = Math.max(lineStart, Math.floor(Number(raw?.lineEnd ?? raw?.line_end) || 0));
@@ -194,8 +231,9 @@ export function planHelpAction(action, registry = {}) {
  * actions retain their relative order and are independent of that pair. */
 export function orderHelpActions(actions) {
   const priority = (action) => {
-    if (action?.type === 'set_theme_preset') return 0;
-    if (action?.type === 'set_theme_palette') return 2;
+    const command = helpActionCommand(action);
+    if (command === 'set_theme_preset') return 0;
+    if (command === 'set_theme_palette') return 2;
     return 1;
   };
   return Array.isArray(actions)
@@ -254,16 +292,24 @@ export function helpActionReceiptId(message, action, index = 0) {
   if (RECEIPT_ID.test(issued)) return issued;
   const position = Math.max(0, Math.floor(Number(index) || 0));
   const createdAt = Math.max(0, Math.floor(Number(message?.createdAt) || 0));
+  let canonical = null;
+  try { canonical = normalizeActionPayload(action); } catch { /* legacy fallback below */ }
   const material = JSON.stringify([
     createdAt,
     String(message?.text || '').slice(0, 2_000),
-    String(action?.type || ''),
-    String(action?.target || ''),
-    String(action?.value || ''),
-    Array.isArray(action?.options) ? action.options.map(String).slice(0, 16) : [],
+    canonical?.command || String(action?.type || ''),
+    canonical?.target || String(action?.target || ''),
+    canonical ? String(canonical.value) : String(action?.value || ''),
+    canonical ? [...canonical.options] : (
+      Array.isArray(action?.options) ? action.options.map(String).slice(0, 16) : []
+    ),
     position,
   ]);
   return `legacy:${createdAt.toString(36)}:${receiptHash(material)}:${position}`;
+}
+
+export function helpActionPayload(action) {
+  return serializeActionPayload(action);
 }
 
 export function hasIssuedHelpActionReceipt(action) {

@@ -7,6 +7,7 @@ import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
 import { buildAutomaticHelpState } from './helpAutomaticState.js';
 import {
   createSerialHelpActionRunner, helpActionReceiptDecision, helpActionReceiptId,
+  helpActionCommand,
   hasIssuedHelpActionReceipt, helpActionConfirmationTypes,
   helpActionRequiresConfirmation,
   MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute,
@@ -30,6 +31,17 @@ import {
 
 const RECEIPTS_KEY = 'gbHelpActionReceiptsV1';
 const COLOR_KEYS = ['--gb-brand-label', '--gb-brand', '--gb-brand-dark', '--gb-brand-border'];
+const MODAL_TARGETS = Object.freeze({
+  notifications: '__gbShowNotificationsModal',
+  mockup_studio: '__gbOpenMockupStudio',
+  gift_catalog: '__gbOpenGiftCatalog',
+  crm_search: '__gbShowCrmSearchModal',
+  task_list: '__gbShowTaskListModal',
+  quick_task: '__gbShowQuickTaskModal',
+  quick_order_note: '__gbShowQuickOrderNoteModal',
+  call_log: '__gbShowCallLogModal',
+  image_preview: '__gbOpenImagePreview',
+});
 
 function storageGet(keys) {
   return new Promise((resolve) => chrome.storage.local.get(keys, (value) => resolve(value || {})));
@@ -70,12 +82,13 @@ async function environment() {
     themeVariants,
     shareScopes,
     templates: Array.isArray(stored.templates) ? stored.templates : [],
+    modalTargets: Object.keys(MODAL_TARGETS),
     policy: stored.gbRemoteSettingsPolicy || {},
   };
 }
 
 export function isExecutableHelpAction(action) {
-  return MUTATION_ACTION_TYPES.has(String(action?.type || ''));
+  return MUTATION_ACTION_TYPES.has(helpActionCommand(action));
 }
 
 export async function prepareHelpActionReceipts(receiptIds) {
@@ -115,6 +128,16 @@ export async function helpActionContext() {
 async function execute(action, receiptId) {
   const env = await environment();
   const operation = planHelpAction(action, env);
+  if (operation.type === 'open_modal') {
+    const open = globalThis[MODAL_TARGETS[operation.target]];
+    if (typeof open !== 'function') {
+      throw new Error('That modal is not available on this page');
+    }
+    await open();
+    return {
+      message: `Opened ${operation.target.replaceAll('_', ' ')}`,
+    };
+  }
   if (operation.type === 'set_feature') {
     const flags = { ...FEATURE_DEFAULTS, ...await loadFlags(), [operation.target]: operation.value };
     await storageSet({ featureFlags: flags });
@@ -263,4 +286,16 @@ const executeHelpActionSerial = createSerialHelpActionRunner(executeHelpActionOn
 
 export function executeHelpActionOnce(receiptId, action, options) {
   return executeHelpActionSerial(receiptId, action, options);
+}
+
+/** Shared entry point for notification cards and future extension surfaces.
+ * All callers reach the same live registries, remote policy checks, link
+ * confirmation semantics, serialization queue, and idempotent receipt ledger
+ * as Help Companion. */
+export function executeActionPayloadOnce(receiptId, payload, options) {
+  return executeHelpActionSerial(receiptId, { payload }, options);
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.__gbExecuteActionPayloadOnce = executeActionPayloadOnce;
 }

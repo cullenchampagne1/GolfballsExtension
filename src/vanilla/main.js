@@ -51,12 +51,12 @@ function __gbAccessAllowed(st, now) {
     } catch { /* worker unavailable during navigation */ }
   }
 
-  const __gbNotificationActions = window.GBNotificationActions;
-  __gbNotificationActions?.registerHandler?.(
+  const __gbActionRuntime = window.GBActionRuntime;
+  __gbActionRuntime?.registerHandler?.(
     'open_mockup_batch',
     'content',
     (payload) => {
-      const batchId = String(payload.batch_id || '');
+      const batchId = String(payload.target || '');
       if (
         !/^batch_[a-f0-9]{32}$/.test(batchId)
         || typeof window.__gbOpenMockupStudio !== 'function'
@@ -65,7 +65,7 @@ function __gbAccessAllowed(st, now) {
       return true;
     },
   );
-  __gbNotificationActions?.registerHandler?.(
+  __gbActionRuntime?.registerHandler?.(
     'open_contact',
     'content',
     (_payload, context) => {
@@ -81,12 +81,12 @@ function __gbAccessAllowed(st, now) {
       return true;
     },
   );
-  __gbNotificationActions?.registerHandler?.(
+  __gbActionRuntime?.registerHandler?.(
     'open_support_ticket',
     'content',
     (payload) => {
       if (!/^GBT-[A-Z0-9]{6,16}$/.test(
-        String(payload.ticket_id || ''),
+        String(payload.target || ''),
       )) return false;
       chrome.runtime.sendMessage({
         action: 'openEditor',
@@ -97,7 +97,34 @@ function __gbAccessAllowed(st, now) {
     },
   );
 
-  function __gbOpenNotification(notification, options = {}) {
+  const __gbSharedActionCommands = [
+    'open_modal',
+    'set_feature',
+    'set_setting',
+    'set_theme_preset',
+    'set_theme_palette',
+    'share_settings',
+    'share_email_template',
+    'submit_ticket',
+  ];
+  for (const command of __gbSharedActionCommands) {
+    __gbActionRuntime?.registerHandler?.(
+      command,
+      'content',
+      (payload, context) => {
+        const run = window.__gbExecuteActionPayloadOnce;
+        const remoteId = Number(context.notification?.remoteId);
+        if (
+          typeof run !== 'function'
+          || !Number.isSafeInteger(remoteId)
+          || remoteId < 1
+        ) return false;
+        return run(`notification:${remoteId}`, payload);
+      },
+    );
+  }
+
+  async function __gbOpenNotification(notification, options = {}) {
     const acknowledge = options.receipt !== false;
     const receipt = (state) => {
       if (acknowledge) __gbNotificationReceipt(notification, state);
@@ -108,16 +135,57 @@ function __gbAccessAllowed(st, now) {
       receipt('read');
       return true;
     }
-    let handled = false;
+    let result = false;
     try {
-      handled = __gbNotificationActions?.execute?.(
+      result = await __gbActionRuntime?.execute?.(
         rawAction,
         'content',
         { notification },
-      ) === true;
-    } catch { handled = false; }
+      );
+    } catch { result = false; }
+    const handled = (
+      result === true
+      || (
+        result
+        && typeof result === 'object'
+        && result.status === 'succeeded'
+      )
+    );
     if (handled) {
       receipt('acted');
+      if (result && typeof result === 'object') {
+        const message = String(result.message || 'Action applied');
+        const url = String(result.url || '');
+        if (url) {
+          window.__gbToast?.action?.({
+            title: message,
+            message: 'The generated link is ready.',
+            placement: 'top-right',
+            align: 'right',
+            secondary: 'Dismiss',
+            primary: 'Copy link',
+            onPrimary: async () => {
+              try {
+                await navigator.clipboard.writeText(url);
+                window.__gbToast?.success?.('Link copied', {
+                  duration: 1800,
+                  placement: 'top-right',
+                });
+              } catch {
+                window.__gbToast?.error?.('Could not copy link', {
+                  duration: 2200,
+                  placement: 'top-right',
+                });
+              }
+            },
+          });
+        } else if (result.replayed !== true) {
+          window.__gbToast?.success?.(message, {
+            duration: 2300,
+            placement: 'top-right',
+          });
+        }
+      }
       return true;
     }
     window.__gbToast?.warning?.('This notification action is unavailable', {
@@ -127,7 +195,7 @@ function __gbAccessAllowed(st, now) {
   }
   window.__gbRunNotificationAction = __gbOpenNotification;
   window.__gbCanRunNotificationAction = (notification) => (
-    __gbNotificationActions?.canExecute?.(
+    __gbActionRuntime?.canExecute?.(
       notification?.action,
       'content',
     ) === true

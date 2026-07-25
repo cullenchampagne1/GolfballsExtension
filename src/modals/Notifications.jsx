@@ -419,13 +419,20 @@ export function Notifications({ onClosed, bindClose }) {
     // and made the batch gallery appear behind the center.
     closeRef.current?.();
     setTimeout(() => {
-      const handled = window.__gbRunNotificationAction?.(item);
-      if (!handled) {
-        window.__gbToast?.warning?.(
-          'That action is not available on this page',
-          { duration: 3200, placement: 'top-right' },
-        );
-      }
+      Promise.resolve(window.__gbRunNotificationAction?.(item))
+        .then((handled) => {
+          if (handled) return;
+          window.__gbToast?.warning?.(
+            'That action is not available on this page',
+            { duration: 3200, placement: 'top-right' },
+          );
+        })
+        .catch(() => {
+          window.__gbToast?.warning?.(
+            'That action could not be completed',
+            { duration: 3200, placement: 'top-right' },
+          );
+        });
     }, 240);
   }, [toast, update]);
 

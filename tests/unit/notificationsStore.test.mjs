@@ -4,8 +4,11 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const root = new URL('../../', import.meta.url);
-const actionSource = readFileSync(
-  new URL('lib/notification-actions.js', root), 'utf8',
+const languageSource = readFileSync(
+  new URL('lib/action-language.js', root), 'utf8',
+);
+const runtimeSource = readFileSync(
+  new URL('lib/action-runtime.js', root), 'utf8',
 );
 const source = readFileSync(new URL('lib/notifications-store.js', root), 'utf8');
 const BATCH_ID = `batch_${'a'.repeat(32)}`;
@@ -36,11 +39,14 @@ function harness(initial = {}) {
   });
   context.globalThis = context;
   new vm.Script(
-    actionSource, { filename: 'notification-actions.js' },
+    languageSource, { filename: 'action-language.js' },
+  ).runInContext(context);
+  new vm.Script(
+    runtimeSource, { filename: 'action-runtime.js' },
   ).runInContext(context);
   new vm.Script(source, { filename: 'notifications-store.js' }).runInContext(context);
   return {
-    actions: context.GBNotificationActions,
+    actions: context.GBActionRuntime,
     store: context.GBNotifications,
     stored,
     badges,
@@ -59,8 +65,11 @@ function remote(overrides = {}) {
     action: {
       label: 'Open gallery',
       payload: JSON.stringify({
+        version: 1,
         command: 'open_mockup_batch',
-        batch_id: BATCH_ID,
+        target: BATCH_ID,
+        value: '',
+        options: [],
       }),
     },
     presentation: { type: 'action' },
@@ -80,7 +89,7 @@ describe('notification outbox cache', () => {
       JSON.parse(normalized.action.payload).command,
       'open_mockup_batch',
     );
-    assert.equal(JSON.parse(normalized.action.payload).batch_id, BATCH_ID);
+    assert.equal(JSON.parse(normalized.action.payload).target, BATCH_ID);
     assert.equal(normalized.action.label, 'Open gallery');
     assert.equal(normalized.presentation.type, 'action');
     assert.equal(normalized.presentation.location, 'top-right');
@@ -132,9 +141,11 @@ describe('notification outbox cache', () => {
       action: {
         label: 'Open contact',
         payload: JSON.stringify({
+          version: 1,
           command: 'open_contact',
-          contact_email: 'person@example.com',
-          message_id: 'message-12',
+          target: 'person@example.com',
+          value: 'message-12',
+          options: [],
         }),
       },
     })]);
@@ -152,9 +163,11 @@ describe('notification outbox cache', () => {
       action: {
         label: 'Read reply',
         payload: JSON.stringify({
+          version: 1,
           command: 'open_contact',
-          contact_email: 'Person@Example.com',
-          message_id: 'message-12',
+          target: 'Person@Example.com',
+          value: 'message-12',
+          options: [],
         }),
       },
       presentation: { type: 'action' },
@@ -168,10 +181,10 @@ describe('notification outbox cache', () => {
     assert.equal(actions.canExecute(normalized.action, 'content'), true);
     assert.equal(actions.execute(normalized.action, 'content'), true);
     assert.equal(
-      handled[0].contact_email,
-      'person@example.com',
+      handled[0].target,
+      'Person@Example.com',
     );
-    assert.equal(handled[0].message_id, 'message-12');
+    assert.equal(handled[0].value, 'message-12');
     assert.equal(normalized.presentation.type, 'action');
     assert.equal(normalized.presentation.location, 'top-right');
   });

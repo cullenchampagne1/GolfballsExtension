@@ -17,6 +17,7 @@ const registry = {
   themeVariants: { dark: 'dark', nord: 'nord', slate: 'midnight', midnight: 'midnight' },
   shareScopes: ['settings-preferences', 'settings-appearance'],
   templates: [{ id: 'tpl-follow-up', name: 'Follow up', subject: 'Checking in' }],
+  modalTargets: ['mockup_studio'],
   policy: { hiddenFeatures: {}, hiddenDeveloperSettings: {}, adminBypass: false },
 };
 
@@ -38,6 +39,15 @@ describe('Help Companion action policy', () => {
       ['settings-appearance'],
     );
     assert.equal(planHelpAction({ type: 'share_email_template', target: 'tpl-follow-up' }, registry).template.name, 'Follow up');
+    assert.deepEqual(
+      planHelpAction({
+        payload: JSON.stringify({
+          version: 1, command: 'open_modal', target: 'mockup_studio',
+          value: '', options: [], label: 'Open Mockup Studio',
+        }),
+      }, registry),
+      { type: 'open_modal', target: 'mockup_studio' },
+    );
     assert.deepEqual(
       planHelpAction({
         type: 'submit_ticket', target: 'bug', label: 'Charge button is inert',
@@ -178,6 +188,7 @@ describe('Help Companion action policy', () => {
     assert.throws(() => planHelpAction({ type: 'set_theme_palette', target: 'brand', options: ['red'] }, registry), /four valid colors/);
     assert.throws(() => planHelpAction({ type: 'share_settings', target: 'settings', value: 'Bad', options: ['secret-scope'] }, registry), /unregistered scope/);
     assert.throws(() => planHelpAction({ type: 'share_email_template', target: 'tpl-missing' }, registry), /not available/);
+    assert.throws(() => planHelpAction({ type: 'open_modal', target: 'invented' }, registry), /not registered/);
     assert.throws(() => planHelpAction({ type: 'submit_ticket', target: 'incident', label: 'Bad', value: 'Bad' }, registry), /type is invalid/);
   });
 

@@ -88,7 +88,8 @@
       ],
       "js": [
         "theme.js",
-        "lib/notification-actions.js",
+        "lib/action-language.js",
+        "lib/action-runtime.js",
         "react-dist/vanilla/three-runtime.js",
         "src/vanilla/smart-detection.js",
         "react-dist/vanilla/page-engine.js",
