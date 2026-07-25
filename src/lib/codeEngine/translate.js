@@ -66,6 +66,10 @@ function asActionCall(src, node) {
   return {
     contract: contract.name,
     argText: args ? slice(src, args.from + 1, args.to - 1).trim() : '',
+    // The block id keys on the CALL node so it matches instrument.js exactly
+    // (the statement span differs — it includes `await`/`const … =`).
+    callFrom: call.from,
+    callTo: call.to,
   };
 }
 
@@ -92,7 +96,8 @@ function statementToBlock(src, stmt) {
           childByName(stmt, 'VariableDefinition').from, childByName(stmt, 'VariableDefinition').to)) || null
         : null;
       return {
-        id, kind: 'action', contract: action.contract, argText: action.argText,
+        id: nodeId(action.callFrom, action.callTo),
+        kind: 'action', contract: action.contract, argText: action.argText,
         assignTo, text,
       };
     }

@@ -242,6 +242,10 @@
       "file": "tests/unit/codeEngineTranslate.test.mjs"
     },
     {
+      "name": "guard \u00b7 code-engine instrumentation & simulation",
+      "file": "tests/unit/codeEngineInstrument.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },
