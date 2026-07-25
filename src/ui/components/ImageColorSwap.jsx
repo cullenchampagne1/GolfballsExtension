@@ -142,6 +142,108 @@ export function GlassIconBtn({ icon, active, onClick, title }) {
   );
 }
 
+function GlassZoomButton({
+  children, title, onClick, disabled = false,
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      data-viewer-ui="true"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        minWidth: 22, height: 22, padding: '0 7px',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        lineHeight: 1, outline: 'none',
+        fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+        fontFamily: 'var(--gb-font-mono)',
+        color: disabled
+          ? 'var(--gb-text-ghost)'
+          : hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)',
+        background: hovered && !disabled ? GLASS_BG_HVR : GLASS_BG,
+        backdropFilter: GLASS_FILTER,
+        WebkitBackdropFilter: GLASS_FILTER,
+        border: `1px solid ${GLASS_BORDER}`,
+        borderRadius: GLASS_RADIUS,
+        boxShadow: GLASS_SHADOW,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.56 : 1,
+        transition: 'color .12s, background-color .12s, opacity .12s',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Shared image-viewer zoom chrome. It is positioned against the nearest
+ * relative preview surface so ImagePreview, catalog alignment, and generated
+ * mockup viewers present identical controls and zoom feedback.
+ */
+export function ViewerZoomControls({
+  zoomLevel,
+  onZoomOut,
+  onReset,
+  onZoomIn,
+  canZoomOut = true,
+  canZoomIn = true,
+}) {
+  return (
+    <>
+      <div
+        data-viewer-ui="true"
+        style={{
+          position: 'absolute', left: 10, bottom: 8, zIndex: 6,
+          padding: '2px 7px', pointerEvents: 'none',
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+          fontFamily: 'var(--gb-font-mono)',
+          color: 'var(--gb-text-secondary)',
+          background: GLASS_BG,
+          backdropFilter: GLASS_FILTER,
+          WebkitBackdropFilter: GLASS_FILTER,
+          border: `1px solid ${GLASS_BORDER}`,
+          borderRadius: GLASS_RADIUS,
+          boxShadow: GLASS_SHADOW,
+        }}
+      >
+        {Math.round(Number(zoomLevel) || 100)}%
+      </div>
+      <div
+        data-viewer-ui="true"
+        style={{
+          position: 'absolute', right: 8, bottom: 8, zIndex: 6,
+          display: 'flex', gap: 4,
+        }}
+      >
+        <GlassZoomButton
+          title="Zoom out"
+          disabled={!canZoomOut}
+          onClick={onZoomOut}
+        >
+          −
+        </GlassZoomButton>
+        <GlassZoomButton title="Reset zoom" onClick={onReset}>
+          1:1
+        </GlassZoomButton>
+        <GlassZoomButton
+          title="Zoom in"
+          disabled={!canZoomIn}
+          onClick={onZoomIn}
+        >
+          +
+        </GlassZoomButton>
+      </div>
+    </>
+  );
+}
+
 export const DropperIcon = (p) => (
   <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

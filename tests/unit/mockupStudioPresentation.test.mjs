@@ -18,6 +18,10 @@ const ringSource = source.slice(
   source.indexOf('function BatchRingBurst'),
   source.indexOf('function FullResultViewer'),
 );
+const viewerSource = source.slice(
+  source.indexOf('function FullResultViewer'),
+  source.indexOf('function ResultCard'),
+);
 const batchViewSource = source.slice(
   source.indexOf('function BatchView'),
   source.indexOf('export function MockupStudio'),
@@ -94,5 +98,20 @@ describe('mockup gallery in-studio presentation', () => {
     assert.match(batchViewSource, /gridTemplateColumns: 'repeat\(4, minmax\(0, 1fr\)\)'/);
     assert.match(batchViewSource, /label="Generating"/);
     assert.doesNotMatch(batchViewSource, /<ProgressBar/);
+  });
+
+  it('uses the shared landscape image viewer without changing downloaded assets', () => {
+    assert.match(source, /createCornerTransparentPreview/);
+    assert.match(viewerSource, /const displayUrl = useCornerTransparentPreview/);
+    assert.match(viewerSource, /\.\.\.PREVIEW_GRID/);
+    assert.match(viewerSource, /<ViewerZoomControls/);
+    assert.match(
+      viewerSource,
+      /flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden'/,
+    );
+    assert.match(viewerSource, /src=\{displayUrl\}/);
+    assert.match(viewerSource, /saveResultAsset\(\s*asset,/);
+    assert.doesNotMatch(viewerSource, /aspectRatio: '1 \/ 1'/);
+    assert.doesNotMatch(viewerSource, /height: 'min\(100%, 620px\)'/);
   });
 });

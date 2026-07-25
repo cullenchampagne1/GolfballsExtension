@@ -9,8 +9,12 @@ import {
 import {
   ZOOM_MAX, ZOOM_MIN, ZOOM_BUTTON_STEP, framePoint, wheelZoom, zoomToPoint,
 } from '../lib/imageZoom.js';
+import { createCornerTransparentPreview } from '../lib/imageBackground.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import {
+  PREVIEW_GRID, ViewerZoomControls,
+} from '../ui/components/ImageColorSwap.jsx';
 import {
   bootstrapProductGenerationStudio,
   cancelProductGenerationBatch,
@@ -207,6 +211,24 @@ function useResultAsset(job, enabled = true) {
   }, [available, enabled, job?.job_id]);
   return state.jobId === job?.job_id
     ? state : { asset: null, loading: Boolean(available), error: '' };
+}
+
+function useCornerTransparentPreview(sourceUrl) {
+  const [preview, setPreview] = useState({ source: '', url: '' });
+  useEffect(() => {
+    if (!sourceUrl) {
+      setPreview({ source: '', url: '' });
+      return undefined;
+    }
+    let cancelled = false;
+    createCornerTransparentPreview(sourceUrl).then((url) => {
+      if (!cancelled) setPreview({ source: sourceUrl, url: url || sourceUrl });
+    }).catch(() => {
+      if (!cancelled) setPreview({ source: sourceUrl, url: sourceUrl });
+    });
+    return () => { cancelled = true; };
+  }, [sourceUrl]);
+  return preview.source === sourceUrl ? preview.url : sourceUrl;
 }
 
 function ResultArtwork({
@@ -1101,6 +1123,7 @@ function BatchProgressRing({ batch, progress, total }) {
 
 function FullResultViewer({ job, onBack }) {
   const { asset, loading, error } = useResultAsset(job, true);
+  const displayUrl = useCornerTransparentPreview(asset?.dataUrl || '');
   const [view, setView] = useState({ zoom: ZOOM_MIN, offset: { x: 0, y: 0 } });
   const { zoom, offset } = view;
   const dragRef = useRef(null);
@@ -1145,6 +1168,7 @@ function FullResultViewer({ job, onBack }) {
   }, [ready]);
 
   const onPointerDown = useCallback((event) => {
+    if (event.target?.closest?.('[data-viewer-ui="true"], button')) return;
     if (zoom <= ZOOM_MIN || !asset?.dataUrl) return;
     dragRef.current = {
       pointerId: event.pointerId,
@@ -1202,40 +1226,6 @@ function FullResultViewer({ job, onBack }) {
             {[job.source?.label, job.variation?.label].filter(Boolean).join(' · ')}
           </div>
         </div>
-        {asset?.dataUrl && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 2, padding: 2,
-            borderRadius: 'var(--gb-r-md)',
-            background: 'var(--gb-fill-inverse-medium)',
-            border: '1px solid var(--gb-border-default)',
-          }}>
-            <IconBtn
-              size="xs" variant="ghost" title="Zoom out"
-              icon={<I.close style={{ transform: 'rotate(45deg)' }} />}
-              disabled={zoom <= ZOOM_MIN}
-              onClick={() => zoomAt(zoom / ZOOM_BUTTON_STEP)}
-            />
-            <button
-              type="button"
-              onClick={reset}
-              title="Reset zoom"
-              style={{
-                minWidth: 38, height: 20, padding: '0 4px', cursor: 'pointer',
-                border: 0, background: 'transparent', fontFamily: 'var(--gb-font-mono)',
-                fontSize: 9.5, fontWeight: 700,
-                color: zoom > ZOOM_MIN ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-              }}
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <IconBtn
-              size="xs" variant="ghost" title="Zoom in"
-              icon={<I.plus />}
-              disabled={zoom >= ZOOM_MAX}
-              onClick={() => zoomAt(zoom * ZOOM_BUTTON_STEP)}
-            />
-          </div>
-        )}
         <Btn
           size="sm"
           variant="primary"
@@ -1248,71 +1238,74 @@ function FullResultViewer({ job, onBack }) {
           Download
         </Btn>
       </div>
-      <div style={{
-        flex: 1, minHeight: 0, padding: 18,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--gb-surface-canvas)',
-      }}>
-        <div
-          ref={frameRef}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onDoubleClick={(event) => (
-            zoom > ZOOM_MIN ? reset() : zoomAt(2.5, event.clientX, event.clientY)
-          )}
-          style={{
-            // Driven from HEIGHT so the square shrinks to fit a short panel
-            // instead of keeping its width and clipping the bottom off.
-            height: 'min(100%, 620px)', aspectRatio: '1 / 1', maxWidth: '100%',
-            overflow: 'hidden', display: 'flex', position: 'relative',
-            alignItems: 'center', justifyContent: 'center',
-            touchAction: 'none',
-            cursor: !asset?.dataUrl ? 'default'
-              : zoom > ZOOM_MIN ? (dragRef.current ? 'grabbing' : 'grab') : 'zoom-in',
-            borderRadius: 'var(--gb-r-lg)',
-            background: 'var(--gb-fill-soft)',
-            border: '1px solid var(--gb-border-default)',
-            boxShadow: 'var(--gb-shadow-lg)',
-          }}
-        >
-          {asset?.dataUrl ? (
-            <motion.img
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              src={asset.dataUrl}
-              alt=""
-              draggable={false}
-              style={{
-                width: '100%', height: '100%', objectFit: 'contain',
-                transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                // No transition while dragging — the pan must track the pointer.
-                transition: dragRef.current ? 'none' : 'transform .16s cubic-bezier(.4,0,.2,1)',
-                willChange: 'transform',
-                userSelect: 'none',
-              }}
-            />
-          ) : loading ? (
-            <span style={{
-              width: 28, height: 28, borderRadius: '50%',
-              border: '2.5px solid var(--gb-brand-tint-border)',
-              borderTopColor: 'var(--gb-brand-label)',
-              animation: 'gb-ms-spin .7s linear infinite',
+      <div
+        ref={frameRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onDoubleClick={(event) => {
+          if (event.target?.closest?.('[data-viewer-ui="true"], button')) return;
+          if (zoom > ZOOM_MIN) reset();
+          else zoomAt(2.5, event.clientX, event.clientY);
+        }}
+        style={{
+          flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          touchAction: 'none',
+          cursor: !asset?.dataUrl ? 'default'
+            : zoom > ZOOM_MIN ? (dragRef.current ? 'grabbing' : 'grab') : 'zoom-in',
+          ...PREVIEW_GRID,
+        }}
+      >
+        {asset?.dataUrl ? (
+          <motion.img
+            key={`${job.job_id}:${displayUrl === asset.dataUrl ? 'original' : 'masked'}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            src={displayUrl}
+            alt=""
+            draggable={false}
+            style={{
+              maxWidth: 'calc(100% - 32px)', maxHeight: 'calc(100% - 32px)',
+              width: 'auto', height: 'auto', objectFit: 'contain',
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+              // No transition while dragging — the pan must track the pointer.
+              transition: dragRef.current ? 'none' : 'transform .16s cubic-bezier(.4,0,.2,1)',
+              willChange: 'transform',
+              userSelect: 'none', pointerEvents: 'none',
+              WebkitUserDrag: 'none',
             }}
-            />
-          ) : (
-            <div style={{
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: 8,
-              color: error ? 'var(--gb-error-fg)' : 'var(--gb-text-muted)',
-              fontSize: 10.5,
-            }}>
-              {error ? <I.alert size={22} /> : <Camera size={22} />}
-              {error || 'Image preview unavailable'}
-            </div>
-          )}
-        </div>
+          />
+        ) : loading ? (
+          <span style={{
+            width: 28, height: 28, borderRadius: '50%',
+            border: '2.5px solid var(--gb-brand-tint-border)',
+            borderTopColor: 'var(--gb-brand-label)',
+            animation: 'gb-ms-spin .7s linear infinite',
+          }}
+          />
+        ) : (
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', gap: 8,
+            color: error ? 'var(--gb-error-fg)' : 'var(--gb-text-muted)',
+            fontSize: 10.5,
+          }}>
+            {error ? <I.alert size={22} /> : <Camera size={22} />}
+            {error || 'Image preview unavailable'}
+          </div>
+        )}
+        {asset?.dataUrl && (
+          <ViewerZoomControls
+            zoomLevel={zoom * 100}
+            canZoomOut={zoom > ZOOM_MIN}
+            canZoomIn={zoom < ZOOM_MAX}
+            onZoomOut={() => zoomAt(zoom / ZOOM_BUTTON_STEP)}
+            onReset={reset}
+            onZoomIn={() => zoomAt(zoom * ZOOM_BUTTON_STEP)}
+          />
+        )}
       </div>
     </div>
   );

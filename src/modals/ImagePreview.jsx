@@ -7,8 +7,8 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
-  PREVIEW_GRID, GLASS_BG, GLASS_BG_HVR, GLASS_BORDER, GLASS_FILTER, GLASS_SHADOW, GLASS_RADIUS,
-  GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolorImage,
+  PREVIEW_GRID, GLASS_BG, GLASS_BORDER, GLASS_FILTER, GLASS_SHADOW, GLASS_RADIUS,
+  GlassIconBtn, ViewerZoomControls, DropperIcon, ResetIcon, SwapPopover, recolorImage,
 } from '../ui/components/ImageColorSwap.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
@@ -1442,42 +1442,20 @@ export function ImagePreview({
                   mode. In 3D the viewer owns wheel scaling and the
                   toolbox (bottom-right) takes over the slot. */}
               {view === '2d' && (
-                <>
-                  <div style={{
-                    position: 'absolute', bottom: 8, left: 10,
-                    fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-                    color: 'var(--gb-text-secondary)',
-                    background: GLASS_BG,
-                    backdropFilter: GLASS_FILTER,
-                    WebkitBackdropFilter: GLASS_FILTER,
-                    border: `1px solid ${GLASS_BORDER}`,
-                    borderRadius: GLASS_RADIUS,
-                    boxShadow: GLASS_SHADOW,
-                    padding: '2px 7px',
-                    pointerEvents: 'none',
-                    fontFamily: 'var(--gb-font-mono)',
-                  }}>{zoomLevel}%</div>
-                  <div style={{
-                    position: 'absolute', bottom: 8, right: 8,
-                    display: 'flex', gap: 4,
-                  }}>
-                    <ZoomChipBtn
-                      tooltip="Zoom out"
-                      onClick={() => {
-                        const c = wrapRef.current;
-                        zoom(-ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
-                      }}
-                    >−</ZoomChipBtn>
-                    <ZoomChipBtn tooltip="Reset zoom" onClick={resetZoom}>1:1</ZoomChipBtn>
-                    <ZoomChipBtn
-                      tooltip="Zoom in"
-                      onClick={() => {
-                        const c = wrapRef.current;
-                        zoom(ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
-                      }}
-                    >+</ZoomChipBtn>
-                  </div>
-                </>
+                <ViewerZoomControls
+                  zoomLevel={zoomLevel}
+                  canZoomOut={scaleRef.current > ZOOM_MIN}
+                  canZoomIn={scaleRef.current < ZOOM_MAX}
+                  onZoomOut={() => {
+                    const c = wrapRef.current;
+                    zoom(-ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
+                  }}
+                  onReset={resetZoom}
+                  onZoomIn={() => {
+                    const c = wrapRef.current;
+                    zoom(ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
+                  }}
+                />
               )}
             </>
           )}
@@ -2037,41 +2015,6 @@ function RotationSlider({ value, onChange }) {
         }} />
       </div>
     </motion.div>
-  );
-}
-
-/* ── ZoomChipBtn ────────────────────────────────────────────────
-   Frosted-glass zoom button — matches the LiquidDrawer capsule
-   aesthetic so all overlay chrome reads as one family. */
-function ZoomChipBtn({ children, tooltip: _tooltip, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        minWidth: 22, height: 22, padding: '0 7px',
-        fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
-        fontFamily: 'var(--gb-font-mono)',
-        color: hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)',
-        background: hovered ? GLASS_BG_HVR : GLASS_BG,
-        backdropFilter: GLASS_FILTER,
-        WebkitBackdropFilter: GLASS_FILTER,
-        border: `1px solid ${GLASS_BORDER}`,
-        borderRadius: GLASS_RADIUS,
-        boxShadow: GLASS_SHADOW,
-        cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        lineHeight: 1,
-        outline: 'none',
-        transition: 'color .12s, background-color .12s',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
