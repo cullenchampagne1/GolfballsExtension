@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, IconBtn, Tag, Dot, Input, ModalShell, I } from '../ui/index.js';
+import { Btn, IconBtn, Tag, Dot, Input, Dropdown, ModalShell, I } from '../ui/index.js';
 import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
@@ -110,7 +110,8 @@ function fmtMoney(n) {
   return `$${Math.round(v)}`;
 }
 
-function TopBar({ campaign, onChange, dirty, audienceCount, audienceValue, onSave, onClose }) {
+function TopBar({ campaign, onChange, dirty, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onSave, onClose }) {
+  const contactOptions = audience.map((c, i) => ({ id: c._key, label: c.contactName || c.name || c.contactId || `Contact ${i + 1}` }));
   return (
     <div style={{ padding: '12px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
@@ -140,6 +141,15 @@ function TopBar({ campaign, onChange, dirty, audienceCount, audienceValue, onSav
           </>
         )}
       </div>
+      {/* Simulate against a chosen audience member (drives page.contact). */}
+      {contactOptions.length > 0 && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)', flexShrink: 0 }}>Sim as</span>
+          <div style={{ width: 168 }}>
+            <Dropdown size="sm" value={simContactKey} options={contactOptions} searchable placeholder="Pick a contact…" onChange={onSimContactChange} />
+          </div>
+        </div>
+      )}
       <Btn variant="primary" status="brand" size="sm" icon={<I.check />} onClick={onSave} disabled={!dirty}>{dirty ? 'Save' : 'Saved'}</Btn>
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" icon={<I.close />} onClick={onClose} />
@@ -265,6 +275,8 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [campaign, setCampaign] = useState(() => newCampaign('Untitled campaign'));
   const [dirty, setDirty] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // Which audience member the code simulation runs against (page.contact).
+  const [simContactKey, setSimContactKey] = useState(null);
 
   // Import result from the paste dialog: refresh the library, open the first
   // imported campaign, and surface anything the importer couldn't resolve.
@@ -324,11 +336,16 @@ export function CampaignManager({ onClose, contacts = [] }) {
   // The read-only `page` model the code panel simulates against — the live
   // audience selection, so `page.contacts` / `page.contact` resolve for real.
   const audienceKeyed = useMemo(() => contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` })), [contacts]);
+  // Keep the chosen simulation contact valid as the audience changes.
+  useEffect(() => {
+    if (!audienceKeyed.length) { setSimContactKey(null); return; }
+    setSimContactKey((k) => (audienceKeyed.some((c) => c._key === k) ? k : audienceKeyed[0]._key));
+  }, [audienceKeyed]);
   const simPage = useMemo(() => ({
     contacts: audienceKeyed,
-    contact: audienceKeyed[0] || {},
+    contact: audienceKeyed.find((c) => c._key === simContactKey) || audienceKeyed[0] || {},
     count: audienceKeyed.length,
-  }), [audienceKeyed]);
+  }), [audienceKeyed, simContactKey]);
   const setAutomation = (src) => patchCampaign({ ...campaign, automation: src });
   const audienceValue = useMemo(() => contacts.reduce((s, c) => s + (Number(c.value) || 0), 0), [contacts]);
 
@@ -347,6 +364,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
       <motion.div initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
       <ModalShell width={CAMPAIGN_MANAGER_WIDTH} height={CAMPAIGN_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign}
+          audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue}
           onSave={save} onClose={requestClose} />
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
