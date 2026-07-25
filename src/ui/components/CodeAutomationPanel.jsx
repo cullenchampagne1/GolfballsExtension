@@ -29,7 +29,7 @@ if (c.daysCold > 30) {
 export function CodeAutomationPanel({
   value, onChange, blocks = [], errors = [],
   view = 'code', onView,
-  trace = [], runningId = null, done = false, result = null,
+  trace = [], runningId = null, done = false, result = null, error = null,
   simStatus = 'idle',
 }) {
   const code = value || '';
@@ -71,6 +71,15 @@ export function CodeAutomationPanel({
           </div>
         ) : (
           <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
+            {error ? (
+              <div style={{ margin: '14px 18px 0', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid var(--gb-error-tint-border)', borderRadius: 10, background: 'var(--gb-error-tint-soft)' }}>
+                <I.alert size={14} style={{ color: 'var(--gb-error-fg)', marginTop: 1, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--gb-error-fg)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Dependency error</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', marginTop: 2, lineHeight: 1.5 }}>{error}</div>
+                </div>
+              </div>
+            ) : null}
             <BlocksView
               blocks={blocks}
               trace={trace}

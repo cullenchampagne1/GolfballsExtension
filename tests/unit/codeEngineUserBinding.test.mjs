@@ -32,7 +32,14 @@ describe('userBinding · shape + lookups', () => {
     assert.equal(u.email('Win-back').id, 'e1');
     assert.equal(u.email('e1').name, 'Win-back');
     assert.equal(u.task('Follow up').subject, 'Call them');
-    assert.equal(u.email('nope'), null);
+  });
+
+  it('throws a dependency error when a named template is missing', () => {
+    const u = buildUserBinding(SAVED);
+    assert.throws(() => u.email('Nope'), /Missing dependency: no saved email named .Nope./);
+    assert.throws(() => u.task('Ghost'), /no saved task named/);
+    // The optional, non-throwing path stays available via the arrays.
+    assert.equal(u.emails.find((e) => e.name === 'Nope'), undefined);
   });
 
   it('userBindingData keeps only the serializable arrays', () => {
@@ -63,5 +70,15 @@ describe('userBinding · drops a saved email into a send (both runners)', () => 
     const body = buildTraceBody('await actions.sendEmail(user.email("Win-back"));');
     assert.match(body, /const user = \{/);
     assert.match(body, /email: __find/);
+  });
+
+  it('surfaces a dependency error when the code references a missing template', async () => {
+    const { ok, error, trace } = await simulateProgram(
+      'await actions.sendEmail(user.email("Does Not Exist"));',
+      {}, { run: makeSandboxRunner({ exec: fakeExec }), user: SAVED },
+    );
+    assert.equal(ok, false);
+    assert.match(error, /Missing dependency: no saved email named .Does Not Exist./);
+    assert.deepEqual(trace, []); // nothing sent — it stopped at the missing dependency
   });
 });

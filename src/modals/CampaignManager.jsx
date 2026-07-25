@@ -623,8 +623,8 @@ export function CampaignManager({ onClose, contacts = [] }) {
     try { res = await simulateProgram(campaign.automation || '', pageFor(contact, audienceKeyed), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData }); }
     catch (e) { if (my === simRunRef.current) { toast?.error?.('Simulate failed — ' + String(e?.message || e)); setSim((s) => ({ ...s, status: 'idle' })); } return; }
     if (my !== simRunRef.current) return;
-    if (!res.ok && !res.trace.length) { toast?.error?.(res.error || 'Simulation failed.'); setSim((s) => ({ ...s, status: 'idle' })); return; }
-    setSim((s) => ({ ...s, status: 'replaying', trace: res.trace, replayIdx: 0, result: res.result }));
+    if (res.error) toast?.error?.(res.error);
+    setSim((s) => ({ ...s, status: 'replaying', trace: res.trace, replayIdx: res.trace.length ? 0 : -1, result: res.result, error: res.error || null }));
   };
   const stopSim = () => { simRunRef.current += 1; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim((s) => ({ ...s, status: s.trace.length ? 'done' : 'idle', done: true })); };
   const resetSim = () => { simRunRef.current += 1; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' }); };
@@ -686,7 +686,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
             blocks={program.blocks} errors={program.errors}
             view={view} onView={setView}
             trace={shownTrace} runningId={runningId} done={sim.status === 'done'} result={sim.status === 'done' ? sim.result : null}
-            simStatus={sim.status} />
+            error={sim.status === 'done' ? sim.error : null} simStatus={sim.status} />
         </div>
         <StatsStrip program={program} campaign={campaign} dirty={dirty} onSave={save} />
         </>
