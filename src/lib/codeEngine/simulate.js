@@ -42,21 +42,36 @@ export function asyncFunctionRunner(code, scope) {
  *           where a `failed` entry is a contract-validation failure (bad/missing
  *           params), surfaced as a preflight without ever sending anything.
  */
-export async function simulateProgram(source, page = {}, { run = asyncFunctionRunner, user = {} } = {}) {
+/* Contracts that perform a real effect (routed to the executor on a live run). */
+const EFFECT_CONTRACTS = new Set(['sendEmail', 'createTask', 'logCall', 'completeTask']);
+
+/**
+ * Run a program. Records a dry trace by default; if `executor` is provided it
+ * ALSO performs the real writes content-side (a live run) — the trace still
+ * reflects each step for the run view. `executor.run(contract, input)` and
+ * `executor.commitEdits(fields)` do the actual sends/edits.
+ */
+export async function simulateProgram(source, page = {}, { run = asyncFunctionRunner, user = {}, executor = null } = {}) {
   const { code, calls } = instrument(source);
   const trace = [];
 
-  const record = (id, name, input) => {
+  const record = async (id, name, input) => {
     const check = validateContractInput(name, input);
-    trace.push({
+    const entry = {
       id,
       contract: name,
       status: check.ok ? 'ran' : 'failed',
       summary: describeContract(name, input),
       errors: check.errors,
-    });
+    };
+    trace.push(entry);
+    // Live run: perform the real write; surface a failure on the entry.
+    if (executor && check.ok && EFFECT_CONTRACTS.has(name)) {
+      try { await executor.run(name, check.value || input); }
+      catch (e) { entry.status = 'failed'; entry.errors = [String(e?.message || e)]; }
+    }
     // Return a shape a program can keep using (e.g. read a would-be result).
-    return { ok: check.ok, dry: true, simulated: true };
+    return { ok: check.ok, dry: !executor, simulated: !executor };
   };
 
   // page.evaluate(ref) → its own "Evaluate" step; returns the outbound object.
@@ -77,10 +92,15 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
     }
     edits[prop] = value;
   };
-  const commitEdits = () => {
+  const commitEdits = async () => {
     const keys = Object.keys(edits);
     if (!keys.length) return;
-    record('editContact', 'editContact', { fields: { ...edits } });
+    const fields = { ...edits };
+    await record('editContact', 'editContact', { fields });
+    if (executor) {
+      try { await executor.commitEdits(fields); }
+      catch (e) { const last = trace[trace.length - 1]; if (last) { last.status = 'failed'; last.errors = [String(e?.message || e)]; } }
+    }
     keys.forEach((k) => delete edits[k]);
   };
   const latestOpen = (list) => (list || []).reduce((best, t) => (!best || String(t.dueDate || '') > String(best.dueDate || '') ? t : best), null);
@@ -113,10 +133,10 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
   try {
     // The runner returns the program's final value (the closing-step summary).
     const result = await run(code, scope);
-    commitEdits(); // auto-commit any staged edits as one grouped step
+    await commitEdits(); // auto-commit any staged edits as one grouped step
     return { ok: true, trace, calls, error: null, result: result == null ? null : result };
   } catch (error) {
-    commitEdits(); // flush whatever was staged before the error
+    await commitEdits(); // flush whatever was staged before the error
     // A thrown program error stops the trace where it happened — still useful.
     return { ok: false, trace, calls, error: String(error?.message || error), result: null };
   }

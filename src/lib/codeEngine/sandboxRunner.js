@@ -106,13 +106,14 @@ export function makeSandboxRunner({ exec, doc } = {}) {
     const entries = Array.isArray(raw) ? raw : (raw && raw.__gbTrace) || [];
     for (const e of entries) {
       if (!e) continue;
+      // Awaited so a live run's real writes complete in order.
       if (e.kind === 'evaluate') { if (typeof recordEval === 'function') recordEval(e.id, { name: e.name }); }
-      else if (e.kind === 'complete') { if (pageRec.complete) pageRec.complete({ id: e.id, subject: e.subject }); }
+      else if (e.kind === 'complete') { if (pageRec.complete) await pageRec.complete({ id: e.id, subject: e.subject }); }
       else if (e.kind === 'edit') { if (pageRec.edit) pageRec.edit(e.prop, e.value); }
-      else if (e.kind === 'commit') { if (pageRec.commit) pageRec.commit(); }
-      else if (typeof record === 'function') record(e.id, e.contract, e.input);
+      else if (e.kind === 'commit') { if (pageRec.commit) await pageRec.commit(); }
+      else if (typeof record === 'function') await record(e.id, e.contract, e.input);
     }
-    if (pageRec.commit) pageRec.commit(); // auto-commit any staged edits
+    if (pageRec.commit) await pageRec.commit(); // auto-commit any staged edits
     // Surface the program's final return value (the closing "step" summary).
     return Array.isArray(raw) ? undefined : (raw && raw.__gbRet);
   };

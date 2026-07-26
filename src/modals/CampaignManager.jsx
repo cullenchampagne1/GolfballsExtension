@@ -20,6 +20,14 @@ import { translateProgram, flattenBlocks } from '../lib/codeEngine/translate.js'
 import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
 import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
+import { makeExecutor } from '../lib/codeEngine/executor.js';
+import { planRun, planSummary } from '../lib/codeEngine/runPlan.js';
+import { readEmailConfig, sendEmail } from '../lib/emailSender.js';
+import { pickFromAddress } from '../lib/sender.js';
+import { submitQuickTask } from '../lib/submitQuickTask.js';
+import { submitCallLog } from '../lib/submitCallLog.js';
+import { completeTaskById } from '../lib/crmTasks.js';
+import { crmUpdateContact } from '../lib/contact-detail-shared.jsx';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   CAMPAIGN_MANAGER_HEIGHT,
@@ -270,6 +278,36 @@ function ImportCampaignsModal({ onClose, onDone }) {
 /* ── Root ── */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* Build the REAL executor for one contact — reuses the proven lib functions
+   (emailSender.sendEmail accepts an arbitrary `to` + appends its own signature;
+   crmUpdateContact / completeTaskById take explicit ids). */
+function makeContactExecutor(contact, runDeps, dispatch) {
+  const c = contact || {};
+  const ec = runDeps.emailConfig || {};
+  return makeExecutor({
+    ctx: {
+      contactId: c.contactId, contactName: c.contactName || c.name, phone: c.phone,
+      employeeId: runDeps.employeeId, accountId: c.accountId, email: c.email,
+    },
+    sendEmail: async (outbound, ctx) => {
+      const to = outbound.to || ctx.email;
+      if (!to) throw new Error('no email address for this contact');
+      return sendEmail({
+        to,
+        subject: outbound.subject || '',
+        htmlBody: outbound.body || '',
+        from: outbound.from || pickFromAddress({}, ec.localPart),
+        signature: ec.signature || '',
+        config: ec,
+      }, { dispatch });
+    },
+    submitQuickTask,
+    submitCallLog,
+    completeTaskById,
+    updateContact: crmUpdateContact,
+  });
+}
+
 /* The `page` model for one contact — the live CRM page (runEngine: real tasks +
    contact fields) merged with the audience contact, so page.tasks / page.contact
    edits target the actual page in a single-contact simulation. */
@@ -300,7 +338,7 @@ function useCodeRunner() {
 
   const start = async (args) => {
     lastArgsRef.current = args;
-    const { code, audience, user, pace = 140, live } = args;
+    const { code, audience, user, pace = 140, live, makeExec = null } = args;
     controlRef.current = { paused: false, stopped: false };
     setPaused(false); setComplete(false); setRunning(true);
     const init = {};
@@ -316,7 +354,7 @@ function useCodeRunner() {
       const c = audience[i];
       setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } }));
       let res;
-      try { res = await simulateProgram(code, pageFor(c, audience, live), { run, user }); }
+      try { res = await simulateProgram(code, pageFor(c, audience, live), { run, user, executor: makeExec ? makeExec(c) : null }); }
       catch (e) { res = { ok: false, trace: [], error: String(e?.message || e) }; }
       const ran = res.trace.filter((t) => t.status === 'ran').length;
       const failed = res.trace.some((t) => t.status === 'failed') || !res.ok;
@@ -551,6 +589,39 @@ function CampaignSettings({ campaign, onChange }) {
   );
 }
 
+/* Real-run confirmation — nothing outward/irreversible fires without this. */
+function ConfirmRunModal({ plan, summary, audience, onConfirm, onCancel }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="gb-cmp-scope" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: 460, maxWidth: '92vw', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <span style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-warning-tint-medium)', border: '1px solid var(--gb-warning-tint-border)', color: 'var(--gb-warning-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.zap size={15} /></span>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)' }}>Run for real?</div>
+        </div>
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--gb-text-secondary)', lineHeight: 1.6 }}>
+            This will apply live changes to the CRM — <b>not a dry run</b>. Per contact: <b>{summary}</b>.
+          </div>
+          <div style={{ display: 'flex', gap: 18, padding: '10px 12px', background: 'var(--gb-fill-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+            <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Contacts</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{audience}</div></div>
+            <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Total effects</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>{plan.total}</div></div>
+            {plan.counts.sendEmail ? <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Emails</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)' }}>{plan.counts.sendEmail * audience}</div></div> : null}
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+            Runs are not de-duplicated — running again re-sends. Emails render against the current page, so verify with a single contact first.
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
+          <Btn variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Btn>
+          <Btn variant="primary" status="warning" size="sm" icon={<I.zap />} disabled={busy} state={busy ? 'loading' : 'idle'} onClick={() => { setBusy(true); onConfirm(); }}>Run for real</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignStyles();
   const toast = useToast();
@@ -699,6 +770,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [view, setView] = useState('code');
   const [dryRun, setDryRun] = useState(true);
   const [runMode, setRunMode] = useState(false);
+  const [confirmRun, setConfirmRun] = useState(null); // { plan, summary } — real-run gate
   // The token under the caret → the live docs card (Code view right sidebar).
   const [docToken, setDocToken] = useState('');
   const activeDoc = useMemo(() => resolveDoc(docToken), [docToken]);
@@ -767,13 +839,40 @@ export function CampaignManager({ onClose, contacts = [] }) {
     return () => { if (simTimer.current) clearTimeout(simTimer.current); };
   }, [sim.status, sim.replayIdx, sim.trace]);
 
-  const startRun = () => {
+  const buildRunDeps = async () => {
+    const emailConfig = await readEmailConfig();
+    const employeeId = await new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res(d?.gbEmployeeId || '')); } catch { res(''); } });
+    return { emailConfig, employeeId };
+  };
+
+  const beginDryRun = () => {
+    resetSim(); setRunMode(true);
+    runner.start({ code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140, live: livePage });
+  };
+
+  const beginRealRun = async () => {
+    setConfirmRun(null);
+    const rd = await buildRunDeps();
+    resetSim(); setRunMode(true);
+    runner.start({
+      code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140, live: livePage,
+      makeExec: (c) => makeContactExecutor(c, rd, sendBg),
+    });
+  };
+
+  const startRun = async () => {
     if (!audienceKeyed.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
     if (!program.actionCount) { toast?.warning?.('Add a send/create step before running.'); return; }
     if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
-    resetSim();
-    setRunMode(true);
-    runner.start({ code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140, live: livePage });
+    if (dryRun) { beginDryRun(); return; }
+    // A real run — dry-preview one contact to compute the impact, then confirm.
+    let preview;
+    try {
+      preview = await simulateProgram(campaign.automation || '', pageFor(audienceKeyed[0] || {}, audienceKeyed, livePage), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData });
+    } catch (e) { toast?.error?.('Couldn’t preview the run — ' + String(e?.message || e)); return; }
+    const plan = planRun(preview.trace, audienceKeyed.length);
+    if (!plan.hasEffects) { toast?.warning?.('Nothing to run — no sends/edits/completes.'); return; }
+    setConfirmRun({ plan, summary: planSummary(plan) });
   };
 
   return (
@@ -837,6 +936,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
       </ModalShell>
       </motion.div>
       {importOpen && <ImportCampaignsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
+      {confirmRun && <ConfirmRunModal plan={confirmRun.plan} summary={confirmRun.summary} audience={audienceKeyed.length} onConfirm={beginRealRun} onCancel={() => setConfirmRun(null)} />}
     </motion.div>
     )}
     </AnimatePresence>

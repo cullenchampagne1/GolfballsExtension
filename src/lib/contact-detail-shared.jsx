@@ -86,7 +86,7 @@ async function crmSetDnc(customerID, add) {
   if (!r.ok) throw new Error('dnc failed');
 }
 
-async function crmUpdateContact(customerId, edits) {
+export async function crmUpdateContact(customerId, edits) {
   const base = crmOrigin();
   const res = await fetch(`${base}/golfballs/crm/Admin/Contact/Get.ajax?${customerId}`, { credentials: 'include' });
   const cur = JSON.parse(await res.text());
