@@ -10,6 +10,7 @@ import {
   removeCustomActionFrom, blankCustomAction, editorTypeIdFor, starterSource,
 } from '../../src/lib/customActions.js';
 import { samplePageFor } from '../../src/lib/codeEngine/samplePages.js';
+import { shapeLivePage, ctxFromPage } from '../../src/lib/codeEngine/liveActionRun.js';
 
 describe('customActions · normalize', () => {
   it('fills defaults and clamps an unknown page type to contact', () => {
@@ -91,5 +92,29 @@ describe('customActions · sample pages', () => {
     const p = samplePageFor('order');
     assert.equal(p.order.id, '100245');
     assert.deepEqual(p.tasks.open, []);
+  });
+});
+
+describe('customActions · live run shaping', () => {
+  it('shapes runEngine output (data wrapper) into the page model', () => {
+    const page = shapeLivePage({ data: { contact: { id: '99', firstName: 'Ada', email: 'ada@x.com' }, tasks: { open: [{ id: 't1' }], done: [] } } });
+    assert.equal(page.count, 1);
+    assert.equal(page.contacts.length, 1);
+    assert.equal(page.contact.email, 'ada@x.com');
+    assert.equal(page.tasks.open.length, 1);
+  });
+
+  it('empty page → no contact, empty tasks', () => {
+    const page = shapeLivePage(null);
+    assert.equal(page.count, 0);
+    assert.deepEqual(page.contacts, []);
+    assert.deepEqual(page.tasks, { open: [], done: [] });
+  });
+
+  it('derives executor ctx ids from the contact', () => {
+    const ctx = ctxFromPage({ contact: { customerId: '42', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@x.com', accountId: 'a7' } });
+    assert.equal(ctx.contactId, '42');
+    assert.equal(ctx.contactName, 'Ada Lovelace');
+    assert.equal(ctx.accountId, 'a7');
   });
 });

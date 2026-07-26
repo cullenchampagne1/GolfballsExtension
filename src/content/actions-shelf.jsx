@@ -7,7 +7,9 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { I, Icon, TYPE_ICONS } from '../ui/index.js';
 import { loadFlags } from '../lib/flags.js';
 import { shelfActionDefs } from '../lib/features/featureRegistry.js';
-import { loadFeatureConfig, normalizeFeatureConfig, featureShowsOnPage, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
+import { loadFeatureConfig, normalizeFeatureConfig, featureShowsOnPage, pageApplies, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
+import { loadCustomActions, normalizeCustomAction, STORAGE_KEY as CUSTOM_ACTIONS_KEY } from '../lib/customActions.js';
+import { CustomActionRunHost } from '../ui/components/CustomActionRunHost.jsx';
 import { findPhone } from '../lib/findPhone.js';
 import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
 import { loadLastOrderNote } from '../lib/quickOrderNote.js';
@@ -203,6 +205,30 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
         existing();
         _standaloneUnsubs.delete(d.id);
       }
+    }
+  }
+
+  /* User-authored custom actions (gbCustomActions). Registered like standalone
+     actions but gated by the action's OWN pages/enabled/showInShelf. Clicking
+     one fires a window event that CustomActionRunHost picks up to dry-simulate
+     → confirm → run for real (gated executor). Re-registered wholesale each
+     sync so a renamed/re-iconed action refreshes. */
+  let _customActions = [];
+  const _customActionUnsubs = [];
+  function clearCustomActions() { while (_customActionUnsubs.length) { try { _customActionUnsubs.pop()(); } catch { /* */ } } }
+  function syncCustomActions(pageType) {
+    clearCustomActions();
+    for (const rec of _customActions) {
+      if (!rec || rec.enabled === false || !rec.showInShelf) continue;
+      if (!pageApplies(rec.pages, pageType)) continue;
+      _customActionUnsubs.push(actionRegistry.register({
+        id: `custom-${rec.id}`,
+        label: rec.name,
+        icon: shelfIcon(rec.icon),
+        hint: rec.description || 'Custom action',
+        smartFor: (rec.pages || []).includes('*') ? [] : rec.pages,
+        handler: () => { try { window.dispatchEvent(new CustomEvent('gb-run-custom-action', { detail: rec })); } catch { /* */ } },
+      }));
     }
   }
 
@@ -600,6 +626,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     }
     actionRegistry.setPage(key, label, subLabel);
     syncStandaloneActions(type);
+    syncCustomActions(type);
     registerCallAction(type, label);
     registerLogCallAction(type, label);
     registerTaskAction(type, label);
@@ -654,6 +681,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     createRoot(host).render(
       <ToastHost installGlobal={true}>
         <ShelfGate />
+        <CustomActionRunHost />
       </ToastHost>,
     );
   }
@@ -693,6 +721,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     window.__gbFeatureConfig = c;
     syncContext();
   });
+  loadCustomActions().then((list) => { _customActions = list; syncContext(); });
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
@@ -703,6 +732,10 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
       if (changes[FEATURE_CONFIG_KEY]) {
         _featureCfg = normalizeFeatureConfig(changes[FEATURE_CONFIG_KEY].newValue || {});
         window.__gbFeatureConfig = _featureCfg;
+        syncContext();
+      }
+      if (changes[CUSTOM_ACTIONS_KEY]) {
+        _customActions = (changes[CUSTOM_ACTIONS_KEY].newValue || []).map(normalizeCustomAction);
         syncContext();
       }
     });
