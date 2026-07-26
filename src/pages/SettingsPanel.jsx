@@ -29,6 +29,7 @@ import { FeatureRow } from '../ui/components/FeatureRow.jsx';
 import { FeatureShelfGrid } from '../ui/components/FeatureShelfGrid.jsx';
 import { FEATURE_REGISTRY, featureByKey } from '../lib/features/featureRegistry.js';
 import { loadFeatureConfig, saveFeatureConfig, normalizeFeatureConfig, togglePage } from '../lib/features/featureConfig.js';
+import { loadCustomActions, saveCustomActions, normalizeCustomAction } from '../lib/customActions.js';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
 import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
@@ -1323,6 +1324,7 @@ export function SettingsPanel({ remotePolicy }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [flags, setFlags] = useState(FEATURE_DEFAULTS);
   const [featureCfg, setFeatureCfg] = useState(() => normalizeFeatureConfig({}));
+  const [customActions, setCustomActions] = useState([]);
   const [credentials, setCredentials] = useState(EMPTY_CREDENTIALS);
   const [shortcuts, setShortcuts] = useState(KEYBOARD_SHORTCUTS_DEFAULTS);
   const [customPages, setCustomPages] = useState(emptyCustomPages);
@@ -1357,12 +1359,24 @@ export function SettingsPanel({ remotePolicy }) {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });
     loadFlags().then(setFlags);
     loadFeatureConfig().then(setFeatureCfg);
+    loadCustomActions().then(setCustomActions);
     loadCredentials().then(setCredentials);
     loadKeyboardShortcuts().then(setShortcuts);
     loadCustomPages().then(setCustomPages);
     loadDevSettings().then(setDevSettings);
     loadScales().then(setScales);
   }, [refreshKey, remotePolicy.revision, remotePolicy.adminBypass]);
+
+  // Keep the Custom Actions table live as the editor (bridge) writes/deletes.
+  useEffect(() => {
+    const onCh = (changes, area) => {
+      if (area === 'local' && changes.gbCustomActions) {
+        setCustomActions((changes.gbCustomActions.newValue || []).map(normalizeCustomAction));
+      }
+    };
+    try { chrome.storage.onChanged.addListener(onCh); } catch { /* */ }
+    return () => { try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
+  }, []);
 
   /* UI-scale commit — local state + persist + apply to this document
      immediately so the rep sees the change without waiting for the
@@ -1433,14 +1447,16 @@ export function SettingsPanel({ remotePolicy }) {
   };
   const setFeatureSurface = (key, surface, value) => updateFeatureCfg(key, { [surface]: value });
   const toggleFeaturePage = (key, page) => updateFeatureCfg(key, { pages: togglePage(featureCfg[key]?.pages, page) });
-  /* Grid cell: placing an action on a page implies it belongs on the shelf,
-     so flip showInShelf on as we edit the page set. Off happens via the row. */
-  const toggleFeaturePageGrid = (key, page) => updateFeatureCfg(key, { showInShelf: true, pages: togglePage(featureCfg[key]?.pages, page) });
-  /* The Action Shelf table manages CUSTOM, label-less actions only — every
-     built-in feature is controlled by its own row above (with a pages picker),
-     so it must NOT also appear here. Custom actions (code-block shelf actions)
-     land here once that editor ships; empty until then. */
-  const customShelfActions = [];
+  /* The Custom Actions table manages user-authored, label-less actions only —
+     every built-in feature is controlled by its own row above (with a pages
+     picker), so built-ins must NOT appear here. Placing an action on a page
+     implies it belongs on the shelf, so flip showInShelf on as we edit pages. */
+  const persistActions = (next) => { setCustomActions(next); saveCustomActions(next); };
+  const toggleActionCell = (id, page) => persistActions(customActions.map((a) =>
+    a.id === id ? { ...a, showInShelf: true, pages: togglePage(a.pages, page) } : a));
+  const editAction = (id) => { try { window.openAction?.(id); } catch { /* */ } };
+  const deleteAction = (id) => { try { window.deleteActionById?.(id); } catch { /* */ } };
+  const addAction = () => { try { window.newAction?.('contact'); } catch { /* */ } };
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
   const setCredentialValue = (key, value) => {
     const next = { ...credentials, [key]: value };
@@ -1539,15 +1555,12 @@ export function SettingsPanel({ remotePolicy }) {
           button (code-block editor) is wired in a later phase. */}
       <section>
         <SectionLabel action={
-          <IconBtn size="xs" title="Add a custom action (coming soon)"
-            onClick={() => window.__gbToast?.info?.('Custom shelf actions are coming soon', { duration: 2600 })}>
-            <I.plus />
-          </IconBtn>
+          <IconBtn size="xs" icon={<I.plus />} title="Create a custom action" onClick={addAction} />
         }>Custom Actions</SectionLabel>
         <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', margin: '-2px 0 10px' }}>
           Build your own quick-actions and choose which pages they appear on. Built-in features are controlled by their toggles above.
         </div>
-        <FeatureShelfGrid features={customShelfActions} cfg={featureCfg} getIcon={getIcon} onToggleCell={toggleFeaturePageGrid} />
+        <FeatureShelfGrid actions={customActions} onToggleCell={toggleActionCell} onEdit={editAction} onDelete={deleteAction} />
       </section>
 
       {/* UI Scale — independent zoom per extension surface. Lets the
