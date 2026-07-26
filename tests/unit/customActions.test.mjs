@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeCustomAction, defaultPagesFor, toggleActionPage, upsertCustomAction,
-  removeCustomActionFrom, blankCustomAction, editorTypeIdFor, starterSource,
+  removeCustomActionFrom, blankCustomAction, starterSource,
 } from '../../src/lib/customActions.js';
 import { samplePageFor } from '../../src/lib/codeEngine/samplePages.js';
 import { shapeLivePage, ctxFromPage } from '../../src/lib/codeEngine/liveActionRun.js';
@@ -36,13 +36,6 @@ describe('customActions · normalize', () => {
     assert.deepEqual(a.pages, ['order', 'account']);
     assert.equal(a.showInPopup, true);
     assert.equal(a.enabled, false);
-  });
-
-  it('maps page type to the editor ctx typeId', () => {
-    assert.equal(editorTypeIdFor('order'), 'order');
-    assert.equal(editorTypeIdFor('contact'), 'account');
-    assert.equal(editorTypeIdFor('account'), 'account');
-    assert.equal(editorTypeIdFor('custom'), 'order');
   });
 
   it('seeds a blank action with a starter script for its type', () => {

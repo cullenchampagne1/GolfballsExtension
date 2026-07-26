@@ -27,15 +27,6 @@ export const ACTION_PAGE_TYPES = Object.freeze([
 ]);
 const PAGE_TYPE_IDS = ACTION_PAGE_TYPES.map((p) => p.id);
 
-/** The CodeVarEditor `typeId` (ctx.* completions) for each authoring page
- *  type. The editor only offers order/case/account there, so contact maps to
- *  account (same contact-shaped ctx) and custom falls back to order. */
-export function editorTypeIdFor(pageType) {
-  if (pageType === 'order') return 'order';
-  if (pageType === 'account' || pageType === 'contact') return 'account';
-  return 'order';
-}
-
 /** Default shelf pages for a page type: the type itself, or any page for custom. */
 export function defaultPagesFor(pageType) {
   return pageType === 'custom' ? ['*'] : [pageType];

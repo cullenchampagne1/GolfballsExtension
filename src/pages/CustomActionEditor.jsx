@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Btn, Field, Input, Segmented, EditorHeader, I } from '../ui/index.js';
 import { IconPicker } from '../ui/components/IconPicker.jsx';
 import { CodeVarEditor } from '../ui/components/CodeVarEditor.jsx';
@@ -7,14 +7,14 @@ import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
 import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
 import { samplePageFor } from '../lib/codeEngine/samplePages.js';
-import { normalizeCustomAction, defaultPagesFor, editorTypeIdFor, ACTION_PAGE_TYPES } from '../lib/customActions.js';
+import { normalizeCustomAction, defaultPagesFor, ACTION_PAGE_TYPES } from '../lib/customActions.js';
 
 /* ───────────────────────────────────────────────────────────────
    CustomActionEditor — the Manage-window sub-page for authoring a custom
-   shelf action. Mirrors the template pages (EditorHeader + Field inputs +
-   auto-save via window.__gbSaveAction), but the BODY is a plain code box
-   (no Blocks view, no docs sidebar), plus a page-type selector that scopes
-   what page.* exposes.
+   shelf action. Unlike email/note templates, custom actions are explicit
+   drafts: nothing reaches storage until Save Action is clicked. The body is a
+   plain code box (no Blocks view/docs sidebar), and its runtime namespaces are
+   page.* / user.* / actions.* rather than the template editor's ctx.* schema.
 
    Simulate runs the script DRY against a sample page (no live CRM page here,
    no writes) and reports the outcome as a toast. The real, gated run happens
@@ -24,13 +24,24 @@ import { normalizeCustomAction, defaultPagesFor, editorTypeIdFor, ACTION_PAGE_TY
 const PT_OPTIONS = ACTION_PAGE_TYPES.map((p) => ({ id: p.id, label: p.label }));
 
 export function EmptyState() {
+  const goBack = () => {
+    if (typeof window.closeActionEditor === 'function') window.closeActionEditor();
+  };
   return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
       <span style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <I.bolt size={20} />
       </span>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>No action selected</div>
-      <div style={{ fontSize: 12, maxWidth: 320 }}>Pick a custom action from the sidebar, or create one from Settings → Custom Actions.</div>
+      <div style={{ fontSize: 12, maxWidth: 320 }}>Choose an action from the Custom Actions table in Settings, or create a new one there.</div>
+      <Btn
+        variant="secondary"
+        size="sm"
+        icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />}
+        onClick={goBack}
+      >
+        Back to Settings
+      </Btn>
     </div>
   );
 }
@@ -44,9 +55,24 @@ export function CustomActionEditor({ action }) {
   const [enabled, setEnabled] = useState(action.enabled !== false);
   const [source, setSource] = useState(action.source || '');
   const [simBusy, setSimBusy] = useState(false);
+  const [isNew, setIsNew] = useState(action.__isNew === true);
   // Shelf page scope isn't edited here (the Settings table owns it) but must
   // be persisted; reset to the type default when the page type changes.
   const pagesRef = useRef(action.pages && action.pages.length ? action.pages : defaultPagesFor(action.pageType || 'contact'));
+  const snapshot = (record) => JSON.stringify({
+    name: record.name || '',
+    description: record.description || '',
+    icon: record.icon || 'bolt',
+    pageType: record.pageType || 'contact',
+    enabled: record.enabled !== false,
+    source: record.source || '',
+    pages: record.pages || [],
+  });
+  const [savedSnapshot, setSavedSnapshot] = useState(() => snapshot(action));
+  const draftSnapshot = snapshot({
+    name, description, icon, pageType, enabled, source, pages: pagesRef.current,
+  });
+  const dirty = isNew || draftSnapshot !== savedSnapshot;
 
   const startSim = async () => {
     setSimBusy(true);
@@ -67,25 +93,57 @@ export function CustomActionEditor({ action }) {
 
   const changePageType = (pt) => { setPageType(pt); pagesRef.current = defaultPagesFor(pt); };
 
-  // ── auto-save (debounced) — mirror TemplateEditor ──
-  const skipSave = useRef(true);
-  const saveTimer = useRef(0);
-  const build = () => normalizeCustomAction({ ...action, name, description, icon, pageType, enabled, source, pages: pagesRef.current });
-  useEffect(() => {
-    if (skipSave.current) { skipSave.current = false; return undefined; }
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { if (typeof window.__gbSaveAction === 'function') window.__gbSaveAction(build()); }, 500);
-    return () => clearTimeout(saveTimer.current);
-  }, [name, description, icon, pageType, enabled, source]); // eslint-disable-line react-hooks/exhaustive-deps
+  const build = () => normalizeCustomAction({
+    ...action,
+    name,
+    description,
+    icon,
+    pageType,
+    enabled,
+    source,
+    pages: pagesRef.current,
+    updatedAt: Date.now(),
+  });
+  const save = async () => {
+    if (typeof window.__gbSaveAction !== 'function') {
+      throw new Error('Action storage is unavailable. Reload the Manage window.');
+    }
+    const record = build();
+    await window.__gbSaveAction(record);
+    setSavedSnapshot(draftSnapshot);
+    setIsNew(false);
+    toast?.success?.(`Saved ${record.name}`);
+  };
 
-  const onDelete = () => { if (typeof window.deleteActionById === 'function') window.deleteActionById(action.id); };
+  const onDelete = () => {
+    if (!isNew && typeof window.deleteActionById === 'function') {
+      window.deleteActionById(action.id);
+    }
+  };
   const goBack = () => { if (typeof window.closeActionEditor === 'function') window.closeActionEditor(); };
   const IconGlyph = I[icon] || I.bolt;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, padding: '20px 0 0' }}>
-      <div style={{ marginBottom: 10 }}>
-        <Btn variant="ghost" size="xs" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={goBack}>Back</Btn>
+      <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Btn variant="ghost" size="sm" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={goBack}>
+          Back to Settings
+        </Btn>
+        <div style={{ flex: 1 }} />
+        {dirty && (
+          <span style={{ fontSize: 10.5, color: 'var(--gb-warning-fg)' }}>
+            Unsaved changes
+          </span>
+        )}
+        <Btn
+          variant="primary"
+          size="sm"
+          icon={<I.save />}
+          disabled={!dirty}
+          onClick={save}
+        >
+          Save Action
+        </Btn>
       </div>
       <EditorHeader
         icon={<IconGlyph />}
@@ -94,7 +152,7 @@ export function CustomActionEditor({ action }) {
         enabled={enabled}
         onToggle={() => setEnabled((e) => !e)}
         desc={description || 'Custom shelf action'}
-        onDelete={onDelete}
+        onDelete={isNew ? undefined : onDelete}
       />
 
       {/* Meta — name + description */}
@@ -116,7 +174,7 @@ export function CustomActionEditor({ action }) {
         <CodeVarEditor
           value={source}
           onChange={setSource}
-          typeId={editorTypeIdFor(pageType)}
+          typeId={null}
           bindings={null}
           hideActions
           fill

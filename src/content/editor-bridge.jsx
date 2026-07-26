@@ -29,6 +29,7 @@ let customActions = [];
 let currentId     = null;
 let currentNoteId = null;
 let currentActionId = null;
+let currentActionDraft = null;
 let orderTabId    = null;
 
 /* Mirror the active-template ids to window so the React sidebar's
@@ -259,28 +260,28 @@ async function applyNotePatch(tpl) {
   if (titleEl) titleEl.textContent = tpl.name || 'Untitled';
 }
 
-// ── Custom actions: open / new / delete / save ─────────────────
-// Remember which view was showing so the editor's Back button can restore it
-// (usually Settings, where the + / edit entry points live).
-let _actionPreviousView = 'ed-empty';
+// ── Custom actions: open / new / delete / explicit save ────────
+// Actions are managed only from the Settings table, so the editor always
+// returns there. A new action remains an in-memory draft until Save Action.
 function showActionForm() {
   const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-settings'];
-  _actionPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
   views.forEach((v) => hide(v));
   show('ed-action-form');
   animateView('ed-action-form');
 }
 function closeActionEditor() {
   hide('ed-action-form');
-  show(_actionPreviousView);
-  animateView(_actionPreviousView);
+  show('ed-settings');
+  animateView('ed-settings');
+  setCurrentActionId(null);
+  currentActionDraft = null;
+  if (window.__gbOpenAction) window.__gbOpenAction(null);
 }
 
-async function newAction(pageType = 'contact') {
+function newAction(pageType = 'contact') {
   if (!window.__gbOpenAction) { toast('Action editor failed to load — reload the editor.', true); return; }
-  const rec = blankCustomAction(pageType);
-  customActions.push(rec);
-  await saveCustomActions();
+  const rec = { ...blankCustomAction(pageType), __isNew: true };
+  currentActionDraft = rec;
   setCurrentActionId(rec.id);
   showActionForm();
   window.__gbOpenAction(rec);
@@ -289,9 +290,10 @@ async function newAction(pageType = 'contact') {
 function openAction(id) {
   const rec = customActions.find((a) => a.id === id);
   if (!rec) return;
+  currentActionDraft = { ...rec, __isNew: false };
   setCurrentActionId(id);
   showActionForm();
-  if (window.__gbOpenAction) { window.__gbOpenAction(rec); return; }
+  if (window.__gbOpenAction) { window.__gbOpenAction(currentActionDraft); return; }
   toast('Action editor failed to load — reload the editor.', true);
 }
 
@@ -303,14 +305,15 @@ async function deleteActionById(id) {
   await saveCustomActions();
   if (currentActionId === id) {
     setCurrentActionId(null);
+    currentActionDraft = null;
     hide('ed-action-form');
-    show('ed-empty');
-    animateView('ed-empty');
+    show('ed-settings');
+    animateView('ed-settings');
     if (window.__gbOpenAction) window.__gbOpenAction(null);
   }
 }
 
-/** Auto-save bridge for the React action editor. Upsert by id (normalized). */
+/** Explicit-save bridge for the React action editor. Upsert by id (normalized). */
 async function applyActionPatch(rec) {
   if (!rec || !rec.id) return;
   setCurrentActionId(rec.id);
@@ -318,6 +321,8 @@ async function applyActionPatch(rec) {
   const idx = customActions.findIndex((a) => a.id === norm.id);
   if (idx >= 0) customActions[idx] = norm; else customActions.push(norm);
   await saveCustomActions();
+  currentActionDraft = { ...norm, __isNew: false };
+  return norm;
 }
 
 // ── Variable resolution proxy ──────────────────────────────────
@@ -401,7 +406,9 @@ window.__gbSaveAction   = applyActionPatch;
 window.__gbResolveVars  = resolveVarsLive;
 window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
 window.__gbCurrentNote     = () => noteTemplates.find((t) => t.id === currentNoteId) || null;
-window.__gbCurrentAction   = () => customActions.find((a) => a.id === currentActionId) || null;
+window.__gbCurrentAction   = () => currentActionDraft
+  || customActions.find((a) => a.id === currentActionId)
+  || null;
 
 // Storage onChanged — keep local arrays in sync if another tab/popup edits.
 chrome.storage.onChanged.addListener((changes) => {
