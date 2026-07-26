@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CONTRACTS, EFFECT_CLASSES, GATE_BY_EFFECT,
+  CONTRACTS, EFFECT_CLASSES, GATE_BY_EFFECT, APPROVED_CONTACT_FIELDS,
   contractFor, contractGate, describeContract, listContracts, validateContractInput,
 } from '../../src/lib/codeEngine/contracts.js';
 
@@ -92,6 +92,25 @@ describe('contracts · input validation (template OR custom object)', () => {
     const r = validateContractInput('deleteEverything', { x: 1 });
     assert.equal(r.ok, false);
     assert.ok(r.errors[0].includes('Unknown action'));
+  });
+
+  it('completeTask needs a task; describes by subject', () => {
+    assert.equal(contractGate('completeTask'), 'confirm'); // remote
+    assert.equal(validateContractInput('completeTask', {}).ok, false);
+    assert.equal(validateContractInput('completeTask', { id: 't1', subject: 'Follow up' }).ok, true);
+    assert.equal(describeContract('completeTask', { subject: 'Follow up' }), 'Complete task “Follow up”');
+  });
+
+  it('editContact only allows approved fields, grouped', () => {
+    assert.equal(contractGate('editContact'), 'confirm');
+    assert.equal(validateContractInput('editContact', { fields: {} }).ok, false);
+    assert.equal(validateContractInput('editContact', { fields: { phone: '555', jobTitle: 'VP' } }).ok, true);
+    const bad = validateContractInput('editContact', { fields: { ssn: '123' } });
+    assert.equal(bad.ok, false);
+    assert.ok(bad.errors.some((e) => /not an editable contact field/.test(e)));
+    assert.equal(describeContract('editContact', { fields: { phone: '5', jobTitle: 'x' } }), 'Edit contact — phone, jobTitle');
+    // phone maps to the crmUpdateContact payload key.
+    assert.equal(APPROVED_CONTACT_FIELDS.phone, 'phoneNumber');
   });
 });
 

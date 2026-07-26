@@ -126,6 +126,72 @@ export const CONTRACTS = Object.freeze({
       return label ? `Log ${dir} call “${label}”` : `Log an ${dir} call for the current contact`;
     },
   },
+  // Complete a CRM task — the effect behind page.tasks.open[0].complete().
+  // Executor: crmTasks.completeTaskById(id) (Task/Update.ajax, taskStatusID:3).
+  completeTask: {
+    name: 'completeTask',
+    verb: 'complete_task',
+    object: 'task',
+    effect: 'remote',
+    summary: 'Complete a CRM task',
+    accepts: 'a task from page.tasks.open — page.tasks.open[0].complete()',
+    params: {
+      id: { type: 'string' },
+      subject: { type: 'string', max: 500 },
+    },
+    validate: (i) => ({ errors: (i && (i.id != null || str(i.subject))) ? [] : ['completeTask needs a task (page.tasks.open[…])'] }),
+    describe: (i) => {
+      const s = clip(i?.subject, 55);
+      return s ? `Complete task “${s}”` : 'Complete a task';
+    },
+  },
+  // Apply grouped field edits to the current contact — the effect behind
+  // `page.contact.field = value` (+ commit). Executor: crmUpdateContact(id, edits)
+  // (Contact/Update.ajax, one grouped write). Only approved fields (see
+  // APPROVED_CONTACT_FIELDS) may be set.
+  editContact: {
+    name: 'editContact',
+    verb: 'edit_contact',
+    object: 'contact',
+    effect: 'remote',
+    summary: 'Edit the current contact’s fields',
+    accepts: 'grouped field changes — page.contact.firstName = "…" (approved fields), committed together',
+    params: {
+      fields: { type: 'object' },
+    },
+    validate: (i) => {
+      const keys = i && i.fields && typeof i.fields === 'object' ? Object.keys(i.fields) : [];
+      const errors = [];
+      if (!keys.length) errors.push('editContact has no changes');
+      for (const k of keys) if (!Object.hasOwn(APPROVED_CONTACT_FIELDS, k)) errors.push(`“${k}” is not an editable contact field`);
+      return { errors, value: i };
+    },
+    describe: (i) => {
+      const keys = i && i.fields ? Object.keys(i.fields) : [];
+      if (!keys.length) return 'Edit the current contact';
+      return `Edit contact — ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? ` +${keys.length - 3}` : ''}`;
+    },
+  },
+});
+
+/**
+ * Approved editable contact fields → the crmUpdateContact payload key.
+ * This is the write allowlist for `page.contact.<field> = …`. Mirrors the
+ * de-facto allowlist in contact-detail-shared.jsx crmUpdateContact (the only
+ * persisted-edit path). Fields NOT here (and ALL account fields) have no write
+ * path and are rejected. Keep in sync with that writer.
+ */
+export const APPROVED_CONTACT_FIELDS = Object.freeze({
+  firstName: 'firstName',
+  middleInitial: 'middleInit',
+  lastName: 'lastName',
+  companyName: 'companyName',
+  jobTitle: 'jobTitle',
+  email: 'email',
+  phone: 'phoneNumber',
+  zipCode: 'zipCode',
+  userType: 'UserType',
+  country: 'userCountry',
 });
 
 /** The contract for a call name, or null. Also accepts the snake_case verb. */
