@@ -290,6 +290,10 @@
       "file": "tests/unit/featureConfig.test.mjs"
     },
     {
+      "name": "settings \u00b7 custom actions store + sample pages",
+      "file": "tests/unit/customActions.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },

@@ -89,6 +89,12 @@ export const PRESET_SCOPES = [
     keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
     filter: { noteTemplates: (n) => n.subType === 'call_log' },
   },
+  // User-authored shelf actions (code-block scripts). Merge by id so a shared
+  // preset adds actions without clobbering the recipient's own.
+  {
+    id: 'custom-actions', category: 'Automation', label: 'Custom Actions', desc: 'User-authored code-block shelf actions',
+    keys: ['gbCustomActions'], merge: 'mergeById',
+  },
 ];
 
 /** Stable, versioned envelope used when the RevStack sharing API is not
