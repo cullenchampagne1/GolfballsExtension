@@ -42,7 +42,6 @@ class ProductPlan:
     index: int
     axes: tuple[str, ...]
     profile: str
-    box: tuple[int, int, int, int]
     placement_id: str
     placement_label: str
     placement_description: str
@@ -52,51 +51,51 @@ class ProductPlan:
 # managed catalog. Golf balls are deliberately absent; the extension's 3D ball
 # renderer owns that workflow.
 PLANS = (
-    ProductPlan(4, ("Apparel Color",), "embroidery", (300, 195, 520, 315), "front-center", "Front center", "Embroidery centered on the front crown."),
-    ProductPlan(5, (), "printed", (485, 105, 625, 215), "ball-marker", "Ball marker", "Full-color logo on the removable glove ball marker."),
-    ProductPlan(6, (), "printed", (255, 150, 430, 285), "ball-marker", "Ball marker", "Full-color logo on the removable glove ball marker."),
-    ProductPlan(8, ("Color",), "embroidery", (225, 245, 530, 355), "front-center", "Front center", "Embroidery centered on the visor front."),
-    ProductPlan(9, ("Color",), "embroidery", (235, 245, 565, 430), "front-center", "Front center", "Embroidery centered on the beanie front."),
-    ProductPlan(10, ("Apparel Color",), "embroidery", (260, 225, 515, 350), "front-center", "Front center", "Embroidery centered on the hat front."),
-    ProductPlan(11, ("Apparel Color",), "embroidery", (255, 225, 520, 350), "front-center", "Front center", "Embroidery centered on the junior hat front."),
-    ProductPlan(12, ("Apparel Color",), "embroidery", (470, 260, 600, 365), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(13, ("Color",), "embroidery", (455, 230, 585, 335), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(14, ("Apparel Color",), "embroidery", (480, 235, 600, 335), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(15, ("Color",), "embroidery", (455, 250, 585, 350), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(16, ("Apparel Color",), "embroidery", (470, 230, 600, 335), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(17, ("Apparel Color",), "embroidery", (455, 235, 585, 340), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(18, ("Apparel Color",), "embroidery", (465, 220, 595, 325), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(19, ("Apparel Color",), "embroidery", (455, 225, 585, 330), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(20, ("Apparel Color",), "embroidery", (465, 220, 595, 325), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(21, ("Apparel Color",), "embroidery", (465, 230, 595, 335), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(22, ("Apparel Color",), "printed", (455, 235, 590, 345), "left-chest", "Left chest", "Transfer centered on the wearer's left chest."),
-    ProductPlan(24, ("Apparel Color",), "embroidery", (465, 235, 595, 340), "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
-    ProductPlan(25, ("Color",), "printed", (285, 230, 515, 425), "center-chest", "Center chest", "Full-color transfer centered on the chest."),
-    ProductPlan(27, ("Apparel Color",), "printed", (285, 225, 515, 420), "center-chest", "Center chest", "Full-color transfer centered on the chest."),
-    ProductPlan(28, (), "knit", (300, 290, 515, 470), "outer-ankle", "Outer ankle", "Logo integrated into the visible outer ankle panel."),
-    ProductPlan(29, ("Color",), "printed", (245, 245, 555, 555), "center-face", "Center face", "Full-color personalization centered on the marker face."),
-    ProductPlan(31, ("Color",), "printed", (225, 210, 575, 555), "center-face", "Center face", "Full-color personalization centered on the poker-chip face."),
-    ProductPlan(33, ("Color",), "engraving", (250, 285, 550, 470), "lid-center", "Lid center", "Deep engraving centered on the keepsake-box lid."),
-    ProductPlan(36, ("Accessories Color",), "printed", (320, 170, 480, 310), "marker-face", "Marker face", "Full-color personalization centered on the gift-set marker."),
-    ProductPlan(37, ("Color",), "printed", (330, 175, 470, 300), "handle", "Handle", "Logo centered on the retriever handle."),
-    ProductPlan(38, ("Golf Bags Color",), "embroidery", (330, 350, 535, 500), "front-pocket", "Front pocket", "Embroidery centered on the visible front pocket."),
-    ProductPlan(39, ("Color",), "embroidery", (285, 330, 520, 445), "side-panel", "Side panel", "Embroidery centered on the duffel side panel."),
-    ProductPlan(40, ("Accessories Color",), "embroidery", (315, 300, 520, 465), "front-panel", "Front panel", "Embroidery centered on the headcover front panel."),
-    ProductPlan(41, (), "embroidery", (555, 290, 690, 425), "side-panel", "Side panel", "Embroidery centered on the shoe-bag side panel."),
-    ProductPlan(42, ("Golf Bags Color",), "embroidery", (320, 355, 535, 505), "side-pocket", "Side pocket", "Embroidery centered on the visible side pocket."),
-    ProductPlan(43, ("Color", "Attachments"), "embroidery", (450, 330, 620, 475), "front-pocket", "Front pocket", "Embroidery centered on the visible front pocket."),
-    ProductPlan(44, ("Golf Bags Color",), "embroidery", (350, 335, 515, 485), "front-panel", "Front panel", "Embroidery centered on the travel-bag front panel."),
-    ProductPlan(48, ("Accessories Color",), "printed", (285, 300, 505, 420), "side-panel", "Side panel", "Logo centered on the visible rangefinder side panel."),
-    ProductPlan(49, ("Accessories Color",), "printed", (250, 220, 550, 520), "center-face", "Center face", "Full-color logo centered on the alignment-chip face."),
-    ProductPlan(50, ("Color",), "printed", (275, 130, 525, 265), "canopy-valance", "Canopy valance", "Full-color logo centered on the visible canopy valance."),
-    ProductPlan(51, ("Accessories Color",), "printed", (430, 280, 625, 380), "brush-handle", "Brush handle", "Logo centered on the visible brush handle."),
-    ProductPlan(53, ("Color",), "printed", (260, 250, 545, 500), "blanket-center", "Blanket center", "Full-color decoration centered on the visible blanket panel."),
-    ProductPlan(54, ("Accessories Color",), "embroidery", (385, 315, 545, 445), "front-pocket", "Front pocket", "Embroidery centered on the cooler's front pocket."),
-    ProductPlan(55, ("Accessories Color",), "printed", (250, 250, 550, 515), "front-center", "Front center", "Full-color decoration centered on the backpack front."),
-    ProductPlan(57, ("Color",), "engraving", (315, 250, 500, 460), "center-front", "Center front", "Laser engraving centered on the flask front."),
-    ProductPlan(58, ("Color",), "engraving", (335, 310, 535, 425), "top-face", "Top face", "Laser engraving centered on the hub's top face."),
-    ProductPlan(59, ("Accessories Color",), "printed", (260, 300, 480, 420), "upright-panel", "Upright panel", "Logo centered on the charging station's upright panel."),
-    ProductPlan(60, ("Accessories Color",), "printed", (525, 320, 655, 430), "end-cap", "End cap", "Logo centered on the visible speaker end cap."),
+    ProductPlan(4, ("Apparel Color",), "embroidery", "front-center", "Front center", "Embroidery centered on the front crown."),
+    ProductPlan(5, (), "printed", "ball-marker", "Ball marker", "Full-color logo on the removable glove ball marker."),
+    ProductPlan(6, (), "printed", "ball-marker", "Ball marker", "Full-color logo on the removable glove ball marker."),
+    ProductPlan(8, ("Color",), "embroidery", "front-center", "Front center", "Embroidery centered on the visor front."),
+    ProductPlan(9, ("Color",), "embroidery", "front-center", "Front center", "Embroidery centered on the beanie front."),
+    ProductPlan(10, ("Apparel Color",), "embroidery", "front-center", "Front center", "Embroidery centered on the hat front."),
+    ProductPlan(11, ("Apparel Color",), "embroidery", "front-center", "Front center", "Embroidery centered on the junior hat front."),
+    ProductPlan(12, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(13, ("Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(14, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(15, ("Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(16, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(17, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(18, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(19, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(20, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(21, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(22, ("Apparel Color",), "printed", "left-chest", "Left chest", "Transfer centered on the wearer's left chest."),
+    ProductPlan(24, ("Apparel Color",), "embroidery", "left-chest", "Left chest", "Embroidery on the wearer's left chest."),
+    ProductPlan(25, ("Color",), "printed", "center-chest", "Center chest", "Full-color transfer centered on the chest."),
+    ProductPlan(27, ("Apparel Color",), "printed", "center-chest", "Center chest", "Full-color transfer centered on the chest."),
+    ProductPlan(28, (), "knit", "outer-ankle", "Outer ankle", "Logo integrated into the visible outer ankle panel."),
+    ProductPlan(29, ("Color",), "printed", "center-face", "Center face", "Full-color personalization centered on the marker face."),
+    ProductPlan(31, ("Color",), "printed", "center-face", "Center face", "Full-color personalization centered on the poker-chip face."),
+    ProductPlan(32, (), "printed", "box-top", "Box top", "Full-color decoration centered on the visible custom packaging top."),
+    ProductPlan(33, ("Color",), "engraving", "lid-center", "Lid center", "Deep engraving centered on the keepsake-box lid."),
+    ProductPlan(36, ("Accessories Color",), "printed", "marker-face", "Marker face", "Full-color personalization centered on the gift-set marker."),
+    ProductPlan(37, ("Color",), "printed", "handle", "Handle", "Logo centered on the retriever handle."),
+    ProductPlan(38, ("Golf Bags Color",), "embroidery", "front-pocket", "Front pocket", "Embroidery centered on the visible front pocket."),
+    ProductPlan(39, ("Color",), "embroidery", "side-panel", "Side panel", "Embroidery centered on the duffel side panel."),
+    ProductPlan(40, ("Accessories Color",), "embroidery", "front-panel", "Front panel", "Embroidery centered on the headcover front panel."),
+    ProductPlan(41, (), "embroidery", "side-panel", "Side panel", "Embroidery centered on the shoe-bag side panel."),
+    ProductPlan(42, ("Golf Bags Color",), "embroidery", "side-pocket", "Side pocket", "Embroidery centered on the visible side pocket."),
+    ProductPlan(43, ("Color",), "embroidery", "front-pocket", "Front pocket", "Embroidery centered on the visible front pocket."),
+    ProductPlan(44, ("Golf Bags Color",), "embroidery", "front-panel", "Front panel", "Embroidery centered on the travel-bag front panel."),
+    ProductPlan(48, ("Accessories Color",), "printed", "side-panel", "Side panel", "Logo centered on the visible rangefinder side panel."),
+    ProductPlan(49, ("Accessories Color",), "printed", "center-face", "Center face", "Full-color logo centered on the alignment-chip face."),
+    ProductPlan(50, ("Color",), "printed", "canopy-valance", "Canopy valance", "Full-color logo centered on the visible canopy valance."),
+    ProductPlan(51, ("Accessories Color",), "printed", "brush-handle", "Brush handle", "Logo centered on the visible brush handle."),
+    ProductPlan(53, ("Color",), "printed", "blanket-center", "Blanket center", "Full-color decoration centered on the visible blanket panel."),
+    ProductPlan(54, ("Accessories Color",), "embroidery", "front-pocket", "Front pocket", "Embroidery centered on the cooler's front pocket."),
+    ProductPlan(57, ("Color",), "engraving", "center-front", "Center front", "Laser engraving centered on the flask front."),
+    ProductPlan(58, ("Color",), "engraving", "top-face", "Top face", "Laser engraving centered on the hub's top face."),
+    ProductPlan(59, ("Accessories Color",), "printed", "upright-panel", "Upright panel", "Logo centered on the charging station's upright panel."),
+    ProductPlan(60, ("Accessories Color",), "printed", "end-cap", "End cap", "Logo centered on the visible speaker end cap."),
 )
 
 
@@ -217,7 +216,10 @@ def image_value_names(product: dict) -> dict[int, str]:
 
 def choose_product_image(product: dict, combo: dict) -> str:
     names = image_value_names(product)
-    wanted = set(combo.values())
+    property_names = {
+        row["propertyProductID"]: row["Name"]
+        for row in product.get("PropertyProduct", [])
+    }
     ranked = []
     fallback = []
     for index, image in enumerate(product.get("ProductImage", [])):
@@ -228,15 +230,31 @@ def choose_product_image(product: dict, combo: dict) -> str:
             names.get(value.get("propertyValueProductID"), "")
             for value in image.get("PropertyValueProduct", [])
         }
-        if wanted and wanted.issubset(attached):
-            ranked.append((len(attached) - len(wanted), index, url))
+        wildcard_axes = {
+            property_names.get(condition.get("propertyProductID"), "")
+            for condition in image.get("ProductImageConditionSpecial", [])
+            if condition.get("VisibleOnAllSelections")
+        }
+        if combo and all(
+            value in attached or axis in wildcard_axes
+            for axis, value in combo.items()
+        ):
+            wildcard_count = sum(
+                value not in attached for axis, value in combo.items()
+            )
+            ranked.append((
+                wildcard_count,
+                max(0, len(attached) - (len(combo) - wildcard_count)),
+                index,
+                url,
+            ))
         if any(
             condition.get("VisibleOnNoSelections")
             for condition in image.get("ProductImageConditionSpecial", [])
         ):
             fallback.append((index, url))
     if ranked:
-        return min(ranked)[2]
+        return min(ranked)[3]
     if fallback:
         return min(fallback)[1]
     images = product.get("ProductImage", [])
@@ -281,15 +299,12 @@ def swatch_for(label: str, combo_children: list[dict], axis: str) -> str:
     return ""
 
 
-def make_reference(source: Path, destination: Path, box: tuple[int, int, int, int]):
+def make_reference(source: Path, destination: Path):
     destination.parent.mkdir(parents=True, exist_ok=True)
-    x1, y1, x2, y2 = box
     subprocess.run(
         [
             "magick", str(source), "-auto-orient", "-resize", "800x800",
             "-background", "white", "-gravity", "center", "-extent", "800x800",
-            "-stroke", "#ff1685", "-strokewidth", "8", "-fill", "none",
-            "-draw", f"roundrectangle {x1},{y1} {x2},{y2} 18,18",
             str(destination),
         ],
         check=True,
@@ -300,19 +315,21 @@ def make_reference(source: Path, destination: Path, box: tuple[int, int, int, in
 
 def product_prompt(profile: str) -> str:
     return (
-        "Edit Image 1 by replacing the existing personalization and magenta "
-        "placement outline inside the marked area with the exact logo from "
-        "Image 2. The outline is only a positioning guide and must not appear "
-        "in the final image. Preserve every other part of Image 1 exactly, "
+        "Edit Image 1 by replacing only its existing custom logo, sample "
+        "personalization, or decoration at the registered imprint location "
+        "with the exact logo from Image 2. If no personalization is visible, "
+        "use the registered imprint-location instruction to identify the "
+        "decoration surface. Preserve every other part of Image 1 exactly, "
         "including the product's shape, construction, material, color, branded "
         "details, texture, folds, lighting, reflections, shadows, background, "
         "crop, perspective, and resolution. Preserve the supplied logo's exact "
         "spelling, colors, geometry, proportions, and internal layout; do not "
         "redesign, simplify, restyle, or add anything. Center and scale it "
         "proportionally with comfortable margins. "
-        f"{PROFILE_COPY[profile]} Remove the original personalization and "
-        "placement outline completely. Change nothing outside the marked area. "
-        "Output one finished square product image matching Image 1."
+        f"{PROFILE_COPY[profile]} Remove the original custom or sample "
+        "personalization completely, but preserve permanent manufacturer "
+        "branding. Change nothing outside the decoration surface. Output one "
+        "finished square product image matching Image 1."
     )
 
 
@@ -388,7 +405,7 @@ def build_product(
         image_url = choose_product_image(product, combo)
         downloaded = downloaded_image(index_row, image_url, export_root)
         destination = reference_root / product_id / f"{source_id}.png"
-        make_reference(downloaded, destination, plan.box)
+        make_reference(downloaded, destination)
         served_url = f"{API_REFERENCE_BASE}/{product_id}/{source_id}.png"
         source = {
             "id": source_id,

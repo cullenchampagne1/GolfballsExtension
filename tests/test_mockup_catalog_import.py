@@ -107,9 +107,8 @@ class ProductPlanTests(unittest.TestCase):
         for plan in IMPORTER.PLANS:
             with self.subTest(index=plan.index):
                 self.assertIn(plan.profile, IMPORTER.PROFILE_COPY)
-                x1, y1, x2, y2 = plan.box
-                self.assertTrue(0 <= x1 < x2 <= 800)
-                self.assertTrue(0 <= y1 < y2 <= 800)
+                self.assertTrue(plan.placement_id)
+                self.assertTrue(plan.placement_description)
 
 
 class CurrentVariantTests(unittest.TestCase):
@@ -158,6 +157,28 @@ class CurrentVariantTests(unittest.TestCase):
             "default.webp",
         )
 
+    def test_image_condition_can_wildcard_a_second_visual_axis(self):
+        fixture = product_fixture()
+        fixture["PropertyProduct"].append({
+            "propertyProductID": 3,
+            "Name": "Attachments",
+            "PropertyValueProduct": [
+                {"propertyValueProductID": 301, "Value": "7 Way"},
+                {"propertyValueProductID": 302, "Value": "14 Way"},
+            ],
+        })
+        fixture["ProductImage"][1]["ProductImageConditionSpecial"] = [{
+            "propertyProductID": 3,
+            "VisibleOnAllSelections": True,
+        }]
+        self.assertEqual(
+            IMPORTER.choose_product_image(
+                fixture,
+                {"Color": "Black", "Attachments": "14 Way"},
+            ),
+            "black.webp",
+        )
+
 
 class PromptTests(unittest.TestCase):
     def test_material_profiles_produce_distinct_physical_directions(self):
@@ -169,7 +190,8 @@ class PromptTests(unittest.TestCase):
         self.assertIn("full-color imprint", printed)
         for prompt in (embroidery, engraving, printed):
             self.assertIn("change nothing outside", prompt.lower())
-            self.assertIn("magenta", prompt.lower())
+            self.assertIn("existing custom logo", prompt.lower())
+            self.assertNotIn("placement outline", prompt.lower())
 
 
 if __name__ == "__main__":
