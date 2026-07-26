@@ -158,34 +158,42 @@ function CommentNote({ lines }) {
   );
 }
 
-/* ── recursive block renderer ── */
-function renderList(blocks, ctx, tone, forceStatus) {
-  // A connector precedes each step-like block after the first one on this level.
-  let firstStepSeen = false;
+/* One block in an arm — gets a horizontal tick from the branch's vertical
+   line to the block. Top-level blocks (rail == null) get no line at all;
+   lines are purposeful (branch → its steps), not generic between blocks. */
+function ArmItem({ rail, children }) {
+  if (!rail) return children;
+  return (
+    <div style={{ position: 'relative', paddingLeft: 14 }}>
+      <span style={{ position: 'absolute', left: 0, top: 18, width: 12, height: 2, background: rail, borderRadius: 1 }} />
+      {children}
+    </div>
+  );
+}
+
+/* Render a list of blocks. `rail` (a color) means we're inside a branch arm —
+   each child gets a connecting tick; at the top level rail is null → no lines. */
+function renderBlocks(blocks, ctx, tone, forceStatus, rail) {
   const out = [];
   let i = 0;
   while (i < blocks.length) {
     const b = blocks[i];
     if (b.kind === 'comment') {
-      // Merge a run of consecutive comments into ONE tag box.
       const lines = [];
       let j = i;
       while (j < blocks.length && blocks[j].kind === 'comment') {
         lines.push(...(describeBlock(blocks[j]).lines || []));
         j += 1;
       }
-      out.push(<CommentNote key={`cm-${b.id}`} lines={lines} />);
+      out.push(<ArmItem key={`cm-${b.id}`} rail={rail}><CommentNote lines={lines} /></ArmItem>);
       i = j;
       continue;
     }
-    const step = isStep(b);
-    if (step && firstStepSeen) {
-      // The edge lights up while the block it leads into is the one running.
-      const active = !!ctx.runningId && b.id === ctx.runningId;
-      out.push(<Connector key={`c-${b.id}`} height={22} tone={tone === 'warning' ? 'branch' : 'default'} active={active} />);
-    }
-    if (step) firstStepSeen = true;
-    out.push(<BlockNode key={b.id} block={b} ctx={ctx} tone={tone} forceStatus={forceStatus} />);
+    out.push(
+      <ArmItem key={b.id} rail={rail}>
+        <BlockNode block={b} ctx={ctx} tone={tone} forceStatus={forceStatus} />
+      </ArmItem>,
+    );
     i += 1;
   }
   return out;
@@ -216,19 +224,17 @@ function ComposeCard({ block }) {
   );
 }
 
-/* A "set variable" — a light, subordinate chip (not a step). */
+/* A "set variable" — plain code text, no background box (theme-safe), and
+   clearly subordinate to the step cards. */
 function SetVarCard({ block, greyed }) {
   const d = describeBlock(block);
+  const mono = 'var(--gb-font-mono, ui-monospace, monospace)';
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', maxWidth: '100%', padding: '4px 10px 4px 6px', marginLeft: 8,
-      border: '1px solid var(--gb-border-subtle)', borderRadius: 8, background: 'var(--gb-surface-2)', opacity: greyed ? 0.5 : 1 }}>
-      <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.05em', padding: '1px 5px', borderRadius: 4, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-soft)', textTransform: 'uppercase', flexShrink: 0 }}>set</span>
-      <code style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', flexShrink: 0 }}>{d.title}</code>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '1px 2px', opacity: greyed ? 0.5 : 1, minWidth: 0 }}>
+      <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.03em', color: 'var(--gb-info-fg)', fontFamily: mono, flexShrink: 0 }}>set</span>
+      <code style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', fontFamily: mono, flexShrink: 0 }}>{d.title}</code>
       {d.detail ? (
-        <>
-          <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>=</span>
-          <code style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.detail}</code>
-        </>
+        <code style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>= {d.detail}</code>
       ) : null}
     </div>
   );
@@ -280,17 +286,19 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
     const elseRan = (block.else || []).some((k) => subtreeRan(k, traceById));
     const thenForce = done && !thenRan && elseRan ? 'skipped' : forceStatus;
     const elseForce = done && !elseRan && thenRan ? 'skipped' : forceStatus;
+    const railThen = runningId && thenRan ? BRAND : ARM_RAIL.warning;
+    const railElse = runningId && elseRan ? BRAND : ARM_RAIL.default;
     const d = describeBlock(block, traceById);
     return (
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Card tone="warning" status={status} idx={idx} icon={I.branch}
           title={d.title} tag={<Tag tone="warning" size="xs">IF</Tag>} />
-        <BranchArm label="then" tone="warning" active={runningId && thenRan}>
-          {block.then.length ? renderList(block.then, ctx, 'warning', thenForce) : <EmptyArm />}
+        <BranchArm label="then" tone="warning" rail={railThen}>
+          {block.then.length ? renderBlocks(block.then, ctx, 'warning', thenForce, railThen) : <EmptyArm />}
         </BranchArm>
         {(block.else && block.else.length > 0) && (
-          <BranchArm label="else" tone="default" active={runningId && elseRan}>
-            {renderList(block.else, ctx, 'default', elseForce)}
+          <BranchArm label="else" tone="default" rail={railElse}>
+            {renderBlocks(block.else, ctx, 'default', elseForce, railElse)}
           </BranchArm>
         )}
       </div>
@@ -299,12 +307,13 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
 
   if (block.kind === 'loop') {
     const d = describeBlock(block, traceById);
+    const rail = runningId && subtreeRan(block, traceById) ? BRAND : ARM_RAIL.info;
     return (
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Card tone="info" status={status} idx={idx} icon={I.refresh}
           title={d.title} tag={<Tag tone="neutral" size="xs">LOOP</Tag>} />
-        <BranchArm label="each" tone="info" active={runningId && subtreeRan(block, traceById)}>
-          {block.body.length ? renderList(block.body, ctx, 'info', forceStatus) : <EmptyArm />}
+        <BranchArm label="each" tone="info" rail={rail}>
+          {block.body.length ? renderBlocks(block.body, ctx, 'info', forceStatus, rail) : <EmptyArm />}
         </BranchArm>
       </div>
     );
@@ -313,15 +322,16 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   if (block.kind === 'cases') {
     const d = describeBlock(block, traceById);
     return (
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Card tone="warning" status={status} idx={idx} icon={I.branch}
           title={d.title} tag={<Tag tone="warning" size="xs">SWITCH</Tag>} />
         {block.cases.map((c) => {
           const caseRan = (c.body || []).some((k) => subtreeRan(k, traceById));
           const caseForce = done && !caseRan ? 'skipped' : forceStatus;
+          const rail = runningId && caseRan ? BRAND : ARM_RAIL.warning;
           return (
-            <BranchArm key={c.id} label={c.test == null ? 'default' : `case ${c.test}`} tone="warning" active={runningId && caseRan}>
-              {c.body.length ? renderList(c.body, ctx, 'warning', caseForce) : <EmptyArm />}
+            <BranchArm key={c.id} label={c.test == null ? 'default' : `case ${c.test}`} tone="warning" rail={rail}>
+              {c.body.length ? renderBlocks(c.body, ctx, 'warning', caseForce, rail) : <EmptyArm />}
             </BranchArm>
           );
         })}
@@ -338,22 +348,24 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   );
 }
 
-/* An indented arm (branch then/else, loop body, switch case) with a rail.
-   The rail is tinted by role (warning for a branch, info for a loop, neutral
-   for else) and only glows when the run is inside it — so nested branches /
-   loops read as clearly separate lanes. */
+/* An arm (branch then/else, loop body, switch case). A straight vertical line
+   descends from the branch; each child hangs off it with a horizontal tick
+   (see ArmItem). The line is tinted by role and glows when the run is inside
+   it, so nested branches/loops read as separate lanes. */
+const BRAND = 'var(--gb-brand-label)';
 const ARM_RAIL = {
   warning: 'var(--gb-warning-tint-border)',
   info: 'var(--gb-info-tint-border, var(--gb-border-strong))',
-  default: 'var(--gb-border-subtle)',
+  default: 'var(--gb-border-strong)',
 };
-function BranchArm({ label, tone, active, children }) {
-  const rail = active ? 'var(--gb-brand-label)' : (ARM_RAIL[tone] || ARM_RAIL.default);
+function BranchArm({ label, tone, rail, children }) {
   const labelColor = tone === 'warning' ? 'var(--gb-warning-fg)' : tone === 'info' ? 'var(--gb-info-fg)' : 'var(--gb-text-muted)';
   return (
-    <div style={{ marginLeft: 12, marginTop: 6, paddingLeft: 14, borderLeft: `2px solid ${rail}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: labelColor, margin: '0 0 -1px' }}>{label}</div>
-      {children}
+    <div style={{ marginLeft: 22, marginTop: 4 }}>
+      <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: labelColor, marginBottom: 4, marginLeft: 4 }}>{label}</div>
+      <div style={{ borderLeft: `2px solid ${rail}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -391,8 +403,8 @@ export function BlocksView({ blocks = [], trace = [], runningId = null, done = f
   }
   const ctx = { traceById, done, runningId, indices };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', padding: '16px 18px 40px' }}>
-      {renderList(blocks, ctx, 'default', null)}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 18px 40px' }}>
+      {renderBlocks(blocks, ctx, 'default', null, null)}
     </div>
   );
 }

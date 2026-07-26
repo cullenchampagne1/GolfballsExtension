@@ -141,7 +141,10 @@ const GB_THEME = EditorView.theme({
    its (flex) container so the code box reaches the bottom of the panel. */
 const GB_FILL_THEME = EditorView.theme({
   '&': { height: '100%', maxHeight: 'none' },
-  '.cm-scroller': { overflow: 'auto' },
+  '.cm-scroller': { overflow: 'auto', flex: '1 1 auto' },
+  // In fill mode the editor owns the whole column — no need for the tall
+  // bottom padding that reserved dropdown room in the compact editor.
+  '.cm-content': { paddingBottom: '16px', minHeight: '100%' },
 });
 
 /* The identifier chain under the cursor (e.g. "actions.sendEmail"), for the
@@ -359,7 +362,9 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
       : { display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div ref={hostRef} style={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined} />
 
-      {/* Namespace legend + test action */}
+      {/* Namespace legend + test action — hidden when actions are hidden
+          (e.g. the campaign code editor, which has its own bindings/docs). */}
+      {!hideActions && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           <NsChip label="ctx" hint={typeId === 'account' ? 'page json' : 'empty here'} dim={typeId !== 'account'} />
@@ -420,6 +425,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
         </Btn>
         )}
       </div>
+      )}
 
       {/* Test result */}
       {result && (
