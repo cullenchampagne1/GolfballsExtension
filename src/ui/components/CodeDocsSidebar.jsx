@@ -45,7 +45,7 @@ export function CodeDocsSidebar({ doc }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Example</span>
             {doc.examples.map((ex, i) => (
-              <pre key={i} style={{ margin: 0, padding: '8px 10px', borderRadius: 8, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', fontSize: 10.5, lineHeight: 1.5, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{ex}</pre>
+              <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', fontSize: 10.5, lineHeight: 1.5, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{ex}</div>
             ))}
           </div>
         ) : null}

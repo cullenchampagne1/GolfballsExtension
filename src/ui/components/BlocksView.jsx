@@ -207,9 +207,9 @@ function ComposeCard({ block }) {
   const t = TONE[d.objType === 'task' ? 'info' : 'brand'] || TONE.brand;
   return (
     <div style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-surface-1)', overflow: 'hidden', boxShadow: '0 1px 0 rgba(0,0,0,.12)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'var(--gb-surface-2)', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
         <span style={{ display: 'inline-flex', width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderRadius: 5, background: t.badgeBg, color: t.badgeFg, flexShrink: 0 }}><Ic size={12} /></span>
-        <code style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{d.title}</code>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{d.title}</span>
         <span style={{ marginLeft: 'auto', fontSize: 8.5, fontWeight: 800, letterSpacing: '.05em', padding: '1px 6px', borderRadius: 999, color: t.badgeFg, background: t.badgeBg, textTransform: 'uppercase' }}>new {d.objType}</span>
       </div>
       <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>

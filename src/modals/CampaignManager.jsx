@@ -43,10 +43,19 @@ function ensureCampaignStyles() {
   if (typeof document === 'undefined' || document.getElementById(CMP_STYLE_ID)) return;
   const s = document.createElement('style');
   s.id = CMP_STYLE_ID;
-  // Hover-reveal the sidebar delete + the run-view animations.
+  // Hover-reveal the sidebar delete + the run-view animations. The `code/pre`
+  // reset neutralizes the HOST CRM page's global code/pre styling (this modal
+  // mounts into document.body, not a shadow root), which was leaking a bright
+  // background + border + block display onto every <code> in the blocks/docs.
   s.textContent = `
     .gb-cmp-row .gb-cmp-del { opacity: 0; transition: opacity .12s ease; }
     .gb-cmp-row:hover .gb-cmp-del { opacity: 1; }
+    .gb-cmp-scope code, .gb-cmp-scope kbd, .gb-cmp-scope samp {
+      background: transparent !important; border: 0 !important; box-shadow: none !important;
+      padding: 0 !important; margin: 0 !important; border-radius: 0 !important;
+      display: inline !important; white-space: inherit; vertical-align: baseline !important;
+      font-family: var(--gb-font-mono, ui-monospace, monospace) !important;
+    }
     @keyframes cm-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
     @keyframes cm-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 6px transparent; } }
   `;
@@ -766,7 +775,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           root deliberately opts out of the shared Modals scale. The wrapper
           (initial=false ⇒ no entrance, ModalShell owns the bounce-in) plays
           the scale/fade exit on close. */}
-      <motion.div initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
+      <motion.div className="gb-cmp-scope" initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
       <ModalShell width={CAMPAIGN_MANAGER_WIDTH} height={CAMPAIGN_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim}
           onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}

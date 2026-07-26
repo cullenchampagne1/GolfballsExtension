@@ -94,10 +94,8 @@ const GB_THEME = EditorView.theme({
     color: 'var(--gb-text-primary)',
     border: '1px solid var(--gb-border-default)',
     borderRadius: 'var(--gb-r-sm)',
-    /* Grow up to ~22 lines, then scroll (cm-scroller). No overflow:hidden
-       on the editor itself so the autocomplete dropdown isn't clipped to a
-       sliver — it renders in-flow (scaled space) and extends past it. */
-    maxHeight: '360px',
+    /* Height (maxHeight cap OR fill) is set per-instance below so `fill`
+       is authoritative — no cross-theme override race. */
   },
   '&.cm-focused': { outline: 'none', borderColor: 'var(--gb-brand-tint-border)' },
   '.cm-scroller': { overflow: 'auto' },
@@ -137,15 +135,15 @@ const GB_THEME = EditorView.theme({
   '.cm-lintRange-error': { textDecoration: 'underline wavy var(--gb-error-fg)' },
 }, { dark: true });
 
-/* `fill` mode: drop the intrinsic max-height cap and stretch the editor to
-   its (flex) container so the code box reaches the bottom of the panel. */
-const GB_FILL_THEME = EditorView.theme({
-  '&': { height: '100%', maxHeight: 'none' },
-  '.cm-scroller': { overflow: 'auto', flex: '1 1 auto' },
-  // In fill mode the editor owns the whole column — no need for the tall
-  // bottom padding that reserved dropdown room in the compact editor.
-  '.cm-content': { paddingBottom: '16px', minHeight: '100%' },
-});
+/* Height is authoritative per-instance: `fill` stretches the editor to its
+   flex container (no cap); otherwise it grows to ~22 lines then scrolls. */
+const heightTheme = (fill) => EditorView.theme(fill
+  ? {
+    '&': { height: '100%', maxHeight: 'none' },
+    '.cm-scroller': { overflow: 'auto', flex: '1 1 auto' },
+    '.cm-content': { paddingBottom: '16px', minHeight: '100%' },
+  }
+  : { '&': { maxHeight: '360px' } });
 
 /* The identifier chain under the cursor (e.g. "actions.sendEmail"), for the
    live docs panel. Expands over word + dot chars around the caret. */
@@ -276,6 +274,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           indentOnInput(),
           highlightActiveLine(),
           javascript(),
+          heightTheme(fill),
           syntaxHighlighting(GB_HIGHLIGHT, { fallback: true }),
           /* Default (in-editor, absolute) tooltip positioning. The editor
              lives under <body data-gb-scale="editor"> (a CSS zoom/scale),
@@ -289,7 +288,6 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           cmPlaceholder(placeholder || 'e.g. h.fmt.title(ctx.contact.firstName)'),
           EditorView.lineWrapping,
           GB_THEME,
-          ...(fill ? [GB_FILL_THEME] : []),
           keymap.of([
             indentWithTab,
             ...closeBracketsKeymap,
