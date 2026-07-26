@@ -278,6 +278,10 @@
       "file": "tests/unit/codeEnginePageControl.test.mjs"
     },
     {
+      "name": "guard \u00b7 code-engine run plan (confirm gate)",
+      "file": "tests/unit/codeEngineRunPlan.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },
