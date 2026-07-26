@@ -213,6 +213,20 @@ export async function saveCampaign(campaign) {
   return { campaign: stamped, list: next };
 }
 
+/* Create or update a campaign's CODE by name — the write hook an assistant
+   uses to author campaigns live. Matches an existing campaign case-
+   insensitively by name (or creates one), sets its `automation`, and
+   persists. Returns the saved campaign. */
+export async function writeCampaignCode({ name, automation }) {
+  const list = await loadCampaigns();
+  const wanted = String(name || '').trim();
+  const existing = wanted ? list.find((c) => (c.name || '').trim().toLowerCase() === wanted.toLowerCase()) : null;
+  const base = existing || newCampaign(wanted || 'Untitled campaign');
+  const next = normalizeCampaign({ ...base, name: wanted || base.name, automation: String(automation || '') });
+  const { campaign } = await saveCampaign(next);
+  return campaign;
+}
+
 export async function removeCampaign(id) {
   const list = await loadCampaigns();
   const next = list.filter((c) => c.id !== id);

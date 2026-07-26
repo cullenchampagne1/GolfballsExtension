@@ -48,13 +48,32 @@ const STATIC = {
   page: {
     title: 'page.*',
     kind: 'data',
-    summary: 'The read-only audience model for this run.',
+    summary: 'The read-only audience model for this run. page.contact is the one being simulated; page.contacts is the whole selection.',
     rows: [
-      ['page.contact', 'the contact being simulated (name, email, …)'],
+      ['page.contact', 'the current contact (object)'],
       ['page.contacts', 'the whole selected audience (array)'],
       ['page.count', 'how many contacts are selected'],
+      ['contact.contactName', 'display name (also .name)'],
+      ['contact.email', 'email address (may be empty)'],
+      ['contact.account', 'company / account name'],
+      ['contact.value', 'handed-off value ($), if any'],
+      ['contact.contactId', 'CRM id'],
     ],
-    examples: ['const c = page.contact;', 'for (const c of page.contacts) { … }'],
+    examples: [
+      'const c = page.contact;\nif (c.email) await actions.sendEmail(user.email("Win-back"));',
+      'for (const c of page.contacts) { … }',
+    ],
+  },
+  helpers: {
+    title: 'h.* helpers',
+    kind: 'data',
+    summary: 'Read-only formatting + lookup helpers (same as the code variables). Useful for building custom subjects/bodies before the signature is added.',
+    rows: [
+      ['h.fmt.title / upper / lower', 'case helpers'],
+      ['h.fmt.currency / number / date', 'value formatting'],
+      ['h.coalesce(a, b, …)', 'first non-empty value'],
+    ],
+    examples: ['await actions.sendEmail({ subject: "Hi " + h.fmt.title(page.contact.contactName), body: "…" })'],
   },
   user: {
     title: 'user.*',
@@ -119,7 +138,8 @@ export function resolveDoc(token) {
     return STATIC.actions;
   }
   if (head === 'user') return STATIC.user;
-  if (head === 'page') return STATIC.page;
+  if (head === 'page' || head === 'contact') return STATIC.page;
+  if (head === 'h') return STATIC.helpers;
   if (KEYWORDS.has(head)) return STATIC.control;
   if (DECL.has(head)) return STATIC.setvar;
   // a bare contract name (e.g. cursor on "sendEmail")

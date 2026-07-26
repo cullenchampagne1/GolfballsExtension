@@ -6,9 +6,10 @@ import {
 import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
 import { CodeDocsSidebar } from '../ui/components/CodeDocsSidebar.jsx';
 import { resolveDoc } from '../lib/codeEngine/docs.js';
+import { buildCodeSpec } from '../lib/codeEngine/spec.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
-  loadCampaigns, saveCampaign, removeCampaign, newCampaign, subscribeCampaigns,
+  loadCampaigns, saveCampaign, removeCampaign, newCampaign, subscribeCampaigns, writeCampaignCode,
 } from '../lib/campaign/store.js';
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
@@ -678,6 +679,23 @@ export function CampaignManager({ onClose, contacts = [] }) {
     calls: userData.calls.map((c) => c.name).filter(Boolean),
   }), [userData, templatesLoaded]);
   const runner = useCodeRunner();
+
+  // Expose the code API to an assistant so it can author/edit campaigns:
+  //   window.__gbCampaignCodeSpec()  → the machine-readable spec (bindings,
+  //     every action + params + gate, page fields, rules, saved templates)
+  //   window.__gbWriteCampaign({name, code}) → create/update a campaign by
+  //     name and open it here. Only live while the manager is mounted.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    window.__gbCampaignCodeSpec = () => buildCodeSpec(bindings);
+    window.__gbWriteCampaign = async ({ name, code }) => {
+      const saved = await writeCampaignCode({ name, automation: code });
+      const list = await loadCampaigns();
+      setLibrary(list); setCampaign(saved); setDirty(false); setView('code');
+      return { ok: true, id: saved.id, name: saved.name };
+    };
+    return () => { delete window.__gbCampaignCodeSpec; delete window.__gbWriteCampaign; };
+  }, [bindings]); // eslint-disable-line react-hooks/exhaustive-deps
   // Single-contact simulation that animates the blocks (top-bar Simulate).
   const [sim, setSim] = useState({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' });
   const simRunRef = useRef(0);
