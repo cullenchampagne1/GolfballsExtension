@@ -18,14 +18,14 @@ export const ACTION_ICON_KEYS = Object.freeze([
 
 export function IconPicker({ value, onChange }) {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+    <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 5, width: '100%', overflowX: 'auto', paddingBottom: 4 }}>
       {ACTION_ICON_KEYS.map((key) => {
         const Glyph = I[key] || I.bolt;
         const on = value === key;
         return (
           <button key={key} type="button" onClick={() => onChange(key)} title={key} aria-pressed={on}
             style={{
-              width: 28, height: 28, borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 28, height: 28, borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               transition: 'background .12s ease, border-color .12s ease, color .12s ease',
               border: `1px solid ${on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
               background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-2)',
