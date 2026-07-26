@@ -4,7 +4,7 @@ import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { linter, lintGutter } from '@codemirror/lint';
+import { linter, lintGutter, forceLinting } from '@codemirror/lint';
 import {
   syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput, syntaxTree,
 } from '@codemirror/language';
@@ -13,6 +13,7 @@ import { tags as t } from '@lezer/highlight';
 import { contactSchema } from '../../lib/page-schemas/contact.js';
 import { listPaths } from '../../lib/page-engine/resolve.js';
 import { describeHelpers, staticCheck } from '../../lib/page-engine/code-runtime.js';
+import { lintTemplateRefs } from '../../lib/codeEngine/templateLint.js';
 import { Btn } from './Btn.jsx';
 import { Tag } from './Tag.jsx';
 import { Spinner } from '../shared.jsx';
@@ -157,12 +158,36 @@ function tokenAt(state) {
   return text.slice(start, end).replace(/^\.+|\.+$/g, '');
 }
 
-export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false, onContext }) {
+/* Completions for the campaign-code bindings — page / user / actions. */
+const BINDING_OPTIONS = {
+  actions: [
+    { label: 'actions.sendEmail', type: 'function', detail: '(email) — saved or {subject,body}' },
+    { label: 'actions.createTask', type: 'function', detail: '(task) — saved or {subject,…}' },
+    { label: 'actions.logCall', type: 'function', detail: '(call) — saved or {subject,…}' },
+  ],
+  user: [
+    { label: 'user.emails', type: 'variable', detail: 'saved emails []' },
+    { label: 'user.tasks', type: 'variable', detail: 'saved tasks []' },
+    { label: 'user.calls', type: 'variable', detail: 'saved calls []' },
+    { label: 'user.email', type: 'function', detail: '(name) → saved email (throws if missing)' },
+    { label: 'user.task', type: 'function', detail: '(name) → saved task' },
+    { label: 'user.call', type: 'function', detail: '(name) → saved call' },
+  ],
+  page: [
+    { label: 'page.contact', type: 'variable', detail: 'the contact being run' },
+    { label: 'page.contacts', type: 'variable', detail: 'the audience []' },
+    { label: 'page.count', type: 'variable', detail: 'audience size' },
+  ],
+};
+
+export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false, onContext, bindings = null }) {
   const hostRef    = useRef(null);
   const viewRef    = useRef(null);
   const onChangeRef = useRef(onChange);
   const onContextRef = useRef(onContext);
   onContextRef.current = onContext;
+  const bindingsRef = useRef(bindings);
+  bindingsRef.current = bindings;
   const valueRef   = useRef(value || '');
   const ctxOptsRef = useRef(typeId === 'account' ? CTX_OPTIONS : []);
   const varNamesRef = useRef(varNames);
@@ -181,6 +206,18 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
     if (!hostRef.current) return undefined;
 
     const completionSource = (context) => {
+      // Inside user.email("… / user.task("… / user.call("…  → the saved names.
+      const line = context.state.doc.lineAt(context.pos);
+      const upto = line.text.slice(0, context.pos - line.from);
+      const nameCall = upto.match(/\buser\.(email|task|call)\(\s*["']([^"']*)$/);
+      if (nameCall) {
+        const b = bindingsRef.current || {};
+        const list = nameCall[1] === 'email' ? b.emails : nameCall[1] === 'task' ? b.tasks : b.calls;
+        const opts = (list || []).map((n) => ({ label: n, type: 'text', detail: `saved ${nameCall[1]}` }));
+        if (!opts.length) return null;
+        return { from: context.pos - nameCall[2].length, options: opts, validFor: /[^"']*/ };
+      }
+
       const before = context.matchBefore(/[\w$.[\]'"-]*/);
       if (!before || (before.from === before.to && !context.explicit)) return null;
       const head = before.text.split(/[.[]/)[0];
@@ -188,6 +225,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
       if (head === 'ctx')       options = ctxOptsRef.current;
       else if (head === 'vars') options = varNamesRef.current.map((n) => ({ label: 'vars.' + n, type: 'variable' }));
       else if (head === 'h')    options = HELPER_OPTIONS;
+      else if (BINDING_OPTIONS[head]) options = BINDING_OPTIONS[head];
       if (!options || options.length === 0) return null;
       return { from: before.from, options, validFor: /^[\w$.[\]'"-]*$/ };
     };
@@ -207,6 +245,10 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
       // Length + blocklist (regex, CSP-safe).
       const issue = staticCheck(body);
       if (issue) diags.push({ from: 0, to: Math.max(1, body.length), severity: 'error', message: issue });
+      // Missing saved-template dependencies — user.email("X") where X isn't saved.
+      for (const r of lintTemplateRefs(body, bindingsRef.current)) {
+        diags.push({ from: r.from, to: r.to, severity: 'error', message: r.message });
+      }
       return diags;
     };
 
@@ -260,6 +302,12 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
     viewRef.current = view;
     return () => { view.destroy(); viewRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-run the linter when the saved-template bindings load/change, so a
+  // missing-dependency error appears without needing an edit first.
+  useEffect(() => {
+    if (viewRef.current) forceLinting(viewRef.current);
+  }, [bindings]);
 
   // External value sync — e.g. parent reset on a kind switch. Only
   // dispatch when the incoming value actually differs from the live

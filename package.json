@@ -262,6 +262,10 @@
       "file": "tests/unit/codeEngineUserBinding.test.mjs"
     },
     {
+      "name": "guard \u00b7 code-engine template-dependency lint",
+      "file": "tests/unit/codeEngineTemplateLint.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },

@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, IconBtn, Tag, Dot, Input, Dropdown, PillTag, ModalShell, I } from '../ui/index.js';
+import {
+  Btn, IconBtn, Tag, Dot, Input, Dropdown, PillTag, Checkbox, Field, SectionLabel, RangeSlider, ModalShell, I,
+} from '../ui/index.js';
 import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
+import { CodeDocsSidebar } from '../ui/components/CodeDocsSidebar.jsx';
+import { resolveDoc } from '../lib/codeEngine/docs.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, subscribeCampaigns,
@@ -369,7 +373,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
     </div>
   );
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .3 }}
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .3 }}
       style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
       <div style={{ padding: '14px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
         <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: (running && !paused) ? 'cm-running 1.8s ease-in-out infinite' : 'none' }}><I.send size={15} /></div>
@@ -466,6 +470,65 @@ function StatsStrip({ program, campaign, dirty, onSave }) {
   );
 }
 
+/* ── Campaign settings (right sidebar in Blocks view) — the original
+   pacing / delivery / order controls. ── */
+function CampaignSettings({ campaign, onChange }) {
+  const upd = (patch) => onChange({ ...campaign, ...patch });
+  const ratePerMin = Math.round(60 / Math.max(campaign.paceDelay || 12, 1));
+  const paceLo = Math.max(1, (campaign.paceDelay || 0) - (campaign.paceJitter || 0));
+  const paceHi = (campaign.paceDelay || 0) + (campaign.paceJitter || 0);
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Campaign settings</span>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div>
+          <SectionLabel>Status</SectionLabel>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {['Draft', 'Active', 'Paused'].map((s) => (
+              <PillTag key={s} on={campaign.status === s} onClick={() => upd({ status: s })}>
+                <Dot tone={s === 'Active' ? 'brand' : s === 'Paused' ? 'warning' : 'muted'} glow={s === 'Active'} /> {s}
+              </PillTag>
+            ))}
+          </div>
+        </div>
+        <div>
+          <SectionLabel>Pacing</SectionLabel>
+          <div style={{ padding: 12, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+            <I.zap size={14} style={{ color: 'var(--gb-brand-label)', alignSelf: 'center' }} />
+            <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>~{ratePerMin}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)' }}>per minute · runs only while the tab is open</span>
+          </div>
+          <Field label={<span>Delay between actions · {paceLo}–{paceHi}s</span>} hint="Each action waits a random time in this range — keeps the run looking human.">
+            <RangeSlider values={[paceLo, paceHi]} min={1} max={90} step={1} unit="s" onChange={([a, b]) => upd({ paceDelay: Math.round((a + b) / 2), paceJitter: Math.round((b - a) / 2) })} />
+          </Field>
+        </div>
+        <div>
+          <SectionLabel>Delivery</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+            <Checkbox checked={campaign.suppressDoNotContact !== false} label="Skip “do not contact”" hint="Name or email contains the phrase (any case)" onChange={(v) => upd({ suppressDoNotContact: v })} />
+            <Checkbox checked={campaign.suppressBounced !== false} label="Skip bounced contacts" hint="Contacts with a CRM bounce code" onChange={(v) => upd({ suppressBounced: v })} />
+            <Checkbox checked={campaign.suppressMailerRemoved !== false} label="Skip mailer-removed contacts" hint="Opted out of mailings" onChange={(v) => upd({ suppressMailerRemoved: v })} />
+          </div>
+          <div style={{ height: 12 }} />
+          <Field label="Audience order" hint="The order contacts are worked through this run">
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {[['list', 'As selected'], ['valueDesc', 'Highest value'], ['shuffle', 'Shuffle']].map(([id, label]) => (
+                <PillTag key={id} on={(campaign.audienceOrder || 'list') === id} onClick={() => upd({ audienceOrder: id })}>{label}</PillTag>
+              ))}
+            </div>
+          </Field>
+          <div style={{ height: 12 }} />
+          <Field label={<span>Send cap <span style={{ color: 'var(--gb-text-muted)', fontWeight: 500 }}>· {campaign.sendCap ? `${campaign.sendCap} per run` : 'no cap'}</span></span>} hint="Stop the run after this many actions — 0 = unlimited">
+            <Input value={String(campaign.sendCap || 0)} mono onChange={(v) => upd({ sendCap: Math.max(0, parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) })} />
+          </Field>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignStyles();
   const toast = useToast();
@@ -504,6 +567,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [simContactKey, setSimContactKey] = useState(null);
   // The rep's saved templates, exposed to code as user.emails / user.tasks / user.calls.
   const [userData, setUserData] = useState({ emails: [], tasks: [], calls: [] });
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
 
   // Import result from the paste dialog: refresh the library, open the first
   // imported campaign, and surface anything the importer couldn't resolve.
@@ -549,6 +613,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         tasks: (tasks || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject || '', priority: t.priority, daysOut: t.daysOut })),
         calls: (calls || []).map((c) => ({ id: c.id, name: c.name, subject: c.subject || '' })),
       });
+      setTemplatesLoaded(true);
     });
     return () => { alive = false; };
   }, []);
@@ -602,6 +667,16 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [view, setView] = useState('code');
   const [dryRun, setDryRun] = useState(true);
   const [runMode, setRunMode] = useState(false);
+  // The token under the caret → the live docs card (Code view right sidebar).
+  const [docToken, setDocToken] = useState('');
+  const activeDoc = useMemo(() => resolveDoc(docToken), [docToken]);
+  // Saved-template names, fed to the editor for autocomplete + missing-dependency lint.
+  const bindings = useMemo(() => ({
+    ready: templatesLoaded,
+    emails: userData.emails.map((e) => e.name).filter(Boolean),
+    tasks: userData.tasks.map((t) => t.name).filter(Boolean),
+    calls: userData.calls.map((c) => c.name).filter(Boolean),
+  }), [userData, templatesLoaded]);
   const runner = useCodeRunner();
   // Single-contact simulation that animates the blocks (top-bar Simulate).
   const [sim, setSim] = useState({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' });
@@ -668,8 +743,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
           audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
+        <AnimatePresence mode="wait" initial={false}>
         {runMode ? (
-          <AudienceRunView
+          <AudienceRunView key="run"
             campaign={campaign}
             audience={audienceKeyed}
             mainCount={program.actionCount}
@@ -678,19 +754,34 @@ export function CampaignManager({ onClose, contacts = [] }) {
             onExit={() => { setRunMode(false); runner.reset(); }}
           />
         ) : (
-        <>
+        <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
           <CodeAutomationPanel
             value={campaign.automation || ''} onChange={setAutomation}
             blocks={program.blocks} errors={program.errors}
-            view={view} onView={setView}
+            view={view} onView={setView} onContext={setDocToken} bindings={bindings}
             trace={shownTrace} runningId={runningId} done={sim.status === 'done'} result={sim.status === 'done' ? sim.result : null}
             error={sim.status === 'done' ? sim.error : null} simStatus={sim.status} />
+          {/* Contextual right sidebar: live docs while coding, campaign
+              settings while looking at the blocks. */}
+          <div style={{ width: 288, flexShrink: 0, borderLeft: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', position: 'relative', minHeight: 0 }}>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={view === 'code' ? 'docs' : 'settings'}
+                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
+                style={{ position: 'absolute', inset: 0, minHeight: 0 }}>
+                {view === 'code'
+                  ? <CodeDocsSidebar doc={activeDoc} />
+                  : <CampaignSettings campaign={campaign} onChange={patchCampaign} />}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
         <StatsStrip program={program} campaign={campaign} dirty={dirty} onSave={save} />
-        </>
+        </motion.div>
         )}
+        </AnimatePresence>
       </ModalShell>
       </motion.div>
       {importOpen && <ImportCampaignsModal onClose={() => setImportOpen(false)} onDone={onImported} />}

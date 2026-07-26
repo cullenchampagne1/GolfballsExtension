@@ -1,19 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { CodeVarEditor } from './CodeVarEditor.jsx';
 import { BlocksView } from './BlocksView.jsx';
 import { Spinner } from '../shared.jsx';
 import { I } from '../icons.jsx';
-import { resolveDoc } from '../../lib/codeEngine/docs.js';
 
 /* ───────────────────────────────────────────────────────────────
-   CodeAutomationPanel — the authoring body (Code ⇆ Blocks) + live docs.
+   CodeAutomationPanel — the authoring body (Code ⇆ Blocks).
 
-   This is a controlled display: the parent (CampaignManager) owns the
-   code, the simulation, and the run — exactly like the old timeline was
-   driven by the top bar. The panel just renders the editor, the block
-   flow (fed the parent's trace/runningId/done), and the docs sidebar
-   that follows the caret. The Simulate / Run controls live in the top
-   bar, not here.
+   A controlled display: the parent (CampaignManager) owns the code, the
+   simulation, and the run. The panel renders the editor OR the block
+   flow (fed the parent's trace/runningId/done) with an animated
+   transition between them, and forwards the caret token up (onContext)
+   so the parent's right sidebar can show live docs. The docs / settings
+   sidebar lives in the parent, not here.
 ─────────────────────────────────────────────────────────────── */
 
 const STARTER = `// page.contact = who you're simulating · user.* = your saved templates
@@ -28,13 +28,11 @@ if (c.daysCold > 30) {
 
 export function CodeAutomationPanel({
   value, onChange, blocks = [], errors = [],
-  view = 'code', onView,
+  view = 'code', onView, onContext, bindings = null,
   trace = [], runningId = null, done = false, result = null, error = null,
   simStatus = 'idle',
 }) {
   const code = value || '';
-  const [docToken, setDocToken] = useState('');
-  const activeDoc = useMemo(() => resolveDoc(docToken), [docToken]);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
@@ -44,55 +42,63 @@ export function CodeAutomationPanel({
         <div style={{ marginLeft: 'auto' }}><SimStatus status={simStatus} /></div>
       </div>
 
-      {/* Body: [ code | blocks ] + live docs */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        {view === 'code' ? (
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, minHeight: 0 }}>
-            <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-              <CodeVarEditor
-                value={code}
-                onChange={onChange}
-                onContext={setDocToken}
-                typeId="account"
-                varNames={[]}
-                hideActions
-                fill
-                placeholder={STARTER}
-              />
-            </div>
-            <div style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-              <b>page.*</b> is the contact being run. <b>user.*</b> are your saved emails/tasks/calls. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>logCall</code>.
-            </div>
-            {errors.length ? (
-              <div style={{ flexShrink: 0, fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <I.alert size={12} /> Syntax error — the blocks pause until it's fixed.
+      {/* Body: Code or Blocks, cross-faded. */}
+      <div style={{ flex: 1, position: 'relative', minHeight: 0, minWidth: 0 }}>
+        <AnimatePresence initial={false} mode="wait">
+          {view === 'code' ? (
+            <motion.div key="code"
+              initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+              style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, minHeight: 0 }}>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                <CodeVarEditor
+                  value={code}
+                  onChange={onChange}
+                  onContext={onContext}
+                  bindings={bindings}
+                  typeId="account"
+                  varNames={[]}
+                  hideActions
+                  fill
+                  placeholder={STARTER}
+                />
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
-            {error ? (
-              <div style={{ margin: '14px 18px 0', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid var(--gb-error-tint-border)', borderRadius: 10, background: 'var(--gb-error-tint-soft)' }}>
-                <I.alert size={14} style={{ color: 'var(--gb-error-fg)', marginTop: 1, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--gb-error-fg)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Dependency error</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', marginTop: 2, lineHeight: 1.5 }}>{error}</div>
+              <div style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+                <b>page.*</b> is the contact being run. <b>user.*</b> are your saved emails/tasks/calls. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>logCall</code>.
+              </div>
+              {errors.length ? (
+                <div style={{ flexShrink: 0, fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <I.alert size={12} /> Syntax error — the blocks pause until it's fixed.
                 </div>
-              </div>
-            ) : null}
-            <BlocksView
-              blocks={blocks}
-              trace={trace}
-              runningId={runningId}
-              done={done}
-              result={result}
-              emptyHint={(
-                <span>No blocks yet.<br />Switch to <b>Code</b>, write against <code>page.*</code> + <code>actions.*</code>, then <b>Simulate</b>.</span>
-              )}
-            />
-          </div>
-        )}
-        <DocsSidebar doc={activeDoc} />
+              ) : null}
+            </motion.div>
+          ) : (
+            <motion.div key="blocks"
+              initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+              style={{ position: 'absolute', inset: 0, overflow: 'auto', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
+              {error ? (
+                <div style={{ margin: '14px 18px 0', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid var(--gb-error-tint-border)', borderRadius: 10, background: 'var(--gb-error-tint-soft)' }}>
+                  <I.alert size={14} style={{ color: 'var(--gb-error-fg)', marginTop: 1, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--gb-error-fg)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Dependency error</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', marginTop: 2, lineHeight: 1.5 }}>{error}</div>
+                  </div>
+                </div>
+              ) : null}
+              <BlocksView
+                blocks={blocks}
+                trace={trace}
+                runningId={runningId}
+                done={done}
+                result={result}
+                emptyHint={(
+                  <span>No blocks yet.<br />Switch to <b>Code</b>, write against <code>page.*</code> + <code>actions.*</code>, then <b>Simulate</b>.</span>
+                )}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -129,52 +135,6 @@ function ViewSwitch({ view, onView, blockCount }) {
     <div style={{ display: 'flex', gap: 2, background: 'var(--gb-fill-subtle)', padding: 2, borderRadius: 9 }}>
       <Item id="code" Ic={I.code} label="Code" />
       <Item id="blocks" Ic={I.branch} label="Blocks" badge={blockCount} />
-    </div>
-  );
-}
-
-/* ── Live documentation — follows the token under the caret ── */
-function DocsSidebar({ doc }) {
-  if (!doc) return null;
-  const KIND_ACCENT = {
-    action: 'var(--gb-brand-label)', data: 'var(--gb-info-fg)',
-    flow: 'var(--gb-warning-fg)', topic: 'var(--gb-text-secondary)',
-  };
-  const accent = KIND_ACCENT[doc.kind] || 'var(--gb-text-secondary)';
-  return (
-    <div style={{ width: 288, flexShrink: 0, borderLeft: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gb-border-subtle)', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-        <I.code size={13} style={{ color: 'var(--gb-text-muted)' }} />
-        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Docs · {doc.kind}</span>
-      </div>
-      <div style={{ padding: 14, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <span style={{ width: 4, height: 14, borderRadius: 2, background: accent, flexShrink: 0 }} />
-            <code style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{doc.title}</code>
-            {doc.gate ? <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, letterSpacing: '.03em', padding: '1px 6px', borderRadius: 999, color: 'var(--gb-warning-fg)', background: 'var(--gb-warning-tint-soft)', textTransform: 'uppercase' }}>{doc.gate}</span> : null}
-          </div>
-          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--gb-text-secondary)', lineHeight: 1.55 }}>{doc.summary}</div>
-        </div>
-        {doc.rows?.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {doc.rows.map(([k, v], i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <code style={{ fontSize: 10.5, fontWeight: 700, color: accent, fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)' }}>{k}</code>
-                <span style={{ fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>{v}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {doc.examples?.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Example</span>
-            {doc.examples.map((ex, i) => (
-              <pre key={i} style={{ margin: 0, padding: '8px 10px', borderRadius: 8, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-subtle)', fontSize: 10.5, lineHeight: 1.5, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{ex}</pre>
-            ))}
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }
