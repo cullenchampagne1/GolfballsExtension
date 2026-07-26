@@ -58,6 +58,14 @@ export function buildTraceBody(instrumentedCode) {
     '};',
     'const __gbTrace = [];',
     'page.__eval = (id, ref) => { __gbTrace.push({ kind: "evaluate", id: id, name: ref && ref.name }); return __mkOut(ref); };',
+    // Page control (mirror of simulate.js): record complete/edit/commit intents.
+    'const __approved = (ctx && ctx.approvedFields) || [];',
+    'const __openTasks = ((page.tasks && page.tasks.open) || []).map((tk) => Object.assign({}, tk, { complete: () => { __gbTrace.push({ kind: "complete", id: tk.id, subject: tk.subject }); return { ok: true, dry: true }; } }));',
+    'page.contact = new Proxy(Object.assign({}, page.contact || {}), {',
+    '  set: (t, p, v) => { if (typeof p === "string" && __approved.indexOf(p) === -1) throw new Error("page.contact." + p + " is not an editable field. Editable: " + __approved.join(", ") + "."); __gbTrace.push({ kind: "edit", prop: p, value: v }); t[p] = v; return true; },',
+    '  get: (t, p) => { if (p === "commit") return () => { __gbTrace.push({ kind: "commit" }); }; return t[p]; },',
+    '});',
+    'page.tasks = { open: __openTasks, done: (page.tasks && page.tasks.done) || [], completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
     'const actions = { __trace(id, name, input) {',
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
     '  return { ok: true, dry: true, simulated: true };',
@@ -83,21 +91,28 @@ export function buildTraceBody(instrumentedCode) {
 export function makeSandboxRunner({ exec, doc } = {}) {
   if (typeof exec !== 'function') throw new Error('makeSandboxRunner requires an exec(body, ctx, vars, doc) sandbox executor');
   return async function sandboxRun(code, scope) {
-    const page = (scope && scope.page) || {};
     const u = (scope && scope.user) || {};
     // Only the serializable id-keyed maps cross the realm; the sandbox rebuilds
-    // the finders + outbound helpers. `page` carries only contact data (its
-    // __eval is provided in-sandbox), so strip functions by shallow-copying data.
-    const pageData = { contact: page.contact, contacts: page.contacts, count: page.count };
+    // the finders + outbound helpers. Use the RAW page data (not the node Proxy /
+    // task methods, which can't be structured-cloned into the realm).
+    const src = (scope && scope.__pageData) || (scope && scope.page) || {};
+    const pageData = { contact: src.contact, contacts: src.contacts, count: src.count, tasks: src.tasks };
     const user = { emails: u.emails || {}, tasks: u.tasks || {}, calls: u.calls || {} };
     const record = scope && scope.actions && scope.actions.__trace;
     const recordEval = scope && scope.page && scope.page.__eval;
-    const raw = await exec(buildTraceBody(code), { page: pageData, user }, {}, doc);
+    const pageRec = (scope && scope.__pageRecord) || {};
+    const approvedFields = (scope && scope.__approvedFields) || [];
+    const raw = await exec(buildTraceBody(code), { page: pageData, user, approvedFields }, {}, doc);
     const entries = Array.isArray(raw) ? raw : (raw && raw.__gbTrace) || [];
     for (const e of entries) {
-      if (e && e.kind === 'evaluate') { if (typeof recordEval === 'function') recordEval(e.id, { name: e.name }); }
+      if (!e) continue;
+      if (e.kind === 'evaluate') { if (typeof recordEval === 'function') recordEval(e.id, { name: e.name }); }
+      else if (e.kind === 'complete') { if (pageRec.complete) pageRec.complete({ id: e.id, subject: e.subject }); }
+      else if (e.kind === 'edit') { if (pageRec.edit) pageRec.edit(e.prop, e.value); }
+      else if (e.kind === 'commit') { if (pageRec.commit) pageRec.commit(); }
       else if (typeof record === 'function') record(e.id, e.contract, e.input);
     }
+    if (pageRec.commit) pageRec.commit(); // auto-commit any staged edits
     // Surface the program's final return value (the closing "step" summary).
     return Array.isArray(raw) ? undefined : (raw && raw.__gbRet);
   };

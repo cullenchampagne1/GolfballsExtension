@@ -17,7 +17,7 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { instrument } from './instrument.js';
-import { validateContractInput, describeContract } from './contracts.js';
+import { validateContractInput, describeContract, APPROVED_CONTACT_FIELDS } from './contracts.js';
 import { buildUserBinding } from './userBinding.js';
 import { makeOutbound } from './runtime.js';
 
@@ -65,16 +65,58 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
     trace.push({ id, contract: 'evaluate', kind: 'evaluate', status: 'ran', summary: `Evaluate ${r.name || (r.kind || 'template')}`, errors: [] });
     return makeOutbound(r);
   };
+
+  // ── Page control: complete tasks + grouped contact edits (records only) ──
+  let seq = 0;
+  const edits = {};                          // staged field edits (grouped)
+  const recordComplete = (task) => record(`ct_${(task && task.id) || (seq += 1)}`, 'completeTask', { id: task && task.id, subject: task && task.subject });
+  const stageEdit = (prop, value) => {
+    if (typeof prop !== 'string') return;
+    if (!Object.hasOwn(APPROVED_CONTACT_FIELDS, prop)) {
+      throw new Error(`page.contact.${prop} is not an editable field. Editable: ${Object.keys(APPROVED_CONTACT_FIELDS).join(', ')}.`);
+    }
+    edits[prop] = value;
+  };
+  const commitEdits = () => {
+    const keys = Object.keys(edits);
+    if (!keys.length) return;
+    record('editContact', 'editContact', { fields: { ...edits } });
+    keys.forEach((k) => delete edits[k]);
+  };
+  const latestOpen = (list) => (list || []).reduce((best, t) => (!best || String(t.dueDate || '') > String(best.dueDate || '') ? t : best), null);
+
+  // Node-path `page` — the Proxy set-trap captures `page.contact.x = y`; each
+  // task carries a `.complete()`. (The sandbox mirrors this inline.)
+  const nodePage = { ...page, __eval: recordEval };
+  nodePage.contact = new Proxy({ ...(page.contact || {}) }, {
+    set(t, p, v) { stageEdit(p, v); t[p] = v; return true; },
+    get(t, p) { if (p === 'commit') return () => commitEdits(); return t[p]; },
+  });
+  const openTasks = ((page.tasks && page.tasks.open) || []).map((tk) => ({ ...tk, complete: () => recordComplete(tk) }));
+  nodePage.tasks = {
+    open: openTasks,
+    done: (page.tasks && page.tasks.done) || [],
+    completeAll: () => { openTasks.forEach((t) => t.complete()); },
+    completeLatest: () => { const t = latestOpen(openTasks); if (t) t.complete(); },
+  };
+
   const scope = {
     actions: { __trace: record },
-    page: { ...page, __eval: recordEval },
+    page: nodePage,
     user: buildUserBinding(user),
+    // Sandbox replay hooks + the write allowlist (for the in-sandbox proxy).
+    __pageRecord: { complete: (t) => recordComplete(t), edit: stageEdit, commit: commitEdits },
+    __approvedFields: Object.keys(APPROVED_CONTACT_FIELDS),
+    // The RAW (serializable, method-free) page data for the sandbox realm.
+    __pageData: page,
   };
   try {
     // The runner returns the program's final value (the closing-step summary).
     const result = await run(code, scope);
+    commitEdits(); // auto-commit any staged edits as one grouped step
     return { ok: true, trace, calls, error: null, result: result == null ? null : result };
   } catch (error) {
+    commitEdits(); // flush whatever was staged before the error
     // A thrown program error stops the trace where it happened — still useful.
     return { ok: false, trace, calls, error: String(error?.message || error), result: null };
   }

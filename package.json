@@ -274,6 +274,10 @@
       "file": "tests/unit/codeEngineEvaluate.test.mjs"
     },
     {
+      "name": "guard \u00b7 code-engine page control (tasks + edits)",
+      "file": "tests/unit/codeEnginePageControl.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },
