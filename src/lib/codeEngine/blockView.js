@@ -95,6 +95,12 @@ export function subtreeFailed(block, traceById = {}) {
  */
 export function runStatus(block, traceById, { done = false, runningId = null, force = null } = {}) {
   if (runningId && block.id === runningId) return 'running';
+  // complete/edit steps aren't trace-keyed by node id (the id is dynamic); if
+  // reached they ran, if in an untaken branch they're skipped.
+  if (block.kind === 'complete' || block.kind === 'edit') {
+    if (force) return force;
+    return done ? 'ran' : 'pending';
+  }
   if (isTracedLeaf(block)) {
     const entries = traceById[block.id];
     if (entries && entries.length) return entries.some((e) => e.status === 'failed') ? 'failed' : 'ran';
@@ -167,6 +173,15 @@ export function describeBlock(block, traceById = {}) {
   }
   if (block.kind === 'setVar') {
     return { ...base, kind: 'setVar', icon: 'code', title: block.name || 'value', detail: block.valueText || '' };
+  }
+  if (block.kind === 'complete') {
+    const label = block.method === 'completeAll' ? 'Complete all open tasks'
+      : block.method === 'completeLatest' ? 'Complete the latest task'
+      : 'Complete task';
+    return { ...base, kind: 'complete', icon: 'check', title: label, detail: block.method === 'complete' ? (block.refText || '') : '' };
+  }
+  if (block.kind === 'edit') {
+    return { ...base, kind: 'edit', icon: 'task', field: block.field, valueText: block.valueText, title: block.field, detail: block.valueText };
   }
   if (block.kind === 'return') {
     return { ...base, kind: 'return', icon: 'check', title: block.valueText ? `Return ${block.valueText}` : 'Return', detail: '' };

@@ -31,6 +31,15 @@ describe('templateLint · missing dependencies', () => {
     assert.deepEqual(lintTemplateRefs('page.evaluate(user.emails.WinBack)', READY), []);
   });
 
+  it('flags editing an unapproved contact field (even before templates load)', () => {
+    const [d] = lintTemplateRefs('page.contact.ssn = "123";', { ready: false });
+    assert.equal(d.kind, 'edit');
+    assert.equal(d.name, 'ssn');
+    assert.match(d.message, /not an editable field/);
+    // an approved field is fine, and == comparisons are not edits
+    assert.deepEqual(lintTemplateRefs('page.contact.jobTitle = "VP"; if (page.contact.email == "x") {}', READY).filter((x) => x.kind === 'edit'), []);
+  });
+
   it('passes a name that IS saved', () => {
     assert.deepEqual(lintTemplateRefs('actions.sendEmail(user.email("Win-back"))', READY), []);
   });

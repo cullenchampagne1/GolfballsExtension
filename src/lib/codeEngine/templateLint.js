@@ -13,8 +13,11 @@
    alone — they can only be checked at run time.
 ─────────────────────────────────────────────────────────────── */
 
+import { APPROVED_CONTACT_FIELDS } from './contracts.js';
+
 const REF_RE = /\buser\.(email|task|call)\(\s*(["'])([^"']+)\2/g;
 const KEYED_RE = /\buser\.(emails|tasks|calls)\.([A-Za-z_$][\w$]*)/g;
+const EDIT_RE = /\bpage\.contact\.([A-Za-z_$][\w$]*)\s*=(?!=)/g;
 
 /**
  * @param {string} source
@@ -22,8 +25,19 @@ const KEYED_RE = /\buser\.(emails|tasks|calls)\.([A-Za-z_$][\w$]*)/g;
  * @returns {Array<{ from, to, kind, name, message }>}
  */
 export function lintTemplateRefs(source, bindings) {
-  if (!bindings || !bindings.ready) return [];
   const src = String(source || '');
+  // Editing an unapproved contact field is always a hard error (no write path)
+  // — independent of whether the saved-template lists have loaded.
+  const editErrors = [];
+  EDIT_RE.lastIndex = 0;
+  let e;
+  while ((e = EDIT_RE.exec(src)) !== null) {
+    const field = e[1];
+    if (Object.hasOwn(APPROVED_CONTACT_FIELDS, field)) continue;
+    const from = e.index + e[0].indexOf(field);
+    editErrors.push({ from, to: from + field.length, kind: 'edit', name: field, message: `page.contact.${field} is not an editable field. Editable: ${Object.keys(APPROVED_CONTACT_FIELDS).join(', ')}.` });
+  }
+  if (!bindings || !bindings.ready) return editErrors;
   const known = {
     email: new Set(bindings.emails || []),
     task: new Set(bindings.tasks || []),
@@ -34,7 +48,7 @@ export function lintTemplateRefs(source, bindings) {
     task: new Set(bindings.taskIds || []),
     call: new Set(bindings.callIds || []),
   };
-  const out = [];
+  const out = [...editErrors];
   let m;
 
   // user.email("Name") — by name.

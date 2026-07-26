@@ -21,8 +21,10 @@ export function buildCodeSpec(bindings = {}) {
     bindings: {
       page: {
         'page.contact': 'the current contact — { contactName, name, email, account, value, contactId }',
+        'page.contact.<field> = value': 'edit an APPROVED contact field (firstName, lastName, middleInitial, companyName, jobTitle, email, phone, zipCode, userType, country); edits are grouped into one write at run end (or page.contact.commit())',
         'page.contacts': 'array — the whole selected audience',
         'page.count': 'number — audience size',
+        'page.tasks': '{ open[], done[] } CRM tasks; page.tasks.open[i].complete() / page.tasks.completeAll() / completeLatest()',
         'page.evaluate(ref)': 'render a saved-template REFERENCE into a sendable outbound object; await it — it is its own (slow) step',
       },
       user: {

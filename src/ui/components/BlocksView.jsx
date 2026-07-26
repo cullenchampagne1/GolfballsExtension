@@ -65,7 +65,7 @@ const GATE_LABEL = { auto: 'auto', confirm: 'confirm', hard: 'gated' };
 /* Which kinds are "steps": email/task/call sends, email evaluations, returns,
    and branches (if/switch) + loops. These get a numbered badge + run status.
    set-variable / comment / raw code are supporting blocks, not steps. */
-const STEP_KINDS = new Set(['action', 'evaluate', 'return', 'branch', 'loop', 'cases']);
+const STEP_KINDS = new Set(['action', 'evaluate', 'complete', 'return', 'branch', 'loop', 'cases']);
 const isStep = (b) => STEP_KINDS.has(b.kind);
 /** True for branch-family containers (if / switch). */
 const isBranchKind = (b) => b.kind === 'branch' || b.kind === 'cases';
@@ -189,6 +189,20 @@ function renderBlocks(blocks, ctx, tone, forceStatus, rail) {
       i = j;
       continue;
     }
+    if (b.kind === 'edit') {
+      // Merge consecutive contact edits into ONE grouped "Edit contact" card.
+      const fields = [];
+      let j = i;
+      while (j < blocks.length && blocks[j].kind === 'edit') {
+        const d = describeBlock(blocks[j]);
+        fields.push({ field: d.field, value: d.valueText });
+        j += 1;
+      }
+      const status = runStatus(b, ctx.traceById, { done: ctx.done, force: forceStatus });
+      out.push(<ArmItem key={`ed-${b.id}`} rail={rail}><EditGroupCard fields={fields} status={status} /></ArmItem>);
+      i = j;
+      continue;
+    }
     out.push(
       <ArmItem key={b.id} rail={rail}>
         <BlockNode block={b} ctx={ctx} tone={tone} forceStatus={forceStatus} />
@@ -240,12 +254,51 @@ function SetVarCard({ block, greyed }) {
   );
 }
 
+/* A grouped "Edit contact" card — the staged field changes applied together
+   as one CRM write. */
+function EditGroupCard({ fields, status }) {
+  const mono = 'var(--gb-font-mono, ui-monospace, monospace)';
+  const greyed = status === 'skipped' || status === 'cut';
+  const ran = status === 'ran';
+  return (
+    <div style={{ border: `1px solid ${ran ? 'var(--gb-success-tint-border)' : 'var(--gb-border-default)'}`, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-surface-1)', overflow: 'hidden', boxShadow: '0 1px 0 rgba(0,0,0,.12)', opacity: greyed ? 0.55 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        <span style={{ display: 'inline-flex', width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderRadius: 5, background: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', color: 'var(--gb-info-fg)', flexShrink: 0 }}><I.task size={12} /></span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Edit contact</span>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {ran && <Tag tone="success" size="xs">RAN</Tag>}
+          {greyed && <Tag tone="neutral" size="xs">SKIPPED</Tag>}
+          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', padding: '1px 6px', borderRadius: 999, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', textTransform: 'uppercase' }}>{fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+        </span>
+      </div>
+      <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {fields.map((f, i) => (
+          <div key={i} style={{ fontSize: 11, fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--gb-info-fg)', fontWeight: 700 }}>{f.field}</span>
+            <span style={{ color: 'var(--gb-text-ghost)' }}> = </span>
+            <span style={{ color: 'var(--gb-text-muted)' }}>{f.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BlockNode({ block, ctx, tone, forceStatus }) {
   const { traceById, done, runningId, indices } = ctx;
   const status = runStatus(block, traceById, { done, runningId, force: forceStatus });
   const idx = indices[block.id];
 
   if (block.kind === 'compose') return <ComposeCard block={block} />;
+
+  if (block.kind === 'complete') {
+    const d = describeBlock(block, traceById);
+    return (
+      <Card tone="info" status={status} idx={idx} icon={I.check}
+        title={d.title} sublabel={d.detail || null}
+        tag={<Tag tone="neutral" size="xs">COMPLETE TASK</Tag>} />
+    );
+  }
 
   if (block.kind === 'evaluate') {
     const d = describeBlock(block, traceById);

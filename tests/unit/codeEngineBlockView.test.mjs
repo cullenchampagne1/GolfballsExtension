@@ -142,6 +142,15 @@ describe('blockView · block descriptors', () => {
     assert.equal(body[0].contract, 'logCall');
   });
 
+  it('recognizes page.contact edits + task completes as their own blocks', () => {
+    const blocks = translateProgram('page.contact.jobTitle = "VP"; page.tasks.open[0].complete(); page.tasks.completeAll();').blocks;
+    assert.deepEqual(blocks.map((b) => b.kind), ['edit', 'complete', 'complete']);
+    assert.equal(blocks[0].field, 'jobTitle');
+    assert.equal(describeBlock(blocks[0]).title, 'jobTitle');
+    assert.equal(describeBlock(blocks[1]).title, 'Complete task');
+    assert.equal(describeBlock(blocks[2]).title, 'Complete all open tasks');
+  });
+
   it('titles control-flow blocks readably', () => {
     const [branch] = translateProgram('if (page.n > 3) { await actions.logCall({ subject: "x" }); }').blocks;
     assert.equal(describeBlock(branch).title, 'If page.n > 3');

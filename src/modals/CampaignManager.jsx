@@ -15,6 +15,7 @@ import {
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
+import { runEngine } from '../lib/page-engine/index.js';
 import { translateProgram, flattenBlocks } from '../lib/codeEngine/translate.js';
 import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
@@ -269,9 +270,17 @@ function ImportCampaignsModal({ onClose, onDone }) {
 /* ── Root ── */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* The `page` model for one contact — same shape the panel simulates against. */
-function pageFor(contact, audience) {
-  return { contact: contact || {}, contacts: audience, count: audience.length };
+/* The `page` model for one contact — the live CRM page (runEngine: real tasks +
+   contact fields) merged with the audience contact, so page.tasks / page.contact
+   edits target the actual page in a single-contact simulation. */
+function pageFor(contact, audience, live) {
+  const l = live || {};
+  return {
+    contact: { ...(l.contact || {}), ...(contact || {}) },
+    contacts: audience,
+    count: audience.length,
+    tasks: l.tasks || { open: [], done: [] },
+  };
 }
 
 /* ── Run engine (code-driven) ───────────────────────────────────
@@ -291,7 +300,7 @@ function useCodeRunner() {
 
   const start = async (args) => {
     lastArgsRef.current = args;
-    const { code, audience, user, pace = 140 } = args;
+    const { code, audience, user, pace = 140, live } = args;
     controlRef.current = { paused: false, stopped: false };
     setPaused(false); setComplete(false); setRunning(true);
     const init = {};
@@ -307,7 +316,7 @@ function useCodeRunner() {
       const c = audience[i];
       setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } }));
       let res;
-      try { res = await simulateProgram(code, pageFor(c, audience), { run, user }); }
+      try { res = await simulateProgram(code, pageFor(c, audience, live), { run, user }); }
       catch (e) { res = { ok: false, trace: [], error: String(e?.message || e) }; }
       const ran = res.trace.filter((t) => t.status === 'ran').length;
       const failed = res.trace.some((t) => t.status === 'failed') || !res.ok;
@@ -661,6 +670,10 @@ export function CampaignManager({ onClose, contacts = [] }) {
 
   // The read-only `page` model the code panel simulates against — the live
   // audience selection, so `page.contacts` / `page.contact` resolve for real.
+  // The live CRM page (real tasks + contact fields) for page.tasks/page.contact.
+  const livePage = useMemo(() => {
+    try { const m = typeof document !== 'undefined' ? runEngine(document) : null; return (m && (m.data || m)) || {}; } catch { return {}; }
+  }, []);
   const audienceKeyed = useMemo(() => contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` })), [contacts]);
   // Keep the chosen simulation contact valid as the audience changes.
   useEffect(() => {
@@ -734,7 +747,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
     setView('blocks');
     setSim({ status: 'running', trace: [], replayIdx: -1, done: false, result: null, contactName: contact?.contactName || contact?.name || '(contact)' });
     let res;
-    try { res = await simulateProgram(campaign.automation || '', pageFor(contact, audienceKeyed), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData }); }
+    try { res = await simulateProgram(campaign.automation || '', pageFor(contact, audienceKeyed, livePage), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData }); }
     catch (e) { if (my === simRunRef.current) { toast?.error?.('Simulate failed — ' + String(e?.message || e)); setSim((s) => ({ ...s, status: 'idle' })); } return; }
     if (my !== simRunRef.current) return;
     if (res.error) toast?.error?.(res.error);
@@ -760,7 +773,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
     if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
     resetSim();
     setRunMode(true);
-    runner.start({ code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140 });
+    runner.start({ code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140, live: livePage });
   };
 
   return (

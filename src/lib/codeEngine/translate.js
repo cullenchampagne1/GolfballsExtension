@@ -99,6 +99,32 @@ function objectStringProp(src, objNode, key) {
   return null;
 }
 
+/** `page.contact.<field> = <value>` → { field, valueText }; else null. */
+function asContactEdit(src, node) {
+  if (!node || node.name !== 'AssignmentExpression') return null;
+  const member = childByName(node, 'MemberExpression');
+  if (!member) return null;
+  const m = slice(src, member.from, member.to).match(/^page\s*\.\s*contact\s*\.\s*([A-Za-z_$][\w$]*)$/);
+  if (!m) return null;
+  const eq = childByName(node, 'Equals');
+  const val = eq ? children(node).find((n) => n.from >= eq.to) : null;
+  return { field: m[1], valueText: val ? slice(src, val.from, val.to) : '' };
+}
+
+/** `page.tasks…complete()` / `completeAll()` / `completeLatest()` → { method };
+ *  else null. This becomes a "complete task" step. */
+function asTaskComplete(src, node) {
+  let call = node;
+  if (call.name === 'AwaitExpression') call = childByName(call, 'CallExpression') || call;
+  if (call.name !== 'CallExpression') return null;
+  const member = childByName(call, 'MemberExpression');
+  if (!member) return null;
+  const mt = slice(src, member.from, member.to);
+  if (!/page\s*\.\s*tasks/.test(mt)) return null;
+  const m = mt.match(/\.\s*(complete|completeAll|completeLatest)$/);
+  return m ? { method: m[1], refText: mt } : null;
+}
+
 /** If `node` is `page.evaluate(ref)` (optionally awaited), return its span +
  *  the reference text; else null. This becomes an "evaluate" step. */
 function asEvalCall(src, node) {
@@ -154,6 +180,13 @@ function statementToBlock(src, stmt) {
         kind: 'action', contract: action.contract, argText: action.argText,
         assignTo, text,
       };
+    }
+    // page.contact.field = value → an "edit" step (grouped in the view).
+    if (stmt.name === 'ExpressionStatement') {
+      const edit = asContactEdit(src, expr);
+      if (edit) return { id, kind: 'edit', field: edit.field, valueText: edit.valueText, text };
+      const comp = asTaskComplete(src, expr);
+      if (comp) return { id, kind: 'complete', method: comp.method, refText: comp.refText, text };
     }
     // const outbound = await page.evaluate(ref) → an "evaluate" step.
     const evalCall = expr ? asEvalCall(src, expr) : null;

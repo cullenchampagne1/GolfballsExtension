@@ -58,10 +58,14 @@ const STATIC = {
       ['contact.account', 'company / account name'],
       ['contact.value', 'handed-off value ($), if any'],
       ['contact.contactId', 'CRM id'],
+      ['page.contact.field = …', 'edit a field (approved fields, grouped write)'],
+      ['page.tasks.open[i].complete()', 'complete a CRM task'],
+      ['page.tasks.completeAll()', 'complete every open task'],
     ],
     examples: [
       'const c = page.contact;\nif (c.email) await actions.sendEmail(user.email("Win-back"));',
-      'for (const c of page.contacts) { … }',
+      'page.contact.jobTitle = "VP Sales";   // grouped, one write',
+      'if (page.tasks.open.length) page.tasks.open[0].complete();',
     ],
   },
   helpers: {

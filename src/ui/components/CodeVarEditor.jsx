@@ -14,6 +14,9 @@ import { contactSchema } from '../../lib/page-schemas/contact.js';
 import { listPaths } from '../../lib/page-engine/resolve.js';
 import { describeHelpers, staticCheck } from '../../lib/page-engine/code-runtime.js';
 import { lintTemplateRefs } from '../../lib/codeEngine/templateLint.js';
+import { APPROVED_CONTACT_FIELDS } from '../../lib/codeEngine/contracts.js';
+
+const APPROVED_FIELD_NAMES = Object.keys(APPROVED_CONTACT_FIELDS);
 import { Btn } from './Btn.jsx';
 import { Tag } from './Tag.jsx';
 import { Spinner } from '../shared.jsx';
@@ -175,9 +178,10 @@ const BINDING_OPTIONS = {
     { label: 'user.call', type: 'function', detail: '(name) → saved call' },
   ],
   page: [
-    { label: 'page.contact', type: 'variable', detail: 'the contact being run' },
+    { label: 'page.contact', type: 'variable', detail: 'the contact being run (read + edit)' },
     { label: 'page.contacts', type: 'variable', detail: 'the audience []' },
     { label: 'page.count', type: 'variable', detail: 'audience size' },
+    { label: 'page.tasks', type: 'variable', detail: 'open/done CRM tasks — .open[i].complete()' },
     { label: 'page.evaluate', type: 'function', detail: '(ref) → outbound — renders a saved template (a step)' },
   ],
 };
@@ -223,6 +227,19 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
       const before = context.matchBefore(/[\w$.[\]'"-]*/);
       if (!before || (before.from === before.to && !context.explicit)) return null;
       // user.emails.<Id> / user.tasks.<Id> / user.calls.<Id> → the code ids.
+      // page.contact.<field> → editable fields · page.tasks.<method>.
+      const pageMember = before.text.match(/^page\.(contact|tasks)\.[\w$]*$/);
+      if (pageMember) {
+        const opts = pageMember[1] === 'contact'
+          ? APPROVED_FIELD_NAMES.map((f) => ({ label: `page.contact.${f}`, type: 'property', detail: 'editable field' }))
+          : [
+            { label: 'page.tasks.open', type: 'variable', detail: 'open tasks []' },
+            { label: 'page.tasks.done', type: 'variable', detail: 'completed tasks []' },
+            { label: 'page.tasks.completeAll', type: 'function', detail: 'complete every open task' },
+            { label: 'page.tasks.completeLatest', type: 'function', detail: 'complete the latest' },
+          ];
+        return { from: before.from, options: opts, validFor: /^[\w$.]*$/ };
+      }
       const keyed = before.text.match(/^user\.(emails|tasks|calls)\.[\w$]*$/);
       if (keyed) {
         const b = bindingsRef.current || {};
