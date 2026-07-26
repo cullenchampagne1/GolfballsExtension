@@ -46,6 +46,18 @@ describe('email composer slash commands', () => {
     );
   });
 
+  it('matches + labels templates by the spaceless code id (the / menu can\'t type spaces)', () => {
+    const templates = [{ id: 'a9', type: 'account', name: 'Win-back Campaign (v2)' }];
+    // the id is camelCase, numbers→words, no spaces
+    assert.equal(accountEmailTemplates(templates)[0].codeId, 'WinBackCampaignVTwo');
+    // typing "/WinBack" (no space) matches via the code id
+    assert.deepEqual(searchAccountEmailTemplates(templates, 'WinBack').map((t) => t.id), ['a9']);
+    // the entry shows the code id as its label (name kept as description)
+    const [entry] = searchEmailComposerEntries({ templates, query: 'winback' });
+    assert.equal(entry.label, 'WinBackCampaignVTwo');
+    assert.equal(entry.description, 'Win-back Campaign (v2)');
+  });
+
   it('evaluates variables through the live-page resolver before rendering the body', async () => {
     const calls = [];
     const template = {

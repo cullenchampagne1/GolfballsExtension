@@ -1,4 +1,5 @@
 import { renderTemplate } from './variableResolution.js';
+import { camelId } from './codeEngine/templateId.js';
 
 /* Shared slash-command registry for the Email Preview composer. Commands
    intentionally carry only metadata; the composer supplies page-specific
@@ -47,8 +48,14 @@ if (!emailComposerCommandRegistry.get('saved-proposals')) {
   });
 }
 
+/* The spaceless code id (camelCase, numbers→words) — the `/` menu matches +
+   displays this because the slash query can't contain spaces. */
+function withCodeId(item) {
+  return item && item.codeId ? item : { ...item, codeId: camelId(item?.name || item?.id || '') };
+}
+
 function searchableText(item) {
-  return [item?.label, item?.name, item?.description, ...(item?.keywords || [])]
+  return [item?.codeId, item?.label, item?.name, item?.description, ...(item?.keywords || [])]
     .filter(Boolean).join(' ').toLowerCase();
 }
 
@@ -60,7 +67,8 @@ export function searchEmailComposerCommands(query, registry = emailComposerComma
 
 export function accountEmailTemplates(templates) {
   return (Array.isArray(templates) ? templates : [])
-    .filter((template) => template?.enabled !== false && template?.type === 'account');
+    .filter((template) => template?.enabled !== false && template?.type === 'account')
+    .map(withCodeId);
 }
 
 export function searchAccountEmailTemplates(templates, query) {
@@ -70,7 +78,7 @@ export function searchAccountEmailTemplates(templates, query) {
 }
 
 export function savedProposals(proposals) {
-  return (Array.isArray(proposals) ? proposals : []).filter((proposal) => proposal?.id);
+  return (Array.isArray(proposals) ? proposals : []).filter((proposal) => proposal?.id).map(withCodeId);
 }
 
 export function searchSavedProposals(proposals, query) {
@@ -94,8 +102,9 @@ export function searchEmailComposerEntries({ templates, proposals, query, regist
       buckets.push(searchAccountEmailTemplates(templates, query).map((template) => ({
           id: `${command.id}:${template.id}`,
           commandId: command.id,
-          label: template.name || template.subject || 'Untitled template',
-          description: command.label,
+          codeId: template.codeId,
+          label: template.codeId || template.name || template.subject || 'Untitled',
+          description: template.name || command.label,
           value: template,
         })));
       continue;
@@ -104,8 +113,9 @@ export function searchEmailComposerEntries({ templates, proposals, query, regist
       buckets.push(searchSavedProposals(proposals, query).map((proposal) => ({
         id: `${command.id}:${proposal.id}`,
         commandId: command.id,
-        label: proposal.name || 'Untitled proposal',
-        description: command.label,
+        codeId: proposal.codeId,
+        label: proposal.codeId || proposal.name || 'Untitled',
+        description: proposal.name || command.label,
         value: proposal,
       })));
       continue;
