@@ -374,6 +374,14 @@
       ]
     },
     {
+      "name": "guard \u00b7 offline mockup catalog import",
+      "id": "guard-mockup-catalog-import",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_mockup_catalog_import.py"
+      ]
+    },
+    {
       "name": "flow \u00b7 ASP.NET calendar form-state reconstruction",
       "file": "tests/unit/calendarFormState.test.mjs"
     },

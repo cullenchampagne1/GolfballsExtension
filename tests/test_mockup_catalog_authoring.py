@@ -16,9 +16,11 @@ three things that keep that safe:
 import copy
 import importlib.util
 import re
+import struct
 import sys
 import unittest
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import yaml
 
@@ -140,6 +142,70 @@ class ValidateDocumentTests(unittest.TestCase):
         """A 2x2 grid with 3 sources is normal — the shipped towel is sparse."""
         _, _, products = registry()._normalize_v3(document())
         self.assertEqual(len(products["venture-towel"]["sources"]), 3)
+
+    def test_accepts_a_large_catalog_axis_without_raising_batch_limits(self):
+        """Catalog completeness and one-batch image count are separate limits."""
+        values = [
+            {"id": f"color-{index}", "label": f"Color {index}"}
+            for index in range(33)
+        ]
+        sources = [
+            {
+                "id": value["id"],
+                "label": value["label"],
+                "option_values": {"color": value["id"]},
+                "reference_image_url": f"{REF}/{value['id']}.png",
+            }
+            for value in values
+        ]
+        row = product(
+            option_groups=[{
+                "id": "color",
+                "label": "Color",
+                "presentation": "swatch",
+                "columns": 4,
+                "options": values,
+            }],
+            sources=sources,
+        )
+        self.assertEqual(
+            registry().validate_document({
+                "schema_version": 3,
+                "constraints": {"max_products": 5, "max_images": 20},
+                "products": [row],
+            }),
+            1,
+        )
+
+    def test_rejects_more_than_50_registered_source_options(self):
+        values = [
+            {"id": f"color-{index}", "label": f"Color {index}"}
+            for index in range(51)
+        ]
+        row = product(
+            option_groups=[{
+                "id": "color",
+                "label": "Color",
+                "presentation": "swatch",
+                "columns": 4,
+                "options": values,
+            }],
+            sources=[
+                {
+                    "id": value["id"],
+                    "label": value["label"],
+                    "option_values": {"color": value["id"]},
+                    "reference_image_url": f"{REF}/{value['id']}.png",
+                }
+                for value in values
+            ],
+        )
+        with self.assertRaises(PRODUCTS.ProductConfigurationError):
+            registry().validate_document({
+                "schema_version": 3,
+                "constraints": {"max_products": 5, "max_images": 20},
+                "products": [row],
+            })
 
     def test_rejects_a_source_that_misses_an_option_group(self):
         broken = document()
@@ -319,6 +385,93 @@ class CatalogLinkTests(unittest.TestCase):
         broken["products"][0]["catalog_notes"] = "not a registered key"
         with self.assertRaises(PRODUCTS.ProductConfigurationError):
             registry().validate_document(broken)
+
+
+class ManagedProofCatalogTests(unittest.TestCase):
+    """The first audited non-ball products stay complete and renderable."""
+
+    EXPECTED_SOURCES = {
+        "premium-metal-ball-marker": {
+            "white-gold", "red-gold", "navy-gold", "black-gold",
+            "copper-copper", "silver-silver", "gold-gold",
+        },
+        "richardson-220-unstructured-hat": {
+            "black", "navy", "stone", "white", "charcoal", "maroon",
+            "dark-green", "slate",
+        },
+        "adidas-3-stripes-chest-sport-shirt": {
+            "black-white", "white-black", "lucky-blue-white",
+            "collegiate-navy-white", "collegiate-red-black",
+            "collegiate-royal-grey-three", "grey-five-black",
+        },
+        "corkcicle-16oz-classic-tumbler": {
+            "midnight-navy", "matte-black", "white",
+        },
+    }
+    REFERENCE_ROUTE = (
+        "/projects/golfballs-extension/product-generation/references/"
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config_root = ROOT.parent / "api-access-configs"
+        cls.source = cls.config_root / "golfballs-image-generation.yaml"
+        if not cls.source.is_file():
+            raise unittest.SkipTest("managed catalog is local-only")
+        cls.document = yaml.safe_load(cls.source.read_text())
+        cls.products = {
+            row["id"]: row for row in cls.document.get("products", [])
+        }
+
+    def test_proof_products_register_every_audited_current_source(self):
+        for product_id, expected in self.EXPECTED_SOURCES.items():
+            with self.subTest(product=product_id):
+                product = self.products[product_id]
+                self.assertEqual(
+                    {source["id"] for source in product["sources"]},
+                    expected,
+                )
+                self.assertEqual(len(product["variations"]), 1)
+                self.assertTrue(product["catalog_sku"])
+                self.assertTrue(product["catalog_id"])
+
+    def test_proof_product_references_are_local_square_png_assets(self):
+        for product_id in self.EXPECTED_SOURCES:
+            for source in self.products[product_id]["sources"]:
+                with self.subTest(product=product_id, source=source["id"]):
+                    parsed = urlparse(source["reference_image_url"])
+                    self.assertIn(self.REFERENCE_ROUTE, parsed.path)
+                    relative = unquote(
+                        parsed.path.split(self.REFERENCE_ROUTE, 1)[1]
+                    )
+                    asset = self.config_root / "references" / relative
+                    self.assertTrue(asset.is_file(), f"missing {asset}")
+                    with asset.open("rb") as handle:
+                        header = handle.read(24)
+                    self.assertEqual(header[:8], b"\x89PNG\r\n\x1a\n")
+                    width, height = struct.unpack(">II", header[16:24])
+                    self.assertEqual((width, height), (800, 800))
+
+    def test_proof_catalog_excludes_stale_or_nonvisual_options(self):
+        hat = self.products["richardson-220-unstructured-hat"]
+        hat_colors = {
+            option["id"]
+            for option in hat["option_groups"][0]["options"]
+        }
+        self.assertTrue({"purple", "red", "sky", "yellow"}.isdisjoint(hat_colors))
+
+        tumbler = self.products["corkcicle-16oz-classic-tumbler"]
+        tumbler_colors = {
+            option["id"]
+            for option in tumbler["option_groups"][0]["options"]
+        }
+        self.assertNotIn("powder-blue", tumbler_colors)
+
+        polo = self.products["adidas-3-stripes-chest-sport-shirt"]
+        self.assertNotIn(
+            "size",
+            {group["id"] for group in polo["option_groups"]},
+        )
 
 
 class DocumentRenderTests(unittest.TestCase):

@@ -100,9 +100,9 @@ describe('catalog draft · catalog properties become axes', () => {
     assert.deepEqual(axis.options.map((o) => o.id), ['red', 'blue']);
     const wide = axisFromCatalogProperty({
       label: 'Color',
-      options: Array.from({ length: 30 }, (_, i) => `Shade ${i}`),
+      options: Array.from({ length: 60 }, (_, i) => `Shade ${i}`),
     });
-    assert.equal(wide.options.length, 20);
+    assert.equal(wide.options.length, 50);
   });
 
   it('rejects a facet with no usable options', () => {
@@ -190,14 +190,14 @@ describe('catalog draft · blocking issues', () => {
   it('reports the source ceiling instead of silently truncating', () => {
     const wide = {
       id: 'color', label: 'Color', presentation: 'swatch', columns: 3,
-      options: Array.from({ length: 11 }, (_, i) => ({ id: `c${i}`, label: `C${i}` })),
+      options: Array.from({ length: 26 }, (_, i) => ({ id: `c${i}`, label: `C${i}` })),
     };
     const cells = {};
     for (const combination of combinationsOf([SCENE, wide])) {
       cells[combinationKey(combination)] = { referenceUrl: `${REF}/x.png` };
     }
     const { product, issues } = buildCatalogProduct(draft({ axes: [SCENE, wide], cells }));
-    assert.equal(product.sources.length, 22);
+    assert.equal(product.sources.length, 52);
     assert.ok(issues.some((i) => i.includes(String(MAX_SOURCES))),
       'over-capacity must be reported, not truncated behind the user’s back');
   });
