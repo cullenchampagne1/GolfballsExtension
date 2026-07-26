@@ -286,6 +286,10 @@
       "file": "tests/unit/codeEngineExecutor.test.mjs"
     },
     {
+      "name": "settings \u00b7 feature surface config + registry",
+      "file": "tests/unit/featureConfig.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },
