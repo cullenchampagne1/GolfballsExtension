@@ -34,9 +34,12 @@
 import { FEATURE_FLAGS } from '../flags.js';
 
 /* one() — a standalone feature: a single shelf action whose handler is just
-   "call this window global". Popup + shelf, default pages. */
-const one = (id, label, icon, global, pages = ['*']) => ({
+   "call this window global". Popup + shelf, default pages. `popupLabel` lets a
+   feature read differently on the popup than on the shelf (e.g. the image
+   viewer is "Submit Proof" in the popup, "Image Viewer" on the shelf). */
+const one = (id, label, icon, global, pages = ['*'], popupLabel = null) => ({
   popup: true,
+  popupLabel,
   shelf: { actions: [{ id, label, icon }], pages, global },
 });
 
@@ -45,6 +48,7 @@ const one = (id, label, icon, global, pages = ['*']) => ({
    Still popup-launchable (the popup messages the tab to run the action). */
 const ctx = (actions, pages) => ({
   popup: true,
+  popupLabel: null,
   shelf: { actions, pages, dynamic: true },
 });
 
@@ -54,13 +58,16 @@ const SURFACES = {
   taskListEnabled:        one('gb-open-tasks',         'Task List',         'check',     '__gbShowTaskListModal'),
   giftCatalogEnabled:     one('gb-open-gift-catalog',  'Gifting Catalog',   'card',      '__gbOpenGiftCatalog'),
   mockupStudioEnabled:    one('gb-open-mockup-studio', 'Mockup Studio',     'sparkle',   '__gbOpenMockupStudio'),
-  imagePreviewEnabled:    one('gb-open-image-viewer',  'Image Viewer',      'eye',       '__gbOpenImagePreview'),
+  // The image viewer IS submit-proof — one modal, one feature. Reads "Image
+  // Viewer" on the shelf, "Submit Proof" in the popup (order-context).
+  imagePreviewEnabled:    one('gb-open-image-viewer',  'Image Viewer',      'eye',       '__gbOpenImagePreview', ['*'], 'Submit Proof'),
   watchListEnabled:       one('gb-open-watch-list',    'Watchlist',         'eye',       '__gbShowWatchListModal'),
   notificationsEnabled:   one('gb-open-notifications', 'Notifications',     'alert',     '__gbShowNotificationsModal'),
   crmNewContactEnabled:   one('gb-open-new-contact',   'New Contact',       'user',      '__gbShowCrmCreateContactModal'),
-  campaignManagerEnabled: one('gb-open-campaigns',     'Campaign Manager',  'megaphone', '__gbOpenCampaignManager'),
   // Margin calc is meaningful on order pages by default; the global works anywhere.
   marginCalcEnabled:      one('gb-open-margin-calc',   'Margin Calculator', 'bolt',      '__gbShowMarginCalcModal', ['order']),
+  // Order Edit depends on the order page, so it's order-scoped on both surfaces.
+  orderEditEnabled:       one('gb-order-edit',         'Order Edit',        'edit',      '__gbShowOrderEditModal', ['order']),
 
   // ── Page-contextual launchers (popup + shelf, scoped pages) ──
   callLogEnabled:     ctx([{ id: 'gb-call-contact', label: 'Call contact', icon: 'phone' }, { id: 'gb-log-incoming-call', label: 'Log incoming call', icon: 'edit' }], ['contact', 'account']),
@@ -68,6 +75,9 @@ const SURFACES = {
   phoneFinderEnabled: ctx([{ id: 'gb-find-phone', label: 'Find phone', icon: 'search' }], ['contact']),
   copyIdsEnabled:     ctx([{ id: 'gb-copy-order-ids', label: 'Copy order IDs', icon: 'copy' }], ['order-index']),
   calendarEnabled:    ctx([{ id: 'gb-order-dates', label: 'Order dates', icon: 'cog' }], ['order']),
+
+  // Campaign Manager is only ever opened from CRM Search / Tasks (its contact
+  // set), never as a standalone launcher → toggle-only (NO_SURFACES).
 };
 
 const NO_SURFACES = Object.freeze({ popup: false, shelf: null });

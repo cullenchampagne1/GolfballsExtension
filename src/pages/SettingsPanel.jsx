@@ -27,7 +27,7 @@ import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { FeatureRow } from '../ui/components/FeatureRow.jsx';
 import { FeatureShelfGrid } from '../ui/components/FeatureShelfGrid.jsx';
-import { FEATURE_REGISTRY, featureByKey, shelfFeatures } from '../lib/features/featureRegistry.js';
+import { FEATURE_REGISTRY, featureByKey } from '../lib/features/featureRegistry.js';
 import { loadFeatureConfig, saveFeatureConfig, normalizeFeatureConfig, togglePage } from '../lib/features/featureConfig.js';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
 import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
@@ -1433,11 +1433,14 @@ export function SettingsPanel({ remotePolicy }) {
   };
   const setFeatureSurface = (key, surface, value) => updateFeatureCfg(key, { [surface]: value });
   const toggleFeaturePage = (key, page) => updateFeatureCfg(key, { pages: togglePage(featureCfg[key]?.pages, page) });
-  /* Grid cell: placing a feature on a page implies it belongs on the shelf,
+  /* Grid cell: placing an action on a page implies it belongs on the shelf,
      so flip showInShelf on as we edit the page set. Off happens via the row. */
   const toggleFeaturePageGrid = (key, page) => updateFeatureCfg(key, { showInShelf: true, pages: togglePage(featureCfg[key]?.pages, page) });
-  // Grid rows: shelf-capable features that are enabled (the flag is on).
-  const gridFeatures = shelfFeatures().filter((f) => !!flags[f.key] && visible(f.key));
+  /* The Action Shelf table manages CUSTOM, label-less actions only — every
+     built-in feature is controlled by its own row above (with a pages picker),
+     so it must NOT also appear here. Custom actions (code-block shelf actions)
+     land here once that editor ships; empty until then. */
+  const customShelfActions = [];
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
   const setCredentialValue = (key, value) => {
     const next = { ...credentials, [key]: value };
@@ -1530,18 +1533,22 @@ export function SettingsPanel({ remotePolicy }) {
         </div>
       </section>
 
-      {/* Action Shelf — the "what shows where" matrix. Every enabled feature
-          that contributes a quick-action gets a row; each cell places that
-          action on a CRM page. Same featureConfig the per-feature rows edit. */}
-      {gridFeatures.length > 0 && (
-        <section>
-          <SectionLabel>Action Shelf</SectionLabel>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', margin: '-2px 0 10px' }}>
-            Choose which pages each quick-action appears on. “All” lights every page; pick specific pages to narrow it.
-          </div>
-          <FeatureShelfGrid features={gridFeatures} cfg={featureCfg} getIcon={getIcon} onToggleCell={toggleFeaturePageGrid} />
-        </section>
-      )}
+      {/* Custom Actions — the "what shows where" matrix for label-less custom
+          shelf actions (code-block actions). Built-in features are managed by
+          their own rows above, so only custom actions appear here. The Add
+          button (code-block editor) is wired in a later phase. */}
+      <section>
+        <SectionLabel action={
+          <IconBtn size="xs" title="Add a custom action (coming soon)"
+            onClick={() => window.__gbToast?.info?.('Custom shelf actions are coming soon', { duration: 2600 })}>
+            <I.plus />
+          </IconBtn>
+        }>Custom Actions</SectionLabel>
+        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', margin: '-2px 0 10px' }}>
+          Build your own quick-actions and choose which pages they appear on. Built-in features are controlled by their toggles above.
+        </div>
+        <FeatureShelfGrid features={customShelfActions} cfg={featureCfg} getIcon={getIcon} onToggleCell={toggleFeaturePageGrid} />
+      </section>
 
       {/* UI Scale — independent zoom per extension surface. Lets the
           rep run the host CRM at one browser zoom and the extension

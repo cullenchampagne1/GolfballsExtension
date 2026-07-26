@@ -4872,11 +4872,6 @@ export const HELP_CONTENT = {
                 "Order Edit button in the email popup."
               ],
               [
-                "Submit Proof",
-                "On",
-                "Send art proofs from the order page."
-              ],
-              [
                 "Email Preview",
                 "On",
                 "Click email rows in Case Email History to open the full thread."
@@ -4897,7 +4892,6 @@ export const HELP_CONTENT = {
                 "emailTemplatesEnabled",
                 "chargeEnabled",
                 "orderEditEnabled",
-                "submitProofEnabled",
                 "emailPreviewEnabled",
                 "textPreviewEnabled",
                 "campaignManagerEnabled"
@@ -4924,7 +4918,7 @@ export const HELP_CONTENT = {
               [
                 "Image Viewer",
                 "On",
-                "View / extract logo images + the 3D ball preview."
+                "View / extract logo images, the 3D ball preview, and Submit Proof (popup)."
               ],
               [
                 "Gifting Catalog",
@@ -5057,6 +5051,30 @@ export const HELP_CONTENT = {
                 "copyIdsEnabled",
                 "signifydGlowEnabled",
                 "phoneFinderEnabled"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "Other"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Feature",
+              "Default",
+              "What it controls"
+            ],
+            "rows": [
+              [
+                "submitProofEnabled",
+                "On",
+                ""
+              ]
+            ],
+            "meta": {
+              "flagKeys": [
+                "submitProofEnabled"
               ]
             }
           },
@@ -9323,18 +9341,6 @@ export const HELP_CONTENT = {
       "flag": "orderEditEnabled"
     },
     {
-      "id": "flag:submitProofEnabled",
-      "category": "Settings",
-      "title": "Submit Proof",
-      "keywords": [
-        "submitProofEnabled",
-        "Email & Templates"
-      ],
-      "description": "Send art proofs from the order page.",
-      "article": "feature-toggles",
-      "flag": "submitProofEnabled"
-    },
-    {
       "id": "flag:emailPreviewEnabled",
       "category": "Settings",
       "title": "Email Preview",
@@ -9534,7 +9540,7 @@ export const HELP_CONTENT = {
         "imagePreviewEnabled",
         "Tools"
       ],
-      "description": "View / extract logo images + the 3D ball preview.",
+      "description": "View / extract logo images, the 3D ball preview, and Submit Proof (popup).",
       "article": "feature-toggles",
       "flag": "imagePreviewEnabled"
     },

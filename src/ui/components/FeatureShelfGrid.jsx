@@ -19,20 +19,20 @@ import { SHELF_PAGES, pageApplies } from '../../lib/features/featureConfig.js';
    calls onToggleCell(key, pageId).
 ─────────────────────────────────────────────────────────────── */
 
-const COL = 74; // px per page column
+const COL = 38; // px per page column — compact so all 6 fit the narrow settings panel
 
 function Cell({ lit, ghost, onClick, title }) {
   return (
     <button type="button" onClick={onClick} title={title}
       style={{
-        width: 22, height: 22, borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 20, height: 20, borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: 'background .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease',
         border: `1px solid ${lit ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
         background: lit && !ghost ? 'var(--gb-brand-tint-medium)' : lit ? 'var(--gb-brand-tint-soft)' : 'transparent',
         color: lit ? 'var(--gb-brand-label)' : 'transparent',
         opacity: ghost ? 0.72 : 1,
       }}>
-      <I.check size={12} />
+      <I.check size={11} />
     </button>
   );
 }
@@ -40,19 +40,19 @@ function Cell({ lit, ghost, onClick, title }) {
 export function FeatureShelfGrid({ features, cfg, getIcon, onToggleCell }) {
   if (!features.length) {
     return (
-      <div style={{ padding: '14px 12px', textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
-        Enable a feature with a shelf action to place it on pages.
+      <div style={{ padding: '16px 12px', textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
+        No custom actions yet. Use <strong style={{ color: 'var(--gb-text-secondary)' }}>+</strong> to build one and place it on pages.
       </div>
     );
   }
-  const gridCols = `minmax(120px, 1.4fr) repeat(${SHELF_PAGES.length}, ${COL}px)`;
+  const gridCols = `minmax(88px, 1fr) repeat(${SHELF_PAGES.length}, ${COL}px)`;
   return (
     <div style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-1)' }}>
       {/* Header */}
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', padding: '8px 10px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)' }}>
-        <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--gb-text-muted)' }}>Feature</div>
+      <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', columnGap: 2, padding: '7px 9px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)' }}>
+        <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--gb-text-muted)' }}>Action</div>
         {SHELF_PAGES.map((p) => (
-          <div key={p.id} title={p.label} style={{ justifySelf: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '.02em', color: p.id === '*' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', textAlign: 'center' }}>{p.short}</div>
+          <div key={p.id} title={p.label} style={{ justifySelf: 'center', fontSize: 8.5, fontWeight: 700, letterSpacing: '.01em', color: p.id === '*' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{p.short}</div>
         ))}
       </div>
       {/* Rows */}
@@ -60,10 +60,10 @@ export function FeatureShelfGrid({ features, cfg, getIcon, onToggleCell }) {
         const c = cfg[f.key] || {};
         const wildcard = (c.pages || []).includes('*');
         return (
-          <div key={f.key} style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', padding: '7px 10px', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <div key={f.key} style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'center', columnGap: 2, padding: '6px 9px', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ color: 'var(--gb-text-muted)', display: 'flex', flexShrink: 0 }}>{getIcon ? getIcon(f.icon) : null}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
             </div>
             {SHELF_PAGES.map((p) => {
               const isWildCol = p.id === '*';

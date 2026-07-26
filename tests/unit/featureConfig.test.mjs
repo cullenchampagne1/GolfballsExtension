@@ -41,6 +41,27 @@ describe('featureRegistry · surfaces', () => {
     assert.deepEqual(phone.surfaces.shelf.pages, ['contact']);
   });
 
+  it('demotes Campaign Manager to a toggle (opened only from CRM Search / Tasks)', () => {
+    const cm = featureByKey('campaignManagerEnabled');
+    assert.equal(cm.surfaces.popup, false);
+    assert.equal(cm.surfaces.shelf, null);
+  });
+
+  it('scopes Order Edit to order pages on both surfaces', () => {
+    const oe = featureByKey('orderEditEnabled');
+    assert.equal(oe.surfaces.popup, true);
+    assert.deepEqual(oe.surfaces.shelf.pages, ['order']);
+    assert.equal(oe.surfaces.shelf.global, '__gbShowOrderEditModal');
+  });
+
+  it('unifies image viewer + submit proof: one feature, per-surface labels', () => {
+    const img = featureByKey('imagePreviewEnabled');
+    assert.equal(img.surfaces.shelf.actions[0].label, 'Image Viewer'); // shelf reads "Image Viewer"
+    assert.equal(img.surfaces.popupLabel, 'Submit Proof');             // popup reads "Submit Proof"
+    // The old standalone Submit Proof flag is merged away (no separate feature).
+    assert.equal(featureByKey('submitProofEnabled'), null);
+  });
+
   it('shelfFeatures / popupFeatures list only surfaced features', () => {
     const shelf = shelfFeatures().map((f) => f.key);
     assert.ok(shelf.includes('crmSearchEnabled'));

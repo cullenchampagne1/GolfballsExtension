@@ -62,7 +62,6 @@ export const FEATURE_FLAGS = [
   { key: 'emailTemplatesEnabled', section: 'Email & Templates', name: 'Email Templates',  desc: 'Template dropdown, resolved variables, and Send button in the popup.', icon: 'mail' },
   { key: 'chargeEnabled',         section: 'Email & Templates', name: 'Charge Card',       desc: 'Charge / Refund button in the email popup.',                          icon: 'card' },
   { key: 'orderEditEnabled',      section: 'Email & Templates', name: 'Order Edit',        desc: 'Order Edit button in the email popup.',                               icon: 'edit' },
-  { key: 'submitProofEnabled',    section: 'Email & Templates', name: 'Submit Proof',      desc: 'Send art proofs from the order page.',                                icon: 'send' },
   { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Click email rows in Case Email History to open the full thread.',     icon: 'mail' },
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
   { key: 'campaignManagerEnabled', section: 'Email & Templates', name: 'Campaign Manager', desc: 'Multi-step campaign automation (from CRM Search / Tasks).',            icon: 'megaphone' },
@@ -82,7 +81,7 @@ export const FEATURE_FLAGS = [
   { key: 'signifydGlowEnabled', section: 'Orders & Pricing', name: 'Signifyd Glow',     desc: 'Glow orders by Signifyd score.',                   icon: 'alert' },
   { key: 'phoneFinderEnabled',  section: 'Orders & Pricing', name: 'Phone Finder',      desc: 'Scan a contact’s orders for a phone number.',      icon: 'search' },
   // ── Tools ──
-  { key: 'imagePreviewEnabled', section: 'Tools', name: 'Image Viewer',         desc: 'View / extract logo images + the 3D ball preview.', icon: 'eye' },
+  { key: 'imagePreviewEnabled', section: 'Tools', name: 'Image Viewer',         desc: 'View / extract logo images, the 3D ball preview, and Submit Proof (popup).', icon: 'eye' },
   { key: 'giftCatalogEnabled',  section: 'Tools', name: 'Gifting Catalog',      desc: 'Gifting catalog, customization, and monograms.',    icon: 'card' },
   { key: 'mockupStudioEnabled', section: 'Tools', name: 'Mockup Studio',        desc: 'Generate product mockups in durable image batches.', icon: 'eye' },
   { key: 'actionsShelfEnabled', section: 'Tools', name: 'Quick Actions Shelf',  desc: 'Floating bottom-right quick-actions shelf (Shift×2).', icon: 'bolt' },

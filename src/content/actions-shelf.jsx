@@ -175,8 +175,8 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     'gb-open-watch-list':   'Track orders across sessions',
     'gb-open-notifications':'Targeted messages + completion alerts',
     'gb-open-new-contact':  'Quick-create a CRM contact',
-    'gb-open-campaigns':    'Multi-step campaign automation',
     'gb-open-margin-calc':  'Margin + profit metrics for this order',
+    'gb-order-edit':        'Edit this order’s details',
   };
   const STANDALONE_DEFS = shelfActionDefs().filter((d) => !d.dynamic);
   const _standaloneUnsubs = new Map(); // action id → unsub

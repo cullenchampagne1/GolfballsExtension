@@ -19,7 +19,9 @@ import {
    data-driven Tools section — we only gate their existing buttons on the
    feature's popup surface config. */
 const POPUP_FEATURES = popupFeatures();
-const BESPOKE_POPUP_KEYS = new Set(['taskListEnabled', 'crmSearchEnabled', 'watchListEnabled', 'notificationsEnabled']);
+// Registry features with a bespoke popup button above (rich state / order
+// context) — gated on their popup surface but not duplicated in Tools.
+const BESPOKE_POPUP_KEYS = new Set(['taskListEnabled', 'crmSearchEnabled', 'watchListEnabled', 'notificationsEnabled', 'orderEditEnabled', 'imagePreviewEnabled']);
 const popIcon = (name) => { const C = I[name] || I.bolt; return <C />; };
 
 /* ───────────────────────────────────────────────────────────────
@@ -1158,7 +1160,7 @@ function MainView({
               </Btn>
             </Reveal>
           )}
-          {flags.orderEditEnabled && (
+          {popupShows('orderEditEnabled') && (
             <Reveal key="orderEdit">
               <Btn full size="sm"
                 disabled={orderEditDisabled}
@@ -1207,7 +1209,7 @@ function MainView({
               <Btn full size="sm" icon={<I.alert />} onClick={onNotifications} badge={notifCount} badgeTone="brand">Notifications</Btn>
             </Reveal>
           )}
-          {flags.submitProofEnabled && (
+          {popupShows('imagePreviewEnabled') && (
             <Reveal key="proof">
               <Btn full size="sm"
                 disabled={proofDisabled}
@@ -1228,7 +1230,7 @@ function MainView({
           {toolFeatures.map((f) => (
             <Reveal key={f.key}>
               <Btn full size="sm" icon={popIcon(f.icon)} onClick={() => launchFeature(f)}>
-                {f.surfaces.shelf?.actions?.[0]?.label || f.name}
+                {f.surfaces.popupLabel || f.surfaces.shelf?.actions?.[0]?.label || f.name}
               </Btn>
             </Reveal>
           ))}
