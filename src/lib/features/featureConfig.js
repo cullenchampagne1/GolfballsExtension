@@ -34,12 +34,12 @@ export function normalizeFeatureConfig(saved = {}) {
 
 /** The pages a shelf action can target (PAGE_TYPE ids + the `*` any wildcard). */
 export const SHELF_PAGES = Object.freeze([
-  { id: '*', label: 'All pages' },
-  { id: 'contact', label: 'Contact' },
-  { id: 'account', label: 'Account' },
-  { id: 'order', label: 'Order' },
-  { id: 'order-index', label: 'Orders list' },
-  { id: 'opportunity', label: 'Opportunity' },
+  { id: '*', label: 'All pages', short: 'All' },
+  { id: 'contact', label: 'Contact', short: 'Contact' },
+  { id: 'account', label: 'Account', short: 'Account' },
+  { id: 'order', label: 'Order', short: 'Order' },
+  { id: 'order-index', label: 'Orders list', short: 'Orders' },
+  { id: 'opportunity', label: 'Opportunity', short: 'Opp' },
 ]);
 
 /** Toggle a page in a pages[] list. Selecting `*` clears the rest; selecting a
@@ -53,11 +53,24 @@ export function togglePage(pages, page) {
   return arr.length ? arr : ['*'];
 }
 
+/** Does a `pages` list cover `pageType`? '*' matches every page (incl. the
+ *  null/unknown key the shelf uses for opportunity/other). Pure — shared by
+ *  BOTH surfaces so popup buttons and shelf actions honor the same scope. */
+export function pageApplies(pages, pageType) {
+  const list = pages || [];
+  return list.includes('*') || list.includes(pageType);
+}
+
 /** Should this feature's shelf action appear on `pageType`? */
 export function featureShowsOnPage(cfg, pageType) {
   if (!cfg || !cfg.showInShelf) return false;
-  const pages = cfg.pages || [];
-  return pages.includes('*') || pages.includes(pageType);
+  return pageApplies(cfg.pages, pageType);
+}
+
+/** Should this feature's popup launcher appear given the active page? */
+export function featureShowsInPopup(cfg, pageType) {
+  if (!cfg || !cfg.showInPopup) return false;
+  return pageApplies(cfg.pages, pageType);
 }
 
 /** A short status label for the collapsed row ("Popup · Shelf · 2 pages"). */

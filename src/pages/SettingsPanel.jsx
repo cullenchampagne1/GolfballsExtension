@@ -26,7 +26,8 @@ import {
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { FeatureRow } from '../ui/components/FeatureRow.jsx';
-import { FEATURE_REGISTRY, featureByKey } from '../lib/features/featureRegistry.js';
+import { FeatureShelfGrid } from '../ui/components/FeatureShelfGrid.jsx';
+import { FEATURE_REGISTRY, featureByKey, shelfFeatures } from '../lib/features/featureRegistry.js';
 import { loadFeatureConfig, saveFeatureConfig, normalizeFeatureConfig, togglePage } from '../lib/features/featureConfig.js';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
 import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
@@ -1432,6 +1433,11 @@ export function SettingsPanel({ remotePolicy }) {
   };
   const setFeatureSurface = (key, surface, value) => updateFeatureCfg(key, { [surface]: value });
   const toggleFeaturePage = (key, page) => updateFeatureCfg(key, { pages: togglePage(featureCfg[key]?.pages, page) });
+  /* Grid cell: placing a feature on a page implies it belongs on the shelf,
+     so flip showInShelf on as we edit the page set. Off happens via the row. */
+  const toggleFeaturePageGrid = (key, page) => updateFeatureCfg(key, { showInShelf: true, pages: togglePage(featureCfg[key]?.pages, page) });
+  // Grid rows: shelf-capable features that are enabled (the flag is on).
+  const gridFeatures = shelfFeatures().filter((f) => !!flags[f.key] && visible(f.key));
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
   const setCredentialValue = (key, value) => {
     const next = { ...credentials, [key]: value };
@@ -1523,6 +1529,19 @@ export function SettingsPanel({ remotePolicy }) {
           ))}
         </div>
       </section>
+
+      {/* Action Shelf — the "what shows where" matrix. Every enabled feature
+          that contributes a quick-action gets a row; each cell places that
+          action on a CRM page. Same featureConfig the per-feature rows edit. */}
+      {gridFeatures.length > 0 && (
+        <section>
+          <SectionLabel>Action Shelf</SectionLabel>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', margin: '-2px 0 10px' }}>
+            Choose which pages each quick-action appears on. “All” lights every page; pick specific pages to narrow it.
+          </div>
+          <FeatureShelfGrid features={gridFeatures} cfg={featureCfg} getIcon={getIcon} onToggleCell={toggleFeaturePageGrid} />
+        </section>
+      )}
 
       {/* UI Scale — independent zoom per extension surface. Lets the
           rep run the host CRM at one browser zoom and the extension

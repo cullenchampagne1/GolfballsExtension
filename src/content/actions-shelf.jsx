@@ -5,8 +5,9 @@ import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { I, Icon, TYPE_ICONS } from '../ui/index.js';
-import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { loadFlags } from '../lib/flags.js';
+import { shelfActionDefs } from '../lib/features/featureRegistry.js';
+import { loadFeatureConfig, normalizeFeatureConfig, featureShowsOnPage, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
 import { findPhone } from '../lib/findPhone.js';
 import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
 import { loadLastOrderNote } from '../lib/quickOrderNote.js';
@@ -145,6 +146,66 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
 
      Each context-bound action keeps its own unsub fn in a module-
      scoped var so the next syncContext can swap it. */
+  /* ── Feature surface config (featureConfig) ──────────────────
+     The single gate for what the shelf shows. A feature's action appears
+     only when (a) its master flag is on (featureFlags) AND (b) its shelf
+     surface is on for the current page (featureConfig showInShelf + pages).
+     Defaults derive from the registry, so behavior is unchanged until a rep
+     customizes it in Settings → Features / Action Shelf. Stashed on
+     window.__gbFeatureConfig so other content scripts (the popup launcher
+     bridge) can read the same truth. */
+  let _featureCfg = normalizeFeatureConfig({});
+  window.__gbFeatureConfig = _featureCfg;
+  function shelfShows(key, pageType) {
+    if ((window.__gbFeatureFlags || {})[key] === false) return false; // master off
+    return featureShowsOnPage(_featureCfg[key], pageType);             // surface + page
+  }
+
+  /* Standalone shelf actions (a safe no-arg window global) are generated
+     straight from the registry — no per-feature boilerplate. Page-contextual
+     actions (call/task/find-phone/copy-ids/order-dates) stay handcrafted
+     below because they read live DOM + carry extra gates. */
+  const shelfIcon = (name) => { const C = I[name] || I.bolt; return <C size={13} />; };
+  const SHELF_HINTS = {
+    'gb-open-image-viewer': 'Drag, paste, or extract — then Submit Proof',
+    'gb-open-contacts':     'CRM Search — name, email, account, phone',
+    'gb-open-tasks':        'My Tasks — review, complete, follow up',
+    'gb-open-gift-catalog': 'Corporate gifting — photos, pricing, custom imprint',
+    'gb-open-mockup-studio':'Generate product mockups in durable batches',
+    'gb-open-watch-list':   'Track orders across sessions',
+    'gb-open-notifications':'Targeted messages + completion alerts',
+    'gb-open-new-contact':  'Quick-create a CRM contact',
+    'gb-open-campaigns':    'Multi-step campaign automation',
+    'gb-open-margin-calc':  'Margin + profit metrics for this order',
+  };
+  const STANDALONE_DEFS = shelfActionDefs().filter((d) => !d.dynamic);
+  const _standaloneUnsubs = new Map(); // action id → unsub
+  function syncStandaloneActions(pageType) {
+    for (const d of STANDALONE_DEFS) {
+      const show = shelfShows(d.key, pageType);
+      const existing = _standaloneUnsubs.get(d.id);
+      if (show && !existing) {
+        _standaloneUnsubs.set(d.id, actionRegistry.register({
+          id: d.id,
+          label: d.label,
+          icon: shelfIcon(d.icon),
+          hint: SHELF_HINTS[d.id] || '',
+          // Page-scoped launchers float to the top on their page; '*' ones
+          // stay in the ordinary page section (matches old ALWAYS behavior).
+          smartFor: d.pages.includes('*') ? [] : d.pages,
+          handler: () => {
+            const fn = window[d.global];
+            if (typeof fn === 'function') fn();
+            else window.__gbToast?.error?.(`${d.label} not loaded on this page`, { duration: 2400 });
+          },
+        }));
+      } else if (!show && existing) {
+        existing();
+        _standaloneUnsubs.delete(d.id);
+      }
+    }
+  }
+
   let _callActionUnsub = null;
   let _logCallActionUnsub = null;
   let _taskActionUnsub = null;
@@ -157,8 +218,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
-    if ((window.__gbFeatureFlags || {}).callLogEnabled === false) return;
-    if (pageType !== 'contact' && pageType !== 'account') return;
+    if (!shelfShows('callLogEnabled', pageType)) return;
     /* Gate on a real phone existing on the page. When the contact has
        no phone, Call would dial nothing — surface Find phone instead
        (registered separately). Postbacks that rebuild the phone label
@@ -211,8 +271,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
      subtitle reflects whatever's currently on screen. */
   function registerLogCallAction(pageType, displayName) {
     if (_logCallActionUnsub) { _logCallActionUnsub(); _logCallActionUnsub = null; }
-    if ((window.__gbFeatureFlags || {}).callLogEnabled === false) return;
-    if (pageType !== 'contact' && pageType !== 'account') return;
+    if (!shelfShows('callLogEnabled', pageType)) return;
 
     const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
     const phone = readContactPhoneRaw();
@@ -312,9 +371,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
 
   function registerFindPhoneAction(pageType) {
     if (_findPhoneActionUnsub) { _findPhoneActionUnsub(); _findPhoneActionUnsub = null; }
-    if (pageType !== 'contact') return;
-    const flags = window.__gbFeatureFlags || {};
-    if (flags.phoneFinderEnabled === false) return;
+    if (!shelfShows('phoneFinderEnabled', pageType)) return;
     // Already has a usable phone → nothing to do.
     if (_readContactPhoneDigits().length >= 7) return;
     const orderCount = document.querySelectorAll('table.dtORD tbody tr').length;
@@ -370,9 +427,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
 
   function registerCopyOrdersAction(pageType) {
     if (_copyIdsActionUnsub) { _copyIdsActionUnsub(); _copyIdsActionUnsub = null; }
-    if (pageType !== 'order-index') return;
-    const flags = window.__gbFeatureFlags || {};
-    if (flags.copyIdsEnabled === false) return;
+    if (!shelfShows('copyIdsEnabled', pageType)) return;
     // Initial count — gives the action a more useful hint right out of
     // the gate. Click-time re-scans pick up newly-loaded rows.
     const initial = readOrderRows();
@@ -417,9 +472,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
      back up; main.js then mounts the modal. */
   function registerOrderDatesAction(pageType) {
     if (_orderDatesActionUnsub) { _orderDatesActionUnsub(); _orderDatesActionUnsub = null; }
-    if (pageType !== 'order') return;
-    const flags = window.__gbFeatureFlags || {};
-    if (flags.calendarEnabled === false) return;
+    if (!shelfShows('calendarEnabled', pageType)) return;
     const id = readOrderId();
     _orderDatesActionUnsub = actionRegistry.register({
       id: 'gb-order-dates',
@@ -488,8 +541,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
 
   function registerTaskAction(pageType, displayName) {
     if (_taskActionUnsub) { _taskActionUnsub(); _taskActionUnsub = null; }
-    if ((window.__gbFeatureFlags || {}).quickTaskEnabled === false) return;
-    if (pageType !== 'contact' && pageType !== 'account') return;
+    if (!shelfShows('quickTaskEnabled', pageType)) return;
 
     const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
     _taskActionUnsub = actionRegistry.register({
@@ -547,6 +599,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
         : 'No filter selected';
     }
     actionRegistry.setPage(key, label, subLabel);
+    syncStandaloneActions(type);
     registerCallAction(type, label);
     registerLogCallAction(type, label);
     registerTaskAction(type, label);
@@ -625,117 +678,33 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     _syncTimer = setTimeout(syncContext, 30);
   };
 
-  /* Always-available actions — surface on every page so the rep
-     can reach these modals from anywhere they're working. Each one
-     is gated on a dev setting (default ON) so the shelf can be
-     trimmed without recompiling. We hold the unsub fn from
-     actionRegistry.register and re-run applyAlwaysActions whenever
-     devSettings changes in chrome.storage. */
-  const ALWAYS_ACTIONS = [
-    {
-      flag: 'imagePreviewEnabled',
-      def: {
-        id: 'gb-open-image-viewer',
-        label: 'Open Image Viewer',
-        icon: <I.eye size={13} />,
-        hint: 'Drag, paste, or extract — then Submit Proof',
-        handler: () => {
-          if (typeof window.__gbOpenImagePreview === 'function') {
-            window.__gbOpenImagePreview();   // no url → drop-zone state
-          } else {
-            window.__gbToast?.error?.('Image viewer not loaded on this page', { duration: 2400 });
-          }
-        },
-      },
-    },
-    {
-      flag: 'crmSearchEnabled',
-      def: {
-        id: 'gb-open-contacts',
-        label: 'Open Contacts',
-        icon: <I.search size={13} />,
-        hint: 'CRM Search — name, email, account, phone',
-        handler: () => {
-          if (typeof window.__gbShowCrmSearchModal === 'function') {
-            window.__gbShowCrmSearchModal();
-          } else {
-            window.__gbToast?.error?.('CRM Search not loaded on this page', { duration: 2400 });
-          }
-        },
-      },
-    },
-    {
-      flag: 'taskListEnabled',
-      def: {
-        id: 'gb-open-tasks',
-        label: 'Open Tasks',
-        icon: <I.check size={13} />,
-        hint: 'My Tasks — review, complete, follow up',
-        handler: () => {
-          if (typeof window.__gbShowTaskListModal === 'function') {
-            window.__gbShowTaskListModal();
-          } else {
-            window.__gbToast?.error?.('Task list not loaded on this page', { duration: 2400 });
-          }
-        },
-      },
-    },
-    {
-      flag: 'giftCatalogEnabled',
-      def: {
-        id: 'gb-open-gift-catalog',
-        label: 'Gifting Catalog',
-        icon: <I.card size={13} />,
-        hint: 'Corporate gifting — photos, pricing, custom-logo imprint',
-        handler: () => {
-          if (typeof window.__gbOpenGiftCatalog === 'function') {
-            window.__gbOpenGiftCatalog();
-          } else {
-            window.__gbToast?.error?.('Gifting catalog not loaded on this page', { duration: 2400 });
-          }
-        },
-      },
-    },
-    {
-      flag: 'mockupStudioEnabled',
-      def: {
-        id: 'gb-open-mockup-studio',
-        label: 'Mockup Studio',
-        icon: <I.sparkle size={13} />,
-        hint: 'Generate product mockups in durable batches',
-        handler: () => {
-          if (typeof window.__gbOpenMockupStudio === 'function') {
-            window.__gbOpenMockupStudio();
-          } else {
-            window.__gbToast?.error?.('Mockup Studio not loaded on this page', { duration: 2400 });
-          }
-        },
-      },
-    },
-  ];
-  const _alwaysUnsubs = new Map(); // key → unsub fn
-  function applyAlwaysActions(flags) {
-    for (const entry of ALWAYS_ACTIONS) {
-      // Each always-action follows the FEATURE FLAG of the modal it opens, so
-      // turning a feature off removes it from the shelf too. Default ON; only
-      // an explicit `false` hides it.
-      const enabled = flags?.[entry.flag] !== false;
-      const existing = _alwaysUnsubs.get(entry.flag);
-      if (enabled && !existing) {
-        _alwaysUnsubs.set(entry.flag, actionRegistry.register(entry.def));
-      } else if (!enabled && existing) {
-        existing();
-        _alwaysUnsubs.delete(entry.flag);
-      }
-    }
-  }
-  // Initial registration — read flags asynchronously, then react to any
-  // in-session feature-flag changes via storage.onChanged.
-  loadFlags().then(applyAlwaysActions);
+  /* Standalone "always-available" launchers (CRM Search, Task List, Gifting,
+     Mockup Studio, Image Viewer, Watchlist, Notifications, New Contact,
+     Campaigns, Margin Calc) are now generated from the registry and gated by
+     featureConfig per page — see syncStandaloneActions(), driven from
+     syncContext(). Feature-flag + surface-config changes both re-run it. */
+  loadFlags().then((f) => {
+    // Merge persisted flags under any live broadcast already applied by main.js.
+    window.__gbFeatureFlags = { ...f, ...(window.__gbFeatureFlags || {}) };
+    syncContext();
+  });
+  loadFeatureConfig().then((c) => {
+    _featureCfg = c;
+    window.__gbFeatureConfig = c;
+    syncContext();
+  });
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local' || !changes.featureFlags) return;
-      applyAlwaysActions(changes.featureFlags.newValue || {});
+      if (area !== 'local') return;
+      if (changes.featureFlags) {
+        window.__gbFeatureFlags = changes.featureFlags.newValue || {};
+        syncContext();
+      }
+      if (changes[FEATURE_CONFIG_KEY]) {
+        _featureCfg = normalizeFeatureConfig(changes[FEATURE_CONFIG_KEY].newValue || {});
+        window.__gbFeatureConfig = _featureCfg;
+        syncContext();
+      }
     });
   }
 

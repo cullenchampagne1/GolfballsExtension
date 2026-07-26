@@ -665,6 +665,31 @@ function __gbAccessAllowed(st, now) {
       return true;
     }
 
+    /* Generic launcher bridge for the browser-action popup. The popup can't
+       reach in-page globals directly (separate window), so it messages the
+       tab with the resolved target it read from the feature registry:
+         · GB_LAUNCH_GLOBAL   — call a safe no-arg window.__gb* opener
+         · GB_RUN_SHELF_ACTION — run a registered action-shelf action by id
+                                 (for page-contextual tools like find-phone,
+                                 copy-ids — which need live DOM). */
+    if (msg.action === 'GB_LAUNCH_GLOBAL') {
+      // Only ever invoke our own __gb* openers, never an arbitrary window fn.
+      if (typeof msg.global === 'string' && /^__gb[A-Za-z]+$/.test(msg.global)) {
+        const fn = window[msg.global];
+        if (typeof fn === 'function') { try { fn(); } catch {} }
+        else window.__gbToast?.error?.('That tool isn’t available on this page', { duration: 2600 });
+      }
+      return true;
+    }
+
+    if (msg.action === 'GB_RUN_SHELF_ACTION') {
+      const reg = window.__gbActionRegistry;
+      const act = reg?.getActions?.().find((a) => a.id === msg.id);
+      if (act && typeof act.handler === 'function') { try { act.handler(); } catch {} }
+      else window.__gbToast?.warning?.('That action isn’t available on this page', { duration: 2800 });
+      return true;
+    }
+
   });
 
   /* Expose the resolver as a window global so React content scripts

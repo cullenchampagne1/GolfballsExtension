@@ -7,10 +7,20 @@ import { useDevSettings } from '../lib/devSettings.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
+import { popupFeatures } from '../lib/features/featureRegistry.js';
+import { loadFeatureConfig, normalizeFeatureConfig, featureShowsInPopup, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
 import {
   Btn, Dropdown, TemplatePicker, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle, ToastHost,
 } from '../ui';
+
+/* Registry features that already have a bespoke popup button above (charge/
+   order-edit/proof aren't registry features). We don't duplicate these in the
+   data-driven Tools section — we only gate their existing buttons on the
+   feature's popup surface config. */
+const POPUP_FEATURES = popupFeatures();
+const BESPOKE_POPUP_KEYS = new Set(['taskListEnabled', 'crmSearchEnabled', 'watchListEnabled', 'notificationsEnabled']);
+const popIcon = (name) => { const C = I[name] || I.bolt; return <C />; };
 
 /* ───────────────────────────────────────────────────────────────
    popup.jsx — React port of popup.html / popup.js.
@@ -172,6 +182,9 @@ function PopupApp() {
   const [allTemplates, setAllTemplates] = useState([]);  // all enabled, non-case templates (full list, pre page-filter)
   const [pageInfo, setPageInfo] = useState({});
   const [flags, setFlags] = useState({});
+  // Per-feature surface config (which surfaces each feature shows on). Defaults
+  // (all surfaces on) until loaded so no button flashes off on first paint.
+  const [featureCfg, setFeatureCfg] = useState(() => normalizeFeatureConfig({}));
   const [paConfigured, setPaConfigured] = useState(false);
   const [watchList, setWatchList] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -254,6 +267,7 @@ function PopupApp() {
       setWatchList(data.watchList || []);
       setNotifications(data.gbNotifications || []);
       setFlags(mergedFlags);
+      loadFeatureConfig().then((c) => { if (!cancelled) setFeatureCfg(c); });
       setPaConfigured(isPowerAutomateUrl(credentials.powerAutomateUrl));
 
       if (tpls.length === 0) { setStage('empty'); return; }
@@ -478,6 +492,7 @@ function PopupApp() {
           ...next,
         });
       }
+      if (changes[FEATURE_CONFIG_KEY]) setFeatureCfg(normalizeFeatureConfig(changes[FEATURE_CONFIG_KEY].newValue || {}));
       if (changes.watchList) setWatchList(changes.watchList.newValue || []);
       if (changes.gbNotifications) setNotifications(changes.gbNotifications.newValue || []);
       if (changes.templates) {
@@ -538,6 +553,7 @@ function PopupApp() {
           resolvedTo={resolvedTo}
           pageInfo={pageInfo}
           flags={flags}
+          featureCfg={featureCfg}
           paConfigured={paConfigured}
           watchList={watchList}
           notifications={notifications}
@@ -783,7 +799,7 @@ function MainView({
   pendingVars = [], toPending = false,
   selectedVariationId, onSelectVariation,
   tpl,
-  resolving, resolvedVars, resolvedTo, pageInfo, flags, paConfigured, watchList, notifications = [], tab,
+  resolving, resolvedVars, resolvedTo, pageInfo, flags, featureCfg = {}, paConfigured, watchList, notifications = [], tab,
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof,
 }) {
@@ -905,6 +921,22 @@ function MainView({
     await sendMessage(tab.id, { action: 'showNotificationsModal' });
     window.close();
   };
+
+  /* ── data-driven launchers (Tools section) ──
+     Show a feature's popup button when its master flag is on, its popup
+     surface is enabled, and the current page is in scope. Launch by asking
+     the content script to run the feature: a safe no-arg global for
+     standalone tools, or the registered shelf action for page-contextual
+     ones (find-phone, copy-ids, …). */
+  const popupShows = (key) => flags[key] !== false && featureShowsInPopup(featureCfg[key], pageType);
+  const launchFeature = async (f) => {
+    if (!tab) return;
+    const shelf = f.surfaces?.shelf;
+    if (shelf?.global) await sendMessage(tab.id, { action: 'GB_LAUNCH_GLOBAL', global: shelf.global });
+    else if (shelf?.actions?.[0]) await sendMessage(tab.id, { action: 'GB_RUN_SHELF_ACTION', id: shelf.actions[0].id });
+    window.close();
+  };
+  const toolFeatures = POPUP_FEATURES.filter((f) => !BESPOKE_POPUP_KEYS.has(f.key) && popupShows(f.key));
 
   /* Resolve the subject/body for this send. Picks the variation (a pinned
      saved one, a uniform random roll across [original, …saved] when the
@@ -1136,7 +1168,7 @@ function MainView({
               </Btn>
             </Reveal>
           )}
-          {flags.watchListEnabled && (
+          {popupShows('watchListEnabled') && (
             <Reveal key="watch">
               <div style={{ display: 'flex', gap: 6 }}>
                 <Btn size="sm"
@@ -1160,17 +1192,17 @@ function MainView({
               </div>
             </Reveal>
           )}
-          {flags.taskListEnabled && (
+          {popupShows('taskListEnabled') && (
             <Reveal key="tasks">
               <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>My Tasks</Btn>
             </Reveal>
           )}
-          {flags.crmSearchEnabled && (
+          {popupShows('crmSearchEnabled') && (
             <Reveal key="crmSearch">
               <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
             </Reveal>
           )}
-          {flags.notificationsEnabled && (
+          {popupShows('notificationsEnabled') && (
             <Reveal key="notifications">
               <Btn full size="sm" icon={<I.alert />} onClick={onNotifications} badge={notifCount} badgeTone="brand">Notifications</Btn>
             </Reveal>
@@ -1185,6 +1217,21 @@ function MainView({
               </Btn>
             </Reveal>
           )}
+          {/* Data-driven launchers — every other popup-surfaced feature that
+              applies to this page. Registry-sourced, so new features appear
+              here automatically once they declare a popup surface. */}
+          {toolFeatures.length > 0 && (
+            <Reveal key="tools-label">
+              <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--gb-text-muted)', padding: '2px 2px 0' }}>Tools</div>
+            </Reveal>
+          )}
+          {toolFeatures.map((f) => (
+            <Reveal key={f.key}>
+              <Btn full size="sm" icon={popIcon(f.icon)} onClick={() => launchFeature(f)}>
+                {f.surfaces.shelf?.actions?.[0]?.label || f.name}
+              </Btn>
+            </Reveal>
+          ))}
         </AnimatePresence>
       </div>
 
