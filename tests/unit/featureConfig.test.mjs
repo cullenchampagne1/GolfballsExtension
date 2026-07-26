@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { FEATURE_REGISTRY, featureByKey, shelfFeatures } from '../../src/lib/features/featureRegistry.js';
-import { normalizeFeatureConfig, featureShowsOnPage, surfaceSummary } from '../../src/lib/features/featureConfig.js';
+import { normalizeFeatureConfig, featureShowsOnPage, surfaceSummary, togglePage } from '../../src/lib/features/featureConfig.js';
 
 describe('featureRegistry · surfaces', () => {
   it('declares popup + shelf for a dual-surface feature', () => {
@@ -58,5 +58,27 @@ describe('featureConfig · defaults + queries', () => {
   it('summarizes surfaces for the collapsed row', () => {
     assert.match(surfaceSummary(normalizeFeatureConfig({}).crmSearchEnabled), /Popup · Shelf · all pages/);
     assert.match(surfaceSummary(normalizeFeatureConfig({ callLogEnabled: { showInPopup: false, showInShelf: true, pages: ['contact', 'account'] } }).callLogEnabled), /Shelf · 2 pages/);
+  });
+});
+
+describe('featureConfig · togglePage', () => {
+  it('selecting a specific page drops the `*` wildcard', () => {
+    assert.deepEqual(togglePage(['*'], 'contact'), ['contact']);
+  });
+
+  it('selecting `*` collapses back to all-pages', () => {
+    assert.deepEqual(togglePage(['contact', 'account'], '*'), ['*']);
+  });
+
+  it('adds a page and keeps registry order (not click order)', () => {
+    assert.deepEqual(togglePage(['order'], 'contact'), ['contact', 'order']);
+  });
+
+  it('removing the last specific page falls back to `*`', () => {
+    assert.deepEqual(togglePage(['contact'], 'contact'), ['*']);
+  });
+
+  it('toggling a present page removes just that page', () => {
+    assert.deepEqual(togglePage(['contact', 'account'], 'account'), ['contact']);
   });
 });

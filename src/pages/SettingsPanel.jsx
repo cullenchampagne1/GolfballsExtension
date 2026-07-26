@@ -25,6 +25,9 @@ import {
 } from '../lib/presetScopes.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
+import { FeatureRow } from '../ui/components/FeatureRow.jsx';
+import { FEATURE_REGISTRY, featureByKey } from '../lib/features/featureRegistry.js';
+import { loadFeatureConfig, saveFeatureConfig, normalizeFeatureConfig, togglePage } from '../lib/features/featureConfig.js';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
 import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
@@ -1318,6 +1321,7 @@ function InstallationIdentityNotice() {
 export function SettingsPanel({ remotePolicy }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [flags, setFlags] = useState(FEATURE_DEFAULTS);
+  const [featureCfg, setFeatureCfg] = useState(() => normalizeFeatureConfig({}));
   const [credentials, setCredentials] = useState(EMPTY_CREDENTIALS);
   const [shortcuts, setShortcuts] = useState(KEYBOARD_SHORTCUTS_DEFAULTS);
   const [customPages, setCustomPages] = useState(emptyCustomPages);
@@ -1351,6 +1355,7 @@ export function SettingsPanel({ remotePolicy }) {
   useEffect(() => {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });
     loadFlags().then(setFlags);
+    loadFeatureConfig().then(setFeatureCfg);
     loadCredentials().then(setCredentials);
     loadKeyboardShortcuts().then(setShortcuts);
     loadCustomPages().then(setCustomPages);
@@ -1417,6 +1422,16 @@ export function SettingsPanel({ remotePolicy }) {
     window.__gbToast?.success('Colors reset to green');
   };
   const toggleFlag = (key) => { const next = { ...flags, [key]: !flags[key] }; setFlags(next); saveFlags(next); };
+  /* Surface/page config lives in its own store (featureConfig) so the master
+     on/off in featureFlags stays untouched. patch = a shallow merge into one
+     feature's row; normalize keeps it clamped to what the feature supports. */
+  const updateFeatureCfg = (key, patch) => {
+    const next = normalizeFeatureConfig({ ...featureCfg, [key]: { ...(featureCfg[key] || {}), ...patch } });
+    setFeatureCfg(next);
+    saveFeatureConfig(next);
+  };
+  const setFeatureSurface = (key, surface, value) => updateFeatureCfg(key, { [surface]: value });
+  const toggleFeaturePage = (key, page) => updateFeatureCfg(key, { pages: togglePage(featureCfg[key]?.pages, page) });
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
   const setCredentialValue = (key, value) => {
     const next = { ...credentials, [key]: value };
@@ -1490,9 +1505,18 @@ export function SettingsPanel({ remotePolicy }) {
           {[...new Set(regularFeatures.map(f => f.section || 'Other'))].map((sec) => (
             <div key={sec}>
               <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 8 }}>{sec}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {regularFeatures.filter(f => (f.section || 'Other') === sec).map((f) => (
-                  <FeatureSpotlight key={f.key} on={!!flags[f.key]} icon={getIcon(f.icon)} name={f.name} desc={f.desc} onChange={() => toggleFlag(f.key)} />
+                  <FeatureRow
+                    key={f.key}
+                    feature={featureByKey(f.key) || { ...f, surfaces: { popup: null, shelf: null } }}
+                    icon={getIcon(f.icon)}
+                    on={!!flags[f.key]}
+                    cfg={featureCfg[f.key] || {}}
+                    onToggleEnabled={() => toggleFlag(f.key)}
+                    onSetSurface={(surface, value) => setFeatureSurface(f.key, surface, value)}
+                    onTogglePage={(page) => toggleFeaturePage(f.key, page)}
+                  />
                 ))}
               </div>
             </div>

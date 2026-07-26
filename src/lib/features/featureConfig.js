@@ -32,6 +32,27 @@ export function normalizeFeatureConfig(saved = {}) {
   return out;
 }
 
+/** The pages a shelf action can target (PAGE_TYPE ids + the `*` any wildcard). */
+export const SHELF_PAGES = Object.freeze([
+  { id: '*', label: 'All pages' },
+  { id: 'contact', label: 'Contact' },
+  { id: 'account', label: 'Account' },
+  { id: 'order', label: 'Order' },
+  { id: 'order-index', label: 'Orders list' },
+  { id: 'opportunity', label: 'Opportunity' },
+]);
+
+/** Toggle a page in a pages[] list. Selecting `*` clears the rest; selecting a
+ *  specific page drops `*`; emptying falls back to `*`. Pure. */
+export function togglePage(pages, page) {
+  if (page === '*') return ['*'];
+  const cur = new Set(pages || []);
+  cur.delete('*');
+  if (cur.has(page)) cur.delete(page); else cur.add(page);
+  const arr = SHELF_PAGES.map((p) => p.id).filter((id) => cur.has(id)); // stable order
+  return arr.length ? arr : ['*'];
+}
+
 /** Should this feature's shelf action appear on `pageType`? */
 export function featureShowsOnPage(cfg, pageType) {
   if (!cfg || !cfg.showInShelf) return false;
