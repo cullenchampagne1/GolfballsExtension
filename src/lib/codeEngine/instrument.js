@@ -50,23 +50,30 @@ export function instrument(source) {
       const member = childByName(ref, 'MemberExpression');
       if (!member) return undefined;
       const memberText = src.slice(member.from, member.to);
+      const args = childByName(ref, 'ArgList');
+      if (!args) return undefined;
+      const id = nodeId(ref.from, ref.to);
+      const afterParen = args.from + 1;
+      const hasArgs = src.slice(args.from + 1, args.to - 1).trim().length > 0;
+
+      // page.evaluate(ref) → page.__eval("id", ref) — the evaluation step.
+      if (/^page\s*\.\s*evaluate$/.test(memberText)) {
+        calls.push({ id, contract: 'evaluate', from: ref.from, to: ref.to });
+        edits.push({ pos: member.from, remove: member.to - member.from, insert: 'page.__eval' });
+        const lead = `${JSON.stringify(id)},`;
+        edits.push({ pos: afterParen, remove: 0, insert: hasArgs ? lead : lead.replace(/,$/, '') });
+        return undefined;
+      }
+
+      // actions.X(args) → actions.__trace("id","X", args)
       const match = memberText.match(/^actions\s*\.\s*([A-Za-z_$][\w$]*)$/);
       if (!match) return undefined;
       const contract = contractFor(match[1]);
       if (!contract) return undefined;
-      const args = childByName(ref, 'ArgList');
-      if (!args) return undefined;
 
-      const id = nodeId(ref.from, ref.to);
       calls.push({ id, contract: contract.name, from: ref.from, to: ref.to });
-
-      // 1) replace the member `actions.X` with the dispatcher `actions.__trace`
       edits.push({ pos: member.from, remove: member.to - member.from, insert: 'actions.__trace' });
-      // 2) inject `"id","name",` as the leading args, right after `(`
-      const afterParen = args.from + 1;
       const lead = `${JSON.stringify(id)},${JSON.stringify(contract.name)},`;
-      // If the call has no args, drop the trailing comma to keep `(id,name)` valid.
-      const hasArgs = src.slice(args.from + 1, args.to - 1).trim().length > 0;
       edits.push({ pos: afterParen, remove: 0, insert: hasArgs ? lead : lead.replace(/,$/, '') });
       return undefined;
     },

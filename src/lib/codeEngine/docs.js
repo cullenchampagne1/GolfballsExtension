@@ -78,14 +78,28 @@ const STATIC = {
   user: {
     title: 'user.*',
     kind: 'data',
-    summary: 'Your saved templates — drop one straight into a send.',
+    summary: 'Your saved templates, keyed by a code id (e.g. user.emails.WinBack). They are REFERENCES — evaluate one before sending.',
     rows: [
-      ['user.emails', 'saved emails (array of { id, name, subject })'],
-      ['user.email(name)', 'look one up by name or id (or null)'],
-      ['user.tasks / user.task()', 'saved tasks + lookup'],
-      ['user.calls / user.call()', 'saved calls + lookup'],
+      ['user.emails.<Id>', 'a saved email reference (auto-random version)'],
+      ['user.emails.<Id>.versions[n]', 'a specific version'],
+      ['user.email(name|id)', 'look one up — THROWS if missing'],
+      ['user.tasks.* / user.calls.*', 'same for saved tasks + calls'],
     ],
-    examples: ['await actions.sendEmail(user.email("Win-back"))', 'user.tasks.find(t => t.name === "Follow up")'],
+    examples: ['const o = await page.evaluate(user.emails.WinBack);\nawait actions.sendEmail(o);'],
+  },
+  evaluate: {
+    title: 'page.evaluate(ref)',
+    kind: 'flow',
+    summary: 'Render a saved-template reference into a sendable OUTBOUND object. This is its own step (it can take a few seconds) — await it, then send it.',
+    rows: [
+      ['outbound.subject / body', 'read or assign to override'],
+      ['outbound.append(text)', 'append to the body (chainable)'],
+      ['outbound.appendSubject(t)', 'append to the subject'],
+      ['custom', 'build your own: { subject, body } / { subject, priority, daysOut }'],
+    ],
+    examples: [
+      'const o = await page.evaluate(user.emails.WinBack);\no.appendSubject(" — " + page.contact.contactName);\nawait actions.sendEmail(o);',
+    ],
   },
   actions: {
     title: 'actions.*',
@@ -138,7 +152,9 @@ export function resolveDoc(token) {
     return STATIC.actions;
   }
   if (head === 'user') return STATIC.user;
+  if (head === 'page' && member === 'evaluate') return STATIC.evaluate;
   if (head === 'page' || head === 'contact') return STATIC.page;
+  if (head === 'outbound') return STATIC.evaluate;
   if (head === 'h') return STATIC.helpers;
   if (KEYWORDS.has(head)) return STATIC.control;
   if (DECL.has(head)) return STATIC.setvar;

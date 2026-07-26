@@ -14,6 +14,7 @@
 ─────────────────────────────────────────────────────────────── */
 
 const REF_RE = /\buser\.(email|task|call)\(\s*(["'])([^"']+)\2/g;
+const KEYED_RE = /\buser\.(emails|tasks|calls)\.([A-Za-z_$][\w$]*)/g;
 
 /**
  * @param {string} source
@@ -28,21 +29,37 @@ export function lintTemplateRefs(source, bindings) {
     task: new Set(bindings.tasks || []),
     call: new Set(bindings.calls || []),
   };
+  const ids = {
+    email: new Set(bindings.emailIds || []),
+    task: new Set(bindings.taskIds || []),
+    call: new Set(bindings.callIds || []),
+  };
   const out = [];
   let m;
+
+  // user.email("Name") — by name.
   REF_RE.lastIndex = 0;
   while ((m = REF_RE.exec(src)) !== null) {
     const kind = m[1];
     const name = m[3];
     if (known[kind].has(name)) continue;
-    const from = m.index + m[0].indexOf(name, m[0].indexOf('(')); // start of the name literal
-    out.push({
-      from,
-      to: from + name.length,
-      kind,
-      name,
-      message: `No saved ${kind} named “${name}”. Create a ${kind} with that name, or fix the reference — this campaign depends on it.`,
-    });
+    const from = m.index + m[0].indexOf(name, m[0].indexOf('('));
+    out.push({ from, to: from + name.length, kind, name, message: dependencyMsg(kind, name) });
+  }
+
+  // user.emails.<Id> — by code id (only when we know the ids for that kind).
+  const kindOf = { emails: 'email', tasks: 'task', calls: 'call' };
+  KEYED_RE.lastIndex = 0;
+  while ((m = KEYED_RE.exec(src)) !== null) {
+    const kind = kindOf[m[1]];
+    const id = m[2];
+    if (!ids[kind].size || ids[kind].has(id)) continue;
+    const from = m.index + m[0].lastIndexOf(id);
+    out.push({ from, to: from + id.length, kind, name: id, message: dependencyMsg(kind, id) });
   }
   return out;
+}
+
+function dependencyMsg(kind, ref) {
+  return `No saved ${kind} “${ref}”. Create a ${kind} with that name, or fix the reference — this campaign depends on it.`;
 }

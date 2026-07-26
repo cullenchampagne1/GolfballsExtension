@@ -177,6 +177,7 @@ const BINDING_OPTIONS = {
     { label: 'page.contact', type: 'variable', detail: 'the contact being run' },
     { label: 'page.contacts', type: 'variable', detail: 'the audience []' },
     { label: 'page.count', type: 'variable', detail: 'audience size' },
+    { label: 'page.evaluate', type: 'function', detail: '(ref) → outbound — renders a saved template (a step)' },
   ],
 };
 
@@ -220,6 +221,14 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
 
       const before = context.matchBefore(/[\w$.[\]'"-]*/);
       if (!before || (before.from === before.to && !context.explicit)) return null;
+      // user.emails.<Id> / user.tasks.<Id> / user.calls.<Id> → the code ids.
+      const keyed = before.text.match(/^user\.(emails|tasks|calls)\.[\w$]*$/);
+      if (keyed) {
+        const b = bindingsRef.current || {};
+        const ids = keyed[1] === 'emails' ? b.emailIds : keyed[1] === 'tasks' ? b.taskIds : b.callIds;
+        const opts = (ids || []).map((id) => ({ label: `user.${keyed[1]}.${id}`, type: 'variable', detail: `saved ${keyed[1].slice(0, -1)}` }));
+        if (opts.length) return { from: before.from, options: opts, validFor: /^[\w$.]*$/ };
+      }
       const head = before.text.split(/[.[]/)[0];
       let options = null;
       if (head === 'ctx')       options = ctxOptsRef.current;

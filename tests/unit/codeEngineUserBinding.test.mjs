@@ -26,26 +26,30 @@ const SAVED = {
 };
 
 describe('userBinding · shape + lookups', () => {
-  it('exposes arrays and name/id finders', () => {
+  it('keys emails by a PascalCase code id and finds by name/id', () => {
     const u = buildUserBinding(SAVED);
-    assert.equal(u.emails.length, 1);
-    assert.equal(u.email('Win-back').id, 'e1');
-    assert.equal(u.email('e1').name, 'Win-back');
+    assert.equal(Object.keys(u.emails).length, 1);
+    assert.ok(u.emails.WinBack, 'user.emails.WinBack should exist');
+    assert.equal(u.emails.WinBack.id, 'e1');
+    assert.equal(u.email('Win-back').id, 'e1'); // by name
+    assert.equal(u.email('e1').name, 'Win-back'); // by id
     assert.equal(u.task('Follow up').subject, 'Call them');
+    assert.equal(u.emails.WinBack.versions[0].subject, 'We miss you');
   });
 
   it('throws a dependency error when a named template is missing', () => {
     const u = buildUserBinding(SAVED);
     assert.throws(() => u.email('Nope'), /Missing dependency: no saved email named .Nope./);
     assert.throws(() => u.task('Ghost'), /no saved task named/);
-    // The optional, non-throwing path stays available via the arrays.
-    assert.equal(u.emails.find((e) => e.name === 'Nope'), undefined);
+    // The optional, non-throwing path stays available via the keyed map.
+    assert.equal(Object.values(u.emails).find((e) => e.name === 'Nope'), undefined);
   });
 
-  it('userBindingData keeps only the serializable arrays', () => {
+  it('userBindingData keeps only the serializable id-keyed maps', () => {
     const d = userBindingData(SAVED);
     assert.deepEqual(Object.keys(d).sort(), ['calls', 'emails', 'tasks']);
     assert.equal(typeof d.email, 'undefined');
+    assert.ok(d.emails.WinBack);
   });
 });
 

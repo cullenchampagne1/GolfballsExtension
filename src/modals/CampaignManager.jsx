@@ -7,6 +7,7 @@ import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
 import { CodeDocsSidebar } from '../ui/components/CodeDocsSidebar.jsx';
 import { resolveDoc } from '../lib/codeEngine/docs.js';
 import { buildCodeSpec } from '../lib/codeEngine/spec.js';
+import { codeIdsFor } from '../lib/codeEngine/userBinding.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, subscribeCampaigns, writeCampaignCode,
@@ -677,6 +678,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
     emails: userData.emails.map((e) => e.name).filter(Boolean),
     tasks: userData.tasks.map((t) => t.name).filter(Boolean),
     calls: userData.calls.map((c) => c.name).filter(Boolean),
+    emailIds: codeIdsFor(userData.emails),
+    taskIds: codeIdsFor(userData.tasks),
+    callIds: codeIdsFor(userData.calls),
   }), [userData, templatesLoaded]);
   const runner = useCodeRunner();
 

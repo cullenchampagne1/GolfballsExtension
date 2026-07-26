@@ -16,15 +16,20 @@ import { I } from '../icons.jsx';
    sidebar lives in the parent, not here.
 ─────────────────────────────────────────────────────────────── */
 
-const STARTER = `// page.contact = who you're simulating · user.* = your saved templates
-// Re-engage a cold contact with a SAVED email, else a saved task:
+const STARTER = `// page.contact = who you're running · user.emails.* = your saved emails
 const c = page.contact;
 
-if (c.daysCold > 30) {
-  await actions.sendEmail(user.email("Win-back"));   // a saved email
+if (c.daysCold > 30 && c.email) {
+  // 1) evaluate a saved email into a sendable object (its own step)
+  const outbound = await page.evaluate(user.emails.WinBack);
+  // 2) optional tweak, then send
+  outbound.appendSubject(" — just for " + c.contactName);
+  await actions.sendEmail(outbound);
 } else {
-  await actions.createTask(user.task("Quick follow-up"));
-}`;
+  const task = await page.evaluate(user.tasks.QuickFollowUp);
+  await actions.createTask(task);
+}
+return "done";`;
 
 export function CodeAutomationPanel({
   value, onChange, blocks = [], errors = [],

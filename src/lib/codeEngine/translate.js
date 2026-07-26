@@ -99,6 +99,23 @@ function objectStringProp(src, objNode, key) {
   return null;
 }
 
+/** If `node` is `page.evaluate(ref)` (optionally awaited), return its span +
+ *  the reference text; else null. This becomes an "evaluate" step. */
+function asEvalCall(src, node) {
+  let call = node;
+  if (call.name === 'AwaitExpression') call = childByName(call, 'CallExpression') || call;
+  if (call.name !== 'CallExpression') return null;
+  const member = childByName(call, 'MemberExpression');
+  if (!member) return null;
+  if (!/^page\s*\.\s*evaluate$/.test(slice(src, member.from, member.to))) return null;
+  const args = childByName(call, 'ArgList');
+  return {
+    callFrom: call.from,
+    callTo: call.to,
+    refText: args ? slice(src, args.from + 1, args.to - 1).trim() : '',
+  };
+}
+
 /** Statement node → one block (recursing into branch/loop/switch bodies). */
 function statementToBlock(src, stmt) {
   const id = nodeId(stmt.from, stmt.to);
@@ -131,6 +148,15 @@ function statementToBlock(src, stmt) {
         kind: 'action', contract: action.contract, argText: action.argText,
         assignTo, text,
       };
+    }
+    // const outbound = await page.evaluate(ref) → an "evaluate" step.
+    const evalCall = expr ? asEvalCall(src, expr) : null;
+    if (evalCall) {
+      const assignTo = stmt.name === 'VariableDeclaration'
+        ? (childByName(stmt, 'VariableDefinition') && slice(src,
+          childByName(stmt, 'VariableDefinition').from, childByName(stmt, 'VariableDefinition').to)) || null
+        : null;
+      return { id: nodeId(evalCall.callFrom, evalCall.callTo), kind: 'evaluate', refText: evalCall.refText, assignTo, text };
     }
     // A non-action `const/let/var x = …` → a "set variable" block, or a
     // "compose" block when the value is an email/task-shaped object literal.

@@ -19,6 +19,7 @@
 import { instrument } from './instrument.js';
 import { validateContractInput, describeContract } from './contracts.js';
 import { buildUserBinding } from './userBinding.js';
+import { makeOutbound } from './runtime.js';
 
 /** A runner that executes instrumented code via AsyncFunction (Node/tests).
  *  The browser passes its own sandbox-backed runner instead. */
@@ -58,7 +59,17 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
     return { ok: check.ok, dry: true, simulated: true };
   };
 
-  const scope = { actions: { __trace: record }, page, user: buildUserBinding(user) };
+  // page.evaluate(ref) → its own "Evaluate" step; returns the outbound object.
+  const recordEval = (id, ref) => {
+    const r = ref || {};
+    trace.push({ id, contract: 'evaluate', kind: 'evaluate', status: 'ran', summary: `Evaluate ${r.name || (r.kind || 'template')}`, errors: [] });
+    return makeOutbound(r);
+  };
+  const scope = {
+    actions: { __trace: record },
+    page: { ...page, __eval: recordEval },
+    user: buildUserBinding(user),
+  };
   try {
     // The runner returns the program's final value (the closing-step summary).
     const result = await run(code, scope);

@@ -34,6 +34,8 @@ const clip = (value, max) => { const s = str(value); return s.length > max ? `${
 function templateOf(input) {
   if (!input || typeof input !== 'object') return null;
   if (input.id != null && input.name != null) return input;
+  // An evaluated outbound object carries templateId + name.
+  if (input.templateId != null && input.name != null) return input;
   if (input.template && typeof input.template === 'object') return input.template;
   return null;
 }

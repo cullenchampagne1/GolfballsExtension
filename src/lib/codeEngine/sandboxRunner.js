@@ -36,16 +36,28 @@
 export function buildTraceBody(instrumentedCode) {
   return [
     'const page = (ctx && ctx.page) || {};',
-    // Rebuild the user binding (functions can\'t cross the realm) from raw data.
+    // Rebuild the user binding (functions can\'t cross the realm) from the
+    // serializable id-keyed maps. Mirror of userBinding.buildUserBinding.
     'const __u = (ctx && ctx.user) || {};',
-    'const __find = (list, kind) => (q) => {',
-    '  const f = (list || []).find((t) => t && (t.id === q || t.name === q));',
+    'const __find = (map, kind) => (q) => {',
+    '  const m = map || {};',
+    '  const f = m[q] || Object.keys(m).map((k) => m[k]).find((r) => r && (r.id === q || r.name === q));',
     '  if (!f) throw new Error("Missing dependency: no saved " + kind + " named \\u201c" + q + "\\u201d. Create a " + kind + " with that name (or fix the reference).");',
     '  return f;',
     '};',
-    'const user = { emails: __u.emails || [], tasks: __u.tasks || [], calls: __u.calls || [],',
-    '  email: __find(__u.emails || [], "email"), task: __find(__u.tasks || [], "task"), call: __find(__u.calls || [], "call") };',
+    'const user = { emails: __u.emails || {}, tasks: __u.tasks || {}, calls: __u.calls || {},',
+    '  email: __find(__u.emails || {}, "email"), task: __find(__u.tasks || {}, "task"), call: __find(__u.calls || {}, "call") };',
+    // Mirror of runtime.makeOutbound.
+    'const __mkOut = (ref) => {',
+    '  const r = ref || {}; const v = (r.versions && r.versions[0]) || r;',
+    '  const o = { kind: r.kind || "email", name: r.name || null, templateId: r.id || null, subject: v.subject || "", body: v.body || "" };',
+    '  if (r.priority != null) o.priority = r.priority; if (r.daysOut != null) o.daysOut = r.daysOut;',
+    '  o.append = function (t) { this.body = (this.body || "") + String(t == null ? "" : t); return this; };',
+    '  o.appendSubject = function (t) { this.subject = (this.subject || "") + String(t == null ? "" : t); return this; };',
+    '  return o;',
+    '};',
     'const __gbTrace = [];',
+    'page.__eval = (id, ref) => { __gbTrace.push({ kind: "evaluate", id: id, name: ref && ref.name }); return __mkOut(ref); };',
     'const actions = { __trace(id, name, input) {',
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
     '  return { ok: true, dry: true, simulated: true };',
@@ -73,13 +85,18 @@ export function makeSandboxRunner({ exec, doc } = {}) {
   return async function sandboxRun(code, scope) {
     const page = (scope && scope.page) || {};
     const u = (scope && scope.user) || {};
-    // Only the serializable arrays cross the realm; the sandbox rebuilds the finders.
-    const user = { emails: u.emails || [], tasks: u.tasks || [], calls: u.calls || [] };
+    // Only the serializable id-keyed maps cross the realm; the sandbox rebuilds
+    // the finders + outbound helpers. `page` carries only contact data (its
+    // __eval is provided in-sandbox), so strip functions by shallow-copying data.
+    const pageData = { contact: page.contact, contacts: page.contacts, count: page.count };
+    const user = { emails: u.emails || {}, tasks: u.tasks || {}, calls: u.calls || {} };
     const record = scope && scope.actions && scope.actions.__trace;
-    const raw = await exec(buildTraceBody(code), { page, user }, {}, doc);
+    const recordEval = scope && scope.page && scope.page.__eval;
+    const raw = await exec(buildTraceBody(code), { page: pageData, user }, {}, doc);
     const entries = Array.isArray(raw) ? raw : (raw && raw.__gbTrace) || [];
-    if (typeof record === 'function') {
-      for (const entry of entries) record(entry.id, entry.contract, entry.input);
+    for (const e of entries) {
+      if (e && e.kind === 'evaluate') { if (typeof recordEval === 'function') recordEval(e.id, { name: e.name }); }
+      else if (typeof record === 'function') record(e.id, e.contract, e.input);
     }
     // Surface the program's final return value (the closing "step" summary).
     return Array.isArray(raw) ? undefined : (raw && raw.__gbRet);

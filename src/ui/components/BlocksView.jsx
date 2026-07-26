@@ -63,7 +63,7 @@ const CONTRACT_TONE = { sendEmail: 'brand', createTask: 'info', logCall: 'info' 
 const GATE_LABEL = { auto: 'auto', confirm: 'confirm', hard: 'gated' };
 
 /* Which kinds are "steps" that get a numbered badge + run status. */
-const isStep = (b) => b.kind === 'action' || b.kind === 'branch' || b.kind === 'loop' || b.kind === 'cases';
+const isStep = (b) => b.kind === 'action' || b.kind === 'evaluate' || b.kind === 'branch' || b.kind === 'loop' || b.kind === 'cases';
 
 /** Precompute display indices: top-level steps 1,2,3; nested 2a,2b… */
 function indexSteps(blocks, prefix = '', map = {}) {
@@ -203,6 +203,16 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   const idx = indices[block.id];
 
   if (block.kind === 'compose') return <ComposeCard block={block} />;
+
+  if (block.kind === 'evaluate') {
+    const d = describeBlock(block, traceById);
+    return (
+      <Card tone="info" status={status} idx={idx} icon={I.refresh}
+        title={d.title} sublabel={d.detail || null}
+        tag={<Tag tone="neutral" size="xs">EVALUATE</Tag>}
+        right={<span title="rendering the template can take a few seconds" style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.03em', padding: '1px 6px', borderRadius: 999, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', textTransform: 'uppercase', flexShrink: 0 }}>~5s</span>} />
+    );
+  }
 
   if (block.kind === 'action') {
     const d = describeBlock(block, traceById);

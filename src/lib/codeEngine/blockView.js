@@ -60,10 +60,13 @@ export function blockStatus(block, traceById = {}) {
   return saw;
 }
 
-/** Did this block (or any descendant action) actually fire in the trace? */
+/** A leaf that produces a trace entry (an action send or an evaluate step). */
+const isTracedLeaf = (b) => b && (b.kind === 'action' || b.kind === 'evaluate');
+
+/** Did this block (or any descendant action/evaluate) actually fire in the trace? */
 export function subtreeRan(block, traceById = {}) {
   if (!block) return false;
-  if (block.kind === 'action') {
+  if (isTracedLeaf(block)) {
     const e = traceById[block.id];
     return !!(e && e.length && e.some((x) => x.status !== 'failed'));
   }
@@ -73,7 +76,7 @@ export function subtreeRan(block, traceById = {}) {
 /** Did any descendant action fail its contract preflight? */
 export function subtreeFailed(block, traceById = {}) {
   if (!block) return false;
-  if (block.kind === 'action') {
+  if (isTracedLeaf(block)) {
     const e = traceById[block.id];
     return !!(e && e.some((x) => x.status === 'failed'));
   }
@@ -92,7 +95,7 @@ export function subtreeFailed(block, traceById = {}) {
  */
 export function runStatus(block, traceById, { done = false, runningId = null, force = null } = {}) {
   if (runningId && block.id === runningId) return 'running';
-  if (block.kind === 'action') {
+  if (isTracedLeaf(block)) {
     const entries = traceById[block.id];
     if (entries && entries.length) return entries.some((e) => e.status === 'failed') ? 'failed' : 'ran';
     if (force) return force;
@@ -160,6 +163,16 @@ export function describeBlock(block, traceById = {}) {
   }
   if (block.kind === 'setVar') {
     return { ...base, kind: 'setVar', icon: 'code', title: block.name || 'value', detail: block.valueText || '' };
+  }
+  if (block.kind === 'evaluate') {
+    const entries = traceById[block.id] || [];
+    const summary = entries.length ? entries[entries.length - 1].summary : `Evaluate ${block.refText || 'template'}`;
+    return {
+      ...base, kind: 'evaluate', icon: 'refresh',
+      title: summary,
+      detail: block.assignTo ? `→ ${block.assignTo}` : (block.refText || ''),
+      runs: entries.length,
+    };
   }
   if (block.kind === 'compose') {
     return {

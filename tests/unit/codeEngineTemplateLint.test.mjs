@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { lintTemplateRefs } from '../../src/lib/codeEngine/templateLint.js';
 
-const READY = { ready: true, emails: ['Win-back'], tasks: ['Follow up'], calls: [] };
+const READY = { ready: true, emails: ['Win-back'], tasks: ['Follow up'], calls: [], emailIds: ['WinBack'], taskIds: ['FollowUp'], callIds: [] };
 
 describe('templateLint · missing dependencies', () => {
   it('flags a user.email("X") whose name is not saved', () => {
@@ -16,7 +16,19 @@ describe('templateLint · missing dependencies', () => {
     assert.equal(d.kind, 'email');
     assert.equal(d.name, 'Ghost Email');
     assert.equal(src.slice(d.from, d.to), 'Ghost Email');
-    assert.match(d.message, /No saved email named/);
+    assert.match(d.message, /No saved email/);
+  });
+
+  it('flags a user.emails.<Id> whose code id is not saved', () => {
+    const src = 'const o = await page.evaluate(user.emails.GhostPromo);';
+    const [d] = lintTemplateRefs(src, READY);
+    assert.equal(d.kind, 'email');
+    assert.equal(d.name, 'GhostPromo');
+    assert.equal(src.slice(d.from, d.to), 'GhostPromo');
+  });
+
+  it('passes a known code id', () => {
+    assert.deepEqual(lintTemplateRefs('page.evaluate(user.emails.WinBack)', READY), []);
   });
 
   it('passes a name that IS saved', () => {

@@ -270,6 +270,10 @@
       "file": "tests/unit/codeEngineSpec.test.mjs"
     },
     {
+      "name": "guard \u00b7 code-engine evaluate \u2192 send + ids",
+      "file": "tests/unit/codeEngineEvaluate.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Help Companion automatic settings context",
       "file": "tests/unit/helpActions.test.mjs"
     },
