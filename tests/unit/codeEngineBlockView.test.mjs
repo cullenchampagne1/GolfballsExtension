@@ -90,6 +90,11 @@ describe('blockView · block descriptors', () => {
     assert.equal(describeBlock(c).title, 're-engage cold contacts');
   });
 
+  it('gives a comment clean lines (block comment → multiple lines)', () => {
+    const [c] = translateProgram('/* first line\n   * second line */').blocks;
+    assert.deepEqual(describeBlock(c).lines, ['first line', 'second line']);
+  });
+
   it('renders a non-action declaration as a setVar block with name + value', () => {
     const [v] = translateProgram('const daysCold = 30;').blocks;
     assert.equal(v.kind, 'setVar');

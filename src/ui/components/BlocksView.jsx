@@ -143,14 +143,17 @@ function Card({ tone = 'neutral', status, idx, icon, title, sublabel, tag, right
   );
 }
 
-/* ── a quiet comment note (deliberately NOT a step) ── */
-function CommentNote({ block }) {
-  const d = describeBlock(block);
-  if (!d.title) return null;
+/* ── a note tag-box (the // markers stripped) — NOT a step. Consecutive
+   comments merge into one box, one line of text per source line. ── */
+function CommentNote({ lines }) {
+  if (!lines || !lines.length) return null;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 2px 3px 30px' }}>
-      <span style={{ fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', fontSize: 11, color: 'var(--gb-text-ghost)', lineHeight: 1.5 }}>//</span>
-      <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>{d.title}</span>
+    <div style={{ alignSelf: 'flex-start', maxWidth: '100%', display: 'inline-flex', flexDirection: 'column', gap: 1,
+      margin: '2px 0 2px 8px', padding: '5px 10px', borderRadius: 8,
+      background: 'var(--gb-warning-tint-soft, var(--gb-fill-subtle))', border: '1px solid var(--gb-warning-tint-border, var(--gb-border-subtle))' }}>
+      {lines.map((l, i) => (
+        <span key={i} style={{ fontSize: 10.5, color: 'var(--gb-warning-fg, var(--gb-text-muted))', lineHeight: 1.5 }}>{l}</span>
+      ))}
     </div>
   );
 }
@@ -160,10 +163,20 @@ function renderList(blocks, ctx, tone, forceStatus) {
   // A connector precedes each step-like block after the first one on this level.
   let firstStepSeen = false;
   const out = [];
-  blocks.forEach((b, i) => {
+  let i = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
     if (b.kind === 'comment') {
-      out.push(<CommentNote key={b.id} block={b} />);
-      return;
+      // Merge a run of consecutive comments into ONE tag box.
+      const lines = [];
+      let j = i;
+      while (j < blocks.length && blocks[j].kind === 'comment') {
+        lines.push(...(describeBlock(blocks[j]).lines || []));
+        j += 1;
+      }
+      out.push(<CommentNote key={`cm-${b.id}`} lines={lines} />);
+      i = j;
+      continue;
     }
     const step = isStep(b);
     if (step && firstStepSeen) {
@@ -173,7 +186,8 @@ function renderList(blocks, ctx, tone, forceStatus) {
     }
     if (step) firstStepSeen = true;
     out.push(<BlockNode key={b.id} block={b} ctx={ctx} tone={tone} forceStatus={forceStatus} />);
-  });
+    i += 1;
+  }
   return out;
 }
 

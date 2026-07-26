@@ -109,6 +109,14 @@ export function runStatus(block, traceById, { done = false, runningId = null, fo
 
 const firstLine = (text) => String(text ?? '').split('\n').map((l) => l.trim()).find(Boolean) || '';
 
+/** A comment's text → clean lines, with the //, / *, * markers stripped. */
+export function commentLines(text) {
+  const s = String(text ?? '').replace(/^\s*\/\*+/, '').replace(/\*+\/\s*$/, '');
+  return s.split('\n')
+    .map((l) => l.replace(/^\s*\/\/+\s?/, '').replace(/^\s*\*\s?/, '').trim())
+    .filter(Boolean);
+}
+
 function loopTitle(block) {
   const head = block.headText ? ` ${block.headText}` : '';
   if (block.loopKind === 'while') return `While${head || ' …'}`;
@@ -154,12 +162,8 @@ export function describeBlock(block, traceById = {}) {
     return { ...base, icon: 'branch', title: `Switch on ${block.onText || '…'}` };
   }
   if (block.kind === 'comment') {
-    const clean = String(block.text || '')
-      .replace(/^\s*\/\/+\s?/, '')
-      .replace(/^\s*\/\*+/, '').replace(/\*+\/\s*$/, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return { ...base, kind: 'comment', icon: 'code', title: clean };
+    const lines = commentLines(block.text);
+    return { ...base, kind: 'comment', icon: 'code', title: lines.join(' '), lines };
   }
   if (block.kind === 'setVar') {
     return { ...base, kind: 'setVar', icon: 'code', title: block.name || 'value', detail: block.valueText || '' };
