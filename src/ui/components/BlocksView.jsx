@@ -39,7 +39,7 @@ function Connector({ active, height = 30, tone = 'default', hookRight, hookLeft 
   const dash = active ? '4 4' : '0';
   const anim = active ? { animation: 'gbb-flow 1.2s linear infinite' } : null;
   return (
-    <div style={{ position: 'relative', height, width: 26, marginLeft: 15, display: 'flex', justifyContent: 'center' }}>
+    <div style={{ position: 'relative', height, width: 26, marginLeft: 10, display: 'flex', justifyContent: 'center' }}>
       <svg width={26} height={height} style={{ overflow: 'visible' }}>
         {hookRight
           ? <path d={`M13 0 L13 ${height - 10} Q13 ${height} 23 ${height}`} fill="none" stroke={stroke} strokeWidth={1.5} strokeDasharray={dash} style={anim} />
@@ -62,8 +62,13 @@ const TONE = {
 const CONTRACT_TONE = { sendEmail: 'brand', createTask: 'info', logCall: 'info' };
 const GATE_LABEL = { auto: 'auto', confirm: 'confirm', hard: 'gated' };
 
-/* Which kinds are "steps" that get a numbered badge + run status. */
-const isStep = (b) => b.kind === 'action' || b.kind === 'evaluate' || b.kind === 'branch' || b.kind === 'loop' || b.kind === 'cases';
+/* Which kinds are "steps": email/task/call sends, email evaluations, returns,
+   and branches (if/switch) + loops. These get a numbered badge + run status.
+   set-variable / comment / raw code are supporting blocks, not steps. */
+const STEP_KINDS = new Set(['action', 'evaluate', 'return', 'branch', 'loop', 'cases']);
+const isStep = (b) => STEP_KINDS.has(b.kind);
+/** True for branch-family containers (if / switch). */
+const isBranchKind = (b) => b.kind === 'branch' || b.kind === 'cases';
 
 /** Precompute display indices: top-level steps 1,2,3; nested 2a,2b… */
 function indexSteps(blocks, prefix = '', map = {}) {
@@ -197,6 +202,24 @@ function ComposeCard({ block }) {
   );
 }
 
+/* A "set variable" — a light, subordinate chip (not a step). */
+function SetVarCard({ block, greyed }) {
+  const d = describeBlock(block);
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, alignSelf: 'flex-start', maxWidth: '100%', padding: '4px 10px 4px 6px', marginLeft: 8,
+      border: '1px solid var(--gb-border-subtle)', borderRadius: 8, background: 'var(--gb-surface-2)', opacity: greyed ? 0.5 : 1 }}>
+      <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.05em', padding: '1px 5px', borderRadius: 4, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-soft)', textTransform: 'uppercase', flexShrink: 0 }}>set</span>
+      <code style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', flexShrink: 0 }}>{d.title}</code>
+      {d.detail ? (
+        <>
+          <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>=</span>
+          <code style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono, ui-monospace, monospace)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.detail}</code>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function BlockNode({ block, ctx, tone, forceStatus }) {
   const { traceById, done, runningId, indices } = ctx;
   const status = runStatus(block, traceById, { done, runningId, force: forceStatus });
@@ -228,15 +251,15 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
     );
   }
 
-  if (block.kind === 'setVar') {
+  if (block.kind === 'return') {
     const d = describeBlock(block, traceById);
     return (
-      <Card tone="neutral" status={forceStatus || 'pending'} icon={I.code}
-        title={d.title}
-        tag={<span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', padding: '1px 6px', borderRadius: 5, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-soft)', textTransform: 'uppercase', flexShrink: 0 }}>set</span>}
-        sublabel={d.detail ? `= ${d.detail}` : null} />
+      <Card tone="success" status={status === 'pending' && done ? 'ran' : status} idx={idx} icon={I.check}
+        title={d.title} tag={<Tag tone="success" size="xs">RETURN</Tag>} />
     );
   }
+
+  if (block.kind === 'setVar') return <SetVarCard block={block} greyed={forceStatus === 'skipped' || forceStatus === 'cut'} />;
 
   if (block.kind === 'branch') {
     const thenRan = block.then.some((k) => subtreeRan(k, traceById));
@@ -301,12 +324,21 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   );
 }
 
-/* An indented arm (branch then/else, loop body, switch case) with a rail. */
+/* An indented arm (branch then/else, loop body, switch case) with a rail.
+   The rail is tinted by role (warning for a branch, info for a loop, neutral
+   for else) and only glows when the run is inside it — so nested branches /
+   loops read as clearly separate lanes. */
+const ARM_RAIL = {
+  warning: 'var(--gb-warning-tint-border)',
+  info: 'var(--gb-info-tint-border, var(--gb-border-strong))',
+  default: 'var(--gb-border-subtle)',
+};
 function BranchArm({ label, tone, active, children }) {
-  const rail = active ? 'var(--gb-brand-label)' : tone === 'warning' ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-strong)';
+  const rail = active ? 'var(--gb-brand-label)' : (ARM_RAIL[tone] || ARM_RAIL.default);
+  const labelColor = tone === 'warning' ? 'var(--gb-warning-fg)' : tone === 'info' ? 'var(--gb-info-fg)' : 'var(--gb-text-muted)';
   return (
-    <div style={{ marginLeft: 13, marginTop: 6, paddingLeft: 16, borderLeft: `2px solid ${rail}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--gb-text-muted)', margin: '0 0 -1px' }}>{label}</div>
+    <div style={{ marginLeft: 12, marginTop: 6, paddingLeft: 14, borderLeft: `2px solid ${rail}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: labelColor, margin: '0 0 -1px' }}>{label}</div>
       {children}
     </div>
   );
@@ -347,7 +379,6 @@ export function BlocksView({ blocks = [], trace = [], runningId = null, done = f
   return (
     <div style={{ display: 'flex', flexDirection: 'column', padding: '16px 18px 40px' }}>
       {renderList(blocks, ctx, 'default', null)}
-      {done && <ReturnNote result={result} />}
     </div>
   );
 }

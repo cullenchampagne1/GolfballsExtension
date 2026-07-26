@@ -121,6 +121,22 @@ describe('blockView · block descriptors', () => {
     assert.equal(a.contract, 'createTask');
   });
 
+  it('parses a return statement as its own step block', () => {
+    const [b] = translateProgram('return "done";').blocks;
+    assert.equal(b.kind, 'return');
+    assert.equal(describeBlock(b).title, 'Return "done"');
+  });
+
+  it('flattens a switch case { … } block and drops the break', () => {
+    const src = 'switch (x) { case "a": { await actions.logCall({ subject: "y" }); break; } }';
+    const [sw] = translateProgram(src).blocks;
+    assert.equal(sw.kind, 'cases');
+    const body = sw.cases[0].body;
+    assert.equal(body.length, 1, 'case body should be just the action, not a wrapping code block + break');
+    assert.equal(body[0].kind, 'action');
+    assert.equal(body[0].contract, 'logCall');
+  });
+
   it('titles control-flow blocks readably', () => {
     const [branch] = translateProgram('if (page.n > 3) { await actions.logCall({ subject: "x" }); }').blocks;
     assert.equal(describeBlock(branch).title, 'If page.n > 3');

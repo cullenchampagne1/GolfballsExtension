@@ -32,7 +32,7 @@ if (c.daysCold > 30 && c.email) {
 return "done";`;
 
 export function CodeAutomationPanel({
-  value, onChange, blocks = [], errors = [],
+  value, onChange, blocks = [], errors = [], blockCount = null,
   view = 'code', onView, onContext, bindings = null,
   trace = [], runningId = null, done = false, result = null, error = null,
   simStatus = 'idle',
@@ -43,18 +43,19 @@ export function CodeAutomationPanel({
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
       {/* Toolbar: the Code ⇆ Blocks switch + sim status */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0 }}>
-        <ViewSwitch view={view} onView={onView} blockCount={blocks.length} />
+        <ViewSwitch view={view} onView={onView} blockCount={blockCount == null ? blocks.length : blockCount} />
         <div style={{ marginLeft: 'auto' }}><SimStatus status={simStatus} /></div>
       </div>
 
-      {/* Body: Code or Blocks, cross-faded. */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 0, minWidth: 0 }}>
+      {/* Body: Code or Blocks, cross-faded. mode="wait" keeps a single child
+          mounted so it can fill the height in normal flow (no absolute clip). */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0 }}>
         <AnimatePresence initial={false} mode="wait">
           {view === 'code' ? (
             <motion.div key="code"
-              initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-              style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, minHeight: 0 }}>
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.14 }}
+              style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8, minHeight: 0 }}>
               <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
                 <CodeVarEditor
                   value={code}
@@ -79,9 +80,9 @@ export function CodeAutomationPanel({
             </motion.div>
           ) : (
             <motion.div key="blocks"
-              initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-              style={{ position: 'absolute', inset: 0, overflow: 'auto', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.14 }}
+              style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
               {error ? (
                 <div style={{ margin: '14px 18px 0', display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid var(--gb-error-tint-border)', borderRadius: 10, background: 'var(--gb-error-tint-soft)' }}>
                   <I.alert size={14} style={{ color: 'var(--gb-error-fg)', marginTop: 1, flexShrink: 0 }} />

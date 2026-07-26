@@ -164,6 +164,9 @@ export function describeBlock(block, traceById = {}) {
   if (block.kind === 'setVar') {
     return { ...base, kind: 'setVar', icon: 'code', title: block.name || 'value', detail: block.valueText || '' };
   }
+  if (block.kind === 'return') {
+    return { ...base, kind: 'return', icon: 'check', title: block.valueText ? `Return ${block.valueText}` : 'Return', detail: '' };
+  }
   if (block.kind === 'evaluate') {
     const entries = traceById[block.id] || [];
     const summary = entries.length ? entries[entries.length - 1].summary : `Evaluate ${block.refText || 'template'}`;

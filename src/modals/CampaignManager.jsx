@@ -443,7 +443,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
 /* ── Stats strip (footer) — code program summary + Save ── */
 function StatsStrip({ program, campaign, dirty, onSave }) {
   const ratePerMin = Math.round(60 / Math.max(campaign.paceDelay || 12, 1));
-  const isValid = program.errors.length === 0 && program.actionCount > 0;
+  const isValid = program.errors.length === 0 && program.stepCount > 0;
   const Cell = ({ icon, k, v, sub, tone = 'neutral' }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 10px', flexShrink: 0 }}>
       <div style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', background: tone === 'brand' ? 'var(--gb-brand-tint-medium)' : tone === 'warning' ? 'var(--gb-warning-tint-medium)' : tone === 'success' ? 'var(--gb-success-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: tone === 'brand' ? 'var(--gb-brand-label)' : tone === 'warning' ? 'var(--gb-warning-fg)' : tone === 'success' ? 'var(--gb-success-fg)' : 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(icon, { size: 13 })}</div>
@@ -461,7 +461,9 @@ function StatsStrip({ program, campaign, dirty, onSave }) {
     <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minHeight: 56 }}>
       <Cell icon={<I.zap />} tone="brand" k="Pacing" v={`~${ratePerMin}/min`} sub={`${campaign.paceDelay || 12}s`} />
       <Divider />
-      <Cell icon={<I.flow />} k="Steps" v={program.actionCount} sub={program.branchCount ? `${program.branchCount} branch${program.branchCount !== 1 ? 'es' : ''}` : ''} />
+      <Cell icon={<I.send />} k="Steps" v={program.stepCount} />
+      <Divider />
+      <Cell icon={<I.branch />} tone={program.branchCount ? 'warning' : 'neutral'} k="Branches" v={program.branchCount} />
       <div style={{ flex: 1 }} />
       <Cell icon={isValid ? <I.check /> : <I.alert />} tone={isValid ? 'success' : 'warning'} k={isValid ? 'Valid' : 'Issues'} v={isValid ? 'OK' : (program.errors.length || 'empty')} />
       <Divider />
@@ -663,7 +665,13 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const program = useMemo(() => {
     const { blocks, errors } = translateProgram(campaign.automation || '');
     const flat = flattenBlocks(blocks);
-    return { blocks, errors, actionCount: flat.filter((b) => b.kind === 'action').length, branchCount: flat.filter((b) => b.kind === 'branch').length };
+    // Steps = email send / task / call / email evaluation / return.
+    const stepCount = flat.filter((b) => b.kind === 'action' || b.kind === 'evaluate' || b.kind === 'return').length;
+    // Branches = if / switch.
+    const branchCount = flat.filter((b) => b.kind === 'branch' || b.kind === 'cases').length;
+    // Pipeline length = the send/eval actions per contact.
+    const actionCount = flat.filter((b) => b.kind === 'action' || b.kind === 'evaluate').length;
+    return { blocks, errors, stepCount, branchCount, actionCount, blockCount: flat.length };
   }, [campaign.automation]);
 
   const [view, setView] = useState('code');
@@ -782,13 +790,13 @@ export function CampaignManager({ onClose, contacts = [] }) {
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
           <CodeAutomationPanel
             value={campaign.automation || ''} onChange={setAutomation}
-            blocks={program.blocks} errors={program.errors}
+            blocks={program.blocks} errors={program.errors} blockCount={program.blockCount}
             view={view} onView={setView} onContext={setDocToken} bindings={bindings}
             trace={shownTrace} runningId={runningId} done={sim.status === 'done'} result={sim.status === 'done' ? sim.result : null}
             error={sim.status === 'done' ? sim.error : null} simStatus={sim.status} />
-          {/* Contextual right sidebar: live docs while coding, campaign
-              settings while looking at the blocks. */}
-          <div style={{ width: 288, flexShrink: 0, borderLeft: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', position: 'relative', minHeight: 0 }}>
+          {/* Contextual right sidebar: live docs while coding (narrow), the
+              campaign settings while on the blocks (wider so nothing squishes). */}
+          <div style={{ width: view === 'code' ? 288 : 348, flexShrink: 0, borderLeft: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', position: 'relative', minHeight: 0, transition: 'width .18s ease' }}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={view === 'code' ? 'docs' : 'settings'}
                 initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}

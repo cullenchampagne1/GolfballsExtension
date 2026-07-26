@@ -126,6 +126,12 @@ function statementToBlock(src, stmt) {
     return { id, kind: 'comment', text };
   }
 
+  // A `return …` is a step (the closing summary).
+  if (stmt.name === 'ReturnStatement') {
+    const expr = children(stmt).find((n) => n.name !== 'return' && n.name !== ';');
+    return { id, kind: 'return', valueText: expr ? slice(src, expr.from, expr.to) : '', text };
+  }
+
   // An expression statement whose expression is an action call → action block.
   if (stmt.name === 'ExpressionStatement' || stmt.name === 'VariableDeclaration') {
     const expr = stmt.name === 'ExpressionStatement'
@@ -194,12 +200,15 @@ function statementToBlock(src, stmt) {
   return { id, kind: 'code', text };
 }
 
+/* Structural tokens / control-flow noise that shouldn't become blocks. */
+const SKIP_NODES = new Set(['{', '}', ';', 'BreakStatement', 'ContinueStatement', 'break', 'continue']);
+
 /** Block body (a { … } Block node, or a single statement) → block[]. */
 function blockBody(src, node) {
   if (!node) return [];
   if (node.name === 'Block') {
     return children(node)
-      .filter((n) => n.name !== '{' && n.name !== '}')
+      .filter((n) => !SKIP_NODES.has(n.name))
       .map((n) => statementToBlock(src, n));
   }
   return [statementToBlock(src, node)];
@@ -257,7 +266,11 @@ function switchToBlock(src, stmt, id) {
         current = { id: nodeId(n.from, n.to), test: n.name === 'DefaultLabel' ? null : label, body: [] };
         cases.push(current);
       } else if (current && n.name !== '{' && n.name !== '}') {
-        current.body.push(statementToBlock(src, n));
+        // `case x: { … }` wraps its statements in a Block — flatten it, and
+        // drop the `break;` control noise so the case reads as real steps.
+        if (n.name === 'Block') current.body.push(...blockBody(src, n));
+        else if (n.name === 'BreakStatement' || n.name === ';' || n.name === 'break') { /* skip */ }
+        else current.body.push(statementToBlock(src, n));
       }
     }
   }
