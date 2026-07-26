@@ -20,12 +20,15 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { migrateTemplates } from '../lib/templateMigration.js';
+import { blankCustomAction, normalizeCustomAction } from '../lib/customActions.js';
 
 // ── State ──────────────────────────────────────────────────────
 let templates     = [];
 let noteTemplates = [];
+let customActions = [];
 let currentId     = null;
 let currentNoteId = null;
+let currentActionId = null;
 let orderTabId    = null;
 
 /* Mirror the active-template ids to window so the React sidebar's
@@ -37,6 +40,7 @@ let orderTabId    = null;
    came off. Route every write to these locals through the setters. */
 function setCurrentId(id)     { currentId     = id; if (typeof window !== 'undefined') window.currentId     = id; }
 function setCurrentNoteId(id) { currentNoteId = id; if (typeof window !== 'undefined') window.currentNoteId = id; }
+function setCurrentActionId(id) { currentActionId = id; if (typeof window !== 'undefined') window.currentActionId = id; }
 // Tracks the view that was visible before openSettings() so
 // closeSettings() can restore it.
 let _settingsPreviousView = 'ed-empty';
@@ -82,13 +86,16 @@ function toast(msg, isError = false) {
 
 // ── Storage ────────────────────────────────────────────────────
 function loadStorage() {
-  return new Promise((res) => chrome.storage.local.get(['templates', 'noteTemplates', 'orderTabId', 'gbEditorLaunchIntent'], res));
+  return new Promise((res) => chrome.storage.local.get(['templates', 'noteTemplates', 'gbCustomActions', 'orderTabId', 'gbEditorLaunchIntent'], res));
 }
 async function saveTemplates() {
   return new Promise((res) => chrome.storage.local.set({ templates }, res));
 }
 async function saveNoteTemplates() {
   return new Promise((res) => chrome.storage.local.set({ noteTemplates }, res));
+}
+async function saveCustomActions() {
+  return new Promise((res) => chrome.storage.local.set({ gbCustomActions: customActions }, res));
 }
 
 // ── Templates: open / new / delete ─────────────────────────────
@@ -109,6 +116,7 @@ async function newTemplate() {
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
+  hide('ed-action-form');
   show('ed-form');
   animateView('ed-form');
   openTemplate(id);
@@ -122,6 +130,7 @@ function openTemplate(id) {
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
+  hide('ed-action-form');
   show('ed-form');
   animateView('ed-form');
   if (window.__gbOpenTemplate) {
@@ -178,6 +187,7 @@ async function newNoteTemplate() {
   hide('ed-empty');
   hide('ed-form');
   hide('ed-settings');
+  hide('ed-action-form');
   show('ed-note-form');
   animateView('ed-note-form');
   openNoteTemplate(id);
@@ -191,6 +201,7 @@ function openNoteTemplate(id) {
   hide('ed-empty');
   hide('ed-form');
   hide('ed-settings');
+  hide('ed-action-form');
   show('ed-note-form');
   animateView('ed-note-form');
   if (window.__gbOpenNote) {
@@ -248,6 +259,67 @@ async function applyNotePatch(tpl) {
   if (titleEl) titleEl.textContent = tpl.name || 'Untitled';
 }
 
+// ── Custom actions: open / new / delete / save ─────────────────
+// Remember which view was showing so the editor's Back button can restore it
+// (usually Settings, where the + / edit entry points live).
+let _actionPreviousView = 'ed-empty';
+function showActionForm() {
+  const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-settings'];
+  _actionPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
+  views.forEach((v) => hide(v));
+  show('ed-action-form');
+  animateView('ed-action-form');
+}
+function closeActionEditor() {
+  hide('ed-action-form');
+  show(_actionPreviousView);
+  animateView(_actionPreviousView);
+}
+
+async function newAction(pageType = 'contact') {
+  if (!window.__gbOpenAction) { toast('Action editor failed to load — reload the editor.', true); return; }
+  const rec = blankCustomAction(pageType);
+  customActions.push(rec);
+  await saveCustomActions();
+  setCurrentActionId(rec.id);
+  showActionForm();
+  window.__gbOpenAction(rec);
+}
+
+function openAction(id) {
+  const rec = customActions.find((a) => a.id === id);
+  if (!rec) return;
+  setCurrentActionId(id);
+  showActionForm();
+  if (window.__gbOpenAction) { window.__gbOpenAction(rec); return; }
+  toast('Action editor failed to load — reload the editor.', true);
+}
+
+async function deleteActionById(id) {
+  const rec = customActions.find((a) => a.id === id);
+  if (!rec) return;
+  if (!(await gbConfirm(`Delete "${rec.name || 'Untitled action'}"?`, { tone: 'danger', confirmLabel: 'Delete' }))) return;
+  customActions = customActions.filter((a) => a.id !== id);
+  await saveCustomActions();
+  if (currentActionId === id) {
+    setCurrentActionId(null);
+    hide('ed-action-form');
+    show('ed-empty');
+    animateView('ed-empty');
+    if (window.__gbOpenAction) window.__gbOpenAction(null);
+  }
+}
+
+/** Auto-save bridge for the React action editor. Upsert by id (normalized). */
+async function applyActionPatch(rec) {
+  if (!rec || !rec.id) return;
+  setCurrentActionId(rec.id);
+  const norm = normalizeCustomAction(rec);
+  const idx = customActions.findIndex((a) => a.id === norm.id);
+  if (idx >= 0) customActions[idx] = norm; else customActions.push(norm);
+  await saveCustomActions();
+}
+
 // ── Variable resolution proxy ──────────────────────────────────
 /**
  * Variables (DOM/regex/builtin) resolve against a live order/account tab.
@@ -280,7 +352,7 @@ function resolveVarsLive(varsObj) {
 
 // ── Settings open/close (React owns the panel body) ────────────
 function openSettings() {
-  const views = ['ed-empty', 'ed-form', 'ed-note-form'];
+  const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-action-form'];
   _settingsPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
   views.forEach((v) => $(v)?.classList.add('hidden'));
   show('ed-settings');
@@ -319,16 +391,23 @@ window.deleteTemplateById     = deleteTemplateById;
 window.deleteNoteTemplateById = deleteNoteTemplateById;
 window.openSettings     = openSettings;
 window.closeSettings    = closeSettings;
+window.openAction       = openAction;
+window.newAction        = newAction;
+window.deleteActionById = deleteActionById;
+window.closeActionEditor = closeActionEditor;
 window.__gbSaveTemplate = applyTemplatePatch;
 window.__gbSaveNote     = applyNotePatch;
+window.__gbSaveAction   = applyActionPatch;
 window.__gbResolveVars  = resolveVarsLive;
 window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
 window.__gbCurrentNote     = () => noteTemplates.find((t) => t.id === currentNoteId) || null;
+window.__gbCurrentAction   = () => customActions.find((a) => a.id === currentActionId) || null;
 
 // Storage onChanged — keep local arrays in sync if another tab/popup edits.
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.templates)     templates     = changes.templates.newValue     || [];
   if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
+  if (changes.gbCustomActions) customActions = changes.gbCustomActions.newValue || [];
   if (changes.orderTabId)    orderTabId    = changes.orderTabId.newValue    || null;
   if (changes.gbEditorLaunchIntent?.newValue) consumeLaunchIntent(changes.gbEditorLaunchIntent.newValue);
 });
@@ -343,6 +422,7 @@ async function init() {
   const data = await loadStorage();
   templates     = data.templates     || [];
   noteTemplates = data.noteTemplates || [];
+  customActions = data.gbCustomActions || [];
   orderTabId    = data.orderTabId    || null;
   /* One-version backwards-compat pass: lift legacy contact/account/order
      variables onto the page engine, and scratch legacy order auto-match

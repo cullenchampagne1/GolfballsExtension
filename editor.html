@@ -1094,6 +1094,10 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
   <div class="ed-form hidden view-animate" id="ed-settings">
     </div>
 
+  <!-- Custom Action editor — full-width/full-height (no .ed-form max-width),
+       React owns it (editor-actions.js), mount sets height:100%. -->
+  <div class="hidden view-animate" id="ed-action-form"></div>
+
   <div class="ed-form hidden view-animate" id="ed-case-tpls">
     </div>
 </div>
@@ -1112,6 +1116,7 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
 <script src="react-dist/content/editor-settings.js"></script>
 <script src="react-dist/content/editor-templates.js"></script>
 <script src="react-dist/content/editor-notes.js"></script>
+<script src="react-dist/content/editor-actions.js"></script>
 <script src="react-dist/content/editor-sidebar.js"></script>
 </body>
 </html>
