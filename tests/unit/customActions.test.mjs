@@ -49,7 +49,7 @@ describe('customActions · normalize', () => {
     const b = blankCustomAction('order');
     assert.equal(b.pageType, 'order');
     assert.match(b.source, /actions\.createTask/);
-    assert.match(starterSource('custom'), /page\.dom/);
+    assert.match(starterSource('custom'), /Custom action/);
   });
 });
 

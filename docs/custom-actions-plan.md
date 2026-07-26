@@ -90,8 +90,8 @@ Sample fixtures (`src/lib/codeEngine/samplePages.js`): representative `{ contact
 ## 5. Page-type scoping + the "custom" mode
 
 - **order / contact / account** → `page.*` scoped to that type (same object the campaign engine builds). At authoring time it's the sample fixture; at **run** time it's `runEngine(document)` of the live page. Default shelf `pages` = that type.
-- **custom** → the script gets **read-only DOM access** via `page.dom(selector)` / `page.dom.all(selector)` / `page.dom.text(selector)` (wrapping the existing `h.dom*` helpers), plus the same gated `actions.*` library. Default shelf `pages` = `['*']` (any page). **Writes still go only through the gated contracts** — raw DOM is read-only, so a custom action can *read* anything but can only *write* through `actions.createTask/sendEmail/editContact/…` (confirm-gated). This keeps the security model intact.
-  - *(A future "unsafe/raw write" mode could allow direct DOM mutation behind a hard gate — flagged as out of scope unless you want it.)*
+- **custom** → runs on **any page** with `page.*` (where available) + the gated `actions.*` library. Default shelf `pages` = `['*']`.
+  - **Raw DOM access is DEFERRED (architectural).** Scripts execute inside an opaque-origin sandbox iframe (read-only, isolated) so they cannot query the live CRM DOM at run time — even a live run records intent in the sandbox and replays writes content-side. Giving a custom action real `page.dom(...)` access would require running it **content-side, outside the sandbox** (arbitrary code with page + network access) — a security-posture change held for an explicit decision. Until then "custom" = any-page + `actions.*`/`page.*`.
 
 ---
 

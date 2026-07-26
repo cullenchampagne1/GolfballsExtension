@@ -82,10 +82,10 @@ export function blankCustomAction(pageType = 'contact') {
 export function starterSource(pageType) {
   if (pageType === 'custom') {
     return [
-      '// Custom action — read the page via page.dom(...), write via actions.*',
-      '// (writes are confirm-gated). Return a short summary string.',
-      "const name = page.dom.text('h1') || 'this page';",
-      'return `Ran on ${name}`;',
+      '// Custom action — runs on any page.',
+      '// Use actions.* (confirm-gated writes) and page.* where available.',
+      '// (Raw DOM access isn’t available yet — the script runs sandboxed.)',
+      "return 'Ran custom action';",
       '',
     ].join('\n');
   }
