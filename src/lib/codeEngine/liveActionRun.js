@@ -12,20 +12,13 @@
    only when a custom action is actually run.
 ─────────────────────────────────────────────────────────────── */
 
-/** Shape runEngine(document) output into the code engine's `page` model
- *  ({ contact, contacts, count, tasks }). Pure. */
+import { shapeExtractedPage } from './pageModel.js';
+
+/** Shape runEngine(document) output into the full code-engine `page` model.
+ *  Orders, items, activities, proofs, stats, ids, and future schema fields
+ *  pass through; pageModel overlays only the controlled contact/task views. */
 export function shapeLivePage(engineOut) {
-  const l = (engineOut && (engineOut.data || engineOut)) || {};
-  const contact = l.contact || {};
-  const hasContact = !!(contact && Object.keys(contact).length);
-  return {
-    contact,
-    contacts: hasContact ? [contact] : [],
-    count: hasContact ? 1 : 0,
-    tasks: l.tasks || { open: [], done: [] },
-    order: l.order || undefined,
-    account: l.account || undefined,
-  };
+  return shapeExtractedPage(engineOut);
 }
 
 /** The executor ctx ids pulled off the shaped page's contact. Pure. */

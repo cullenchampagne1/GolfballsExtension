@@ -78,6 +78,9 @@ describe('customActions · sample pages', () => {
     const p = samplePageFor('contact');
     assert.equal(p.contact.firstName, 'Jordan');
     assert.ok(p.tasks.open.length >= 1);
+    assert.equal(p.orders.length, 3);
+    assert.equal(p.orders[0].number, '5063056');
+    assert.equal(p.items[0].name, 'Titleist Pro V1 Personalized Golf Balls');
     assert.equal(p.count, 1);
   });
 
@@ -89,12 +92,35 @@ describe('customActions · sample pages', () => {
 });
 
 describe('customActions · live run shaping', () => {
-  it('shapes runEngine output (data wrapper) into the page model', () => {
-    const page = shapeLivePage({ data: { contact: { id: '99', firstName: 'Ada', email: 'ada@x.com' }, tasks: { open: [{ id: 't1' }], done: [] } } });
+  it('preserves the full runEngine record while overlaying code controls', () => {
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '99', account: '7' },
+        contact: { id: '99', firstName: 'Ada', email: 'ada@x.com' },
+        contacts: [{ id: '99' }, { id: '100' }],
+        account: { name: 'Analytical Engines' },
+        orders: [{ number: '5063056', summary: 'Titleist Pro V1' }],
+        items: [{ name: 'Titleist Pro V1', quantity: 2 }],
+        activities: [{ id: 'a1', subject: 'Called' }],
+        proofs: [{ id: 'p1' }],
+        stats: { orderCount: 1 },
+        tasks: { open: [{ id: 't1' }], done: [] },
+      },
+      errors: ['wrapper metadata must not become page data'],
+    });
     assert.equal(page.count, 1);
     assert.equal(page.contacts.length, 1);
     assert.equal(page.contact.email, 'ada@x.com');
     assert.equal(page.tasks.open.length, 1);
+    assert.equal(page.orders[0].number, '5063056');
+    assert.equal(page.items[0].quantity, 2);
+    assert.equal(page.activities[0].id, 'a1');
+    assert.equal(page.proofs[0].id, 'p1');
+    assert.equal(page.stats.orderCount, 1);
+    assert.equal(page.account.name, 'Analytical Engines');
+    assert.equal(page.ids.account, '7');
+    assert.deepEqual(page.relatedContacts.map((contact) => contact.id), ['99', '100']);
+    assert.equal(page.errors, undefined);
   });
 
   it('empty page → no contact, empty tasks', () => {

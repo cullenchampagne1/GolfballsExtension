@@ -36,7 +36,16 @@ export function CustomActionRunHost() {
       import('../../lib/page-engine/index.js'),
       import('../../lib/codeEngine/liveActionRun.js'),
     ]);
-    return { simulateProgram: sim.simulateProgram, makeSandboxRunner: sb.makeSandboxRunner, runInSandbox: bridge.runInSandbox, planRun: plan.planRun, planSummary: plan.planSummary, runEngine: engine.runEngine, live };
+    return {
+      simulateProgram: sim.simulateProgram,
+      makeSandboxRunner: sb.makeSandboxRunner,
+      runInSandbox: bridge.runInSandbox,
+      planRun: plan.planRun,
+      planSummary: plan.planSummary,
+      runEngine: engine.runEngine,
+      clearEngineCache: engine.clearCache,
+      live,
+    };
   }
 
   async function prepare(action) {
@@ -44,6 +53,10 @@ export function CustomActionRunHost() {
     setBusy(true);
     try {
       const eng = await loadEngine();
+      // A CRM partial postback can replace the record tables without replacing
+      // `document`. Re-extract on every explicit action run so orders/tasks
+      // reflect what is on screen now, not an earlier cached page snapshot.
+      eng.clearEngineCache(document);
       const page = eng.live.shapeLivePage(eng.runEngine(document));
       const dry = await eng.simulateProgram(action.source || '', page, { run: eng.makeSandboxRunner({ exec: eng.runInSandbox }), user: {} });
       if (dry.error) { toast?.error?.(`“${action.name}” error: ${dry.error}`, { duration: 5000 }); setBusy(false); return; }

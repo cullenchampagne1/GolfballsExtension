@@ -8,6 +8,8 @@
    all refer to the SAME audience member.
 ─────────────────────────────────────────────────────────────── */
 
+import { shapeExtractedPage } from '../codeEngine/pageModel.js';
+
 function text(value) {
   return value == null ? '' : String(value);
 }
@@ -65,26 +67,9 @@ export function campaignPageFromContext(context, audience = []) {
     return sourceKey && rowKey === sourceKey ? { ...row, ...contact } : row;
   });
 
-  // Preserve the entire parsed schema model instead of maintaining a second,
-  // lossy campaign-specific field list. `contact`, `contacts`, and `tasks`
-  // have campaign control semantics, so they are deliberately overlaid below;
-  // an account page's own contacts table remains available as
-  // `page.relatedContacts`.
-  const {
-    contact: _recordContact,
-    contacts: relatedContacts = [],
-    tasks: _recordTasks,
-    ...record
-  } = data;
-
-  return {
-    ...record,
-    contact,
-    contacts,
-    count: contacts.length,
-    relatedContacts: Array.isArray(relatedContacts) ? relatedContacts : [],
-    tasks: data.tasks || { open: [], done: [] },
-  };
+  // Preserve the same full schema model Action Shelf custom actions receive.
+  // Only the primary contact + execution audience are campaign-specific.
+  return shapeExtractedPage(data, { contact, contacts });
 }
 
 /**

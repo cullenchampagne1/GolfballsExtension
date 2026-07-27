@@ -13,6 +13,7 @@ import {
 } from '../../src/lib/campaign/codeContext.js';
 import { runCodeCampaign } from '../../src/lib/campaign/codeRunner.js';
 import { makeExecutor } from '../../src/lib/codeEngine/executor.js';
+import { shapeLivePage } from '../../src/lib/codeEngine/liveActionRun.js';
 import { makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
 
@@ -96,6 +97,53 @@ describe('campaign code flow', () => {
         context.data,
       ),
       { contactId: '771', accountId: '902' },
+    );
+  });
+
+  it('gives an Action Shelf custom action the same live order data as a campaign', async () => {
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '771', account: '902' },
+        contact: {
+          id: '771',
+          contactId: '771',
+          firstName: 'Avery',
+          lastName: 'Buyer',
+          contactName: 'Avery Buyer',
+        },
+        account: { name: 'Northwind Golf' },
+        orders: [
+          {
+            number: '5063056',
+            summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model',
+            date: '2026-04-24',
+            status: 'Complete',
+          },
+          {
+            number: '5048594',
+            summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model',
+            date: '2026-04-06',
+            status: 'Complete',
+          },
+        ],
+        items: [{ name: 'Titleist Pro V1 Personalized Golf Balls', quantity: 2 }],
+        tasks: { open: [], done: [] },
+      },
+    });
+
+    assert.equal(page.orders.length, 2);
+    assert.equal(page.items[0].quantity, 2);
+    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.doesNotMatch(String(result.result), /^Skipped/);
+    assert.match(String(result.result), /created 4 fresh Prior Year task\(s\)/);
+    assert.match(String(result.result), /created 1 brand task\(s\)/);
+    assert.ok(
+      result.trace.some((entry) => /Titleist Customer - Tier 2/.test(entry.summary || '')),
+      'the live custom-action trace should include the derived Titleist tier task',
     );
   });
 

@@ -33,11 +33,32 @@ const SAMPLE_TASKS = Object.freeze({
   ],
 });
 
+const SAMPLE_ORDERS = Object.freeze([
+  { number: '5063056', summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model', date: '2026-04-24', revenue: 0.01, status: 'Complete' },
+  { number: '5048594', summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model', date: '2026-04-06', revenue: 70.94, status: 'Complete' },
+  { number: '4861490', summary: 'Vice Drive Custom Logo Golf Balls', date: '2025-12-12', revenue: 234.5, status: 'Complete' },
+]);
+
+const SAMPLE_ITEMS = Object.freeze([
+  { name: 'Titleist Pro V1 Personalized Golf Balls', quantity: 2, revenue: 70.95 },
+  { name: 'Vice Drive Custom Logo Golf Balls', quantity: 1, revenue: 234.5 },
+]);
+
 /** A representative `page` for the given authoring page type. */
 export function samplePageFor(pageType) {
   const contact = { ...SAMPLE_CONTACT };
   const tasks = { open: SAMPLE_TASKS.open.map((t) => ({ ...t })), done: SAMPLE_TASKS.done.map((t) => ({ ...t })) };
-  const base = { contact, contacts: [contact], count: 1, tasks };
+  const orders = SAMPLE_ORDERS.map((order) => ({ ...order }));
+  const items = SAMPLE_ITEMS.map((item) => ({ ...item }));
+  const base = {
+    contact,
+    contacts: [contact],
+    count: 1,
+    tasks,
+    account: { name: 'Fairway Supply Co', type: 'Wholesale' },
+    orders,
+    items,
+  };
 
   if (pageType === 'order') {
     // Order pages carry sparse contact data + no contact tasks.
