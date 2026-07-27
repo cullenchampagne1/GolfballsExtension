@@ -233,11 +233,18 @@ account. It groups orders by source year + month, averages the day within each
 group, completes existing open tasks whose subject contains `Prior Year`, and
 creates a fresh three-task future cycle:
 
-1. `Prior Year #1` — three weeks before the anniversary.
-2. `Prior Year #2` — two weeks before the anniversary.
-3. `Prior Year #3` — the Monday before the anniversary.
+1. `Prior Year #1 [source year]` — three weeks before the anniversary.
+2. `Prior Year #2 [source year]` — two weeks before the anniversary.
+3. `Prior Year #3 [source year]` — the Monday before the anniversary.
 
 Every subject retains the source year in brackets, and every description lists
 the source orders used to derive the averaged date. If the first step in this
 year's sequence has passed, the whole sequence rolls to next year so the three
-tasks remain chronological.
+tasks remain chronological. Physical anniversary dates stay in the task body,
+not the subject.
+
+The same campaign also derives a brand from the first word of every order
+summary and refreshes one `Brand Customer - Tier N` task per brand for
+December 17, 2030. Tiering counts matching order rows: one order is Tier 3,
+two or three are Tier 2, and four or more are Tier 1. Existing tier tasks for
+the detected brands are completed before their replacements are created.

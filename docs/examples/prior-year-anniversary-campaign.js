@@ -1,10 +1,16 @@
-// Prior-year anniversary timeline.
+// Prior-year anniversary + brand-tier timeline.
 //
 // Run this campaign against CONTACT or ACCOUNT records from CRM Search. The
 // campaign engine runs this body once per selected record and hydrates that
 // record's own page.orders + page.tasks list before it starts.
+//
+// It also maintains one long-range brand task per first-word product brand:
+//   1 order → Tier 3 · 2–3 orders → Tier 2 · 4+ orders → Tier 1.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BRAND_TASK_YEAR = 2030;
+const BRAND_TASK_MONTH = 11; // December (zero-based)
+const BRAND_TASK_DAY = 17;
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
@@ -62,12 +68,52 @@ function formatShortDate(value) {
   return `${value.getMonth() + 1}/${value.getDate()}/${value.getFullYear()}`;
 }
 
-const orders = (Array.isArray(page.orders) ? page.orders : [])
+function brandFromOrder(order) {
+  const title = String(order?.summary || order?.title || "").trim();
+  const firstWord = title.split(/\s+/)[0] || "";
+  // Keep ordinary brand punctuation (TaylorMade+, A.G., etc.) while dropping
+  // trademark symbols or row decoration around the first word.
+  return firstWord
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/[^A-Za-z0-9&+.'’/-]+$/, "");
+}
+
+function tierForOrderCount(count) {
+  if (count >= 4) return 1;
+  if (count >= 2) return 2;
+  return 3;
+}
+
+function describeOrder(order, parsedDate = null) {
+  const number = order?.number ? `#${order.number}` : "Order";
+  const date = parsedDate || calendarDate(order?.date);
+  const summary = String(order?.summary || order?.title || "No description").trim();
+  return [number, date ? formatShortDate(date) : null, summary]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+const allOrders = Array.isArray(page.orders) ? page.orders : [];
+const orders = allOrders
   .map((order) => ({ order, date: calendarDate(order.date) }))
   .filter((entry) => entry.date);
 
-if (!orders.length) {
-  return "Skipped — this account has no dated orders";
+// Count order rows by the first word in the product title. The order history
+// is the authority here: a $0.01 completed order still establishes that this
+// customer buys the brand.
+const brandGroups = new Map();
+for (const order of allOrders) {
+  const brand = brandFromOrder(order);
+  if (!brand) continue;
+  const key = brand.toLowerCase();
+  if (!brandGroups.has(key)) {
+    brandGroups.set(key, { brand, orders: [] });
+  }
+  brandGroups.get(key).orders.push(order);
+}
+
+if (!orders.length && !brandGroups.size) {
+  return "Skipped — this record has no usable orders";
 }
 
 // A source period is one source year + calendar month. Multiple orders in
@@ -95,10 +141,31 @@ const anniversaries = [...grouped.values()]
   }))
   .sort((a, b) => a.month - b.month || a.sourceYear - b.sourceYear);
 
-// Reset only the old Prior Year timeline. Unrelated open tasks stay untouched.
-const oldPriorYearTasks = (page.tasks?.open || [])
-  .filter((task) => /prior[\s_-]*year/i.test(String(task.subject || "")));
+const brandPlans = [...brandGroups.values()]
+  .map((group) => ({
+    ...group,
+    tier: tierForOrderCount(group.orders.length)
+  }))
+  .sort((a, b) => a.brand.localeCompare(b.brand));
+
+// Reset only the timelines this campaign owns. Unrelated open tasks stay
+// untouched. A prior tier for a detected brand is replaced even if its order
+// count moved that customer into another tier.
+const openTasks = page.tasks?.open || [];
+const oldPriorYearTasks = anniversaries.length
+  ? openTasks.filter((task) => /prior[\s_-]*year/i.test(String(task.subject || "")))
+  : [];
+const oldBrandTasks = openTasks.filter((task) => {
+  const subject = String(task.subject || "").trim().toLowerCase();
+  return brandPlans.some((plan) => (
+    subject.startsWith(`${plan.brand.toLowerCase()} customer - tier `)
+    && /[123]$/.test(subject)
+  ));
+});
 for (const task of oldPriorYearTasks) {
+  await task.complete();
+}
+for (const task of oldBrandTasks) {
   await task.complete();
 }
 
@@ -135,11 +202,7 @@ for (const anniversary of anniversaries) {
 
   const sourceOrders = anniversary.orders
     .sort((a, b) => a.date - b.date)
-    .map(({ order, date }) => {
-      const number = order.number ? `#${order.number}` : "Order";
-      const summary = String(order.summary || order.title || "No description").trim();
-      return `${number} · ${formatShortDate(date)} · ${summary}`;
-    })
+    .map(({ order, date }) => describeOrder(order, date))
     .join("\n");
 
   for (const task of cycle.tasks) {
@@ -155,7 +218,7 @@ for (const anniversary of anniversaries) {
     ].join("\n").slice(0, 4000);
 
     await actions.createTask({
-      subject: `Prior Year #${task.number} [${anniversary.sourceYear}] · ${formatMonthDay(cycle.anniversaryDate)}`,
+      subject: `Prior Year #${task.number} [${anniversary.sourceYear}]`,
       body,
       priority: "med",
       daysOut: Math.max(0, Math.round(
@@ -166,4 +229,50 @@ for (const anniversary of anniversaries) {
   }
 }
 
-return `Completed ${oldPriorYearTasks.length} old Prior Year task(s) and created ${createdCount} fresh task(s) across ${anniversaries.length} anniversary date(s)`;
+const brandTaskDate = makeCalendarDate(
+  BRAND_TASK_YEAR,
+  BRAND_TASK_MONTH,
+  BRAND_TASK_DAY
+);
+const brandDaysOut = Math.max(
+  0,
+  Math.round(calendarDayNumber(brandTaskDate) - calendarDayNumber(today))
+);
+let brandCreatedCount = 0;
+
+for (const plan of brandPlans) {
+  const sourceOrders = [...plan.orders]
+    .sort((a, b) => {
+      const left = calendarDate(a.date);
+      const right = calendarDate(b.date);
+      return (left?.getTime() || 0) - (right?.getTime() || 0);
+    })
+    .map((order) => describeOrder(order))
+    .join("\n");
+  const body = [
+    `Brand-customer classification for ${recordName}.`,
+    `Brand: ${plan.brand}.`,
+    `Order count: ${plan.orders.length}.`,
+    `Tier: ${plan.tier}.`,
+    "Tier rules: 1 order = Tier 3; 2–3 orders = Tier 2; 4+ orders = Tier 1.",
+    `Review date: ${formatShortDate(brandTaskDate)}.`,
+    "",
+    "Matching orders:",
+    sourceOrders
+  ].join("\n").slice(0, 4000);
+
+  await actions.createTask({
+    subject: `${plan.brand} Customer - Tier ${plan.tier}`,
+    body,
+    priority: "med",
+    daysOut: brandDaysOut
+  });
+  brandCreatedCount += 1;
+}
+
+return [
+  `Completed ${oldPriorYearTasks.length} old Prior Year task(s)`,
+  `completed ${oldBrandTasks.length} old brand task(s)`,
+  `created ${createdCount} fresh Prior Year task(s) across ${anniversaries.length} anniversary date(s)`,
+  `and created ${brandCreatedCount} brand task(s)`
+].join(", ");

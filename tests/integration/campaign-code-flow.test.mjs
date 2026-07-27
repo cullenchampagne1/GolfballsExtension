@@ -211,13 +211,18 @@ describe('campaign code flow', () => {
         ids: { contact: '771', account: '' },
         contact: { firstName: 'Avery', lastName: 'Buyer' },
         orders: [
-          { number: '1001', summary: 'Blue logo towels', date: '2024-08-04' },
-          { number: '1002', summary: 'White logo towels', date: '2024-08-06' },
-          { number: '1003', summary: 'Embroidered hats', date: '2025-12-12' },
+          { number: '5063056', summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model', date: '2026-04-24', revenue: 0.01, status: 'Complete' },
+          { number: '5048594', summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model', date: '2026-04-06', revenue: 70.94, status: 'Complete' },
+          { number: '4861490', summary: 'Vice Drive Custom Logo Golf Balls', date: '2025-12-12', status: 'Complete' },
+          { number: '4000001', summary: 'Callaway Chrome Soft Custom Golf Balls', date: '', status: 'Complete' },
+          { number: '4000002', summary: 'Callaway Supersoft Custom Golf Balls', date: '', status: 'Complete' },
+          { number: '4000003', summary: 'Callaway Warbird Custom Golf Balls', date: '', status: 'Complete' },
+          { number: '4000004', summary: 'Callaway ERC Soft Custom Golf Balls', date: '', status: 'Complete' },
         ],
         tasks: {
           open: [
             { id: 'old-1', subject: 'Prior Year #1 [2023]' },
+            { id: 'old-brand-1', subject: 'Titleist Customer - Tier 3' },
             { id: 'keep-1', subject: 'Normal follow up' },
           ],
           done: [],
@@ -227,10 +232,10 @@ describe('campaign code flow', () => {
 
     assert.equal(page.account, undefined);
     assert.equal(page.contact.contactId, '771');
-    assert.equal(page.orders.length, 3);
+    assert.equal(page.orders.length, 7);
     assert.deepEqual(
       page.tasks.open.map((task) => task.id),
-      ['old-1', 'keep-1'],
+      ['old-1', 'old-brand-1', 'keep-1'],
     );
     const writes = [];
     const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
@@ -247,7 +252,7 @@ describe('campaign code flow', () => {
     assert.equal(result.ok, true);
     const actionTrace = result.trace.filter((entry) => entry.kind !== 'function');
     const functionTrace = result.trace.filter((entry) => entry.kind === 'function');
-    assert.equal(actionTrace.length, 7);
+    assert.equal(actionTrace.length, 11);
     assert.ok(functionTrace.length > 7, 'helper calls should remain visible to Simulate');
     assert.ok(
       [...new Set(functionTrace.map((entry) => entry.id))]
@@ -255,28 +260,58 @@ describe('campaign code flow', () => {
       'a repeated helper should reuse its stable function block id',
     );
     assert.deepEqual(writes.map(([name]) => name), [
-      'completeTask',
+      'completeTask', 'completeTask',
+      'createTask', 'createTask', 'createTask',
       'createTask', 'createTask', 'createTask',
       'createTask', 'createTask', 'createTask',
     ]);
     assert.equal(writes[0][1].id, 'old-1');
-    const created = writes.slice(1).map(([, input]) => input);
+    assert.equal(writes[1][1].id, 'old-brand-1');
+    const created = writes.slice(2).map(([, input]) => input);
     assert.deepEqual(
       created.map((task) => task.subject),
       [
-        'Prior Year #1 [2024] · August 5',
-        'Prior Year #2 [2024] · August 5',
-        'Prior Year #3 [2024] · August 5',
-        'Prior Year #1 [2025] · December 12',
-        'Prior Year #2 [2025] · December 12',
-        'Prior Year #3 [2025] · December 12',
+        'Prior Year #1 [2026]',
+        'Prior Year #2 [2026]',
+        'Prior Year #3 [2026]',
+        'Prior Year #1 [2025]',
+        'Prior Year #2 [2025]',
+        'Prior Year #3 [2025]',
+        'Callaway Customer - Tier 1',
+        'Titleist Customer - Tier 2',
+        'Vice Customer - Tier 3',
       ],
     );
     assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut > 0));
-    assert.match(created[0].body, /Blue logo towels/);
-    assert.match(created[0].body, /White logo towels/);
-    assert.match(created[3].body, /Embroidered hats/);
-    assert.match(result.result, /created 6 fresh task\(s\) across 2 anniversary date\(s\)/);
+    assert.match(created[0].body, /Titleist Pro V1 Personalized/);
+    assert.match(created[0].body, /Averaged reorder anniversary: April 15/);
+    assert.match(created[3].body, /Vice Drive Custom Logo/);
+
+    const brandTasks = created.slice(6);
+    assert.deepEqual(brandTasks.map((task) => task.daysOut), [
+      brandTasks[0].daysOut,
+      brandTasks[0].daysOut,
+      brandTasks[0].daysOut,
+    ]);
+    assert.match(brandTasks[0].body, /Order count: 4/);
+    assert.match(brandTasks[1].body, /Order count: 2/);
+    assert.match(brandTasks[1].body, /#5063056/);
+    assert.match(brandTasks[1].body, /#5048594/);
+    assert.match(brandTasks[2].body, /Order count: 1/);
+    assert.ok(brandTasks.every((task) => /Review date: 12\/17\/2030/.test(task.body)));
+    const computedBrandDue = new Date();
+    computedBrandDue.setHours(12, 0, 0, 0);
+    computedBrandDue.setDate(computedBrandDue.getDate() + brandTasks[0].daysOut);
+    assert.deepEqual(
+      [
+        computedBrandDue.getFullYear(),
+        computedBrandDue.getMonth() + 1,
+        computedBrandDue.getDate(),
+      ],
+      [2030, 12, 17],
+    );
+    assert.match(result.result, /created 6 fresh Prior Year task\(s\) across 2 anniversary date\(s\)/);
+    assert.match(result.result, /created 3 brand task\(s\)/);
   });
 
   it('does not count function-entry animation events as campaign actions', async () => {
