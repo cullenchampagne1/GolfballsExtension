@@ -138,7 +138,10 @@ const created = await actions.createTask({
   body?,
   priority?: "high" | "med" | "low",
   daysOut?: number,
-  categoryId?: number
+  categoryId?: number,
+  contactId?: string,
+  contactName?: string,
+  accountId?: string
 });
 
 await actions.completeTask({ id: created.taskId });
@@ -168,6 +171,11 @@ await actions.logCall(user.call("Left voicemail"));
 
 Every action is dry-run capable. A live run requires the confirmation screen;
 email is outward-facing and CRM writes are remote effects.
+
+The optional contact/account routing fields are intended for registered
+modal-entry contexts, where one sandboxed custom action can safely schedule
+tasks for several contacts without loading each profile. If `contactId` is
+omitted, task creation retains the current-record behavior.
 
 ## Control flow
 
@@ -256,3 +264,33 @@ summary and refreshes one `Brand Customer - Tier N` task per brand for
 December 17, 2030. Tiering counts matching order rows: one order is Tier 3,
 two or three are Tier 2, and four or more are Tier 1. Existing tier tasks for
 the detected brands are completed before their replacements are created.
+
+It additionally maintains quarterly coverage over the current and next three
+calendar quarters. Any dated existing task—or a Prior Year task planned by the
+same run—covers that record's quarter. A missing quarter receives
+`Q<N> Reach Out Opportunity`, due at the quarter midpoint or immediately when
+the current quarter's midpoint has passed. This coverage still runs for
+contacts that have no usable orders.
+
+## Task List quarterly reach-out custom action
+
+The paste-ready action at
+[`docs/examples/quarterly-reach-out-task-list-action.js`](examples/quarterly-reach-out-task-list-action.js)
+runs once over Task List's already-loaded data rather than hydrating every
+contact profile. Create a Custom Action with:
+
+- **Runs on:** `Custom (any page)`
+- **Entry point:** `.gb-task-list-modal` (the aliases `task-list` and
+  `modal:task-list` are equivalent)
+
+While Task List is open, the action appears in the shelf. Its provider exposes
+every loaded task under `page.entryPoint.data.tasks` and unique contact routing
+under `page.entryPoint.data.contacts`, independent of the modal's visible
+filter. The action groups tasks by contact, treats any dated task as quarter
+coverage, and creates each missing task in the rolling four-quarter window
+through the ordinary confirmation-gated executor.
+
+Contacts with no contact ID are skipped because the CRM cannot attach a task
+to them. A contact with no Task List row cannot be discovered from this surface;
+run the per-record campaign once to seed those contacts before using the faster
+Task List reconciliation action.

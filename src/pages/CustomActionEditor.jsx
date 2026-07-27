@@ -8,6 +8,7 @@ import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
 import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
 import { samplePageFor } from '../lib/codeEngine/samplePages.js';
 import { normalizeCustomAction, defaultPagesFor, ACTION_PAGE_TYPES } from '../lib/customActions.js';
+import { normalizeEntryPoints } from '../lib/customActionEntryPoints.js';
 
 /* ───────────────────────────────────────────────────────────────
    CustomActionEditor — the Manage-window sub-page for authoring a custom
@@ -54,6 +55,9 @@ export function CustomActionEditor({ action }) {
   const [pageType, setPageType] = useState(action.pageType || 'contact');
   const [enabled, setEnabled] = useState(action.enabled !== false);
   const [source, setSource] = useState(action.source || '');
+  const [entryPointsText, setEntryPointsText] = useState(
+    normalizeEntryPoints(action.entryPoints).join(', '),
+  );
   const [simBusy, setSimBusy] = useState(false);
   const [isNew, setIsNew] = useState(action.__isNew === true);
   // Shelf page scope isn't edited here (the Settings table owns it) but must
@@ -67,17 +71,29 @@ export function CustomActionEditor({ action }) {
     enabled: record.enabled !== false,
     source: record.source || '',
     pages: record.pages || [],
+    entryPoints: normalizeEntryPoints(record.entryPoints),
   });
   const [savedSnapshot, setSavedSnapshot] = useState(() => snapshot(action));
   const draftSnapshot = snapshot({
-    name, description, icon, pageType, enabled, source, pages: pagesRef.current,
+    name,
+    description,
+    icon,
+    pageType,
+    enabled,
+    source,
+    pages: pagesRef.current,
+    entryPoints: normalizeEntryPoints(entryPointsText),
   });
   const dirty = isNew || draftSnapshot !== savedSnapshot;
 
   const startSim = async () => {
     setSimBusy(true);
     try {
-      const res = await simulateProgram(source || '', samplePageFor(pageType), { run: makeSandboxRunner({ exec: runInSandbox }), user: {} });
+      const res = await simulateProgram(
+        source || '',
+        samplePageFor(pageType, { entryPoints: normalizeEntryPoints(entryPointsText) }),
+        { run: makeSandboxRunner({ exec: runInSandbox }), user: {} },
+      );
       if (res.error) {
         toast?.error?.('Simulate: ' + res.error, { duration: 5000 });
       } else {
@@ -102,6 +118,7 @@ export function CustomActionEditor({ action }) {
     enabled,
     source,
     pages: pagesRef.current,
+    entryPoints: normalizeEntryPoints(entryPointsText),
     updatedAt: Date.now(),
   });
   const save = async () => {
@@ -163,6 +180,19 @@ export function CustomActionEditor({ action }) {
       {/* Meta — page type */}
       <div style={{ marginBottom: 10 }}>
         <Field label="Runs on"><Segmented value={pageType} onChange={changePageType} options={PT_OPTIONS} /></Field>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <Field
+          label="Entry points"
+          hint="Optional. Show only while a matching provider or CSS selector exists. Separate multiple values with commas."
+        >
+          <Input
+            value={entryPointsText}
+            onChange={setEntryPointsText}
+            size="sm"
+            placeholder=".gb-task-list-modal, modal:task-list"
+          />
+        </Field>
       </div>
       {/* Meta — icon (full-width row) */}
       <div style={{ marginBottom: 12 }}>

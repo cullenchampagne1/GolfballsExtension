@@ -76,7 +76,7 @@ function injectScrollbarStyles() {
   document.head.appendChild(el);
 }
 
-function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, children }) {
+function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, cardClassName, children }) {
   // Inject the themed-scrollbar stylesheet on first mount. Safe to
   // call multiple times — the guard in injectScrollbarStyles dedupes.
   useEffect(injectScrollbarStyles, []);
@@ -87,7 +87,7 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, children }) {
   const embedded = !!useContext(FloatingPanelEmbedContext)?.container;
   return (
     <motion.div
-      className="gb-modal-card"
+      className={['gb-modal-card', cardClassName].filter(Boolean).join(' ')}
       data-gb-scale="modals"
       data-gb-kbd-scope=""
       initial={{ opacity: 0, scale: 0.95 }}
@@ -153,6 +153,9 @@ export function FloatingPanel({
   // card's own styles, so the caller wins). Used e.g. to set
   // `userSelect: 'none'` on a specific modal without touching the rest.
   cardStyle,
+  // Optional semantic class on the modal card. Custom-action entry points can
+  // use this as a selector alias without scraping the modal's implementation.
+  cardClassName,
   // Embed mode: render the modal CONTAINED inside a host element instead
   // of the full viewport. Used by the Operator's Guide to show real
   // modals scaled into a framed stage. When set:
@@ -302,7 +305,7 @@ export function FloatingPanel({
                 throwScale={phys.throwScale}
                 style={{ zIndex: 999999, pointerEvents: 'auto' }}
               >
-                <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight} cardStyle={cardStyle}>{children}</ModalCard>
+                <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight} cardStyle={cardStyle} cardClassName={cardClassName}>{children}</ModalCard>
               </Throwable>
             ) : (
               /* Centered, non-draggable. Pointer events:none on the
@@ -317,7 +320,7 @@ export function FloatingPanel({
                 }}
               >
                 <div style={{ pointerEvents: 'auto' }}>
-                  <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight} cardStyle={cardStyle}>{children}</ModalCard>
+                  <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight} cardStyle={cardStyle} cardClassName={cardClassName}>{children}</ModalCard>
                 </div>
               </div>
             )}

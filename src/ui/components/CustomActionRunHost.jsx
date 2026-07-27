@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Btn, I } from '../index.js';
 import { useToast } from './ToastHost.jsx';
+import { customActionEntryPoints } from '../../lib/customActionEntryPoints.js';
 
 /* ───────────────────────────────────────────────────────────────
    CustomActionRunHost — runs a custom action from the Action Shelf.
@@ -22,7 +23,11 @@ export function CustomActionRunHost() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const onRun = (e) => { const action = e?.detail; if (action && action.source != null) prepare(action); };
+    const onRun = (e) => {
+      const detail = e?.detail;
+      const action = detail?.action || detail;
+      if (action && action.source != null) prepare(action, detail?.entryPoints);
+    };
     window.addEventListener('gb-run-custom-action', onRun);
     return () => window.removeEventListener('gb-run-custom-action', onRun);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -48,7 +53,7 @@ export function CustomActionRunHost() {
     };
   }
 
-  async function prepare(action) {
+  async function prepare(action, suppliedEntryPoints) {
     if (busy) return;
     setBusy(true);
     try {
@@ -58,6 +63,16 @@ export function CustomActionRunHost() {
       // reflect what is on screen now, not an earlier cached page snapshot.
       eng.clearEngineCache(document);
       const page = eng.live.shapeLivePage(eng.runEngine(document));
+      const entryPoints = Array.isArray(suppliedEntryPoints)
+        ? suppliedEntryPoints
+        : customActionEntryPoints.resolve(action.entryPoints, document);
+      page.entryPoints = entryPoints.map((entryPoint) => ({
+        id: entryPoint.id,
+        label: entryPoint.label,
+        token: entryPoint.token,
+        data: entryPoint.data ?? null,
+      }));
+      page.entryPoint = page.entryPoints[0] || null;
       const dry = await eng.simulateProgram(action.source || '', page, { run: eng.makeSandboxRunner({ exec: eng.runInSandbox }), user: {} });
       if (dry.error) { toast?.error?.(`“${action.name}” error: ${dry.error}`, { duration: 5000 }); setBusy(false); return; }
       const plan = eng.planRun(dry.trace, 1);
@@ -85,6 +100,10 @@ export function CustomActionRunHost() {
       const eng = await loadEngine();
       const executor = await eng.live.makeLiveExecutor(p.page);
       const res = await eng.simulateProgram(p.action.source || '', p.page, { run: eng.makeSandboxRunner({ exec: eng.runInSandbox }), user: {}, executor });
+      await customActionEntryPoints.notifyRunComplete(p.page.entryPoints, {
+        action: p.action,
+        result: res,
+      });
       if (res.error) toast?.error?.(`“${p.action.name}” failed: ${res.error}`, { duration: 6000 });
       else toast?.success?.(typeof res.result === 'string' && res.result ? res.result : `“${p.action.name}” done.`, { duration: 3600 });
     } catch (err) {

@@ -9,6 +9,10 @@ import { loadFlags } from '../lib/flags.js';
 import { shelfActionDefs } from '../lib/features/featureRegistry.js';
 import { loadFeatureConfig, normalizeFeatureConfig, featureShowsOnPage, pageApplies, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
 import { loadCustomActions, normalizeCustomAction, STORAGE_KEY as CUSTOM_ACTIONS_KEY } from '../lib/customActions.js';
+import {
+  customActionEntryPoints,
+  customActionSelectors,
+} from '../lib/customActionEntryPoints.js';
 import { CustomActionRunHost } from '../ui/components/CustomActionRunHost.jsx';
 import { findPhone } from '../lib/findPhone.js';
 import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
@@ -221,13 +225,30 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     for (const rec of _customActions) {
       if (!rec || rec.enabled === false || !rec.showInShelf) continue;
       if (!pageApplies(rec.pages, pageType)) continue;
+      const entryMatches = customActionEntryPoints.resolve(
+        rec.entryPoints,
+        document,
+        { includeData: false },
+      );
+      if (rec.entryPoints?.length && !entryMatches.length) continue;
+      const modalIds = [...new Set(entryMatches.map((match) => match.modalId).filter(Boolean))];
       _customActionUnsubs.push(actionRegistry.register({
         id: `custom-${rec.id}`,
         label: rec.name,
         icon: shelfIcon(rec.icon),
         hint: rec.description || 'Custom action',
         smartFor: (rec.pages || []).includes('*') ? [] : rec.pages,
-        handler: () => { try { window.dispatchEvent(new CustomEvent('gb-run-custom-action', { detail: rec })); } catch { /* */ } },
+        whenModalOpen: modalIds,
+        handler: () => {
+          try {
+            window.dispatchEvent(new CustomEvent('gb-run-custom-action', {
+              detail: {
+                action: rec,
+                entryPoints: customActionEntryPoints.resolve(rec.entryPoints, document),
+              },
+            }));
+          } catch { /* */ }
+        },
       }));
     }
   }
@@ -705,6 +726,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     clearTimeout(_syncTimer);
     _syncTimer = setTimeout(syncContext, 30);
   };
+  customActionEntryPoints.subscribe(queueSync);
 
   /* Standalone "always-available" launchers (CRM Search, Task List, Gifting,
      Mockup Studio, Image Viewer, Watchlist, Notifications, New Contact,
@@ -752,9 +774,20 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
   // High-signal nodes — only re-sync when these appear/change.
   // Scanning every mutation would be expensive on heavy CRM pages.
   const mo = new MutationObserver((muts) => {
+    const customSelectors = customActionSelectors(_customActions);
     for (const m of muts) {
-      for (const n of m.addedNodes) {
+      for (const n of [...m.addedNodes, ...m.removedNodes]) {
         if (n.nodeType !== 1) continue;
+        if (customSelectors.some((selector) => {
+          try {
+            return n.matches?.(selector) || !!n.querySelector?.(selector);
+          } catch {
+            return false;
+          }
+        })) {
+          queueSync();
+          return;
+        }
         if (n.id === 'tbContactId' || n.id === 'lblContactFirstName' ||
             n.id === 'lblContactLastName' || n.id === 'lblContactCompanyName' ||
             n.id === 'lblContactPhoneNumber' ||

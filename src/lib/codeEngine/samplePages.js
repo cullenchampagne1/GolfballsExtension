@@ -10,6 +10,9 @@
    Pure data — no DOM, storage, or chrome.
 ─────────────────────────────────────────────────────────────── */
 
+import { normalizeEntryPoints } from '../customActionEntryPoints.js';
+import { buildTaskListActionContext } from '../taskListActionContext.js';
+
 const SAMPLE_CONTACT = Object.freeze({
   firstName: 'Jordan',
   middleInitial: '',
@@ -44,8 +47,79 @@ const SAMPLE_ITEMS = Object.freeze([
   { name: 'Vice Drive Custom Logo Golf Balls', quantity: 1, revenue: 234.5 },
 ]);
 
+const TASK_LIST_ENTRY_ALIASES = new Set([
+  'task-list',
+  'modal:task-list',
+  '.gb-task-list-modal',
+]);
+
+function sampleTaskListData() {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const future = (days) => {
+    const date = new Date(today);
+    date.setDate(date.getDate() + days);
+    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+  };
+  const rows = [
+    {
+      id: 'sample-task-1',
+      contact: 'Jordan Rivera',
+      contactId: 'sample-contact-1',
+      account: 'Fairway Supply Co',
+      accountId: 'sample-account-1',
+      due: future(20),
+      dueDate: future(20),
+      category: 'Follow Up',
+      priority: 2,
+      priorityLabel: 'Med',
+      subject: 'Review seasonal order',
+      status: 'New',
+    },
+    {
+      id: 'sample-task-2',
+      contact: 'Avery Buyer',
+      contactId: 'sample-contact-2',
+      account: 'Northwind Golf',
+      accountId: 'sample-account-2',
+      due: future(110),
+      dueDate: future(110),
+      category: 'Outbound Call',
+      priority: 2,
+      priorityLabel: 'Med',
+      subject: 'Reorder check-in',
+      status: 'New',
+    },
+  ];
+  return buildTaskListActionContext({ rows, visibleRows: rows });
+}
+
+function withSampleEntryPoints(page, entryPoints) {
+  const tokens = normalizeEntryPoints(entryPoints);
+  if (!tokens.length) return page;
+  const entries = [];
+  const taskListToken = tokens.find((token) => TASK_LIST_ENTRY_ALIASES.has(token));
+  if (taskListToken) {
+    entries.push({
+      id: 'task-list',
+      label: 'My Tasks',
+      token: taskListToken,
+      data: sampleTaskListData(),
+    });
+  }
+  for (const token of tokens) {
+    if (TASK_LIST_ENTRY_ALIASES.has(token)) continue;
+    entries.push({ id: `sample:${token}`, label: token, token, data: null });
+  }
+  return {
+    ...page,
+    entryPoints: entries,
+    entryPoint: entries[0] || null,
+  };
+}
+
 /** A representative `page` for the given authoring page type. */
-export function samplePageFor(pageType) {
+export function samplePageFor(pageType, { entryPoints = [] } = {}) {
   const contact = { ...SAMPLE_CONTACT };
   const tasks = { open: SAMPLE_TASKS.open.map((t) => ({ ...t })), done: SAMPLE_TASKS.done.map((t) => ({ ...t })) };
   const orders = SAMPLE_ORDERS.map((order) => ({ ...order }));
@@ -60,14 +134,14 @@ export function samplePageFor(pageType) {
     items,
   };
 
+  let page = base;
   if (pageType === 'order') {
     // Order pages carry sparse contact data + no contact tasks.
-    return { ...base, contact, tasks: { open: [], done: [] }, order: { id: '100245', total: 1240.5, status: 'In production' } };
-  }
-  if (pageType === 'account') {
-    return { ...base, account: { name: 'Fairway Supply Co', type: 'Wholesale' } };
+    page = { ...base, contact, tasks: { open: [], done: [] }, order: { id: '100245', total: 1240.5, status: 'In production' } };
+  } else if (pageType === 'account') {
+    page = { ...base, account: { name: 'Fairway Supply Co', type: 'Wholesale' } };
   }
   // contact + custom → the contact-shaped sample (custom actions run anywhere,
   // but the sample gives them something concrete to simulate against).
-  return base;
+  return withSampleEntryPoints(page, entryPoints);
 }

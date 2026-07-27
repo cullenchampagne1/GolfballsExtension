@@ -34,7 +34,12 @@ function assertHelperResult(result, fallback) {
 }
 
 function taskTemplate(input) {
-  const value = { ...(input || {}) };
+  const {
+    contactId: _contactId,
+    contactName: _contactName,
+    accountId: _accountId,
+    ...value
+  } = (input || {});
   const priorities = { high: 1, med: 2, medium: 2, low: 3 };
   if (typeof value.priority === 'string' && priorities[value.priority.toLowerCase()]) {
     value.priority = priorities[value.priority.toLowerCase()];
@@ -85,15 +90,19 @@ export function makeExecutor(deps = {}) {
       }
       if (contract === 'createTask') {
         if (!deps.submitQuickTask) throw new Error('task creation is not configured');
+        const target = {
+          contactId: i.contactId || ctx.contactId,
+          employeeId: ctx.employeeId,
+          contactName: i.contactName || ctx.contactName,
+          accountId: i.accountId || ctx.accountId,
+        };
+        if (!target.contactId) {
+          throw new Error('no contact id — provide createTask({ contactId }) or run on a contact');
+        }
         return assertHelperResult(
           await deps.submitQuickTask({
             template: taskTemplate(i),
-            context: {
-              contactId: ctx.contactId,
-              employeeId: ctx.employeeId,
-              contactName: ctx.contactName,
-              accountId: ctx.accountId,
-            },
+            context: target,
           }),
           'task creation failed',
         );

@@ -68,6 +68,25 @@ function formatShortDate(value) {
   return `${value.getMonth() + 1}/${value.getDate()}/${value.getFullYear()}`;
 }
 
+function quarterNumber(value) {
+  return Math.floor(value.getMonth() / 3) + 1;
+}
+
+function quarterKey(value) {
+  return `${value.getFullYear()}-Q${quarterNumber(value)}`;
+}
+
+function rollingQuarter(offset, today) {
+  const absolute = today.getFullYear() * 4 + Math.floor(today.getMonth() / 3) + offset;
+  const year = Math.floor(absolute / 4);
+  const quarter = (absolute % 4) + 1;
+  let dueDate = new Date(year, (quarter - 1) * 3 + 1, 15, 12);
+  if (offset === 0 && calendarDayNumber(dueDate) < calendarDayNumber(today)) {
+    dueDate = new Date(today);
+  }
+  return { year, quarter, key: `${year}-Q${quarter}`, dueDate };
+}
+
 function brandFromOrder(order) {
   const title = String(order?.summary || order?.title || "").trim();
   const firstWord = title.split(/\s+/)[0] || "";
@@ -110,10 +129,6 @@ for (const order of allOrders) {
     brandGroups.set(key, { brand, orders: [] });
   }
   brandGroups.get(key).orders.push(order);
-}
-
-if (!orders.length && !brandGroups.size) {
-  return "Skipped — this record has no usable orders";
 }
 
 // A source period is one source year + calendar month. Multiple orders in
@@ -296,6 +311,51 @@ for (const campaign of scheduledCampaigns) {
   }
 }
 
+// Maintain one scheduled contact opportunity in every quarter of the rolling
+// four-quarter window. Any existing dated task counts as coverage, as do the
+// fresh Prior Year tasks planned above. Tasks this campaign just retired do
+// not count toward the new schedule.
+const resetTasks = new Set([...oldPriorYearTasks, ...oldBrandTasks]);
+const occupiedQuarterKeys = new Set();
+for (const task of [
+  ...openTasks.filter((candidate) => !resetTasks.has(candidate)),
+  ...(page.tasks?.done || [])
+]) {
+  const dueDate = calendarDate(task?.dueDate || task?.due || task?.date);
+  if (dueDate) occupiedQuarterKeys.add(quarterKey(dueDate));
+}
+for (const campaign of scheduledCampaigns) {
+  for (const task of campaign.tasks) {
+    occupiedQuarterKeys.add(quarterKey(task.date));
+  }
+}
+
+let quarterlyCreatedCount = 0;
+let quarterlyCoveredCount = 0;
+const targetQuarters = [0, 1, 2, 3].map((offset) => rollingQuarter(offset, today));
+for (const slot of targetQuarters) {
+  if (occupiedQuarterKeys.has(slot.key)) {
+    quarterlyCoveredCount += 1;
+    continue;
+  }
+
+  await actions.createTask({
+    subject: `Q${slot.quarter} Reach Out Opportunity`,
+    body: [
+      `Quarterly reach-out coverage for ${recordName}.`,
+      `Coverage period: Q${slot.quarter} ${slot.year}.`,
+      "Created because no existing or newly planned task covered this quarter."
+    ].join("\n"),
+    priority: "med",
+    daysOut: Math.max(
+      0,
+      Math.round(calendarDayNumber(slot.dueDate) - calendarDayNumber(today))
+    )
+  });
+  occupiedQuarterKeys.add(slot.key);
+  quarterlyCreatedCount += 1;
+}
+
 const brandTaskDate = makeCalendarDate(
   BRAND_TASK_YEAR,
   BRAND_TASK_MONTH,
@@ -343,5 +403,7 @@ return [
   `created ${createdCount} fresh Prior Year task(s) across ${scheduledCampaigns.length} anniversary date(s)`,
   `skipped ${grouped.size - anniversaries.length} older same-month source period(s)`,
   `skipped ${skippedCampaigns.length} overlapping Prior Year campaign(s)`,
+  `created ${quarterlyCreatedCount} quarterly reach-out task(s)`,
+  `preserved ${quarterlyCoveredCount} covered quarter(s)`,
   `and created ${brandCreatedCount} brand task(s)`
 ].join(", ");

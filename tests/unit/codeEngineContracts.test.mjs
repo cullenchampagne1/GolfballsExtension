@@ -33,6 +33,7 @@ describe('contracts · identity & lookup', () => {
     assert.equal(byName.sendEmail.gate, 'confirm');
     assert.equal(byName.createTask.gate, 'confirm');
     assert.ok(byName.sendEmail.params.includes('to'));
+    assert.ok(byName.createTask.params.includes('contactId'));
   });
 });
 
@@ -133,6 +134,10 @@ describe('contracts · describe() is stable', () => {
   it('summarizes a custom email/task by its subject', () => {
     assert.equal(describeContract('sendEmail', { to: 'a@b.com', subject: 'Quote' }), 'Send email “Quote” to a@b.com');
     assert.equal(describeContract('createTask', { subject: 'Follow up' }), 'Create task “Follow up”');
+    assert.equal(
+      describeContract('createTask', { subject: 'Q4 Reach Out Opportunity', contactName: 'Avery Buyer' }),
+      'Create task “Q4 Reach Out Opportunity” for Avery Buyer',
+    );
     assert.equal(describeContract('logCall', { subject: 'VM', direction: 'inbound' }), 'Log inbound call “VM”');
     assert.equal(describeContract('createTask', {}), 'Create a task for the current contact');
   });

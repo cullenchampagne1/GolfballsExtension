@@ -48,6 +48,13 @@ describe('custom action editor presentation and lifecycle', () => {
     assert.doesNotMatch(editorSource, /editorTypeIdFor/);
   });
 
+  it('authors modal/provider entry points and includes them in live simulation', () => {
+    assert.match(editorSource, /label="Entry points"/);
+    assert.match(editorSource, /normalizeEntryPoints\(entryPointsText\)/);
+    assert.match(editorSource, /samplePageFor\(pageType, \{ entryPoints:/);
+    assert.match(editorSource, /\.gb-task-list-modal, modal:task-list/);
+  });
+
   it('keeps new actions in memory until Save Action is clicked', () => {
     assert.match(newActionSource, /__isNew: true/);
     assert.match(newActionSource, /currentActionDraft = rec/);

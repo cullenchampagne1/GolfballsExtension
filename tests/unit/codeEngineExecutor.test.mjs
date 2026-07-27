@@ -81,6 +81,42 @@ describe('executor · routing', () => {
     assert.equal(received.subject, 'createTask · rendered');
     assert.equal(result.taskId, '88');
   });
+
+  it('targets an explicit contact for modal-backed bulk task creation', async () => {
+    let request;
+    const ex = makeExecutor({
+      ctx: { contactId: '', employeeId: '7' },
+      submitQuickTask: async (value) => {
+        request = value;
+        return { ok: true, taskId: 'bulk-1' };
+      },
+    });
+
+    await ex.run('createTask', {
+      contactId: '991',
+      contactName: 'Morgan Buyer',
+      accountId: '81',
+      subject: 'Q4 Reach Out Opportunity',
+      daysOut: 45,
+    });
+
+    assert.equal(request.context.contactId, '991');
+    assert.equal(request.context.contactName, 'Morgan Buyer');
+    assert.equal(request.context.accountId, '81');
+    assert.equal(request.template.subject, 'Q4 Reach Out Opportunity');
+    assert.equal(request.template.contactId, undefined);
+  });
+
+  it('rejects task creation when neither page nor input supplies a contact id', async () => {
+    const ex = makeExecutor({
+      ctx: { employeeId: '7' },
+      submitQuickTask: async () => ({ ok: true }),
+    });
+    await assert.rejects(
+      () => ex.run('createTask', { subject: 'Quarterly reach out' }),
+      /provide createTask\(\{ contactId \}\)/,
+    );
+  });
 });
 
 describe('executor · live run through simulateProgram', () => {

@@ -9,6 +9,11 @@ import {
   normalizeCustomAction, defaultPagesFor, toggleActionPage, upsertCustomAction,
   removeCustomActionFrom, blankCustomAction, starterSource,
 } from '../../src/lib/customActions.js';
+import {
+  createCustomActionEntryPointRegistry,
+  normalizeEntryPoints,
+} from '../../src/lib/customActionEntryPoints.js';
+import { buildTaskListActionContext } from '../../src/lib/taskListActionContext.js';
 import { samplePageFor } from '../../src/lib/codeEngine/samplePages.js';
 import { shapeLivePage, ctxFromPage } from '../../src/lib/codeEngine/liveActionRun.js';
 
@@ -22,6 +27,7 @@ describe('customActions · normalize', () => {
     assert.equal(a.showInShelf, true);
     assert.equal(a.showInPopup, false);
     assert.deepEqual(a.pages, ['contact']); // default from page type
+    assert.deepEqual(a.entryPoints, []);
     assert.ok(a.id.startsWith('ca_'));
   });
 
@@ -32,8 +38,15 @@ describe('customActions · normalize', () => {
   });
 
   it('preserves a saved page scope + surface flags', () => {
-    const a = normalizeCustomAction({ pageType: 'order', pages: ['order', 'account'], showInPopup: true, enabled: false });
+    const a = normalizeCustomAction({
+      pageType: 'order',
+      pages: ['order', 'account'],
+      entryPoints: ['.gb-task-list-modal', 'modal:task-list'],
+      showInPopup: true,
+      enabled: false,
+    });
     assert.deepEqual(a.pages, ['order', 'account']);
+    assert.deepEqual(a.entryPoints, ['.gb-task-list-modal', 'modal:task-list']);
     assert.equal(a.showInPopup, true);
     assert.equal(a.enabled, false);
   });
@@ -43,6 +56,101 @@ describe('customActions · normalize', () => {
     assert.equal(b.pageType, 'order');
     assert.match(b.source, /actions\.createTask/);
     assert.match(starterSource('custom'), /Custom action/);
+  });
+});
+
+describe('customActions · entry points', () => {
+  it('normalizes comma/newline tokens and removes duplicates', () => {
+    assert.deepEqual(
+      normalizeEntryPoints(' .gb-task-list-modal, modal:task-list\n.gb-task-list-modal '),
+      ['.gb-task-list-modal', 'modal:task-list'],
+    );
+  });
+
+  it('resolves a mounted provider by id or CSS alias with lazy data', () => {
+    const registry = createCustomActionEntryPointRegistry();
+    let reads = 0;
+    let refreshes = 0;
+    const unregister = registry.register({
+      id: 'task-list',
+      aliases: ['.gb-task-list-modal'],
+      modalId: 'task-list',
+      getData: () => {
+        reads += 1;
+        return { tasks: [{ id: 't1' }] };
+      },
+      onRunComplete: () => {
+        refreshes += 1;
+      },
+    });
+
+    const visibility = registry.resolve(['.gb-task-list-modal'], null, { includeData: false });
+    assert.equal(visibility[0].modalId, 'task-list');
+    assert.equal(reads, 0);
+    const run = registry.resolve(['task-list'], null);
+    assert.equal(run[0].data.tasks[0].id, 't1');
+    assert.equal(reads, 1);
+    return registry.notifyRunComplete(run).then(() => {
+      assert.equal(refreshes, 1);
+      unregister();
+      assert.deepEqual(registry.resolve(['task-list'], null), []);
+    });
+  });
+
+  it('falls back to a raw CSS selector when no data provider registered it', () => {
+    const registry = createCustomActionEntryPointRegistry();
+    const doc = { querySelector: (selector) => (selector === '.mounted-tool' ? {} : null) };
+    const matches = registry.resolve(['.mounted-tool'], doc);
+    assert.equal(matches[0].id, 'selector:.mounted-tool');
+    assert.equal(matches[0].data, null);
+  });
+});
+
+describe('customActions · Task List context', () => {
+  it('publishes every task with contact ids, dates, filters, and unique contacts', () => {
+    const rows = [
+      {
+        id: 't1',
+        account: 'Northwind',
+        accountUrl: '/Default.aspx?Page=271&AccountID=90',
+        contact: 'Avery Buyer',
+        contactUrl: '/Default.aspx?Page=240&customerID=77',
+        due: '8/15/2026',
+        category: 'Follow Up',
+        priority: 2,
+        subject: 'Quarterly call',
+        status: 'New',
+      },
+      {
+        id: 't2',
+        account: 'Northwind',
+        contact: 'Avery Buyer',
+        contactId: '77',
+        dueDate: new Date(2026, 10, 15, 12),
+        category: 'Email',
+        priority: 3,
+        subject: 'Holiday check-in',
+        status: 'New',
+      },
+    ];
+    const data = buildTaskListActionContext({
+      rows,
+      visibleRows: [rows[0]],
+      selectedIds: new Set(['t1']),
+      filters: { query: 'quarter', status: '1' },
+    });
+
+    assert.equal(data.totalCount, 2);
+    assert.equal(data.visibleCount, 1);
+    assert.equal(data.contacts.length, 1);
+    assert.equal(data.contacts[0].contactId, '77');
+    assert.deepEqual(data.contacts[0].taskIds, ['t1', 't2']);
+    assert.equal(data.tasks[0].accountId, '90');
+    assert.equal(data.tasks[0].dueDate, '2026-08-15');
+    assert.equal(data.tasks[0].visible, true);
+    assert.equal(data.tasks[0].selected, true);
+    assert.equal(data.tasks[1].dueDate, '2026-11-15');
+    assert.equal(data.filters.query, 'quarter');
   });
 });
 
@@ -88,6 +196,14 @@ describe('customActions · sample pages', () => {
     const p = samplePageFor('order');
     assert.equal(p.order.id, '100245');
     assert.deepEqual(p.tasks.open, []);
+  });
+
+  it('supplies representative Task List entry-point data during authoring', () => {
+    const p = samplePageFor('custom', { entryPoints: ['.gb-task-list-modal'] });
+    assert.equal(p.entryPoint.id, 'task-list');
+    assert.equal(p.entryPoint.data.kind, 'task-list');
+    assert.equal(p.entryPoint.data.contacts.length, 2);
+    assert.equal(p.entryPoint.data.tasks.length, 2);
   });
 });
 

@@ -13,6 +13,8 @@ import { EmailRunner } from './EmailRunner.jsx';
 import { QuickTaskPopover } from './QuickTaskPopover.jsx';
 import { QuickTask } from './QuickTask.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
+import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
+import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
 
 /* ───────────────────────────────────────────────────────────────
    TaskList — React port of content/task-list-modal.js.
@@ -345,6 +347,8 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
      React state so the spinner doesn't trigger a re-render of the whole
      table — Mutates on the trigger button directly via a ref. */
   const busyRowsRef = useRef(new Set());
+  const actionContextRef = useRef(null);
+  const loadTasksRef = useRef(null);
   const [busyVersion, bumpBusy] = useState(0);
   const markBusy = (id) => { busyRowsRef.current.add(id); bumpBusy((n) => n + 1); };
   const clearBusy = (id) => { busyRowsRef.current.delete(id); bumpBusy((n) => n + 1); };
@@ -395,6 +399,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       return next;
     });
   }, [useMock, toast]);
+  loadTasksRef.current = loadTasks;
 
   // Initial load. No second effect this time — TaskList doesn't auto-
   // refire on filter changes (filtering is client-side over the loaded
@@ -510,6 +515,34 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     });
     return rows;
   }, [tasks, query, statusFilter, priorityFilter, dueFilter, sortChain]);
+
+  // Publish the complete parsed list—not merely the filtered/selected slice—
+  // to modal-scoped custom actions. getData is lazy, so the large snapshot is
+  // only read when a user actually clicks an action in the shelf.
+  actionContextRef.current = buildTaskListActionContext({
+    rows: tasks,
+    visibleRows: visibleTasks,
+    selectedIds: selected,
+    status,
+    filters: {
+      query,
+      status: statusFilter,
+      priority: priorityFilter,
+      due: dueFilter,
+    },
+    useMock,
+  });
+  useEffect(() => {
+    if (status !== 'ready') return undefined;
+    return customActionEntryPoints.register({
+      id: 'task-list',
+      label: 'My Tasks',
+      aliases: ['modal:task-list', '.gb-task-list-modal'],
+      modalId: 'task-list',
+      getData: () => actionContextRef.current,
+      onRunComplete: () => loadTasksRef.current?.(),
+    });
+  }, [status]);
 
   // ── Selection ────────────────────────────────────────────────
   const toggleSel = (id, idx, shiftKey) => {
@@ -841,6 +874,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       width={1000}
       height={640}
       backdrop
+      cardClassName={status === 'ready' ? 'gb-task-list-modal' : undefined}
       /* No text selection in this modal — accidental drag-selection while
          range-selecting rows was interfering with clicks. */
       cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
@@ -1668,4 +1702,3 @@ const MegaphoneIcon = ({ size = 11 }) => (
     <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
   </svg>
 );
-

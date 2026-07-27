@@ -41,6 +41,7 @@ New store `chrome.storage.local['gbCustomActions']` (array), with a `customActio
   icon: 'check',              // key from the `I` icon registry (icon picker)
   pageType: 'contact',        // 'order' | 'contact' | 'account' | 'custom'
   source: '…code…',           // the script (Code/Blocks share this string)
+  entryPoints: [],            // optional provider ids / CSS selectors
   enabled: true,              // master on/off
   pages: ['contact'],         // shelf page scope — defaults from pageType, editable in the table
   showInShelf: true,
@@ -50,6 +51,9 @@ New store `chrome.storage.local['gbCustomActions']` (array), with a `customActio
 ```
 
 - Custom actions carry their **own** `pages/showInShelf/showInPopup` (NOT `featureConfig`, which is keyed by feature flags). This is exactly why they belong in the Settings *table* and built-in features do not — the table edits these fields directly.
+- `entryPoints` is optional. Values such as `modal:task-list` or
+  `.gb-task-list-modal` keep the action hidden until that surface is mounted.
+  Multiple values are OR-matched.
 - Registers into `presetScopes.js` (`keys: ['gbCustomActions']`) so it rides settings export/import like templates.
 
 ---
@@ -93,13 +97,35 @@ Sample fixtures (`src/lib/codeEngine/samplePages.js`): representative `{ contact
 - **custom** → runs on **any page** with `page.*` (where available) + the gated `actions.*` library. Default shelf `pages` = `['*']`.
   - **Raw DOM access is DEFERRED (architectural).** Scripts execute inside an opaque-origin sandbox iframe (read-only, isolated) so they cannot query the live CRM DOM at run time — even a live run records intent in the sandbox and replays writes content-side. Giving a custom action real `page.dom(...)` access would require running it **content-side, outside the sandbox** (arbitrary code with page + network access) — a security-posture change held for an explicit decision. Until then "custom" = any-page + `actions.*`/`page.*`.
 
+### Entry-point context
+
+Mounted tools can register a lazy, serializable context provider through
+`customActionEntryPoints`. A matching action receives:
+
+```js
+page.entryPoint       // first matching { id, label, token, data }
+page.entryPoints      // every matching provider/selector
+```
+
+CSS-only matches receive `data: null`; registered providers can supply
+structured data without granting raw DOM access. Task List registers
+`task-list`, `modal:task-list`, and `.gb-task-list-modal` aliases and exposes
+all loaded task rows plus unique contacts, current filters, visibility, and
+selection state. The provider snapshot is resolved only after the action is
+clicked.
+
+For bulk task creation, `actions.createTask` accepts optional `contactId`,
+`contactName`, and `accountId` routing fields. The remote-effect confirmation
+gate is unchanged; routing fields select the target context and are not written
+into the CRM task template.
+
 ---
 
 ## 6. Registration + execution (the shelf)
 
 `actions-shelf.jsx` already data-drives from a registry. Add custom actions alongside:
 - Load `gbCustomActions`; keep live via `storage.onChanged`.
-- In `syncContext(pageType)`, for each **enabled** action where `pageApplies(rec.pages, pageType)` and `rec.showInShelf`, register a shelf action `{ id: 'ca_…', label: rec.name, icon: iconFor(rec.icon), hint: rec.description, smartFor: rec.pages, handler: runCustomAction(rec) }`.
+- In `syncContext(pageType)`, for each **enabled** action where `pageApplies(rec.pages, pageType)`, `rec.showInShelf`, and any configured entry point is active, register a shelf action `{ id: 'ca_…', label: rec.name, icon: iconFor(rec.icon), hint: rec.description, smartFor: rec.pages, handler: runCustomAction(rec) }`.
 - **`runCustomAction(rec)`** (the gated, money-touching part):
   1. Freshly extract `runEngine(document)` and shape it through the shared full-schema page model.
   2. Dry preview: `simulateProgram(rec.source, page, { run: makeSandboxRunner({exec: runInSandbox}), user })` → `planRun(trace)`.

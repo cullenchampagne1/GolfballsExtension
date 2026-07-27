@@ -22,6 +22,10 @@ const PRIOR_YEAR_CAMPAIGN = readFileSync(
   new URL('../../docs/examples/prior-year-anniversary-campaign.js', import.meta.url),
   'utf8',
 );
+const QUARTERLY_REACH_OUT_ACTION = readFileSync(
+  new URL('../../docs/examples/quarterly-reach-out-task-list-action.js', import.meta.url),
+  'utf8',
+);
 async function fakeSandbox(body, ctx, vars = {}, _doc) {
   const fn = new AsyncFunction('ctx', 'vars', 'h', `"use strict";\n${body}`);
   return fn(ctx || {}, vars || {}, {});
@@ -145,6 +149,131 @@ describe('campaign code flow', () => {
       result.trace.some((entry) => /Titleist Customer - Tier 2/.test(entry.summary || '')),
       'the live custom-action trace should include the derived Titleist tier task',
     );
+  });
+
+  it('creates missing quarterly tasks for every contact from one Task List snapshot', async () => {
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    const slot = (offset) => {
+      const absolute = now.getFullYear() * 4 + Math.floor(now.getMonth() / 3) + offset;
+      const year = Math.floor(absolute / 4);
+      const quarter = (absolute % 4) + 1;
+      const date = new Date(year, (quarter - 1) * 3 + 1, 10, 12);
+      return {
+        year,
+        quarter,
+        date: `${year}-${String(date.getMonth() + 1).padStart(2, '0')}-10`,
+      };
+    };
+    const slots = [0, 1, 2, 3].map(slot);
+    const page = {
+      entryPoint: {
+        id: 'task-list',
+        data: {
+          contacts: [
+            { contactId: '101', contactName: 'Ada Buyer', accountId: 'a1', accountName: 'Analytical Golf' },
+            { contactId: '202', contactName: 'Grace Buyer', accountId: 'a2', accountName: 'Compiler Golf' },
+          ],
+          tasks: [
+            { id: 'a-current', contactId: '101', dueDate: slots[0].date, subject: 'Existing Ada follow-up' },
+            { id: 'g-later', contactId: '202', dueDate: slots[2].date, subject: 'Existing Grace follow-up' },
+          ],
+        },
+      },
+    };
+    const writes = [];
+    const executor = makeExecutor({
+      ctx: { employeeId: '7' },
+      submitQuickTask: async ({ template, context }) => {
+        writes.push({ template, context });
+        return { ok: true, taskId: `quarter-${writes.length}` };
+      },
+    });
+    const result = await simulateProgram(QUARTERLY_REACH_OUT_ACTION, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(writes.length, 6);
+    assert.deepEqual(
+      [...new Set(writes.map((write) => write.context.contactId))].sort(),
+      ['101', '202'],
+    );
+    assert.equal(
+      writes.filter((write) => write.context.contactId === '101').length,
+      3,
+    );
+    assert.equal(
+      writes.filter((write) => write.context.contactId === '202').length,
+      3,
+    );
+    assert.ok(
+      !writes.some((write) => (
+        write.context.contactId === '101'
+        && write.template.subject === `Q${slots[0].quarter} Reach Out Opportunity`
+      )),
+      'Ada already has coverage in the current quarter',
+    );
+    assert.ok(
+      !writes.some((write) => (
+        write.context.contactId === '202'
+        && write.template.subject === `Q${slots[2].quarter} Reach Out Opportunity`
+      )),
+      'Grace already has coverage in the third rolling quarter',
+    );
+    assert.ok(writes.every((write) => write.template.daysOut >= 0));
+    assert.match(String(result.result), /Created 6 quarterly reach-out task\(s\)/);
+  });
+
+  it('maintains quarterly coverage in the main campaign even without orders', async () => {
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    const existing = new Date(
+      now.getFullYear(),
+      Math.floor(now.getMonth() / 3) * 3 + 1,
+      10,
+      12,
+    );
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '303', account: '' },
+        contact: {
+          id: '303',
+          contactId: '303',
+          contactName: 'No Order Buyer',
+        },
+        orders: [],
+        tasks: {
+          open: [{
+            id: 'existing-quarter',
+            subject: 'Existing quarterly touch',
+            dueDate: `${existing.getFullYear()}-${String(existing.getMonth() + 1).padStart(2, '0')}-10`,
+          }],
+          done: [],
+        },
+      },
+    });
+    const writes = [];
+    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: {
+        async run(name, input) {
+          writes.push([name, input]);
+          return { ok: true, taskId: `task-${writes.length}` };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    const quarterly = writes
+      .filter(([name, input]) => name === 'createTask' && /^Q[1-4] Reach Out Opportunity$/.test(input.subject))
+      .map(([, input]) => input);
+    assert.equal(quarterly.length, 3);
+    assert.ok(quarterly.every((task) => task.daysOut >= 0));
+    assert.match(String(result.result), /created 3 quarterly reach-out task\(s\)/);
+    assert.match(String(result.result), /created 0 brand task\(s\)/);
   });
 
   it('hydrates and executes every non-email write against each ordered record', async () => {
@@ -300,7 +429,7 @@ describe('campaign code flow', () => {
     assert.equal(result.ok, true);
     const actionTrace = result.trace.filter((entry) => entry.kind !== 'function');
     const functionTrace = result.trace.filter((entry) => entry.kind === 'function');
-    assert.equal(actionTrace.length, 13);
+    assert.equal(actionTrace.length, 14);
     assert.ok(functionTrace.length > 7, 'helper calls should remain visible to Simulate');
     assert.ok(
       [...new Set(functionTrace.map((entry) => entry.id))]
@@ -311,7 +440,7 @@ describe('campaign code flow', () => {
       'completeTask', 'completeTask',
       'createTask', 'createTask', 'createTask', 'createTask',
       'createTask', 'createTask', 'createTask', 'createTask',
-      'createTask', 'createTask', 'createTask',
+      'createTask', 'createTask', 'createTask', 'createTask',
     ]);
     assert.equal(writes[0][1].id, 'old-1');
     assert.equal(writes[1][1].id, 'old-brand-1');
@@ -327,12 +456,13 @@ describe('campaign code flow', () => {
         'Prior Year #2 [2026]',
         'Prior Year Call - [April]',
         'Prior Year #3 [2026]',
+        'Q3 Reach Out Opportunity',
         'Callaway Customer - Tier 1',
         'Titleist Customer - Tier 2',
         'Vice Customer - Tier 3',
       ],
     );
-    assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut > 0));
+    assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut >= 0));
     assert.match(created[0].body, /Vice Drive Custom Logo/);
     assert.match(created[4].body, /Titleist Pro V1 Personalized/);
     assert.match(created[4].body, /Averaged reorder anniversary: April 15/);
@@ -340,7 +470,7 @@ describe('campaign code flow', () => {
     assert.ok(created[2].daysOut < created[3].daysOut);
     assert.match(created[2].body, /Follow-up timing: 1 week before/);
 
-    const brandTasks = created.slice(8);
+    const brandTasks = created.slice(9);
     assert.deepEqual(brandTasks.map((task) => task.daysOut), [
       brandTasks[0].daysOut,
       brandTasks[0].daysOut,
@@ -364,6 +494,7 @@ describe('campaign code flow', () => {
       [2030, 12, 17],
     );
     assert.match(result.result, /created 8 fresh Prior Year task\(s\) across 2 anniversary date\(s\)/);
+    assert.match(result.result, /created 1 quarterly reach-out task\(s\)/);
     assert.match(result.result, /created 3 brand task\(s\)/);
   });
 

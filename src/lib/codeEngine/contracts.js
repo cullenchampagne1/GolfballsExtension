@@ -83,13 +83,16 @@ export const CONTRACTS = Object.freeze({
     object: 'task',
     effect: 'remote',
     summary: 'Create a task for the current contact',
-    accepts: 'a saved task or { subject, body, priority, daysOut }',
+    accepts: 'a saved task or { subject, body, priority, daysOut, contactId? }',
     params: {
       subject: { type: 'string', max: 500 },
       body: { type: 'string', max: 4_000 },
       priority: { type: 'enum', options: ['high', 'med', 'low'] },
       daysOut: { type: 'number', min: 0, max: 3650 },
       categoryId: { type: 'number', min: 0, max: 999_999 },
+      contactId: { type: 'string', max: 80 },
+      contactName: { type: 'string', max: 300 },
+      accountId: { type: 'string', max: 80 },
     },
     validate: (i) => {
       const errors = [];
@@ -99,6 +102,8 @@ export const CONTRACTS = Object.freeze({
     describe: (i) => {
       const tpl = templateOf(i);
       const label = clip(tpl ? (tpl.name || tpl.subject) : i?.subject, 60);
+      const target = clip(i?.contactName || i?.contactId, 40);
+      if (label && target) return `Create task “${label}” for ${target}`;
       return label ? `Create task “${label}”` : 'Create a task for the current contact';
     },
   },

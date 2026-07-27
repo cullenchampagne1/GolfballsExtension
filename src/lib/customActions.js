@@ -14,6 +14,7 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { togglePage } from './features/featureConfig.js';
+import { normalizeEntryPoints } from './customActionEntryPoints.js';
 
 export const STORAGE_KEY = 'gbCustomActions';
 
@@ -48,6 +49,7 @@ export function normalizeCustomAction(rec = {}) {
     icon: typeof rec.icon === 'string' && rec.icon ? rec.icon : 'bolt',
     pageType,
     source: typeof rec.source === 'string' ? rec.source : '',
+    entryPoints: normalizeEntryPoints(rec.entryPoints || rec.entryPoint),
     enabled: rec.enabled !== false,
     pages,
     showInShelf: rec.showInShelf !== false,
@@ -75,7 +77,8 @@ export function starterSource(pageType) {
     return [
       '// Custom action — runs on any page.',
       '// Use actions.* (confirm-gated writes) and page.* where available.',
-      '// (Raw DOM access isn’t available yet — the script runs sandboxed.)',
+      '// Modal entry-point data is available under page.entryPoint.data.',
+      '// (Raw DOM access isn’t available — the script remains sandboxed.)',
       "return 'Ran custom action';",
       '',
     ].join('\n');
