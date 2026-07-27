@@ -164,7 +164,9 @@ export async function runCodeCampaign({
     }
 
     const trace = Array.isArray(result?.trace) ? result.trace : [];
-    const ran = trace.filter((entry) => entry.status === 'ran').length;
+    // Function-entry traces animate Simulate but are not CRM effects and must
+    // not inflate live-run action counts.
+    const ran = trace.filter((entry) => entry.kind !== 'function' && entry.status === 'ran').length;
     const failed = !result?.ok || trace.some((entry) => entry.status === 'failed');
     const summary = {
       contact,

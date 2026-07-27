@@ -2,8 +2,9 @@
    codeEngine/simulate — run a program with NO side effects, produce a
    block-keyed trace for the run animation.
 
-   Instruments the source, injects a recording `actions.__trace` that
-   validates each call against its contract but never executes it, and
+   Instruments the source, injects recording `actions.__trace` and
+   `actions.__function` hooks, validates each contract call but never executes
+   it, and
    runs the code through an INJECTED runner:
      • browser  → the page-engine sandbox (runInSandbox), CSP-safe
      • node/test → AsyncFunction (same shape the sandbox uses)
@@ -38,7 +39,9 @@ export function asyncFunctionRunner(code, scope) {
  * @param {object} page     the page-engine object model (read-only) exposed as `page`
  * @param {object} opts     { run } — executes (code, scope) and returns a promise
  * @returns {Promise<{ ok, trace, calls, error }>}
- *   trace — ordered `{ id, contract, status:'ran'|'failed', summary, errors }`
+ *   trace — ordered action entries plus presentation-only function entries.
+ *           Function entries are `{ id, kind:'function', status:'ran', ... }`;
+ *           action entries are `{ id, contract, status:'ran'|'failed', ... }`.
  *           where a `failed` entry is a contract-validation failure (bad/missing
  *           params), surfaced as a preflight without ever sending anything.
  */
@@ -99,6 +102,22 @@ export async function simulateProgram(
   const { code, calls } = instrument(source);
   const trace = [];
   const actionResults = new Map();
+
+  // Presentation-only entry hook. It deliberately bypasses validation,
+  // executors, pacing, confirmation policy, and onEffect: entering a helper is
+  // not a CRM effect. Its stable source id lets Simulate pulse the same
+  // function block once per invocation, including repeated loop calls.
+  const recordFunction = (id, name) => {
+    trace.push({
+      id,
+      kind: 'function',
+      contract: null,
+      functionName: String(name || 'anonymous'),
+      status: 'ran',
+      summary: `Call ${String(name || 'anonymous')}()`,
+      errors: [],
+    });
+  };
 
   const record = async (id, name, input) => {
     const resolvedInput = resolveActionResults(input, actionResults, !executor);
@@ -213,7 +232,7 @@ export async function simulateProgram(
   };
 
   const scope = {
-    actions: { __trace: record },
+    actions: { __trace: record, __function: recordFunction },
     page: nodePage,
     user: buildUserBinding(user),
     // Sandbox replay hooks + the write allowlist (for the in-sandbox proxy).

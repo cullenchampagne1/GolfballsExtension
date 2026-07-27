@@ -61,6 +61,38 @@ describe('simulate · trace for the animation', () => {
       ['createTask', 'sendEmail']);
   });
 
+  it('emits one presentation-only function entry per helper invocation', async () => {
+    const source = `
+      function label(value) { return "Item " + value; }
+      for (const value of [1, 2, 3]) label(value);
+    `;
+    const { ok, trace, calls } = await simulateProgram(source);
+    assert.equal(ok, true);
+    assert.equal(trace.length, 3);
+    assert.ok(trace.every((entry) => (
+      entry.kind === 'function'
+      && entry.contract === null
+      && entry.status === 'ran'
+      && entry.summary === 'Call label()'
+    )));
+    assert.equal(new Set(trace.map((entry) => entry.id)).size, 1);
+    assert.deepEqual(calls, [], 'function hooks never enter the action-gating list');
+  });
+
+  it('orders repeated function entries before each nested action', async () => {
+    const { trace } = await simulateProgram(`
+      async function queue(subject) {
+        await actions.createTask({ subject });
+      }
+      await queue("one");
+      await queue("two");
+    `);
+    assert.deepEqual(
+      trace.map((entry) => entry.kind === 'function' ? 'function' : entry.contract),
+      ['function', 'createTask', 'function', 'createTask'],
+    );
+  });
+
   it('runs an empty program cleanly', async () => {
     const { ok, trace } = await simulateProgram('');
     assert.equal(ok, true);

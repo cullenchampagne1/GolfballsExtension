@@ -11,7 +11,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { translateProgram } from '../../src/lib/codeEngine/translate.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
-import { indexTrace, blockStatus, describeBlock } from '../../src/lib/codeEngine/blockView.js';
+import {
+  indexTrace,
+  blockStatus,
+  describeBlock,
+  runStatus,
+  subtreeRan,
+} from '../../src/lib/codeEngine/blockView.js';
 
 describe('blockView · trace indexing + status', () => {
   it('indexes an ordered trace by block id, grouping repeats', () => {
@@ -176,6 +182,23 @@ describe('blockView · block descriptors', () => {
 
     const { trace } = await simulateProgram(source);
     assert.equal(blockStatus(fn, indexTrace(trace)), 'ran');
+    assert.equal(describeBlock(fn, indexTrace(trace)).runs, 1);
     assert.equal(describeBlock(fn.body[0], indexTrace(trace)).runs, 1);
+  });
+
+  it('counts repeated pure-helper calls and makes the function itself runnable', async () => {
+    const source = `
+      const normalize = (value) => value.trim().toLowerCase();
+      normalize(" One ");
+      normalize(" Two ");
+      normalize(" Three ");
+    `;
+    const [fn] = translateProgram(source).blocks;
+    const { trace } = await simulateProgram(source);
+    const by = indexTrace(trace);
+    assert.equal(blockStatus(fn, by), 'ran');
+    assert.equal(subtreeRan(fn, by), true);
+    assert.equal(describeBlock(fn, by).runs, 3);
+    assert.equal(runStatus(fn, by, { runningId: fn.id }), 'running');
   });
 });

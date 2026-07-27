@@ -58,7 +58,13 @@ export function blockStatus(block, traceById = {}) {
     if (!entries || !entries.length) return 'pending';
     return entries.some((e) => e.status === 'failed') ? 'failed' : 'ran';
   }
-  let saw = 'pending';
+  // Functions own an entry trace in addition to their nested action traces.
+  // A pure helper therefore reads as executed even when it performs no CRM
+  // action, while a failed nested action still wins during aggregation.
+  const ownFunctionEntries = block.kind === 'function'
+    ? (traceById[block.id] || []).filter((e) => e.kind === 'function')
+    : [];
+  let saw = ownFunctionEntries.length ? 'ran' : 'pending';
   for (const kid of childBlocks(block)) {
     const s = blockStatus(kid, traceById);
     if (s === 'failed') return 'failed';
@@ -73,6 +79,10 @@ const isTracedLeaf = (b) => b && (b.kind === 'action' || b.kind === 'evaluate');
 /** Did this block (or any descendant action/evaluate) actually fire in the trace? */
 export function subtreeRan(block, traceById = {}) {
   if (!block) return false;
+  if (block.kind === 'function') {
+    const own = traceById[block.id];
+    if (own && own.some((e) => e.kind === 'function' && e.status !== 'failed')) return true;
+  }
   if (isTracedLeaf(block)) {
     const e = traceById[block.id];
     return !!(e && e.length && e.some((x) => x.status !== 'failed'));
@@ -176,12 +186,14 @@ export function describeBlock(block, traceById = {}) {
   }
   if (block.kind === 'function') {
     const signature = `${block.name || 'anonymous'}(${block.paramsText || ''})`;
+    const entries = (traceById[block.id] || []).filter((e) => e.kind === 'function');
     return {
       ...base,
       kind: 'function',
       icon: 'code',
       title: signature,
       detail: `${block.async ? 'async ' : ''}${block.functionKind === 'arrow' ? 'arrow function' : 'function'} · ${(block.body || []).length} block${(block.body || []).length === 1 ? '' : 's'}`,
+      runs: entries.length,
     };
   }
   if (block.kind === 'comment') {

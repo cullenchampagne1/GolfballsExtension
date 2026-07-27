@@ -1,12 +1,13 @@
 /**
- * Action-call instrumentation + end-to-end simulation trace.
+ * Action-call + function-entry instrumentation and end-to-end simulation trace.
  *
  * Instrumentation rewrites `actions.X(args)` → `actions.__trace(id, "X", args)`
  * with the SAME node id translate.js assigns, so a run reports which block is
- * executing. These tests actually EXECUTE the instrumented code (AsyncFunction,
- * the same shape the sandbox uses) against a recording `actions.__trace` and a
- * mock `page`, proving the trace threads correctly through loops and branches —
- * with no real side effects.
+ * executing. Function entry hooks use the function block's stable id so repeated
+ * calls can restart that block's animation. These tests actually EXECUTE the
+ * instrumented code (AsyncFunction, the same shape the sandbox uses) against
+ * recording hooks and a mock `page`, proving the trace threads correctly
+ * through functions, loops, and branches — with no real side effects.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,6 +22,9 @@ async function simulate(source, page = {}) {
   const { code } = instrument(source);
   const trace = [];
   const actions = {
+    __function(id, name) {
+      trace.push({ id, kind: 'function', name });
+    },
     __trace(id, name, input) {
       trace.push({ id, contract: name, input: input ?? null });
       return { ok: true, dry: true };
@@ -44,6 +48,26 @@ describe('instrument · rewrite shape', () => {
     const blockId = translateProgram(source).blocks[0].id;
     const callId = instrument(source).calls[0].id;
     assert.equal(callId, blockId, 'trace id must match the block id');
+  });
+
+  it('uses the function block id for declarations and assigned arrows', () => {
+    for (const source of [
+      'function helper(value) { return value; }',
+      'const helper = (value) => value;',
+      'const helper = function (value) { return value; };',
+    ]) {
+      const block = translateProgram(source).blocks[0];
+      const entry = instrument(source).functions[0];
+      assert.equal(block.kind, 'function');
+      assert.equal(entry.id, block.id);
+      assert.equal(entry.name, 'helper');
+    }
+  });
+
+  it('wraps an implicit arrow body without swallowing its action rewrite', () => {
+    const source = 'const create = (subject) => actions.createTask({ subject });';
+    const { code } = instrument(source);
+    assert.match(code, /=> \(actions\.__function\("n\d+_\d+","create"\),actions\.__trace\("n\d+_\d+","createTask",\{ subject \}\)\)/);
   });
 
   it('handles a call with no arguments', () => {
@@ -97,6 +121,24 @@ describe('instrument · executes and traces faithfully', () => {
     assert.deepEqual(trace.map((t) => t.input.to), ['a@x.com', 'b@x.com', 'c@x.com']);
     // Same source node → same block id every iteration (the loop body block).
     assert.equal(new Set(trace.map((t) => t.id)).size, 1);
+  });
+
+  it('records the same function block once per invocation around its nested action', async () => {
+    const source = `
+      async function createOne(subject) {
+        await actions.createTask({ subject });
+      }
+      for (const subject of ["one", "two", "three"]) await createOne(subject);
+    `;
+    const trace = await simulate(source);
+    assert.deepEqual(
+      trace.map((entry) => entry.kind === 'function' ? `call:${entry.name}` : entry.contract),
+      ['call:createOne', 'createTask', 'call:createOne', 'createTask', 'call:createOne', 'createTask'],
+    );
+    const calls = trace.filter((entry) => entry.kind === 'function');
+    assert.equal(calls.length, 3);
+    assert.equal(new Set(calls.map((entry) => entry.id)).size, 1);
+    assert.equal(calls[0].id, translateProgram(source).blocks[0].id);
   });
 
   it('threads a switch to the matching case', async () => {

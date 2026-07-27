@@ -89,6 +89,36 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
     assert.deepEqual(viaSandbox.trace.map((t) => t.contract), ['sendEmail', 'createTask']);
   });
 
+  it('preserves repeated function-entry pulses through the browser sandbox replay', async () => {
+    const source = `
+      async function queue(subject) {
+        await actions.createTask({ subject });
+      }
+      await queue("one");
+      await queue("two");
+      await queue("three");
+    `;
+    const viaSandbox = await simulateProgram(source, {}, {
+      run: makeSandboxRunner({ exec: fakeExec }),
+    });
+    const viaNode = await simulateProgram(source, {}, { run: asyncFunctionRunner });
+    assert.deepEqual(
+      viaSandbox.trace.map((entry) => ({
+        id: entry.id,
+        kind: entry.kind || 'action',
+        contract: entry.contract,
+      })),
+      viaNode.trace.map((entry) => ({
+        id: entry.id,
+        kind: entry.kind || 'action',
+        contract: entry.contract,
+      })),
+    );
+    const entries = viaSandbox.trace.filter((entry) => entry.kind === 'function');
+    assert.equal(entries.length, 3);
+    assert.equal(new Set(entries.map((entry) => entry.id)).size, 1);
+  });
+
   it('carries a contract-validation failure through the replay', async () => {
     const { trace } = await simulateProgram(
       'await actions.sendEmail({ from: "me@x.com" })',

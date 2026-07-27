@@ -13,6 +13,10 @@ const managerSource = readFileSync(
   new URL('../../src/modals/CampaignManager.jsx', import.meta.url),
   'utf8',
 );
+const blocksSource = readFileSync(
+  new URL('../../src/ui/components/BlocksView.jsx', import.meta.url),
+  'utf8',
+);
 
 function fakeHost() {
   const attributes = new Map();
@@ -54,5 +58,11 @@ describe('Campaign Manager presentation scale', () => {
     assert.match(managerSource, />\s*Back to campaigns\s*</);
     assert.match(managerSource, /@keyframes cm-repeat-hit/);
     assert.match(managerSource, /advanceRunRow\(current\[contact\._key\], event, pipeline\)/);
+  });
+
+  it('replays and visibly restarts repeated function-call animations', () => {
+    assert.match(managerSource, /current\?\.kind === 'function' \? 320 : 600/);
+    assert.match(blocksSource, /key=\{`\$\{block\.id\}:\$\{d\.runs\}`\}/);
+    assert.match(blocksSource, /CALLED ×\{d\.runs\}/);
   });
 });

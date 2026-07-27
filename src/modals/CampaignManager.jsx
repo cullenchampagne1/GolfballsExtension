@@ -1031,14 +1031,19 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const stopSim = () => { simRunRef.current += 1; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim((s) => ({ ...s, status: s.trace.length ? 'done' : 'idle', done: true })); };
   const resetSim = () => { simRunRef.current += 1; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' }); };
 
-  // Replay: advance one trace entry ~600ms, then settle on 'done'.
+  // Replay one ordered trace entry at a time. Function entries are brief
+  // invocation pulses; action entries stay longer so their outcome remains
+  // readable. Repeated function ids still advance independently and remount
+  // the function card animation via its occurrence count.
   useEffect(() => {
     if (sim.status !== 'replaying') return undefined;
     if (sim.replayIdx >= sim.trace.length - 1) {
       simTimer.current = setTimeout(() => setSim((s) => ({ ...s, status: 'done', done: true })), 650);
       return () => { if (simTimer.current) clearTimeout(simTimer.current); };
     }
-    simTimer.current = setTimeout(() => setSim((s) => ({ ...s, replayIdx: s.replayIdx + 1 })), 600);
+    const current = sim.trace[sim.replayIdx];
+    const replayDelay = current?.kind === 'function' ? 320 : 600;
+    simTimer.current = setTimeout(() => setSim((s) => ({ ...s, replayIdx: s.replayIdx + 1 })), replayDelay);
     return () => { if (simTimer.current) clearTimeout(simTimer.current); };
   }, [sim.status, sim.replayIdx, sim.trace]);
 

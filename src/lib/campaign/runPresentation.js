@@ -152,8 +152,11 @@ export function finishRunRow(current = {}, summary = {}, pipeline = []) {
       };
     }
   }
-  const last = summary.trace?.length
-    ? summary.trace[summary.trace.length - 1].summary
+  const effectTrace = Array.isArray(summary.trace)
+    ? summary.trace.filter((entry) => entry?.kind !== 'function')
+    : [];
+  const last = effectTrace.length
+    ? effectTrace[effectTrace.length - 1].summary
     : '';
   return {
     ...row,

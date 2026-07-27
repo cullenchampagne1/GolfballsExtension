@@ -7,9 +7,10 @@
    cross that realm boundary, so we can't hand the sandbox the content-side
    recorder. Instead:
 
-     1) wrap the instrumented code so it runs against a SANDBOX-LOCAL
-        `actions.__trace` recorder and returns the raw ordered trace
-        (`[{ id, contract, input }]`) — plain serializable data,
+     1) wrap the instrumented code so it runs against SANDBOX-LOCAL action and
+        function-entry recorders and returns the raw ordered trace
+        (`[{ id, contract, input } | { kind:"function", id, name }]`) —
+        plain serializable data,
      2) run that body in the sandbox via runInSandbox (real control flow,
         real branching over `page`, zero real effects — the recorder only
         records),
@@ -78,7 +79,9 @@ export function buildTraceBody(instrumentedCode) {
     '  get: (t, p) => { if (p === "commit") return () => { __gbTrace.push({ kind: "commit" }); }; return t[p]; },',
     '});',
     'page.tasks = { open: __openTasks, done: (page.tasks && page.tasks.done) || [], completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
-    'const actions = { __trace(id, name, input) {',
+    'const actions = {',
+    '  __function(id, name) { __gbTrace.push({ kind: "function", id, name }); },',
+    '  __trace(id, name, input) {',
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
     '  const result = { ok: true, dry: true, simulated: true };',
     '  if (name === "createTask") result.taskId = "__gb_action_result__:" + String(id) + ":taskId";',
@@ -124,6 +127,7 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
     const pageData = serializable(src) || {};
     const user = { emails: u.emails || {}, tasks: u.tasks || {}, calls: u.calls || {} };
     const record = scope && scope.actions && scope.actions.__trace;
+    const recordFunction = scope && scope.actions && scope.actions.__function;
     const recordEval = scope && scope.page && scope.page.__eval;
     const pageRec = (scope && scope.__pageRecord) || {};
     const approvedFields = (scope && scope.__approvedFields) || [];
@@ -159,7 +163,10 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
     for (const e of entries) {
       if (!e) continue;
       // Awaited so a live run's real writes complete in order.
-      if (e.kind === 'evaluate') {
+      if (e.kind === 'function') {
+        if (typeof recordFunction === 'function') recordFunction(e.id, e.name);
+      }
+      else if (e.kind === 'evaluate') {
         if (typeof recordEval === 'function') {
           await recordEval(e.id, e.ref || { name: e.name }, e.outbound);
         }

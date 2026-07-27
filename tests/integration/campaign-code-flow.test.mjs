@@ -245,7 +245,15 @@ describe('campaign code flow', () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.trace.length, 7);
+    const actionTrace = result.trace.filter((entry) => entry.kind !== 'function');
+    const functionTrace = result.trace.filter((entry) => entry.kind === 'function');
+    assert.equal(actionTrace.length, 7);
+    assert.ok(functionTrace.length > 7, 'helper calls should remain visible to Simulate');
+    assert.ok(
+      [...new Set(functionTrace.map((entry) => entry.id))]
+        .some((id) => functionTrace.filter((entry) => entry.id === id).length > 1),
+      'a repeated helper should reuse its stable function block id',
+    );
     assert.deepEqual(writes.map(([name]) => name), [
       'completeTask',
       'createTask', 'createTask', 'createTask',
@@ -269,6 +277,45 @@ describe('campaign code flow', () => {
     assert.match(created[0].body, /White logo towels/);
     assert.match(created[3].body, /Embroidered hats/);
     assert.match(result.result, /created 6 fresh task\(s\) across 2 anniversary date\(s\)/);
+  });
+
+  it('does not count function-entry animation events as campaign actions', async () => {
+    const audience = [
+      { contactId: '1', contactName: 'One', contactUrl: 'https://crm.test/?customerID=1', _key: '1' },
+    ];
+    const code = `
+      async function queue(subject) {
+        await actions.createTask({ subject });
+      }
+      await queue("one");
+      await queue("two");
+    `;
+    const output = await runCodeCampaign({
+      campaign: {
+        automation: code,
+        paceDelay: 0,
+        paceJitter: 0,
+        sendCap: 0,
+      },
+      audience,
+      dryRun: true,
+      prepareContact: async (contact, ordered) => hydrateCampaignContact(contact, ordered, {
+        buildContext: async () => contextFor(contact),
+      }),
+      executeProgram: async ({ prepared, beforeEffect, onEffect }) => simulateProgram(
+        code,
+        prepared.page,
+        {
+          run: makeSandboxRunner({ exec: fakeSandbox }),
+          beforeEffect,
+          onEffect,
+        },
+      ),
+    });
+
+    assert.equal(output.results[0].ran, 2);
+    assert.equal(output.effects, 2);
+    assert.equal(output.results[0].trace.filter((entry) => entry.kind === 'function').length, 2);
   });
 
   it('honors suppression and the run-wide action cap', async () => {

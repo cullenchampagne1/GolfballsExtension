@@ -291,6 +291,17 @@ function EditGroupCard({ fields, status }) {
   );
 }
 
+function containsBlockId(block, id) {
+  if (!block || !id) return false;
+  if (block.id === id) return true;
+  if ((block.then || []).some((kid) => containsBlockId(kid, id))) return true;
+  if ((block.else || []).some((kid) => containsBlockId(kid, id))) return true;
+  if ((block.body || []).some((kid) => containsBlockId(kid, id))) return true;
+  return (block.cases || []).some((item) => (
+    (item.body || []).some((kid) => containsBlockId(kid, id))
+  ));
+}
+
 function BlockNode({ block, ctx, tone, forceStatus }) {
   const { traceById, done, runningId, indices } = ctx;
   const status = runStatus(block, traceById, { done, runningId, force: forceStatus });
@@ -301,10 +312,10 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   if (block.kind === 'function') {
     const d = describeBlock(block, traceById);
     const ran = subtreeRan(block, traceById);
-    const rail = runningId && ran ? BRAND : ARM_RAIL.info;
-    // Pure helper calls are not trace events, so "no child action fired" does
-    // not prove the function was skipped. Keep definitions neutral unless an
-    // ancestor branch explicitly cut them or a traced child actually ran.
+    const rail = containsBlockId(block, runningId) ? BRAND : ARM_RAIL.info;
+    // Function entry hooks make pure helpers traceable too. Key the card by
+    // occurrence count so React remounts its CSS animation when the SAME
+    // function is called repeatedly.
     const functionStatus = ran ? status : (forceStatus || 'pending');
     const bodyForce = ran ? forceStatus : (forceStatus || 'definition');
     return (
@@ -313,9 +324,10 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
         border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-xl)',
         background: 'color-mix(in srgb, var(--gb-surface-2) 72%, transparent)',
       }}>
-        <Card tone="neutral" status={functionStatus} idx={idx} icon={I.code}
+        <Card key={`${block.id}:${d.runs}`} tone="neutral" status={functionStatus} idx={idx} icon={I.code}
           title={d.title} sublabel={d.detail}
-          tag={<Tag tone="neutral" size="xs">FUNCTION</Tag>} />
+          tag={<Tag tone="neutral" size="xs">FUNCTION</Tag>}
+          right={d.runs > 0 ? <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.03em', padding: '1px 6px', borderRadius: 999, color: 'var(--gb-info-fg)', background: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', textTransform: 'uppercase', flexShrink: 0 }}>CALLED ×{d.runs}</span> : null} />
         <BranchArm label="function body" tone="info" rail={rail}>
           {block.body.length ? renderBlocks(block.body, ctx, 'info', bodyForce, rail) : <EmptyArm />}
         </BranchArm>
