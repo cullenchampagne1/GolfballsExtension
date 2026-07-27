@@ -126,6 +126,10 @@
       "file": "tests/unit/crmTasks.test.mjs"
     },
     {
+      "name": "ui \u00b7 task list virtualized row window",
+      "file": "tests/unit/taskListVirtualizer.test.mjs"
+    },
+    {
       "name": "crm \u00b7 indexed search ranking",
       "file": "tests/unit/crmIndex.test.mjs"
     },

@@ -15,6 +15,10 @@ import { QuickTask } from './QuickTask.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
+import {
+  TASK_LIST_ROW_HEIGHT,
+  taskListVirtualWindow,
+} from '../lib/taskListVirtualizer.js';
 
 /* ───────────────────────────────────────────────────────────────
    TaskList — React port of content/task-list-modal.js.
@@ -347,7 +351,8 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
      React state so the spinner doesn't trigger a re-render of the whole
      table — Mutates on the trigger button directly via a ref. */
   const busyRowsRef = useRef(new Set());
-  const actionContextRef = useRef(null);
+  const taskScrollRef = useRef(null);
+  const actionContextSourceRef = useRef(null);
   const loadTasksRef = useRef(null);
   const [busyVersion, bumpBusy] = useState(0);
   const markBusy = (id) => { busyRowsRef.current.add(id); bumpBusy((n) => n + 1); };
@@ -516,10 +521,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     return rows;
   }, [tasks, query, statusFilter, priorityFilter, dueFilter, sortChain]);
 
-  // Publish the complete parsed list—not merely the filtered/selected slice—
-  // to modal-scoped custom actions. getData is lazy, so the large snapshot is
-  // only read when a user actually clicks an action in the shelf.
-  actionContextRef.current = buildTaskListActionContext({
+  // Keep only the raw inputs in the ref. The potentially large serialized
+  // snapshot is built lazily if a modal-scoped custom action actually asks
+  // for it; scrolling never pays that cost.
+  actionContextSourceRef.current = {
     rows: tasks,
     visibleRows: visibleTasks,
     selectedIds: selected,
@@ -531,7 +536,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       due: dueFilter,
     },
     useMock,
-  });
+  };
   useEffect(() => {
     if (status !== 'ready') return undefined;
     return customActionEntryPoints.register({
@@ -539,10 +544,17 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       label: 'My Tasks',
       aliases: ['modal:task-list', '.gb-task-list-modal'],
       modalId: 'task-list',
-      getData: () => actionContextRef.current,
+      getData: () => buildTaskListActionContext(actionContextSourceRef.current),
       onRunComplete: () => loadTasksRef.current?.(),
     });
   }, [status]);
+
+  // A new result order should begin at its first row. The virtualizer owns
+  // ordinary scrolling locally, so these filters do not re-render the modal
+  // for every scroll frame.
+  useEffect(() => {
+    if (taskScrollRef.current) taskScrollRef.current.scrollTop = 0;
+  }, [query, statusFilter, priorityFilter, dueFilter, sortChain]);
 
   // ── Selection ────────────────────────────────────────────────
   const toggleSel = (id, idx, shiftKey) => {
@@ -1011,9 +1023,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       </AnimatePresence>
 
       {/* Table */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div ref={taskScrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <TasksTable
           rows={visibleTasks}
+          scrollRef={taskScrollRef}
           status={status}
           query={query}
           allChecked={allVisibleSelected}
@@ -1187,7 +1200,59 @@ function ScanBeam({ top, height }) {
   );
 }
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, busyRows, emailStatusByRow = {}, actionStateByRow = {}, emailRunRunning = false }) {
+function useTaskListScrollMetrics(scrollRef, rowCount) {
+  const [metrics, setMetrics] = useState({
+    scrollTop: 0,
+    viewportHeight: TASK_LIST_ROW_HEIGHT * 10,
+  });
+
+  useEffect(() => {
+    const node = scrollRef?.current;
+    if (!node) return undefined;
+
+    let frame = null;
+    const requestFrame = globalThis.requestAnimationFrame
+      ? globalThis.requestAnimationFrame.bind(globalThis)
+      : (callback) => setTimeout(callback, 16);
+    const cancelFrame = globalThis.cancelAnimationFrame
+      ? globalThis.cancelAnimationFrame.bind(globalThis)
+      : clearTimeout;
+
+    const read = () => {
+      frame = null;
+      const next = {
+        scrollTop: Math.max(0, node.scrollTop || 0),
+        viewportHeight: Math.max(1, node.clientHeight || TASK_LIST_ROW_HEIGHT),
+      };
+      setMetrics((current) => (
+        current.scrollTop === next.scrollTop
+        && current.viewportHeight === next.viewportHeight
+          ? current
+          : next
+      ));
+    };
+    const scheduleRead = () => {
+      if (frame == null) frame = requestFrame(read);
+    };
+
+    read();
+    node.addEventListener('scroll', scheduleRead, { passive: true });
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(scheduleRead)
+      : null;
+    observer?.observe(node);
+
+    return () => {
+      node.removeEventListener('scroll', scheduleRead);
+      observer?.disconnect();
+      if (frame != null) cancelFrame(frame);
+    };
+  }, [scrollRef, rowCount]);
+
+  return metrics;
+}
+
+function TasksTable({ rows, scrollRef, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, busyRows, emailStatusByRow = {}, actionStateByRow = {}, emailRunRunning = false }) {
   /* Beam dwells on the last 'sending' row through the inter-send
      delay so the visual stays tied to the orchestrator's cursor.
      The dwell key is `emailRunRunning` — `allSettled` over so-far-
@@ -1197,7 +1262,6 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
      then clear activeRowId after a short grace period so the beam
      fades out via AnimatePresence below. SENT badges stay in the
      Action column as a record of what was sent. */
-  const containerRef = useRef(null);
   const hasEntries = Object.keys(emailStatusByRow).length > 0;
   const [activeRowId, setActiveRowId] = useState(null);
   useEffect(() => {
@@ -1215,18 +1279,34 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
     // Mid-blast, no row sending right now — keep the beam dwelling
     // on the last anchored row until the next onRowStart fires.
   }, [emailStatusByRow, hasEntries, emailRunRunning]);
-  const [scanRect, setScanRect] = useState(null);
-  useEffect(() => {
-    if (!activeRowId) { setScanRect(null); return; }
-    const root = containerRef.current;
-    if (!root) return;
-    const safeId = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(activeRowId) : String(activeRowId).replace(/"/g, '\\"');
-    const el = root.querySelector(`[data-row-id="${safeId}"]`);
-    if (el) setScanRect({ top: el.offsetTop, height: el.offsetHeight });
-  }, [activeRowId, rows]);
+
+  const { scrollTop, viewportHeight } = useTaskListScrollMetrics(scrollRef, rows.length);
+  const virtualWindow = useMemo(() => taskListVirtualWindow({
+    rowCount: rows.length,
+    scrollTop,
+    viewportHeight,
+  }), [rows.length, scrollTop, viewportHeight]);
+  const mountedRows = useMemo(
+    () => rows.slice(virtualWindow.startIndex, virtualWindow.endIndex),
+    [rows, virtualWindow.startIndex, virtualWindow.endIndex],
+  );
+  const activeRowIndex = activeRowId
+    ? rows.findIndex((row) => row.id === activeRowId)
+    : -1;
+  const scanRect = activeRowIndex >= 0
+    ? {
+      top: activeRowIndex * TASK_LIST_ROW_HEIGHT,
+      height: TASK_LIST_ROW_HEIGHT - 4,
+    }
+    : null;
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div
+      style={{ position: 'relative' }}
+      data-virtualized="true"
+      data-total-rows={rows.length}
+      data-mounted-rows={mountedRows.length}
+    >
       {/* Sticky header — sortable. Click a label to set sort; click
           again to toggle direction. The arrow next to the label
           indicates the active column.
@@ -1276,26 +1356,47 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         </EmptyRow>
       )}
 
-      {status === 'ready' && rows.map((t, idx) => (
-        <TaskRow
-          key={t.id}
-          task={t}
-          isSelected={selected.has(t.id)}
-          isBusy={busyRows?.has(t.id) || false}
-          emailStatus={emailStatusByRow[t.id]}
-          actionState={actionStateByRow[t.id]}
-          onToggle={(e) => onToggle(t.id, idx, e?.shiftKey)}
-        />
-      ))}
-      {/* Same moving light bar CRMSearch has — sweeps over the
-          currently-sending row, dwells through the inter-send delay,
-          and fades out (AnimatePresence opacity exit) once the blast
-          settles via the allSettled effect above. */}
-      <AnimatePresence>
-        {scanRect && (
-          <ScanBeam key="scan" top={scanRect.top} height={scanRect.height} />
-        )}
-      </AnimatePresence>
+      {status === 'ready' && rows.length > 0 && (
+        <div
+          style={{
+            position: 'relative',
+            height: virtualWindow.totalHeight,
+          }}
+        >
+          {mountedRows.map((t, localIndex) => {
+            const rowIndex = virtualWindow.startIndex + localIndex;
+            return (
+              <TaskRow
+                key={t.id}
+                task={t}
+                isSelected={selected.has(t.id)}
+                isBusy={busyRows?.has(t.id) || false}
+                emailStatus={emailStatusByRow[t.id]}
+                actionState={actionStateByRow[t.id]}
+                onToggle={(e) => onToggle(t.id, rowIndex, e?.shiftKey)}
+                virtualStyle={{
+                  position: 'absolute',
+                  insetInline: 0,
+                  top: 0,
+                  height: TASK_LIST_ROW_HEIGHT - 4,
+                  marginBottom: 0,
+                  boxSizing: 'border-box',
+                  transform: `translateY(${rowIndex * TASK_LIST_ROW_HEIGHT}px)`,
+                }}
+              />
+            );
+          })}
+          {/* Same moving light bar CRMSearch has — sweeps over the
+              currently-sending row, dwells through the inter-send delay,
+              and fades out once the blast settles. Its position comes from
+              the full row index, so virtualization does not break it. */}
+          <AnimatePresence>
+            {scanRect && (
+              <ScanBeam key="scan" top={scanRect.top} height={scanRect.height} />
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
@@ -1344,7 +1445,7 @@ function SortHeader({ col, sortChain = [], onSort, muted = false }) {
   );
 }
 
-function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle }) {
+function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle, virtualStyle }) {
   const complete = task.status === 'Complete';
 
   return (
@@ -1362,6 +1463,7 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
         fontSize: 12,
         cursor: 'pointer',
         opacity: complete ? 0.65 : 1,
+        ...virtualStyle,
       }}
       onClick={(e) => {
         if (e.target.closest('a, button, [data-checkbox]')) return;
