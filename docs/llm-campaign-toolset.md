@@ -60,12 +60,12 @@ page.tasks.open   // current record's open tasks
 page.tasks.done   // current record's completed tasks
 ```
 
-`page` retains the parsed schema for the hydrated record. Account campaigns can
-therefore group `page.orders`, inspect `page.account`, and complete the
-account-wide `page.tasks.open` rows. CRM task writes are contact-indexed; on an
-account audience row the engine uses the account schema's first related contact
-as the writer contact while retaining the account id and account-wide read
-model.
+`page` retains the parsed schema for whichever record was selected. A contact
+campaign gets that contact page's own `page.orders`, `page.tasks`, contact
+fields, and contact ID; it does not require an account. An account campaign gets
+the corresponding account-page tables. CRM task writes are contact-indexed, so
+an account audience row uses that page's first related contact as its writer
+contact while a contact row uses its exact contact ID.
 
 Editable contact fields:
 
@@ -223,13 +223,15 @@ This is the safest full helper check because it performs no email send:
 Run it first as a dry run, select one disposable test contact, inspect the
 preview, and only then switch off Dry run.
 
-## Prior-year anniversary account campaign
+## Prior-year anniversary campaign
 
 The paste-ready example at
 [`docs/examples/prior-year-anniversary-campaign.js`](examples/prior-year-anniversary-campaign.js)
-runs against account records. It groups orders by source year + month, averages
-the day within each group, completes existing open tasks whose subject contains
-`Prior Year`, and creates a fresh three-task future cycle:
+runs against contact or account records. Each invocation stays scoped to the
+selected page: contact orders/tasks for a contact, account orders/tasks for an
+account. It groups orders by source year + month, averages the day within each
+group, completes existing open tasks whose subject contains `Prior Year`, and
+creates a fresh three-task future cycle:
 
 1. `Prior Year #1` — three weeks before the anniversary.
 2. `Prior Year #2` — two weeks before the anniversary.

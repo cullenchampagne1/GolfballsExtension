@@ -1,8 +1,8 @@
 // Prior-year anniversary timeline.
 //
-// Run this campaign against ACCOUNT records from CRM Search. The campaign
-// engine runs this body once per account and hydrates page.orders + the
-// account-wide page.tasks list before it starts.
+// Run this campaign against CONTACT or ACCOUNT records from CRM Search. The
+// campaign engine runs this body once per selected record and hydrates that
+// record's own page.orders + page.tasks list before it starts.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTHS = [
@@ -104,10 +104,10 @@ for (const task of oldPriorYearTasks) {
 
 const today = new Date();
 today.setHours(12, 0, 0, 0);
-const accountName = page.account?.name
+const recordName = page.account?.name
   || page.contact?.companyName
   || page.contact?.contactName
-  || "Current account";
+  || "Current record";
 let createdCount = 0;
 
 for (const anniversary of anniversaries) {
@@ -144,7 +144,7 @@ for (const anniversary of anniversaries) {
 
   for (const task of cycle.tasks) {
     const body = [
-      `Prior-year reorder timeline for ${accountName}.`,
+      `Prior-year reorder timeline for ${recordName}.`,
       `Source period: ${MONTHS[anniversary.month]} ${anniversary.sourceYear}.`,
       `Averaged reorder anniversary: ${formatMonthDay(cycle.anniversaryDate)}.`,
       `Scheduled cycle: ${formatShortDate(cycle.anniversaryDate)}.`,

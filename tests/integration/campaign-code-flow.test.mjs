@@ -197,23 +197,41 @@ describe('campaign code flow', () => {
     assert.ok(output.results.every((row) => row.status === 'sent'));
   });
 
-  it('builds a fresh averaged prior-year timeline for an account', async () => {
-    const page = {
-      contact: { contactId: '771', contactName: 'Avery Buyer' },
-      account: { name: 'Northwind Golf' },
-      orders: [
-        { number: '1001', summary: 'Blue logo towels', date: '2024-08-04' },
-        { number: '1002', summary: 'White logo towels', date: '2024-08-06' },
-        { number: '1003', summary: 'Embroidered hats', date: '2025-12-12' },
-      ],
-      tasks: {
-        open: [
-          { id: 'old-1', subject: 'Prior Year #1 [2023]' },
-          { id: 'keep-1', subject: 'Normal follow up' },
-        ],
-        done: [],
-      },
+  it('builds a contact-scoped prior-year timeline without an account', async () => {
+    const sourceContact = {
+      contactId: '771',
+      contactName: 'Avery Buyer',
+      contactUrl: 'https://crm.test/Default.aspx?Page=240&customerID=771',
     };
+    const page = campaignPageFromContext({
+      contact: sourceContact,
+      contactId: '771',
+      contactName: 'Avery Buyer',
+      data: {
+        ids: { contact: '771', account: '' },
+        contact: { firstName: 'Avery', lastName: 'Buyer' },
+        orders: [
+          { number: '1001', summary: 'Blue logo towels', date: '2024-08-04' },
+          { number: '1002', summary: 'White logo towels', date: '2024-08-06' },
+          { number: '1003', summary: 'Embroidered hats', date: '2025-12-12' },
+        ],
+        tasks: {
+          open: [
+            { id: 'old-1', subject: 'Prior Year #1 [2023]' },
+            { id: 'keep-1', subject: 'Normal follow up' },
+          ],
+          done: [],
+        },
+      },
+    }, [sourceContact]);
+
+    assert.equal(page.account, undefined);
+    assert.equal(page.contact.contactId, '771');
+    assert.equal(page.orders.length, 3);
+    assert.deepEqual(
+      page.tasks.open.map((task) => task.id),
+      ['old-1', 'keep-1'],
+    );
     const writes = [];
     const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
