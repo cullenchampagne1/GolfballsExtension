@@ -319,23 +319,23 @@ describe('campaign code flow', () => {
     assert.deepEqual(
       created.map((task) => task.subject),
       [
-        'Prior Year #1 [2026]',
-        'Prior Year #2 [2026]',
-        'Prior Year Call - [April]',
-        'Prior Year #3 [2026]',
         'Prior Year #1 [2025]',
         'Prior Year #2 [2025]',
         'Prior Year Call - [December]',
         'Prior Year #3 [2025]',
+        'Prior Year #1 [2026]',
+        'Prior Year #2 [2026]',
+        'Prior Year Call - [April]',
+        'Prior Year #3 [2026]',
         'Callaway Customer - Tier 1',
         'Titleist Customer - Tier 2',
         'Vice Customer - Tier 3',
       ],
     );
     assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut > 0));
-    assert.match(created[0].body, /Titleist Pro V1 Personalized/);
-    assert.match(created[0].body, /Averaged reorder anniversary: April 15/);
-    assert.match(created[4].body, /Vice Drive Custom Logo/);
+    assert.match(created[0].body, /Vice Drive Custom Logo/);
+    assert.match(created[4].body, /Titleist Pro V1 Personalized/);
+    assert.match(created[4].body, /Averaged reorder anniversary: April 15/);
     assert.ok(created[2].daysOut > created[1].daysOut);
     assert.ok(created[2].daysOut < created[3].daysOut);
     assert.match(created[2].body, /Follow-up timing: 1 week before/);
@@ -365,6 +365,97 @@ describe('campaign code flow', () => {
     );
     assert.match(result.result, /created 8 fresh Prior Year task\(s\) across 2 anniversary date\(s\)/);
     assert.match(result.result, /created 3 brand task\(s\)/);
+  });
+
+  it('keeps the newest source year per month and skips a different campaign within 20 days', async () => {
+    const now = new Date();
+    const retainedMonth = (now.getMonth() + 3) % 12;
+    const competingMonth = (retainedMonth + 1) % 12;
+    const recentYear = now.getFullYear() - 1;
+    const olderYear = recentYear - 2;
+    const competingYear = recentYear - 1;
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const dateText = (year, month, day) => (
+      `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    );
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '991', account: '' },
+        contact: {
+          id: '991',
+          contactId: '991',
+          firstName: 'Morgan',
+          lastName: 'Buyer',
+          contactName: 'Morgan Buyer',
+        },
+        orders: [
+          {
+            number: 'old-month',
+            summary: 'Acme Legacy Product',
+            date: dateText(olderYear, retainedMonth, 5),
+          },
+          {
+            number: 'new-month-1',
+            summary: 'Acme Current Product A',
+            date: dateText(recentYear, retainedMonth, 10),
+          },
+          {
+            number: 'new-month-2',
+            summary: 'Acme Current Product B',
+            date: dateText(recentYear, retainedMonth, 20),
+          },
+          {
+            number: 'overlap-month',
+            summary: 'Beta Adjacent Product',
+            date: dateText(competingYear, competingMonth, 15),
+          },
+        ],
+        tasks: { open: [], done: [] },
+      },
+    });
+    const writes = [];
+    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: {
+        async run(name, input) {
+          writes.push([name, input]);
+          return { ok: true, taskId: `task-${writes.length}` };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    const priorTasks = writes
+      .filter(([name, input]) => name === 'createTask' && /^Prior Year/.test(input.subject))
+      .map(([, input]) => input);
+    assert.equal(priorTasks.length, 4);
+    assert.equal(
+      priorTasks.filter((task) => task.subject === `Prior Year Call - [${monthNames[retainedMonth]}]`).length,
+      1,
+    );
+    assert.ok(
+      priorTasks.every((task) => !task.subject.includes(`[${monthNames[competingMonth]}]`)),
+      'the lower-ranked adjacent campaign should not create any tasks',
+    );
+    assert.deepEqual(
+      priorTasks.filter((task) => /^Prior Year #/.test(task.subject)).map((task) => task.subject),
+      [
+        `Prior Year #1 [${recentYear}]`,
+        `Prior Year #2 [${recentYear}]`,
+        `Prior Year #3 [${recentYear}]`,
+      ],
+    );
+    assert.match(priorTasks[0].body, new RegExp(`Source period: ${monthNames[retainedMonth]} ${recentYear}`));
+    assert.match(priorTasks[0].body, /Averaged reorder anniversary: \w+ 15/);
+    assert.match(priorTasks[0].body, /#new-month-1/);
+    assert.match(priorTasks[0].body, /#new-month-2/);
+    assert.doesNotMatch(priorTasks[0].body, /#old-month/);
+    assert.match(result.result, /skipped 1 older same-month source period\(s\)/);
+    assert.match(result.result, /skipped 1 overlapping Prior Year campaign\(s\)/);
   });
 
   it('does not count function-entry animation events as campaign actions', async () => {

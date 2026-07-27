@@ -229,9 +229,10 @@ The paste-ready example at
 [`docs/examples/prior-year-anniversary-campaign.js`](examples/prior-year-anniversary-campaign.js)
 runs against contact or account records. Each invocation stays scoped to the
 selected page: contact orders/tasks for a contact, account orders/tasks for an
-account. It groups orders by source year + month, averages the day within each
-group, completes existing open tasks whose subject contains `Prior Year`, and
-creates a fresh four-task future cycle:
+account. It groups orders by source year + month, keeps only the newest source
+year represented in each calendar month, and averages the day using orders
+from that retained period. It then completes existing open tasks whose subject
+contains `Prior Year` and creates a fresh four-task future cycle:
 
 1. `Prior Year #1 [source year]` — three weeks before the anniversary.
 2. `Prior Year #2 [source year]` — two weeks before the anniversary.
@@ -243,6 +244,12 @@ the source orders used to derive the averaged date. If the first step in this
 year's sequence has passed, the whole sequence rolls to next year so the four
 tasks remain chronological. Physical anniversary dates stay in the task body,
 not the subject.
+
+Before creating tasks, candidate monthly campaigns are ranked by their newest
+supporting order. If any task in a lower-ranked candidate would fall within 20
+calendar days of a task in a different accepted campaign, the entire candidate
+is skipped. The four tasks belonging to the same campaign are exempt, so their
+normal one-week cadence remains intact.
 
 The same campaign also derives a brand from the first word of every order
 summary and refreshes one `Brand Customer - Tier N` task per brand for

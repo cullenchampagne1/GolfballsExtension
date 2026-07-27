@@ -131,9 +131,21 @@ for (const entry of orders) {
   group.orders.push(entry);
 }
 
-const anniversaries = [...grouped.values()]
+// A customer may reorder in the same month across several years. Keep only
+// that month's newest source year so one calendar month can never create
+// several competing Prior Year campaigns.
+const mostRecentGroupByMonth = new Map();
+for (const group of grouped.values()) {
+  const current = mostRecentGroupByMonth.get(group.month);
+  if (!current || group.sourceYear > current.sourceYear) {
+    mostRecentGroupByMonth.set(group.month, group);
+  }
+}
+
+const anniversaries = [...mostRecentGroupByMonth.values()]
   .map((group) => ({
     ...group,
+    latestSourceTime: Math.max(...group.orders.map(({ date }) => date.getTime())),
     averageDay: Math.min(
       daysInMonth(group.sourceYear, group.month),
       Math.max(1, Math.round(group.days.reduce((sum, day) => sum + day, 0) / group.days.length))
@@ -175,9 +187,8 @@ const recordName = page.account?.name
   || page.contact?.companyName
   || page.contact?.contactName
   || "Current record";
-let createdCount = 0;
 
-for (const anniversary of anniversaries) {
+function buildCampaign(anniversary) {
   let cycleYear = today.getFullYear();
 
   const buildCycle = (year) => {
@@ -201,17 +212,70 @@ for (const anniversary of anniversaries) {
     cycle = buildCycle(cycleYear);
   }
 
+  return {
+    key: `${anniversary.sourceYear}-${anniversary.month}`,
+    anniversary,
+    ...cycle
+  };
+}
+
+// Resolve close campaigns before writing anything. Newer source evidence wins:
+// after ranking by the latest supporting order, reject a different campaign
+// when any of its four tasks would land within 20 calendar days of a task in
+// an accepted campaign. The four tasks inside one campaign are intentionally
+// exempt from this guard.
+const rankedCampaigns = anniversaries
+  .map(buildCampaign)
+  .sort((a, b) => (
+    b.anniversary.latestSourceTime - a.anniversary.latestSourceTime
+    || b.anniversary.sourceYear - a.anniversary.sourceYear
+    || b.anniversary.month - a.anniversary.month
+  ));
+const scheduledCampaigns = [];
+const scheduledTaskDates = [];
+const skippedCampaigns = [];
+
+for (const campaign of rankedCampaigns) {
+  const conflict = campaign.tasks.some((candidateTask) => (
+    scheduledTaskDates.some((scheduledTask) => (
+      scheduledTask.campaignKey !== campaign.key
+      && Math.abs(
+        calendarDayNumber(candidateTask.date) - calendarDayNumber(scheduledTask.date)
+      ) <= 20
+    ))
+  ));
+
+  if (conflict) {
+    skippedCampaigns.push(campaign);
+    continue;
+  }
+
+  scheduledCampaigns.push(campaign);
+  for (const task of campaign.tasks) {
+    scheduledTaskDates.push({ campaignKey: campaign.key, date: task.date });
+  }
+}
+
+// Ranking decides which campaigns survive; task creation remains chronological.
+scheduledCampaigns.sort((a, b) => (
+  calendarDayNumber(a.tasks[0].date) - calendarDayNumber(b.tasks[0].date)
+));
+
+let createdCount = 0;
+for (const campaign of scheduledCampaigns) {
+  const { anniversary, anniversaryDate, tasks } = campaign;
   const sourceOrders = anniversary.orders
+    .slice()
     .sort((a, b) => a.date - b.date)
     .map(({ order, date }) => describeOrder(order, date))
     .join("\n");
 
-  for (const task of cycle.tasks) {
+  for (const task of tasks) {
     const body = [
       `Prior-year reorder timeline for ${recordName}.`,
       `Source period: ${MONTHS[anniversary.month]} ${anniversary.sourceYear}.`,
-      `Averaged reorder anniversary: ${formatMonthDay(cycle.anniversaryDate)}.`,
-      `Scheduled cycle: ${formatShortDate(cycle.anniversaryDate)}.`,
+      `Averaged reorder anniversary: ${formatMonthDay(anniversaryDate)}.`,
+      `Scheduled cycle: ${formatShortDate(anniversaryDate)}.`,
       `Follow-up timing: ${task.timing}.`,
       "",
       "Source orders:",
@@ -276,6 +340,8 @@ for (const plan of brandPlans) {
 return [
   `Completed ${oldPriorYearTasks.length} old Prior Year task(s)`,
   `completed ${oldBrandTasks.length} old brand task(s)`,
-  `created ${createdCount} fresh Prior Year task(s) across ${anniversaries.length} anniversary date(s)`,
+  `created ${createdCount} fresh Prior Year task(s) across ${scheduledCampaigns.length} anniversary date(s)`,
+  `skipped ${grouped.size - anniversaries.length} older same-month source period(s)`,
+  `skipped ${skippedCampaigns.length} overlapping Prior Year campaign(s)`,
   `and created ${brandCreatedCount} brand task(s)`
 ].join(", ");
