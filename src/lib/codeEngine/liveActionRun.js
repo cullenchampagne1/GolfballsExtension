@@ -52,7 +52,7 @@ export async function makeLiveExecutor(page) {
     { submitCallLog },
     { completeTaskById },
     { crmUpdateContact },
-    { sendBackgroundMessage },
+    { dispatchBackgroundMessage },
   ] = await Promise.all([
     import('./executor.js'),
     import('../emailSender.js'),
@@ -79,10 +79,11 @@ export async function makeLiveExecutor(page) {
         to,
         subject: outbound.subject || '',
         htmlBody: outbound.body || '',
-        from: outbound.from || pickFromAddress({}, ec.localPart),
+        from: outbound.from || pickFromAddress(outbound, ec.localPart),
+        replyMode: outbound.replyMode || 'standalone',
         signature: ec.signature || '',
         config: ec,
-      }, { dispatch: sendBackgroundMessage });
+      }, { dispatch: dispatchBackgroundMessage });
     },
     submitQuickTask,
     submitCallLog,

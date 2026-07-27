@@ -430,6 +430,26 @@
       "file": "tests/integration/order-note-relay.test.mjs"
     },
     {
+      "name": "flow \u00b7 campaign audience \u2192 hydrated CRM actions",
+      "file": "tests/integration/campaign-code-flow.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 campaign code import validation",
+      "file": "tests/unit/campaignImport.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 campaign run policy controls",
+      "file": "tests/unit/campaignRunPolicy.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 campaign template evaluation",
+      "file": "tests/unit/campaignTemplateEvaluation.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 background helper dispatch adapter",
+      "file": "tests/unit/backgroundMessage.test.mjs"
+    },
+    {
       "name": "flow \u00b7 encrypted crm index roundtrip",
       "file": "tests/integration/crm-index-roundtrip.test.mjs"
     },

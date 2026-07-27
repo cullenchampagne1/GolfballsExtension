@@ -59,7 +59,14 @@ const TONE = {
   warning: { badgeBg: 'var(--gb-warning-tint-medium)', badgeFg: 'var(--gb-warning-fg)', run: 'var(--gb-warning-fg)' },
   neutral: { badgeBg: 'var(--gb-fill-strong)', badgeFg: 'var(--gb-text-secondary)', run: 'var(--gb-brand-label)' },
 };
-const CONTRACT_TONE = { sendEmail: 'brand', createTask: 'info', logCall: 'info' };
+const CONTRACT_TONE = {
+  sendEmail: 'brand',
+  createTask: 'info',
+  completeTask: 'info',
+  logCall: 'info',
+  addNote: 'info',
+  editContact: 'info',
+};
 const GATE_LABEL = { auto: 'auto', confirm: 'confirm', hard: 'gated' };
 
 /* Which kinds are "steps": email/task/call sends, email evaluations, returns,
@@ -313,7 +320,14 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   if (block.kind === 'action') {
     const d = describeBlock(block, traceById);
     const at = CONTRACT_TONE[block.contract] || 'neutral';
-    const IcMap = { mail: I.mail, task: I.task, phone: I.phone, code: I.code };
+    const IcMap = {
+      mail: I.mail,
+      task: I.task,
+      check: I.check,
+      phone: I.phone,
+      edit: I.edit,
+      code: I.code,
+    };
     const gate = GATE_LABEL[d.gate];
     return (
       <Card tone={at} status={status} idx={idx} icon={IcMap[d.icon] || I.code}

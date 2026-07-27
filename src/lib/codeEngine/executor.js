@@ -27,36 +27,117 @@ export function mapEditFields(fields) {
   return out;
 }
 
+function assertHelperResult(result, fallback) {
+  if (result?.ok === false) throw new Error(result.error || fallback);
+  if (result?.state === 'failed') throw new Error(result.error || fallback);
+  return result;
+}
+
+function taskTemplate(input) {
+  const value = { ...(input || {}) };
+  const priorities = { high: 1, med: 2, medium: 2, low: 3 };
+  if (typeof value.priority === 'string' && priorities[value.priority.toLowerCase()]) {
+    value.priority = priorities[value.priority.toLowerCase()];
+  }
+  return value;
+}
+
+function activityTemplate(input, { note = false } = {}) {
+  const value = input || {};
+  const direction = value.callDirection != null
+    ? Number(value.callDirection)
+    : (value.direction === 'inbound' ? 1 : 0);
+  return {
+    ...value,
+    subject: value.subject || (note ? 'Campaign note' : 'Campaign call'),
+    callDirection: direction === 1 ? 1 : 0,
+    callCategory: Number(value.callCategory ?? value.categoryId ?? 35) || 35,
+    callVoicemail: value.callVoicemail ?? value.voicemail ?? false,
+  };
+}
+
 export function makeExecutor(deps = {}) {
   const ctx = deps.ctx || {};
+  const prepare = async (contract, input) => (
+    typeof deps.prepareInput === 'function'
+      ? (await deps.prepareInput(contract, input || {})) || {}
+      : (input || {})
+  );
+  const commitEdits = async (fields) => {
+    const payload = mapEditFields(fields);
+    if (!Object.keys(payload).length) return { ok: true, changed: [] };
+    if (!deps.updateContact) throw new Error('contact editing is not configured');
+    if (!ctx.contactId) throw new Error('no contact id — open a contact page to edit');
+    const result = await deps.updateContact(ctx.contactId, payload);
+    assertHelperResult(result, 'contact edit failed');
+    return { ok: true, changed: Object.keys(payload), result };
+  };
+
   return {
     async run(contract, input) {
-      const i = input || {};
+      const i = await prepare(contract, input);
       if (contract === 'sendEmail') {
         if (!deps.sendEmail) throw new Error('email sending is not configured');
-        return deps.sendEmail(i, ctx);
+        return assertHelperResult(
+          await deps.sendEmail(i, ctx),
+          'email send failed',
+        );
       }
       if (contract === 'createTask') {
         if (!deps.submitQuickTask) throw new Error('task creation is not configured');
-        return deps.submitQuickTask({ template: i, context: { contactId: ctx.contactId, employeeId: ctx.employeeId, contactName: ctx.contactName, accountId: ctx.accountId } });
+        return assertHelperResult(
+          await deps.submitQuickTask({
+            template: taskTemplate(i),
+            context: {
+              contactId: ctx.contactId,
+              employeeId: ctx.employeeId,
+              contactName: ctx.contactName,
+              accountId: ctx.accountId,
+            },
+          }),
+          'task creation failed',
+        );
       }
       if (contract === 'logCall') {
         if (!deps.submitCallLog) throw new Error('call logging is not configured');
-        return deps.submitCallLog({ template: i, context: { contactId: ctx.contactId, phone: ctx.phone, employeeId: ctx.employeeId, contactName: ctx.contactName } });
+        return assertHelperResult(
+          await deps.submitCallLog({
+            template: activityTemplate(i),
+            context: {
+              contactId: ctx.contactId,
+              phone: ctx.phone,
+              employeeId: ctx.employeeId,
+              contactName: ctx.contactName,
+            },
+          }),
+          'call logging failed',
+        );
+      }
+      if (contract === 'addNote') {
+        if (!deps.submitCallLog) throw new Error('activity note logging is not configured');
+        return assertHelperResult(
+          await deps.submitCallLog({
+            template: activityTemplate(i, { note: true }),
+            context: {
+              contactId: ctx.contactId,
+              phone: ctx.phone,
+              employeeId: ctx.employeeId,
+              contactName: ctx.contactName,
+            },
+          }),
+          'activity note failed',
+        );
       }
       if (contract === 'completeTask') {
         if (!deps.completeTaskById) throw new Error('task completion is not configured');
         if (!i.id) throw new Error('completeTask needs a task id (page.tasks.open[…])');
-        return deps.completeTaskById(i.id);
+        const result = await deps.completeTaskById(i.id);
+        assertHelperResult(result, 'task completion failed');
+        return { ok: true, taskId: String(i.id), result };
       }
+      if (contract === 'editContact') return commitEdits(i.fields);
       return null;
     },
-    async commitEdits(fields) {
-      const payload = mapEditFields(fields);
-      if (!Object.keys(payload).length) return null;
-      if (!deps.updateContact) throw new Error('contact editing is not configured');
-      if (!ctx.contactId) throw new Error('no contact id — open a contact page to edit');
-      return deps.updateContact(ctx.contactId, payload);
-    },
+    commitEdits,
   };
 }

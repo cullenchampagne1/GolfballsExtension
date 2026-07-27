@@ -6,6 +6,22 @@
 > action is a callable object‑oriented contract. The JSON payload API and this
 > engine are two front‑ends onto **one internal control surface**.
 
+## Implementation status — July 2026
+
+The contact-level Phase 1 path is implemented. CRM Search and Task List pass
+compact audience records to Campaign Manager; each record is fetched and
+hydrated before its program runs. The code runner now enforces audience order,
+suppression, pacing, pause/stop, and a run-wide action cap, while the content
+side replays allowlisted effects through the existing email, task, call-log,
+task-completion, and contact-update helpers.
+
+Available effects are `sendEmail`, `createTask`, `completeTask`, `logCall`,
+`addNote`, and grouped `page.contact` edits. Saved email evaluation resolves
+the current record's variables and recipient; saved task/call runtime fields
+survive the sandbox boundary. A created task's real id is replayed into a later
+`completeTask` call. The proposal/object-construction work described below
+remains future scope.
+
 ---
 
 ## 0. TL;DR — the pieces already fit

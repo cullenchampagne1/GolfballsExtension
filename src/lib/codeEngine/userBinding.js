@@ -5,7 +5,7 @@
    (templateId.js), each an evaluatable REFERENCE — not the rendered
    content:
 
-     user.emails.WinBack            → the saved email (auto-random version)
+     user.emails.WinBack            → the saved email's base version
      user.emails.WinBack.versions[0]→ a specific version
      user.email("Win-back")         → same, by name or id (throws if missing)
 
@@ -22,18 +22,56 @@ import { idsFor } from './templateId.js';
 
 const arr = (v) => (Array.isArray(v) ? v : []);
 
+const TEMPLATE_RUNTIME_FIELDS = Object.freeze([
+  'vars',
+  'toField',
+  'replyMode',
+  'senderAccount',
+  'senderRandomize',
+  'priority',
+  'daysOut',
+  'categoryId',
+  'callDirection',
+  'callCategory',
+  'callVoicemail',
+]);
+
+function copyRuntimeFields(target, ...sources) {
+  for (const key of TEMPLATE_RUNTIME_FIELDS) {
+    for (const source of sources) {
+      if (source && source[key] !== undefined) {
+        target[key] = source[key];
+        break;
+      }
+    }
+  }
+  return target;
+}
+
 /** Build the id-keyed reference map for one kind of saved template. */
 function refsOf(list, kind) {
   const byId = {};
   for (const t of idsFor(list)) {
-    const ref = {
+    const ref = copyRuntimeFields({
       id: t.id, codeId: t.codeId, name: t.name || t.codeId, kind,
       subject: t.subject || '', body: t.body || '',
-      priority: t.priority, daysOut: t.daysOut,
-    };
-    const versions = arr(t.versions).length
-      ? t.versions.map((v, i) => ({ codeId: ref.codeId, id: ref.id, name: ref.name, kind, versionIndex: i, subject: v.subject || ref.subject, body: v.body || ref.body, priority: ref.priority, daysOut: ref.daysOut }))
-      : [{ codeId: ref.codeId, id: ref.id, name: ref.name, kind, versionIndex: 0, subject: ref.subject, body: ref.body, priority: ref.priority, daysOut: ref.daysOut }];
+    }, t);
+    // Email templates persist `variations`; early code-engine records used
+    // `versions`. Normalize both to one base-first array so every saved field
+    // needed by task/call/email helpers survives the sandbox boundary.
+    const versionSources = arr(t.versions).length
+      ? arr(t.versions)
+      : [{ subject: ref.subject, body: ref.body }, ...arr(t.variations)];
+    const versions = versionSources.map((v, i) => copyRuntimeFields({
+      codeId: ref.codeId,
+      id: ref.id,
+      name: ref.name,
+      kind,
+      versionIndex: i,
+      variationId: i === 0 ? '__original' : (v.id || String(i)),
+      subject: v.subject ?? ref.subject,
+      body: v.body ?? ref.body,
+    }, v, ref));
     ref.versions = versions;
     byId[t.codeId] = ref;
   }

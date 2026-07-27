@@ -16,7 +16,7 @@ import { CONTRACTS, GATE_BY_EFFECT } from './contracts.js';
 export function buildCodeSpec(bindings = {}) {
   return {
     version: 1,
-    language: 'JavaScript (async). Runs once per contact in a read-only sandbox.',
+    language: 'JavaScript (async). Runs once per hydrated audience record in a guarded sandbox.',
     model: 'Sending an email / creating a task / logging a call is a STEP. if/else are BRANCHES; for/while are LOOPS. Untaken paths show as skipped.',
     bindings: {
       page: {
@@ -24,11 +24,11 @@ export function buildCodeSpec(bindings = {}) {
         'page.contact.<field> = value': 'edit an APPROVED contact field (firstName, lastName, middleInitial, companyName, jobTitle, email, phone, zipCode, userType, country); edits are grouped into one write at run end (or page.contact.commit())',
         'page.contacts': 'array — the whole selected audience',
         'page.count': 'number — audience size',
-        'page.tasks': '{ open[], done[] } CRM tasks; page.tasks.open[i].complete() / page.tasks.completeAll() / completeLatest()',
+        'page.tasks': '{ open[], done[] } for the current audience record; page.tasks.open[i].complete() / completeAll() / completeLatest()',
         'page.evaluate(ref)': 'render a saved-template REFERENCE into a sendable outbound object; await it — it is its own (slow) step',
       },
       user: {
-        'user.emails.<Id>': 'a saved email REFERENCE, keyed by a PascalCase code id (e.g. user.emails.WinBack); .versions[n] for a specific version',
+        'user.emails.<Id>': 'a saved email REFERENCE, keyed by a PascalCase code id (e.g. user.emails.WinBack); the base is used by default and .versions[n] selects a specific version',
         'user.tasks.<Id> / user.calls.<Id>': 'saved task / call references',
         'user.email(name|id)': 'look up a saved email; THROWS a dependency error if missing (same for user.task/user.call)',
       },
@@ -54,14 +54,18 @@ export function buildCodeSpec(bindings = {}) {
       calls: Array.isArray(bindings.calls) ? bindings.calls : [],
     },
     rules: [
-      'Prefer saved templates: actions.sendEmail(user.email("Win-back")). A missing name is a hard dependency error.',
+      'For saved emails, await page.evaluate(user.email("Win-back")) before actions.sendEmail(outbound) so variables and the recipient resolve during preview. A missing name is a hard dependency error.',
       'Custom objects are allowed too: actions.sendEmail({ subject, body }); actions.createTask({ subject, priority, daysOut }).',
+      'actions.createTask returns { taskId }; complete the same task with actions.completeTask({ id: created.taskId }).',
+      'actions.addNote({ subject, body }) adds a CRM activity note to the current audience record.',
+      'The campaign body already runs once per audience record. Do not loop page.contacts unless you intentionally want nested audience work.',
       'Recipient defaults to page.contact; the signature is appended by the send engine — never include it.',
       'Guard on data you use, e.g. `if (page.contact.email) …`.',
       'End with `return "<short status>"` — it becomes the closing step summary.',
     ],
     examples: [
-      'const c = page.contact;\nif (c.email && c.value > 1000) {\n  await actions.sendEmail(user.email("VIP thank-you"));\n  await actions.createTask(user.task("Confirm VIP touch"));\n} else {\n  await actions.createTask(user.task("Re-engage"));\n}\nreturn c.value > 1000 ? "vip" : "nurture";',
+      'const c = page.contact;\nif (c.email && c.value > 1000) {\n  const email = await page.evaluate(user.email("VIP thank-you"));\n  await actions.sendEmail(email);\n  await actions.createTask(user.task("Confirm VIP touch"));\n} else {\n  await actions.createTask(user.task("Re-engage"));\n}\nreturn c.value > 1000 ? "vip" : "nurture";',
+      'const task = await actions.createTask({ subject: "Campaign test", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: "Campaign test", body: "Non-email workflow verified." });\nreturn "verified";',
     ],
   };
 }

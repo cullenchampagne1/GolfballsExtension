@@ -47,17 +47,29 @@ export function buildTraceBody(instrumentedCode) {
     '};',
     'const user = { emails: __u.emails || {}, tasks: __u.tasks || {}, calls: __u.calls || {},',
     '  email: __find(__u.emails || {}, "email"), task: __find(__u.tasks || {}, "task"), call: __find(__u.calls || {}, "call") };',
-    // Mirror of runtime.makeOutbound.
-    'const __mkOut = (ref) => {',
-    '  const r = ref || {}; const v = (r.versions && r.versions[0]) || r;',
-    '  const o = { kind: r.kind || "email", name: r.name || null, templateId: r.id || null, subject: v.subject || "", body: v.body || "" };',
-    '  if (r.priority != null) o.priority = r.priority; if (r.daysOut != null) o.daysOut = r.daysOut;',
+    // Mirror of runtime.makeOutbound / hydrateOutbound.
+    'const __hydrateOut = (data) => {',
+    '  const o = Object.assign({}, data || {});',
     '  o.append = function (t) { this.body = (this.body || "") + String(t == null ? "" : t); return this; };',
     '  o.appendSubject = function (t) { this.subject = (this.subject || "") + String(t == null ? "" : t); return this; };',
     '  return o;',
     '};',
+    'const __mkOut = (ref) => {',
+    '  const r = ref || {}; const v = (r.versions && r.versions[0]) || r;',
+    '  const o = { kind: r.kind || "email", name: r.name || null, templateId: r.id || null, subject: v.subject || "", body: v.body || "" };',
+    '  for (const k of ["vars","toField","replyMode","senderAccount","senderRandomize","priority","daysOut","categoryId","callDirection","callCategory","callVoicemail"]) {',
+    '    if (v[k] !== undefined) o[k] = v[k]; else if (r[k] !== undefined) o[k] = r[k];',
+    '  }',
+    '  return __hydrateOut(o);',
+    '};',
     'const __gbTrace = [];',
-    'page.__eval = (id, ref) => { __gbTrace.push({ kind: "evaluate", id: id, name: ref && ref.name }); return __mkOut(ref); };',
+    'const __evaluated = (ctx && ctx.evaluated) || {};',
+    'page.__eval = (id, ref) => {',
+    '  const out = Object.prototype.hasOwnProperty.call(__evaluated, id) ? __hydrateOut(__evaluated[id]) : __mkOut(ref);',
+    '  const plain = Object.assign({}, out); delete plain.append; delete plain.appendSubject;',
+    '  __gbTrace.push({ kind: "evaluate", id: id, name: ref && ref.name, ref: ref || {}, outbound: plain });',
+    '  return out;',
+    '};',
     // Page control (mirror of simulate.js): record complete/edit/commit intents.
     'const __approved = (ctx && ctx.approvedFields) || [];',
     'const __openTasks = ((page.tasks && page.tasks.open) || []).map((tk) => Object.assign({}, tk, { complete: () => { __gbTrace.push({ kind: "complete", id: tk.id, subject: tk.subject }); return { ok: true, dry: true }; } }));',
@@ -68,7 +80,9 @@ export function buildTraceBody(instrumentedCode) {
     'page.tasks = { open: __openTasks, done: (page.tasks && page.tasks.done) || [], completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
     'const actions = { __trace(id, name, input) {',
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
-    '  return { ok: true, dry: true, simulated: true };',
+    '  const result = { ok: true, dry: true, simulated: true };',
+    '  if (name === "createTask") result.taskId = "__gb_action_result__:" + String(id) + ":taskId";',
+    '  return result;',
     '} };',
     'const __gbRet = await (async () => {',
     String(instrumentedCode ?? ''),
@@ -88,7 +102,14 @@ export function buildTraceBody(instrumentedCode) {
  * @returns {(code, scope) => Promise<void>}  runs the code, then replays each
  *   recorded call through `scope.actions.__trace` (the content-side recorder).
  */
-export function makeSandboxRunner({ exec, doc } = {}) {
+function serializable(value) {
+  if (!value || typeof value !== 'object') return value;
+  return JSON.parse(JSON.stringify(value, (_key, item) => (
+    typeof item === 'function' ? undefined : item
+  )));
+}
+
+export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
   if (typeof exec !== 'function') throw new Error('makeSandboxRunner requires an exec(body, ctx, vars, doc) sandbox executor');
   return async function sandboxRun(code, scope) {
     const u = (scope && scope.user) || {};
@@ -102,12 +123,43 @@ export function makeSandboxRunner({ exec, doc } = {}) {
     const recordEval = scope && scope.page && scope.page.__eval;
     const pageRec = (scope && scope.__pageRecord) || {};
     const approvedFields = (scope && scope.__approvedFields) || [];
-    const raw = await exec(buildTraceBody(code), { page: pageData, user, approvedFields }, {}, doc);
+    const evaluated = {};
+    const runOnce = () => exec(
+      buildTraceBody(code),
+      { page: pageData, user, approvedFields, evaluated },
+      {},
+      doc,
+    );
+    let raw = await runOnce();
+
+    // The sandbox cannot call privileged/content-side resolvers directly.
+    // Discover page.evaluate references in a side-effect-free pass, resolve
+    // them against this contact, then rerun with those outbound values. Repeat
+    // briefly in case rendered content changes a later branch.
+    if (typeof evaluateRef === 'function') {
+      for (let round = 0; round < 3; round += 1) {
+        const discovered = Array.isArray(raw) ? raw : (raw && raw.__gbTrace) || [];
+        const missing = discovered.filter(
+          (entry) => entry?.kind === 'evaluate'
+            && !Object.hasOwn(evaluated, entry.id),
+        );
+        if (!missing.length) break;
+        await Promise.all(missing.map(async (entry) => {
+          evaluated[entry.id] = serializable(await evaluateRef(entry.ref || {}));
+        }));
+        raw = await runOnce();
+      }
+    }
+
     const entries = Array.isArray(raw) ? raw : (raw && raw.__gbTrace) || [];
     for (const e of entries) {
       if (!e) continue;
       // Awaited so a live run's real writes complete in order.
-      if (e.kind === 'evaluate') { if (typeof recordEval === 'function') recordEval(e.id, { name: e.name }); }
+      if (e.kind === 'evaluate') {
+        if (typeof recordEval === 'function') {
+          await recordEval(e.id, e.ref || { name: e.name }, e.outbound);
+        }
+      }
       else if (e.kind === 'complete') { if (pageRec.complete) await pageRec.complete({ id: e.id, subject: e.subject }); }
       else if (e.kind === 'edit') { if (pageRec.edit) pageRec.edit(e.prop, e.value); }
       else if (e.kind === 'commit') { if (pageRec.commit) await pageRec.commit(); }

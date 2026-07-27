@@ -1,6 +1,6 @@
 /* ───────────────────────────────────────────────────────────────────────────
-   campaignImport — validate + normalize LLM-generated campaign JSON and merge
-   it into chrome.storage.local.campaigns.
+   campaignImport — validate + normalize code-first campaign JSON and merge it
+   into chrome.storage.local.campaigns.
 
    The paste-import dialog (Campaign Manager sidebar) accepts:
      • a single campaign object,
@@ -11,17 +11,17 @@
    campaign id (no collisions / no accidental overwrite); unknown fields are
    dropped so a sloppy blob can't poison storage.
 
-   Email/call/task steps that send a saved template reference it by NAME
-   (`templateName`) — a model can't know the user's internal template ids — and
-   importCampaigns resolves those names against the live template stores at
-   import time. Unresolved names import with an empty templateId + a warning so
-   the user can pick the template in the editor.
+   `automation` is the executable source of truth. Legacy `steps[]` are still
+   normalized when they ride alongside code so old metadata survives, but a
+   steps-only blob is rejected instead of importing an empty, un-runnable
+   campaign into the code-first editor.
    ─────────────────────────────────────────────────────────────────────────── */
 
 import { uid, saveCampaign } from './store.js';
 import { isGroupedTree, emptyTree } from '../matchEngine.js';
 import { loadCallTemplates } from '../callLog.js';
 import { loadTaskTemplates } from '../quickTask.js';
+import { translateProgram } from '../codeEngine/translate.js';
 
 const VALID_KINDS = ['email', 'call', 'task', 'custom'];
 const VALID_STATUS = ['Draft', 'Active', 'Paused'];
@@ -91,6 +91,18 @@ export function normalizeImportedCampaign(raw, index = 0) {
   const warnings = [];
   const warn = (m) => warnings.push(m);
   const steps = rawSteps.map((s, i) => normalizeStep(s, i, warn));
+  const automation = typeof raw.automation === 'string'
+    ? raw.automation
+    : (typeof raw.code === 'string' ? raw.code : '');
+  if (!automation.trim()) {
+    throw new Error(
+      `Campaign #${index + 1} (“${name}”) is missing executable "automation" JavaScript. Legacy steps-only campaigns cannot run in the code-first Campaign Manager.`,
+    );
+  }
+  const parsedAutomation = translateProgram(automation);
+  if (parsedAutomation.errors.length) {
+    throw new Error(`Campaign #${index + 1} (“${name}”) has invalid automation JavaScript.`);
+  }
 
   // parentId integrity — a child must point at a real step in this campaign.
   const ids = new Set(steps.map((s) => s.id));
@@ -113,6 +125,7 @@ export function normalizeImportedCampaign(raw, index = 0) {
     sendCap: clampInt(raw.sendCap, 0, 100000, 0),
     audienceOrder: VALID_ORDER.includes(raw.audienceOrder) ? raw.audienceOrder : 'list',
     steps,
+    automation,
     lastSaved: null,
   };
   return { campaign, warnings };

@@ -153,9 +153,8 @@ export function normalizeCampaign(raw) {
     sendCap: Number.isFinite(raw.sendCap) ? Math.max(0, raw.sendCap) : 0,
     audienceOrder: ['list', 'shuffle', 'valueDesc'].includes(raw.audienceOrder) ? raw.audienceOrder : 'list',
     steps: Array.isArray(raw.steps) ? raw.steps.map(normalizeStep) : [],
-    // Code-first automation source (the editor's "Code" mode). A string of JS
-    // authored against `actions.*` + `page.*`; empty when the campaign uses the
-    // step timeline. Persisted verbatim so it survives close/reopen.
+    // Code-first automation source. Persisted verbatim so it survives
+    // close/reopen; legacy steps remain compatibility metadata only.
     automation: typeof raw.automation === 'string' ? raw.automation : '',
     lastSaved: raw.lastSaved || null,
   };
@@ -175,6 +174,7 @@ export function newCampaign(name = 'Untitled campaign') {
     sendCap: 0,                   // max actions per run (0 = unlimited)
     audienceOrder: 'list',        // 'list' | 'shuffle' | 'valueDesc'
     steps: [],
+    automation: '',
     lastSaved: null,
   };
 }

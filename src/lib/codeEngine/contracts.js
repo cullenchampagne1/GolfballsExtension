@@ -89,6 +89,7 @@ export const CONTRACTS = Object.freeze({
       body: { type: 'string', max: 4_000 },
       priority: { type: 'enum', options: ['high', 'med', 'low'] },
       daysOut: { type: 'number', min: 0, max: 3650 },
+      categoryId: { type: 'number', min: 0, max: 999_999 },
     },
     validate: (i) => {
       const errors = [];
@@ -107,11 +108,12 @@ export const CONTRACTS = Object.freeze({
     object: 'call',
     effect: 'remote',
     summary: 'Log a call for the current contact',
-    accepts: 'a saved call or { subject, body, direction }',
+    accepts: 'a saved call or { subject, body, direction, categoryId, voicemail }',
     params: {
       subject: { type: 'string', max: 500 },
       body: { type: 'string', max: 4_000 },
       direction: { type: 'enum', options: ['outbound', 'inbound'] },
+      categoryId: { type: 'number', min: 1, max: 999_999 },
       voicemail: { type: 'bool' },
     },
     validate: (i) => {
@@ -124,6 +126,28 @@ export const CONTRACTS = Object.freeze({
       const label = clip(tpl ? (tpl.name || tpl.subject) : i?.subject, 60);
       const dir = i?.direction === 'inbound' ? 'inbound' : 'outbound';
       return label ? `Log ${dir} call “${label}”` : `Log an ${dir} call for the current contact`;
+    },
+  },
+  addNote: {
+    name: 'addNote',
+    verb: 'add_note',
+    object: 'note',
+    effect: 'remote',
+    summary: 'Add a CRM activity note for the current contact',
+    accepts: '{ subject?, body, categoryId? }',
+    params: {
+      subject: { type: 'string', max: 500 },
+      body: { type: 'string', max: 4_000 },
+      categoryId: { type: 'number', min: 1, max: 999_999 },
+    },
+    validate: (i) => {
+      const errors = [];
+      if (!str(i?.subject) && !str(i?.body)) errors.push('addNote needs a subject or body');
+      return { errors, value: i };
+    },
+    describe: (i) => {
+      const label = clip(i?.subject || i?.body, 60);
+      return label ? `Add activity note “${label}”` : 'Add an activity note';
     },
   },
   // Complete a CRM task — the effect behind page.tasks.open[0].complete().
@@ -139,7 +163,12 @@ export const CONTRACTS = Object.freeze({
       id: { type: 'string' },
       subject: { type: 'string', max: 500 },
     },
-    validate: (i) => ({ errors: (i && (i.id != null || str(i.subject))) ? [] : ['completeTask needs a task (page.tasks.open[…])'] }),
+    validate: (i) => ({
+      errors: i && i.id != null && str(i.id)
+        ? []
+        : ['completeTask needs a task id (page.tasks.open[…] or actions.createTask result)'],
+      value: i,
+    }),
     describe: (i) => {
       const s = clip(i?.subject, 55);
       return s ? `Complete task “${s}”` : 'Complete a task';

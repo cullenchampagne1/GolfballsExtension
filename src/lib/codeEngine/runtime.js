@@ -18,6 +18,13 @@
    keep the two in sync.)
 ─────────────────────────────────────────────────────────────── */
 
+export function hydrateOutbound(value) {
+  const o = { ...(value || {}) };
+  o.append = function append(text) { this.body = (this.body || '') + String(text == null ? '' : text); return this; };
+  o.appendSubject = function appendSubject(text) { this.subject = (this.subject || '') + String(text == null ? '' : text); return this; };
+  return o;
+}
+
 export function makeOutbound(ref) {
   const r = ref || {};
   const v = (Array.isArray(r.versions) && r.versions[0]) || r;
@@ -28,9 +35,21 @@ export function makeOutbound(ref) {
     subject: v.subject || '',
     body: v.body || '',
   };
-  if (r.priority != null) o.priority = r.priority;
-  if (r.daysOut != null) o.daysOut = r.daysOut;
-  o.append = function append(text) { this.body = (this.body || '') + String(text == null ? '' : text); return this; };
-  o.appendSubject = function appendSubject(text) { this.subject = (this.subject || '') + String(text == null ? '' : text); return this; };
-  return o;
+  for (const key of [
+    'vars',
+    'toField',
+    'replyMode',
+    'senderAccount',
+    'senderRandomize',
+    'priority',
+    'daysOut',
+    'categoryId',
+    'callDirection',
+    'callCategory',
+    'callVoicemail',
+  ]) {
+    if (v[key] !== undefined) o[key] = v[key];
+    else if (r[key] !== undefined) o[key] = r[key];
+  }
+  return hydrateOutbound(o);
 }

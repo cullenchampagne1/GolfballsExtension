@@ -167,7 +167,9 @@ const BINDING_OPTIONS = {
   actions: [
     { label: 'actions.sendEmail', type: 'function', detail: '(email) — saved or {subject,body}' },
     { label: 'actions.createTask', type: 'function', detail: '(task) — saved or {subject,…}' },
+    { label: 'actions.completeTask', type: 'function', detail: '({id}) — complete an existing or newly created task' },
     { label: 'actions.logCall', type: 'function', detail: '(call) — saved or {subject,…}' },
+    { label: 'actions.addNote', type: 'function', detail: '({subject,body}) — CRM activity note' },
   ],
   user: [
     { label: 'user.emails', type: 'variable', detail: 'saved emails []' },

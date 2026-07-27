@@ -16,7 +16,14 @@
 import { CONTRACTS, describeContract, contractGate } from './contracts.js';
 
 /* Contract → icon name in the shared `I` set (resolved by the component). */
-const CONTRACT_ICON = Object.freeze({ sendEmail: 'mail', createTask: 'task', logCall: 'phone' });
+const CONTRACT_ICON = Object.freeze({
+  sendEmail: 'mail',
+  createTask: 'task',
+  completeTask: 'check',
+  logCall: 'phone',
+  addNote: 'edit',
+  editContact: 'edit',
+});
 
 /** The direct child block lists of a container, flattened. */
 function childBlocks(block) {

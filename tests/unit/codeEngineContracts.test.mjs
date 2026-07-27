@@ -59,6 +59,7 @@ describe('contracts · effect → gate is the safety spine', () => {
     assert.equal(contractGate('sendEmail'), 'confirm'); // outward
     assert.equal(contractGate('createTask'), 'confirm'); // remote
     assert.equal(contractGate('logCall'), 'confirm'); // remote
+    assert.equal(contractGate('addNote'), 'confirm'); // remote
     assert.equal(contractGate('unknown'), null);
   });
 });
@@ -99,6 +100,15 @@ describe('contracts · input validation (template OR custom object)', () => {
     assert.equal(validateContractInput('completeTask', {}).ok, false);
     assert.equal(validateContractInput('completeTask', { id: 't1', subject: 'Follow up' }).ok, true);
     assert.equal(describeContract('completeTask', { subject: 'Follow up' }), 'Complete task “Follow up”');
+  });
+
+  it('registers a first-class activity note contract', () => {
+    assert.equal(validateContractInput('addNote', { body: 'Reviewed account' }).ok, true);
+    assert.equal(validateContractInput('addNote', {}).ok, false);
+    assert.equal(
+      describeContract('addNote', { subject: 'Campaign QA' }),
+      'Add activity note “Campaign QA”',
+    );
   });
 
   it('editContact only allows approved fields, grouped', () => {

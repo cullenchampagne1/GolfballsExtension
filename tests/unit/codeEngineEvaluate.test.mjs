@@ -38,8 +38,17 @@ describe('templateId · camelCase code ids', () => {
 
 describe('runtime · outbound object', () => {
   it('exposes subject/body + append helpers, and is mutable', () => {
-    const o = makeOutbound({ kind: 'email', name: 'X', id: 'e1', versions: [{ subject: 'Hi', body: 'Body' }] });
+    const o = makeOutbound({
+      kind: 'email',
+      name: 'X',
+      id: 'e1',
+      replyMode: 'reply',
+      senderAccount: 'loyaltylogo',
+      versions: [{ subject: 'Hi', body: 'Body' }],
+    });
     assert.equal(o.subject, 'Hi');
+    assert.equal(o.replyMode, 'reply');
+    assert.equal(o.senderAccount, 'loyaltylogo');
     o.append(' more');
     assert.equal(o.body, 'Body more');
     o.subject = 'New';
@@ -67,6 +76,38 @@ describe('evaluate → send', () => {
     const { trace } = await simulateProgram(CODE, { contact: {} }, { run: makeSandboxRunner({ exec: fakeExec }), user: SAVED });
     assert.deepEqual(trace.map((t) => t.contract), ['evaluate', 'sendEmail']);
     assert.equal(trace[1].status, 'ran');
+  });
+
+  it('feeds an asynchronously evaluated outbound back into sandbox control flow', async () => {
+    const fired = [];
+    const evaluateRef = async (ref) => ({
+      ...makeOutbound(ref),
+      subject: 'Rendered for Ada',
+      body: 'Resolved body',
+      to: 'ada@example.test',
+    });
+    const executor = {
+      async run(name, input) {
+        fired.push([name, input.subject, input.to]);
+        return { ok: true };
+      },
+      async commitEdits() { return { ok: true }; },
+    };
+    const { result } = await simulateProgram(`
+      const outbound = await page.evaluate(user.emails.ThreeTaylorMadePromoCampaign);
+      if (outbound.subject.includes("Ada")) {
+        await actions.sendEmail(outbound);
+      }
+      return outbound.to;
+    `, { contact: {} }, {
+      run: makeSandboxRunner({ exec: fakeExec, evaluateRef }),
+      user: SAVED,
+      executor,
+      evaluateRef,
+    });
+
+    assert.equal(result, 'ada@example.test');
+    assert.deepEqual(fired, [['sendEmail', 'Rendered for Ada', 'ada@example.test']]);
   });
 
   it('the sandbox body defines page.__eval + rebuilds outbound', () => {

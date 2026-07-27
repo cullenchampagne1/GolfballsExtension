@@ -19,7 +19,7 @@
 import { instrument } from './instrument.js';
 import { validateContractInput, describeContract, APPROVED_CONTACT_FIELDS } from './contracts.js';
 import { buildUserBinding } from './userBinding.js';
-import { makeOutbound } from './runtime.js';
+import { hydrateOutbound, makeOutbound } from './runtime.js';
 
 /** A runner that executes instrumented code via AsyncFunction (Node/tests).
  *  The browser passes its own sandbox-backed runner instead. */
@@ -43,7 +43,40 @@ export function asyncFunctionRunner(code, scope) {
  *           params), surfaced as a preflight without ever sending anything.
  */
 /* Contracts that perform a real effect (routed to the executor on a live run). */
-const EFFECT_CONTRACTS = new Set(['sendEmail', 'createTask', 'logCall', 'completeTask']);
+const EFFECT_CONTRACTS = new Set([
+  'sendEmail', 'createTask', 'logCall', 'addNote', 'completeTask', 'editContact',
+]);
+const ACTION_RESULT_PREFIX = '__gb_action_result__:';
+
+/** Serializable pointer returned inside the sandbox before live replay. */
+export function actionResultRef(actionId, field) {
+  return `${ACTION_RESULT_PREFIX}${String(actionId)}:${String(field)}`;
+}
+
+function resolveActionResults(value, results, preserveMissing) {
+  if (typeof value === 'string' && value.startsWith(ACTION_RESULT_PREFIX)) {
+    const rest = value.slice(ACTION_RESULT_PREFIX.length);
+    const splitAt = rest.lastIndexOf(':');
+    if (splitAt > 0) {
+      const actionId = rest.slice(0, splitAt);
+      const field = rest.slice(splitAt + 1);
+      const result = results.get(actionId);
+      if (result && Object.hasOwn(result, field)) return result[field];
+    }
+    return preserveMissing ? value : null;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveActionResults(item, results, preserveMissing));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key, resolveActionResults(item, results, preserveMissing),
+      ]),
+    );
+  }
+  return value;
+}
 
 /**
  * Run a program. Records a dry trace by default; if `executor` is provided it
@@ -51,33 +84,96 @@ const EFFECT_CONTRACTS = new Set(['sendEmail', 'createTask', 'logCall', 'complet
  * reflects each step for the run view. `executor.run(contract, input)` and
  * `executor.commitEdits(fields)` do the actual sends/edits.
  */
-export async function simulateProgram(source, page = {}, { run = asyncFunctionRunner, user = {}, executor = null } = {}) {
+export async function simulateProgram(
+  source,
+  page = {},
+  {
+    run = asyncFunctionRunner,
+    user = {},
+    executor = null,
+    beforeEffect = null,
+    onEffect = null,
+    evaluateRef = null,
+  } = {},
+) {
   const { code, calls } = instrument(source);
   const trace = [];
+  const actionResults = new Map();
 
   const record = async (id, name, input) => {
-    const check = validateContractInput(name, input);
+    const resolvedInput = resolveActionResults(input, actionResults, !executor);
+    const check = validateContractInput(name, resolvedInput);
     const entry = {
       id,
       contract: name,
       status: check.ok ? 'ran' : 'failed',
-      summary: describeContract(name, input),
+      summary: describeContract(name, resolvedInput),
       errors: check.errors,
     };
     trace.push(entry);
-    // Live run: perform the real write; surface a failure on the entry.
-    if (executor && check.ok && EFFECT_CONTRACTS.has(name)) {
-      try { await executor.run(name, check.value || input); }
-      catch (e) { entry.status = 'failed'; entry.errors = [String(e?.message || e)]; }
+
+    const isEffect = EFFECT_CONTRACTS.has(name);
+    let result = { ok: check.ok, dry: !executor, simulated: !executor };
+
+    if (check.ok && isEffect && typeof beforeEffect === 'function') {
+      const decision = await beforeEffect({
+        id, name, input: check.value || resolvedInput, entry,
+      });
+      if (decision === false || decision?.allow === false) {
+        entry.status = 'skipped';
+        entry.reason = decision?.reason || 'Skipped by campaign policy';
+        entry.errors = [];
+        result = {
+          ok: false,
+          skipped: true,
+          reason: entry.reason,
+          dry: !executor,
+          simulated: !executor,
+        };
+      }
     }
-    // Return a shape a program can keep using (e.g. read a would-be result).
-    return { ok: check.ok, dry: !executor, simulated: !executor };
+
+    // Live run: perform the real write; helper failures surface on the trace.
+    if (executor && check.ok && isEffect && entry.status === 'ran') {
+      try {
+        const normalizedInput = check.value || resolvedInput;
+        const raw = name === 'editContact' && typeof executor.commitEdits === 'function'
+          ? await executor.commitEdits(normalizedInput.fields)
+          : await executor.run(name, normalizedInput);
+        if (raw?.ok === false) throw new Error(raw.error || `${name} failed`);
+        result = raw && typeof raw === 'object'
+          ? { ...raw, ok: true, dry: false, simulated: false }
+          : { ok: true, value: raw, dry: false, simulated: false };
+      } catch (error) {
+        entry.status = 'failed';
+        entry.errors = [String(error?.message || error)];
+        result = {
+          ok: false,
+          error: entry.errors[0],
+          dry: false,
+          simulated: false,
+        };
+      }
+    }
+
+    // A sandbox executes before effects replay. Give createTask a serializable
+    // future result so later code can complete that exact task in trace order.
+    if (!executor && check.ok && name === 'createTask') {
+      result.taskId = actionResultRef(id, 'taskId');
+    }
+    actionResults.set(String(id), result);
+    if (isEffect && typeof onEffect === 'function') {
+      onEffect({ id, name, entry, status: entry.status, result });
+    }
+    return result;
   };
 
   // page.evaluate(ref) → its own "Evaluate" step; returns the outbound object.
-  const recordEval = (id, ref) => {
+  const recordEval = async (id, ref, evaluated = null) => {
     const r = ref || {};
     trace.push({ id, contract: 'evaluate', kind: 'evaluate', status: 'ran', summary: `Evaluate ${r.name || (r.kind || 'template')}`, errors: [] });
+    if (evaluated && typeof evaluated === 'object') return hydrateOutbound(evaluated);
+    if (typeof evaluateRef === 'function') return evaluateRef(r);
     return makeOutbound(r);
   };
 
@@ -97,10 +193,6 @@ export async function simulateProgram(source, page = {}, { run = asyncFunctionRu
     if (!keys.length) return;
     const fields = { ...edits };
     await record('editContact', 'editContact', { fields });
-    if (executor) {
-      try { await executor.commitEdits(fields); }
-      catch (e) { const last = trace[trace.length - 1]; if (last) { last.status = 'failed'; last.errors = [String(e?.message || e)]; } }
-    }
     keys.forEach((k) => delete edits[k]);
   };
   const latestOpen = (list) => (list || []).reduce((best, t) => (!best || String(t.dueDate || '') > String(best.dueDate || '') ? t : best), null);

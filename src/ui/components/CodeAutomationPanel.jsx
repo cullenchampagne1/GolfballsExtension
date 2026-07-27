@@ -70,7 +70,7 @@ export function CodeAutomationPanel({
                 />
               </div>
               <div style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-                <b>page.*</b> is the contact being run. <b>user.*</b> are your saved emails/tasks/calls. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>logCall</code>.
+                <b>page.*</b> is the hydrated audience record being run. <b>user.*</b> are your saved emails/tasks/calls. <b>actions.*</b> — <code>sendEmail</code>, <code>createTask</code>, <code>completeTask</code>, <code>logCall</code>, <code>addNote</code>.
               </div>
               {errors.length ? (
                 <div style={{ flexShrink: 0, fontSize: 10.5, color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', gap: 5 }}>

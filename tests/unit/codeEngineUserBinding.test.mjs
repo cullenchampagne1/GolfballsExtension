@@ -20,9 +20,32 @@ async function fakeExec(body, ctx) {
 }
 
 const SAVED = {
-  emails: [{ id: 'e1', name: 'Win-back', subject: 'We miss you' }],
-  tasks: [{ id: 't1', name: 'Follow up', subject: 'Call them', priority: 2 }],
-  calls: [],
+  emails: [{
+    id: 'e1',
+    name: 'Win-back',
+    subject: 'We miss you',
+    vars: { firstName: { type: 'builtin', builtin: 'firstName' } },
+    toField: { type: 'auto' },
+    replyMode: 'reply',
+    senderAccount: 'loyaltylogo',
+    variations: [{ id: 'short', subject: 'Quick hello', body: 'Hi' }],
+  }],
+  tasks: [{
+    id: 't1',
+    name: 'Follow up',
+    subject: 'Call them',
+    priority: 2,
+    daysOut: 3,
+    categoryId: 9,
+  }],
+  calls: [{
+    id: 'c1',
+    name: 'Discovery',
+    subject: 'Discovery call',
+    callDirection: 1,
+    callCategory: 39,
+    callVoicemail: true,
+  }],
 };
 
 describe('userBinding · shape + lookups', () => {
@@ -35,6 +58,13 @@ describe('userBinding · shape + lookups', () => {
     assert.equal(u.email('e1').name, 'Win-back'); // by id
     assert.equal(u.task('Follow up').subject, 'Call them');
     assert.equal(u.emails.WinBack.versions[0].subject, 'We miss you');
+    assert.equal(u.emails.WinBack.versions[1].subject, 'Quick hello');
+    assert.equal(u.emails.WinBack.replyMode, 'reply');
+    assert.equal(u.emails.WinBack.senderAccount, 'loyaltylogo');
+    assert.equal(u.tasks.FollowUp.categoryId, 9);
+    assert.equal(u.calls.Discovery.callCategory, 39);
+    assert.equal(u.calls.Discovery.callDirection, 1);
+    assert.equal(u.calls.Discovery.callVoicemail, true);
   });
 
   it('throws a dependency error when a named template is missing', () => {

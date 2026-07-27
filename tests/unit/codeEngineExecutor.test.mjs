@@ -31,12 +31,14 @@ describe('executor · routing', () => {
     await ex.run('sendEmail', { subject: 'Hi' });
     await ex.run('createTask', { subject: 'Do it' });
     await ex.run('logCall', { subject: 'Called' });
+    await ex.run('addNote', { subject: 'Reviewed', body: 'QA note' });
     await ex.run('completeTask', { id: 't9' });
     await ex.commitEdits({ jobTitle: 'VP', phone: '999' });
     assert.deepEqual(calls, [
       ['sendEmail', 'Hi', '42'],
       ['task', 'Do it', '42'],
       ['call', 'Called', '555'],
+      ['call', 'Reviewed', '555'],
       ['complete', 't9'],
       ['edit', '42', { jobTitle: 'VP', phoneNumber: '999' }],
     ]);
@@ -45,6 +47,39 @@ describe('executor · routing', () => {
   it('throws a clear error when a capability is not configured', async () => {
     const ex = makeExecutor({ ctx: {} });
     await assert.rejects(() => ex.run('sendEmail', {}), /not configured/);
+  });
+
+  it('surfaces a helper {ok:false} response as a failed action', async () => {
+    const ex = makeExecutor({
+      ctx: { contactId: '42', employeeId: '7' },
+      submitQuickTask: async () => ({ ok: false, error: 'CRM rejected task' }),
+    });
+    await assert.rejects(
+      () => ex.run('createTask', { subject: 'QA' }),
+      /CRM rejected task/,
+    );
+  });
+
+  it('prepares a saved helper input before routing it to the CRM writer', async () => {
+    let received;
+    const ex = makeExecutor({
+      ctx: { contactId: '42', employeeId: '7' },
+      prepareInput: async (contract, input) => ({
+        ...input,
+        subject: `${contract} · rendered`,
+      }),
+      submitQuickTask: async ({ template }) => {
+        received = template;
+        return { ok: true, taskId: '88' };
+      },
+    });
+    const result = await ex.run('createTask', {
+      id: 'saved-1',
+      name: 'Follow up',
+      subject: 'raw {{firstName}}',
+    });
+    assert.equal(received.subject, 'createTask · rendered');
+    assert.equal(result.taskId, '88');
   });
 });
 

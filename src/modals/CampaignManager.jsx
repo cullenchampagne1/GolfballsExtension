@@ -15,7 +15,9 @@ import {
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
-import { runEngine } from '../lib/page-engine/index.js';
+import { hydrateCampaignContact } from '../lib/campaign/codeContext.js';
+import { runCodeCampaign } from '../lib/campaign/codeRunner.js';
+import { evaluateCampaignTemplate } from '../lib/campaign/templateEvaluation.js';
 import { translateProgram, flattenBlocks } from '../lib/codeEngine/translate.js';
 import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
@@ -28,6 +30,7 @@ import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import { crmUpdateContact } from '../lib/contact-detail-shared.jsx';
+import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   CAMPAIGN_MANAGER_HEIGHT,
@@ -193,10 +196,9 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, au
 }
 
 /* ── Import campaigns — paste an AI-generated JSON blob ──────────
-   Shape contract lives in docs/llm-campaign-toolset.md (the toolset file
-   handed to a model so it can author full campaigns). Validates live as
-   you paste; Import appends with fresh ids (never overwrites) and
-   resolves saved-template references by name. */
+   Shape contract lives in docs/llm-campaign-toolset.md. Validates executable
+   automation live as you paste; Import appends with fresh ids and never
+   overwrites an existing campaign. */
 function ImportCampaignsModal({ onClose, onDone }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -242,11 +244,20 @@ function ImportCampaignsModal({ onClose, onDone }) {
                   {parsed.items.length} campaign{parsed.items.length === 1 ? '' : 's'} ready to import
                 </div>
                 {parsed.items.map(({ campaign: c, warnings }, i) => {
-                  const branches = c.steps.filter((s) => s.branch).length;
+                  const imported = translateProgram(c.automation || '');
+                  const flat = flattenBlocks(imported.blocks);
+                  const actions = flat.filter((block) => (
+                    block.kind === 'action'
+                    || block.kind === 'complete'
+                    || block.kind === 'edit'
+                  )).length;
+                  const branches = flat.filter((block) => (
+                    block.kind === 'branch' || block.kind === 'cases'
+                  )).length;
                   return (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', minWidth: 0 }}>
-                        <Tag tone="brand" size="xs">{c.steps.length} step{c.steps.length === 1 ? '' : 's'}</Tag>
+                        <Tag tone="brand" size="xs">{actions} action{actions === 1 ? '' : 's'}</Tag>
                         <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
                         <span style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }}>{branches ? `${branches} branch${branches === 1 ? '' : 'es'} · ` : ''}{c.audienceOrder}</span>
                       </div>
@@ -276,30 +287,45 @@ function ImportCampaignsModal({ onClose, onDone }) {
 }
 
 /* ── Root ── */
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 /* Build the REAL executor for one contact — reuses the proven lib functions
    (emailSender.sendEmail accepts an arbitrary `to` + appends its own signature;
    crmUpdateContact / completeTaskById take explicit ids). */
-function makeContactExecutor(contact, runDeps, dispatch) {
-  const c = contact || {};
+function makeContactExecutor(context, runDeps, dispatch) {
+  const c = context || {};
   const ec = runDeps.emailConfig || {};
   return makeExecutor({
     ctx: {
       contactId: c.contactId, contactName: c.contactName || c.name, phone: c.phone,
       employeeId: runDeps.employeeId, accountId: c.accountId, email: c.email,
     },
+    prepareInput: async (contract, input) => {
+      if (input?.evaluated) return input;
+      const isSavedReference = input?.templateId || (input?.id && input?.name);
+      if (!isSavedReference && !input?.vars) return input;
+      const kinds = {
+        sendEmail: 'email',
+        createTask: 'task',
+        logCall: 'call',
+      };
+      return evaluateCampaignTemplate({
+        ...input,
+        kind: input.kind || kinds[contract] || input.kind,
+      }, c);
+    },
     sendEmail: async (outbound, ctx) => {
       const to = outbound.to || ctx.email;
       if (!to) throw new Error('no email address for this contact');
-      return sendEmail({
+      const result = await sendEmail({
         to,
         subject: outbound.subject || '',
         htmlBody: outbound.body || '',
-        from: outbound.from || pickFromAddress({}, ec.localPart),
+        from: outbound.from || pickFromAddress(outbound, ec.localPart),
+        replyMode: outbound.replyMode || 'standalone',
         signature: ec.signature || '',
         config: ec,
       }, { dispatch });
+      if (result?.state === 'failed') throw new Error(result.error || 'email send failed');
+      return result;
     },
     submitQuickTask,
     submitCallLog,
@@ -308,25 +334,19 @@ function makeContactExecutor(contact, runDeps, dispatch) {
   });
 }
 
-/* The `page` model for one contact — the live CRM page (runEngine: real tasks +
-   contact fields) merged with the audience contact, so page.tasks / page.contact
-   edits target the actual page in a single-contact simulation. */
-function pageFor(contact, audience, live) {
-  const l = live || {};
-  return {
-    contact: { ...(l.contact || {}), ...(contact || {}) },
-    contacts: audience,
-    count: audience.length,
-    tasks: l.tasks || { open: [], done: [] },
-  };
+function prepareCampaignContact(contact, audience, runDeps = {}) {
+  const emailConfig = runDeps.emailConfig || {};
+  return hydrateCampaignContact(contact, audience, {
+    dispatch: dispatchBackgroundMessage,
+    rep: { employeeId: runDeps.employeeId || '' },
+    emailConfig,
+    signature: emailConfig.signature || '',
+    fromLocalPart: emailConfig.localPart || '',
+  });
 }
 
 /* ── Run engine (code-driven) ───────────────────────────────────
-   Mirrors the old useCampaignRunner interface (rows / progress /
-   start / pause / stop / reset / again), but each contact is evaluated
-   by RUNNING THE CODE (simulateProgram) rather than the step engine —
-   the "evaluation is the same", the authoring is code. Dry by default;
-   real gated sends are the executor swap (next phase). */
+   React adapter around the policy-complete pure audience runner. */
 function useCodeRunner() {
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -338,7 +358,15 @@ function useCodeRunner() {
 
   const start = async (args) => {
     lastArgsRef.current = args;
-    const { code, audience, user, pace = 140, live, makeExec = null } = args;
+    const {
+      campaign,
+      code,
+      audience,
+      user,
+      dryRun,
+      prepareContact,
+      makeExec = null,
+    } = args;
     controlRef.current = { paused: false, stopped: false };
     setPaused(false); setComplete(false); setRunning(true);
     const init = {};
@@ -346,27 +374,69 @@ function useCodeRunner() {
     setRows(init);
     setProgress({ done: 0, total: audience.length });
 
-    const run = makeSandboxRunner({ exec: runInSandbox });
-    for (let i = 0; i < audience.length; i += 1) {
-      if (controlRef.current.stopped) break;
-      while (controlRef.current.paused && !controlRef.current.stopped) await sleep(150);
-      if (controlRef.current.stopped) break;
-      const c = audience[i];
-      setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } }));
-      let res;
-      try { res = await simulateProgram(code, pageFor(c, audience, live), { run, user, executor: makeExec ? makeExec(c) : null }); }
-      catch (e) { res = { ok: false, trace: [], error: String(e?.message || e) }; }
-      const ran = res.trace.filter((t) => t.status === 'ran').length;
-      const failed = res.trace.some((t) => t.status === 'failed') || !res.ok;
-      const last = res.trace.length ? res.trace[res.trace.length - 1].summary : '';
-      setRows((r) => ({
-        ...r,
-        [c._key]: { ...(r[c._key] || {}), ran, label: last || (res.error || '—'), status: failed ? 'failed' : ran > 0 ? 'sent' : 'skipped' },
-      }));
-      setProgress({ done: i + 1, total: audience.length });
-      await sleep(pace);
+    const control = {
+      isPaused: () => controlRef.current.paused,
+      isStopped: () => controlRef.current.stopped,
+    };
+    try {
+      const output = await runCodeCampaign({
+        campaign,
+        audience,
+        dryRun,
+        control,
+        prepareContact,
+        executeProgram: async ({
+          contact, prepared, beforeEffect, onEffect,
+        }) => {
+          const evaluateRef = (ref) => evaluateCampaignTemplate(ref, prepared.context);
+          return simulateProgram(code, prepared.page, {
+            run: makeSandboxRunner({
+              exec: runInSandbox,
+              doc: prepared.context?.doc,
+              evaluateRef,
+            }),
+            user,
+            executor: makeExec ? makeExec(contact, prepared) : null,
+            beforeEffect,
+            onEffect,
+            evaluateRef,
+          });
+        },
+        on: {
+          contactStart: (contact) => {
+            setRows((current) => ({
+              ...current,
+              [contact._key]: {
+                ...(current[contact._key] || {}),
+                status: 'sending',
+              },
+            }));
+          },
+          contactDone: (summary) => {
+            const last = summary.trace?.length
+              ? summary.trace[summary.trace.length - 1].summary
+              : '';
+            const label = last
+              || summary.result
+              || summary.error
+              || (summary.suppressReason ? `Suppressed · ${summary.suppressReason}` : '—');
+            setRows((current) => ({
+              ...current,
+              [summary.contact._key]: {
+                ...(current[summary.contact._key] || {}),
+                ran: summary.ran,
+                label,
+                status: summary.status,
+              },
+            }));
+          },
+          progress: ({ done, total }) => setProgress({ done, total }),
+        },
+      });
+      setComplete(!output.stopped);
+    } finally {
+      setRunning(false);
     }
-    setRunning(false); setComplete(!controlRef.current.stopped);
   };
 
   const pause = () => { controlRef.current.paused = true; setPaused(true); };
@@ -436,7 +506,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
       <div style={{ padding: '14px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
         <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: (running && !paused) ? 'cm-running 1.8s ease-in-out infinite' : 'none' }}><I.send size={15} /></div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{dryRun ? 'Dry-run · nothing is sent' : 'Running campaign'}</div>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{dryRun ? 'Dry-run · no CRM changes' : 'Running campaign'}</div>
           <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--gb-text-primary)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>{campaign.name}</span>
             {paused && <Tag tone="warning" size="xs">Paused</Tag>}
@@ -448,7 +518,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
           <Tally label="Audience" value={total} />
           {audValue > 0 && <Tally label="Value" value={fmtMoney(audValue)} tone="var(--gb-success-fg)" />}
           <Tally label="Running" value={counts.sending} tone="var(--gb-brand-label)" />
-          <Tally label="Sent" value={counts.sent} tone="var(--gb-success-fg)" />
+          <Tally label="Completed" value={counts.sent} tone="var(--gb-success-fg)" />
           <Tally label="Skipped" value={counts.skipped} />
           {counts.failed > 0 && <Tally label="Failed" value={counts.failed} tone="var(--gb-error-fg)" />}
         </div>
@@ -457,9 +527,11 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
           {paused
             ? <Btn size="sm" variant="tinted" status="brand" icon={<I.play />} onClick={resume}>Resume</Btn>
             : complete
-              ? <Btn size="sm" variant="tinted" status="brand" icon={<I.refresh />} onClick={again}>Run again</Btn>
+              ? dryRun
+                ? <Btn size="sm" variant="tinted" status="brand" icon={<I.refresh />} onClick={again}>Run dry-run again</Btn>
+                : <Btn size="sm" variant="tinted" status="brand" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={exit}>Back to editor</Btn>
               : <Btn size="sm" variant="tinted" status="warning" icon={<I.pause />} onClick={pause}>Pause</Btn>}
-          <Btn size="sm" variant="ghost" icon={<I.close />} onClick={exit}>Stop &amp; edit</Btn>
+          {!complete && <Btn size="sm" variant="ghost" icon={<I.close />} onClick={exit}>Stop &amp; edit</Btn>}
         </div>
       </div>
       <div style={{ height: 4, background: 'var(--gb-fill-inverse-medium)', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0, overflow: 'hidden' }}>
@@ -610,7 +682,7 @@ function ConfirmRunModal({ plan, summary, audience, onConfirm, onCancel }) {
             {plan.counts.sendEmail ? <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Emails</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)' }}>{plan.counts.sendEmail * audience}</div></div> : null}
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-            Runs are not de-duplicated — running again re-sends. Emails render against the current page, so verify with a single contact first.
+            Runs are not de-duplicated — running again repeats the effects. Each email renders against its audience record, so verify with a single contact first.
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
@@ -696,15 +768,45 @@ export function CampaignManager({ onClose, contacts = [] }) {
       try {
         chrome.storage.local.get('templates', (o) => res((o?.templates || [])
           .filter((t) => t.enabled !== false && (!t.type || t.type === 'email' || t.type === 'account'))
-          .map((t) => ({ id: t.id, name: t.name, subject: t.subject || '' }))));
+          .map((t) => ({
+            id: t.id,
+            name: t.name,
+            kind: 'email',
+            subject: t.subject || '',
+            body: t.body || '',
+            variations: Array.isArray(t.variations) ? t.variations : [],
+            vars: t.vars || {},
+            toField: t.toField || null,
+            replyMode: t.replyMode || 'standalone',
+            senderAccount: t.senderAccount,
+            senderRandomize: !!t.senderRandomize,
+          }))));
       } catch { res([]); }
     });
     Promise.all([emails, loadTaskTemplates(), loadCallTemplates()]).then(([em, tasks, calls]) => {
       if (!alive) return;
       setUserData({
         emails: em,
-        tasks: (tasks || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject || '', priority: t.priority, daysOut: t.daysOut })),
-        calls: (calls || []).map((c) => ({ id: c.id, name: c.name, subject: c.subject || '' })),
+        tasks: (tasks || []).map((t) => ({
+          id: t.id,
+          name: t.name,
+          kind: 'task',
+          subject: t.subject || '',
+          body: t.body || '',
+          priority: t.priority,
+          daysOut: t.daysOut,
+          categoryId: t.categoryId,
+        })),
+        calls: (calls || []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          kind: 'call',
+          subject: c.subject || '',
+          body: c.body || '',
+          callDirection: c.callDirection,
+          callCategory: c.callCategory,
+          callVoicemail: c.callVoicemail,
+        })),
       });
       setTemplatesLoaded(true);
     });
@@ -739,12 +841,6 @@ export function CampaignManager({ onClose, contacts = [] }) {
     }).catch(() => toast?.error?.('Couldn’t save campaign'));
   };
 
-  // The read-only `page` model the code panel simulates against — the live
-  // audience selection, so `page.contacts` / `page.contact` resolve for real.
-  // The live CRM page (real tasks + contact fields) for page.tasks/page.contact.
-  const livePage = useMemo(() => {
-    try { const m = typeof document !== 'undefined' ? runEngine(document) : null; return (m && (m.data || m)) || {}; } catch { return {}; }
-  }, []);
   const audienceKeyed = useMemo(() => contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` })), [contacts]);
   // Keep the chosen simulation contact valid as the audience changes.
   useEffect(() => {
@@ -758,13 +854,23 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const program = useMemo(() => {
     const { blocks, errors } = translateProgram(campaign.automation || '');
     const flat = flattenBlocks(blocks);
-    // Steps = email send / task / call / email evaluation / return.
-    const stepCount = flat.filter((b) => b.kind === 'action' || b.kind === 'evaluate' || b.kind === 'return').length;
+    const effectKinds = new Set(['action', 'complete', 'edit']);
+    // Steps = every evaluated reference, CRM effect, and final return.
+    const stepCount = flat.filter((b) => effectKinds.has(b.kind) || b.kind === 'evaluate' || b.kind === 'return').length;
     // Branches = if / switch.
     const branchCount = flat.filter((b) => b.kind === 'branch' || b.kind === 'cases').length;
-    // Pipeline length = the send/eval actions per contact.
-    const actionCount = flat.filter((b) => b.kind === 'action' || b.kind === 'evaluate').length;
-    return { blocks, errors, stepCount, branchCount, actionCount, blockCount: flat.length };
+    // Pipeline length includes direct page.task completion and contact edits.
+    const actionCount = flat.filter((b) => effectKinds.has(b.kind) || b.kind === 'evaluate').length;
+    const effectCount = flat.filter((b) => effectKinds.has(b.kind)).length;
+    return {
+      blocks,
+      errors,
+      stepCount,
+      branchCount,
+      actionCount,
+      effectCount,
+      blockCount: flat.length,
+    };
   }, [campaign.automation]);
 
   const [view, setView] = useState('code');
@@ -819,7 +925,19 @@ export function CampaignManager({ onClose, contacts = [] }) {
     setView('blocks');
     setSim({ status: 'running', trace: [], replayIdx: -1, done: false, result: null, contactName: contact?.contactName || contact?.name || '(contact)' });
     let res;
-    try { res = await simulateProgram(campaign.automation || '', pageFor(contact, audienceKeyed, livePage), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData }); }
+    try {
+      const prepared = await prepareCampaignContact(contact, audienceKeyed);
+      const evaluateRef = (ref) => evaluateCampaignTemplate(ref, prepared.context);
+      res = await simulateProgram(campaign.automation || '', prepared.page, {
+        run: makeSandboxRunner({
+          exec: runInSandbox,
+          doc: prepared.context?.doc,
+          evaluateRef,
+        }),
+        user: userData,
+        evaluateRef,
+      });
+    }
     catch (e) { if (my === simRunRef.current) { toast?.error?.('Simulate failed — ' + String(e?.message || e)); setSim((s) => ({ ...s, status: 'idle' })); } return; }
     if (my !== simRunRef.current) return;
     if (res.error) toast?.error?.(res.error);
@@ -847,7 +965,14 @@ export function CampaignManager({ onClose, contacts = [] }) {
 
   const beginDryRun = () => {
     resetSim(); setRunMode(true);
-    runner.start({ code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140, live: livePage });
+    runner.start({
+      campaign,
+      code: campaign.automation || '',
+      audience: audienceKeyed,
+      user: userData,
+      dryRun: true,
+      prepareContact: (contact, ordered) => prepareCampaignContact(contact, ordered),
+    });
   };
 
   const beginRealRun = async () => {
@@ -855,20 +980,40 @@ export function CampaignManager({ onClose, contacts = [] }) {
     const rd = await buildRunDeps();
     resetSim(); setRunMode(true);
     runner.start({
-      code: campaign.automation || '', audience: audienceKeyed, user: userData, pace: 140, live: livePage,
-      makeExec: (c) => makeContactExecutor(c, rd, sendBg),
+      campaign,
+      code: campaign.automation || '',
+      audience: audienceKeyed,
+      user: userData,
+      dryRun: false,
+      prepareContact: (contact, ordered) => prepareCampaignContact(contact, ordered, rd),
+      makeExec: (_contact, prepared) => makeContactExecutor(
+        prepared.context,
+        rd,
+        dispatchBackgroundMessage,
+      ),
     });
   };
 
   const startRun = async () => {
     if (!audienceKeyed.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
-    if (!program.actionCount) { toast?.warning?.('Add a send/create step before running.'); return; }
+    if (!program.effectCount) { toast?.warning?.('Add a CRM action before running.'); return; }
     if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
     if (dryRun) { beginDryRun(); return; }
     // A real run — dry-preview one contact to compute the impact, then confirm.
     let preview;
     try {
-      preview = await simulateProgram(campaign.automation || '', pageFor(audienceKeyed[0] || {}, audienceKeyed, livePage), { run: makeSandboxRunner({ exec: runInSandbox }), user: userData });
+      const contact = audienceKeyed[0] || {};
+      const prepared = await prepareCampaignContact(contact, audienceKeyed);
+      const evaluateRef = (ref) => evaluateCampaignTemplate(ref, prepared.context);
+      preview = await simulateProgram(campaign.automation || '', prepared.page, {
+        run: makeSandboxRunner({
+          exec: runInSandbox,
+          doc: prepared.context?.doc,
+          evaluateRef,
+        }),
+        user: userData,
+        evaluateRef,
+      });
     } catch (e) { toast?.error?.('Couldn’t preview the run — ' + String(e?.message || e)); return; }
     const plan = planRun(preview.trace, audienceKeyed.length);
     if (!plan.hasEffects) { toast?.warning?.('Nothing to run — no sends/edits/completes.'); return; }

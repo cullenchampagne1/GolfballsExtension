@@ -26,10 +26,14 @@ function actionDoc(c) {
       ['gate', `${GATE_BY_EFFECT[c.effect]} · ${c.effect}`],
     ],
     examples: c.name === 'sendEmail'
-      ? ['await actions.sendEmail(user.email("Win-back"))', 'await actions.sendEmail({ subject: "Hi", body: "…" })']
+      ? ['const email = await page.evaluate(user.email("Win-back"));\nawait actions.sendEmail(email)', 'await actions.sendEmail({ subject: "Hi", body: "…" })']
       : c.name === 'createTask'
-        ? ['await actions.createTask(user.task("Follow up"))', 'await actions.createTask({ subject: "Call", daysOut: 2 })']
-        : ['await actions.logCall(user.call("Left VM"))'],
+        ? ['await actions.createTask(user.task("Follow up"))', 'const task = await actions.createTask({ subject: "Call", daysOut: 2 })']
+        : c.name === 'completeTask'
+          ? ['const task = await actions.createTask({ subject: "Test" });\nawait actions.completeTask({ id: task.taskId });', 'await page.tasks.open[0].complete()']
+          : c.name === 'addNote'
+            ? ['await actions.addNote({ subject: "Follow-up", body: "Reviewed account with customer." })']
+            : ['await actions.logCall(user.call("Left VM"))'],
   };
 }
 
@@ -37,7 +41,7 @@ const STATIC = {
   overview: {
     title: 'Campaign code',
     kind: 'topic',
-    summary: 'Write plain JS. Each send/create is a step; if/else are branches. It runs per contact and the blocks light up as it goes.',
+    summary: 'Write plain JS. Each action is a step; if/else are branches. The body runs once per hydrated audience record and the blocks light up as it goes.',
     rows: [
       ['page', 'the contact being run'],
       ['user', 'your saved emails / tasks / calls'],
@@ -113,6 +117,8 @@ const STATIC = {
       ['sendEmail(email)', 'send a saved or custom email'],
       ['createTask(task)', 'create a CRM task'],
       ['logCall(call)', 'log a call activity'],
+      ['addNote(note)', 'add a CRM activity note'],
+      ['completeTask({id})', 'complete a task returned by createTask'],
     ],
     examples: ['await actions.sendEmail(user.email("Win-back"))'],
   },

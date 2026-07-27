@@ -31,3 +31,16 @@ export function sendBackgroundMessage(action, payload = {}) {
     }
   });
 }
+
+/**
+ * Adapter for older helpers that accept one `{ action, ...payload }` object.
+ * The campaign context/email helpers use this dispatcher shape, while the
+ * canonical boundary above intentionally uses `(action, payload)`.
+ */
+export function dispatchBackgroundMessage(message = {}) {
+  const { action, ...payload } = message && typeof message === 'object'
+    ? message
+    : {};
+  if (!action) return Promise.reject(new Error('Background action is required'));
+  return sendBackgroundMessage(action, payload);
+}

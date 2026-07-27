@@ -73,4 +73,27 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
     assert.equal(trace.length, 1);
     assert.equal(trace[0].status, 'ran');
   });
+
+  it('replays a created task id into a later completion action', async () => {
+    const fired = [];
+    const executor = {
+      async run(name, input) {
+        fired.push([name, input]);
+        if (name === 'createTask') return { ok: true, taskId: '8842' };
+        return { ok: true };
+      },
+      async commitEdits() { return { ok: true }; },
+    };
+    const source = `
+      const created = await actions.createTask({ subject: "QA task" });
+      await actions.completeTask({ id: created.taskId });
+    `;
+    const { trace } = await simulateProgram(source, {}, {
+      run: makeSandboxRunner({ exec: fakeExec }),
+      executor,
+    });
+    assert.deepEqual(fired.map(([name]) => name), ['createTask', 'completeTask']);
+    assert.equal(fired[1][1].id, '8842');
+    assert.deepEqual(trace.map((entry) => entry.status), ['ran', 'ran']);
+  });
 });
