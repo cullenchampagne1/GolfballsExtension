@@ -62,6 +62,7 @@ export async function runCodeCampaign({
   const onContactDone = on.contactDone || noop;
   const onProgress = on.progress || noop;
   const onComplete = on.complete || noop;
+  const onEffectEvent = on.effect || noop;
 
   for (let index = 0; index < ordered.length; index += 1) {
     if (control.isStopped?.()) break;
@@ -134,8 +135,19 @@ export async function runCodeCampaign({
       attemptedEffect = true;
       return { allow: true };
     };
-    const onEffect = ({ status }) => {
-      if (status === 'ran') effectCount += 1;
+    const onEffect = async (event) => {
+      if (event.status === 'ran') effectCount += 1;
+      try {
+        await onEffectEvent({
+          contact,
+          index,
+          event,
+          effects: effectCount,
+        });
+      } catch {
+        // Presentation/telemetry must never turn a successful CRM effect into
+        // a failed campaign. The trace remains the execution authority.
+      }
     };
 
     let result;

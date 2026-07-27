@@ -29,9 +29,9 @@ import {
   fmtCurrency, fmtNumber, fmtDate, coalesce, titleCase,
   parseNumber, parseDate, normalizePhone,
 } from '../lib/page-engine/transforms.js';
+import { codeBodyLengthError } from '../lib/page-engine/code-limits.js';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const MAX_BODY_LENGTH = 8192;
 const EXEC_TIMEOUT_MS = 10000;
 const CHANNEL = decodeURIComponent(location.hash.slice(1));
 
@@ -53,8 +53,8 @@ const BLOCKED_PATTERNS = [
   { re: /\b(?:window|globalThis|parent|top|opener|postMessage)\b/, reason: 'ambient window access not allowed' },
 ];
 function precheck(body) {
-  if (typeof body !== 'string') throw new Error('code body must be a string');
-  if (body.length > MAX_BODY_LENGTH) throw new Error(`code body exceeds ${MAX_BODY_LENGTH} characters`);
+  const lengthIssue = codeBodyLengthError(body);
+  if (lengthIssue) throw new Error(lengthIssue);
   for (const { re, reason } of BLOCKED_PATTERNS) if (re.test(body)) throw new Error(`blocked: ${reason}`);
 }
 function wrapBody(body) {

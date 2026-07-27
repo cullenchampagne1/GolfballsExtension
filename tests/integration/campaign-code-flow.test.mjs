@@ -278,6 +278,7 @@ describe('campaign code flow', () => {
       { contactId: '3', contactUrl: 'https://crm.test/?customerID=3', _key: '3' },
     ];
     const fired = [];
+    const effectEvents = [];
     const code = `
       await actions.createTask({ subject: "one" });
       await actions.createTask({ subject: "two" });
@@ -313,6 +314,12 @@ describe('campaign code flow', () => {
           onEffect,
         },
       ),
+      on: {
+        effect: async ({ contact, event, effects }) => {
+          await Promise.resolve();
+          effectEvents.push([contact.contactId, event.name, event.status, effects]);
+        },
+      },
     });
 
     assert.deepEqual(fired, [
@@ -323,5 +330,10 @@ describe('campaign code flow', () => {
     assert.equal(output.results[0].suppressReason, 'do-not-contact');
     assert.equal(output.results[1].trace[2].status, 'skipped');
     assert.equal(output.results[2].suppressReason, 'action-cap');
+    assert.deepEqual(effectEvents, [
+      ['2', 'createTask', 'ran', 1],
+      ['2', 'createTask', 'ran', 2],
+      ['2', 'createTask', 'skipped', 2],
+    ]);
   });
 });

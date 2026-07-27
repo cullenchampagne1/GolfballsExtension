@@ -159,4 +159,23 @@ describe('blockView · block descriptors', () => {
     const [sw] = translateProgram('switch (page.state) { case "CA": await actions.logCall({ subject: "x" }); }').blocks;
     assert.equal(describeBlock(sw).title, 'Switch on page.state');
   });
+
+  it('labels functions separately while preserving their nested action status', async () => {
+    const source = `
+      async function followUp(name) {
+        await actions.createTask({ subject: "Call " + name });
+        return name;
+      }
+      await followUp("Ada");
+    `;
+    const [fn] = translateProgram(source).blocks;
+    const descriptor = describeBlock(fn);
+    assert.equal(descriptor.kind, 'function');
+    assert.equal(descriptor.title, 'followUp(name)');
+    assert.match(descriptor.detail, /async function · 2 blocks/);
+
+    const { trace } = await simulateProgram(source);
+    assert.equal(blockStatus(fn, indexTrace(trace)), 'ran');
+    assert.equal(describeBlock(fn.body[0], indexTrace(trace)).runs, 1);
+  });
 });

@@ -174,6 +174,16 @@ export function describeBlock(block, traceById = {}) {
   if (block.kind === 'cases') {
     return { ...base, icon: 'branch', title: `Switch on ${block.onText || '…'}` };
   }
+  if (block.kind === 'function') {
+    const signature = `${block.name || 'anonymous'}(${block.paramsText || ''})`;
+    return {
+      ...base,
+      kind: 'function',
+      icon: 'code',
+      title: signature,
+      detail: `${block.async ? 'async ' : ''}${block.functionKind === 'arrow' ? 'arrow function' : 'function'} · ${(block.body || []).length} block${(block.body || []).length === 1 ? '' : 's'}`,
+    };
+  }
   if (block.kind === 'comment') {
     const lines = commentLines(block.text);
     return { ...base, kind: 'comment', icon: 'code', title: lines.join(' '), lines };

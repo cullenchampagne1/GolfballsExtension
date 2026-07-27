@@ -38,6 +38,12 @@ import {
   fitCampaignManagerScale,
   normalizeCampaignManagerScale,
 } from '../lib/campaign/presentation.js';
+import {
+  advanceRunRow,
+  buildRunPipeline,
+  displayRunPipeline,
+  finishRunRow,
+} from '../lib/campaign/runPresentation.js';
 
 /* ───────────────────────────────────────────────────────────────
    CampaignManager — code-first campaign editor.
@@ -70,6 +76,11 @@ function ensureCampaignStyles() {
     }
     @keyframes cm-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
     @keyframes cm-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 6px transparent; } }
+    @keyframes cm-repeat-hit {
+      0%   { opacity: .95; transform: scale(.7); box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); }
+      55%  { opacity: .2; transform: scale(2.05); box-shadow: 0 0 0 5px var(--gb-brand-tint-soft); }
+      100% { opacity: 0; transform: scale(2.35); box-shadow: 0 0 0 8px transparent; }
+    }
   `;
   (document.head || document.documentElement).appendChild(s);
 }
@@ -364,13 +375,26 @@ function useCodeRunner() {
       audience,
       user,
       dryRun,
+      pipeline = [],
       prepareContact,
       makeExec = null,
     } = args;
     controlRef.current = { paused: false, stopped: false };
     setPaused(false); setComplete(false); setRunning(true);
     const init = {};
-    audience.forEach((c) => { init[c._key] = { status: 'queued', label: '', ran: 0 }; });
+    audience.forEach((c) => {
+      init[c._key] = {
+        status: 'queued',
+        label: '',
+        ran: 0,
+        stepRuns: {},
+        stepFailures: {},
+        stepOrder: [],
+        runtimeSteps: [],
+        activeStepId: null,
+        pulse: 0,
+      };
+    });
     setRows(init);
     setProgress({ done: 0, total: audience.length });
 
@@ -412,22 +436,26 @@ function useCodeRunner() {
               },
             }));
           },
-          contactDone: (summary) => {
-            const last = summary.trace?.length
-              ? summary.trace[summary.trace.length - 1].summary
-              : '';
-            const label = last
-              || summary.result
-              || summary.error
-              || (summary.suppressReason ? `Suppressed · ${summary.suppressReason}` : '—');
+          effect: async ({ contact, event }) => {
             setRows((current) => ({
               ...current,
-              [summary.contact._key]: {
-                ...(current[summary.contact._key] || {}),
-                ran: summary.ran,
-                label,
-                status: summary.status,
-              },
+              [contact._key]: advanceRunRow(current[contact._key], event, pipeline),
+            }));
+            // A dry run has no delivery pacing, so briefly yield after each
+            // effect. This gives repeated source steps a visible flash instead
+            // of React batching the entire loop into one final dot.
+            if (dryRun) {
+              await new Promise((resolve) => setTimeout(resolve, 140));
+            }
+          },
+          contactDone: (summary) => {
+            setRows((current) => ({
+              ...current,
+              [summary.contact._key]: finishRunRow(
+                current[summary.contact._key],
+                summary,
+                pipeline,
+              ),
             }));
           },
           progress: ({ done, total }) => setProgress({ done, total }),
@@ -464,17 +492,58 @@ const RUN_STATUS_TONE = {
   failed: { fg: 'var(--gb-error-fg)', bg: 'var(--gb-error-tint-medium)', bd: 'var(--gb-error-tint-border)', label: 'Failed' },
 };
 
-function RunPipeline({ mainCount, ran, status }) {
+function RunPipeline({ pipeline, row }) {
+  const steps = displayRunPipeline(pipeline, row);
+  const shown = steps.length ? steps : [{
+    id: 'program',
+    label: 'Program',
+    runs: 0,
+    failed: false,
+  }];
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-      {Array.from({ length: Math.max(1, mainCount) }).map((_, i) => {
-        const done = i < ran;
-        const active = status === 'sending' && i === ran;
-        const color = done || active ? 'var(--gb-brand-label)' : 'var(--gb-text-ghost)';
+    <div style={{ display: 'inline-flex', alignItems: 'center', minWidth: 20 }}>
+      {shown.map((step, i) => {
+        const done = step.runs > 0;
+        const active = row.status === 'sending' && row.activeStepId === step.id;
+        const color = step.failed
+          ? 'var(--gb-error-fg)'
+          : done || active ? 'var(--gb-brand-label)' : 'var(--gb-text-ghost)';
         return (
-          <React.Fragment key={i}>
-            {i > 0 && <span style={{ width: 10, height: 1.5, background: i <= ran ? 'var(--gb-brand-label)' : 'var(--gb-border-default)' }} />}
-            <span style={{ width: active ? 10 : 8, height: active ? 10 : 8, borderRadius: '50%', background: (done || active) ? color : 'transparent', border: `1.5px solid ${color}`, animation: active ? 'cm-pulse-ring 1.2s ease-in-out infinite' : 'none', flexShrink: 0 }} />
+          <React.Fragment key={step.id}>
+            {i > 0 && <span style={{
+              width: 10, height: 1.5,
+              background: done ? 'var(--gb-brand-label)' : 'var(--gb-border-default)',
+              transition: 'background-color .2s ease',
+            }} />}
+            <span title={`${step.label}${step.runs > 1 ? ` · repeated ${step.runs}×` : ''}`} style={{
+              position: 'relative',
+              width: active ? 10 : 8,
+              height: active ? 10 : 8,
+              borderRadius: '50%',
+              background: done || active ? color : 'transparent',
+              border: `1.5px solid ${color}`,
+              flexShrink: 0,
+              transition: 'width .16s ease, height .16s ease, background-color .16s ease, border-color .16s ease',
+            }}>
+              {active && (
+                <span key={`${step.id}-${row.pulse || 0}`} style={{
+                  position: 'absolute', inset: -1.5, borderRadius: '50%',
+                  border: '1.5px solid var(--gb-brand-label)',
+                  pointerEvents: 'none',
+                  animation: 'cm-repeat-hit .48s ease-out both',
+                }} />
+              )}
+              {step.runs > 1 && (
+                <span style={{
+                  position: 'absolute', left: '50%', top: -13, transform: 'translateX(-50%)',
+                  minWidth: 16, height: 11, padding: '0 3px', borderRadius: 999,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)',
+                  color: 'var(--gb-brand-label)', fontSize: 7.5, fontWeight: 800,
+                  fontFamily: 'var(--gb-font-mono)', lineHeight: 1, whiteSpace: 'nowrap',
+                }}>×{step.runs}</span>
+              )}
+            </span>
           </React.Fragment>
         );
       })}
@@ -482,7 +551,7 @@ function RunPipeline({ mainCount, ran, status }) {
   );
 }
 
-function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit }) {
+function AudienceRunView({ campaign, audience, pipeline, runner, dryRun, onExit }) {
   const { rows, progress, paused, complete, running, pause, resume, again } = runner;
   const exit = () => { runner.stop(); onExit?.(); };
   const counts = useMemo(() => {
@@ -529,8 +598,13 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
             : complete
               ? dryRun
                 ? <Btn size="sm" variant="tinted" status="brand" icon={<I.refresh />} onClick={again}>Run dry-run again</Btn>
-                : <Btn size="sm" variant="tinted" status="brand" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={exit}>Back to editor</Btn>
+                : null
               : <Btn size="sm" variant="tinted" status="warning" icon={<I.pause />} onClick={pause}>Pause</Btn>}
+          {complete && (
+            <Btn size="sm" variant="ghost" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={exit}>
+              Back to campaigns
+            </Btn>
+          )}
           {!complete && <Btn size="sm" variant="ghost" icon={<I.close />} onClick={exit}>Stop &amp; edit</Btn>}
         </div>
       </div>
@@ -538,7 +612,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
         <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--gb-brand) 0%, var(--gb-brand-label) 100%)', boxShadow: '0 0 8px var(--gb-brand-label)', transition: 'width .35s ease' }} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '36px 1.4fr 1.1fr auto 1.1fr 120px', gap: 14, padding: '9px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-subtle)', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0 }}>
-        <div /><div>Contact</div><div>Email</div><div>Steps · {mainCount}</div><div>Last step</div><div style={{ textAlign: 'right' }}>State</div>
+        <div /><div>Contact</div><div>Email</div><div>Execution flow</div><div>Last step</div><div style={{ textAlign: 'right' }}>State</div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {audience.map((c) => {
@@ -553,7 +627,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
                 <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.account || ''}</div>
               </div>
               <div style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email || ''}</div>
-              <RunPipeline mainCount={mainCount} ran={st.ran || 0} status={st.status} />
+              <RunPipeline pipeline={pipeline} row={st} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label || (st.status === 'queued' ? 'Up next' : '—')}</div>
               </div>
@@ -615,6 +689,17 @@ function CampaignSettings({ campaign, onChange }) {
         <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Campaign settings</span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div>
+          <SectionLabel>Identity</SectionLabel>
+          <Field label="Campaign name" hint="Shown in the campaign library and run history">
+            <Input
+              value={campaign.name || ''}
+              placeholder="Campaign name"
+              leading={<I.megaphone size={13} />}
+              onChange={(name) => upd({ name })}
+            />
+          </Field>
+        </div>
         <div>
           <SectionLabel>Status</SectionLabel>
           <div style={{ display: 'flex', gap: 5 }}>
@@ -860,15 +945,15 @@ export function CampaignManager({ onClose, contacts = [] }) {
     // Branches = if / switch.
     const branchCount = flat.filter((b) => b.kind === 'branch' || b.kind === 'cases').length;
     // Pipeline length includes direct page.task completion and contact edits.
-    const actionCount = flat.filter((b) => effectKinds.has(b.kind) || b.kind === 'evaluate').length;
     const effectCount = flat.filter((b) => effectKinds.has(b.kind)).length;
+    const pipeline = buildRunPipeline(blocks);
     return {
       blocks,
       errors,
       stepCount,
       branchCount,
-      actionCount,
       effectCount,
+      pipeline,
       blockCount: flat.length,
     };
   }, [campaign.automation]);
@@ -971,6 +1056,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
       audience: audienceKeyed,
       user: userData,
       dryRun: true,
+      pipeline: program.pipeline,
       prepareContact: (contact, ordered) => prepareCampaignContact(contact, ordered),
     });
   };
@@ -985,6 +1071,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
       audience: audienceKeyed,
       user: userData,
       dryRun: false,
+      pipeline: program.pipeline,
       prepareContact: (contact, ordered) => prepareCampaignContact(contact, ordered, rd),
       makeExec: (_contact, prepared) => makeContactExecutor(
         prepared.context,
@@ -1044,7 +1131,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           <AudienceRunView key="run"
             campaign={campaign}
             audience={audienceKeyed}
-            mainCount={program.actionCount}
+            pipeline={program.pipeline}
             runner={runner}
             dryRun={dryRun}
             onExit={() => { setRunMode(false); runner.reset(); }}

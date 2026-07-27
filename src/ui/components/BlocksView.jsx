@@ -72,7 +72,7 @@ const GATE_LABEL = { auto: 'auto', confirm: 'confirm', hard: 'gated' };
 /* Which kinds are "steps": email/task/call sends, email evaluations, returns,
    and branches (if/switch) + loops. These get a numbered badge + run status.
    set-variable / comment / raw code are supporting blocks, not steps. */
-const STEP_KINDS = new Set(['action', 'evaluate', 'complete', 'return', 'branch', 'loop', 'cases']);
+const STEP_KINDS = new Set(['action', 'evaluate', 'complete', 'return', 'branch', 'loop', 'cases', 'function']);
 const isStep = (b) => STEP_KINDS.has(b.kind);
 /** True for branch-family containers (if / switch). */
 const isBranchKind = (b) => b.kind === 'branch' || b.kind === 'cases';
@@ -297,6 +297,31 @@ function BlockNode({ block, ctx, tone, forceStatus }) {
   const idx = indices[block.id];
 
   if (block.kind === 'compose') return <ComposeCard block={block} />;
+
+  if (block.kind === 'function') {
+    const d = describeBlock(block, traceById);
+    const ran = subtreeRan(block, traceById);
+    const rail = runningId && ran ? BRAND : ARM_RAIL.info;
+    // Pure helper calls are not trace events, so "no child action fired" does
+    // not prove the function was skipped. Keep definitions neutral unless an
+    // ancestor branch explicitly cut them or a traced child actually ran.
+    const functionStatus = ran ? status : (forceStatus || 'pending');
+    const bodyForce = ran ? forceStatus : (forceStatus || 'definition');
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', padding: 8,
+        border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-xl)',
+        background: 'color-mix(in srgb, var(--gb-surface-2) 72%, transparent)',
+      }}>
+        <Card tone="neutral" status={functionStatus} idx={idx} icon={I.code}
+          title={d.title} sublabel={d.detail}
+          tag={<Tag tone="neutral" size="xs">FUNCTION</Tag>} />
+        <BranchArm label="function body" tone="info" rail={rail}>
+          {block.body.length ? renderBlocks(block.body, ctx, 'info', bodyForce, rail) : <EmptyArm />}
+        </BranchArm>
+      </div>
+    );
+  }
 
   if (block.kind === 'complete') {
     const d = describeBlock(block, traceById);

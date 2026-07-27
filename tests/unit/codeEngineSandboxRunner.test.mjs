@@ -13,6 +13,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTraceBody, makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram, asyncFunctionRunner } from '../../src/lib/codeEngine/simulate.js';
+import {
+  MAX_CODE_BODY_LENGTH,
+  codeBodyLengthError,
+} from '../../src/lib/page-engine/code-limits.js';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
@@ -30,6 +34,17 @@ describe('sandboxRunner · body shape', () => {
     assert.match(body, /return \{ __gbTrace, __gbRet \};/);
     // Ends in a return, so the sandbox's wrapBody leaves it verbatim (no re-wrap).
     assert.ok(/return\b/.test(body));
+  });
+
+  it('allows multi-function campaign bodies while retaining a shared paste-bomb cap', () => {
+    const oldLimitPlusOne = 'x'.repeat(8193);
+    assert.equal(codeBodyLengthError(oldLimitPlusOne), null);
+    assert.equal(codeBodyLengthError('x'.repeat(MAX_CODE_BODY_LENGTH)), null);
+    assert.equal(
+      codeBodyLengthError('x'.repeat(MAX_CODE_BODY_LENGTH + 1)),
+      `code body exceeds ${MAX_CODE_BODY_LENGTH} characters`,
+    );
+    assert.equal(MAX_CODE_BODY_LENGTH, 65536);
   });
 });
 

@@ -210,6 +210,10 @@
       "file": "tests/unit/campaignPresentation.test.mjs"
     },
     {
+      "name": "ui \u00b7 Campaign Manager repeated-step run presentation",
+      "file": "tests/unit/campaignRunPresentation.test.mjs"
+    },
+    {
       "name": "ui \u00b7 Actions Shelf panel motion",
       "file": "tests/unit/shelfMotion.test.mjs"
     },

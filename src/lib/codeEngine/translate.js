@@ -9,6 +9,7 @@
      if / else               → branch block   (then[]/else[] children)
      for / for-of / while     → loop block     (body[] children)
      switch                  → cases block    (cases[{test, body[]}])
+     function / arrow fn      → function block (body[] keeps its own steps)
      anything else            → code block     (raw source, still executed)
 
    Code is the SOURCE OF TRUTH; the block tree is a one-directional
@@ -120,9 +121,14 @@ function asTaskComplete(src, node) {
   const member = childByName(call, 'MemberExpression');
   if (!member) return null;
   const mt = slice(src, member.from, member.to);
-  if (!/page\s*\.\s*tasks/.test(mt)) return null;
   const m = mt.match(/\.\s*(complete|completeAll|completeLatest)$/);
-  return m ? { method: m[1], refText: mt } : null;
+  if (!m) return null;
+  // Collection helpers belong specifically to page.tasks. An individual
+  // hydrated task is commonly aliased by a loop (`for (const task of
+  // page.tasks.open) await task.complete()`), so allow `.complete()` on the
+  // alias as well and keep it visible as a task-completion block.
+  if (m[1] !== 'complete' && !/page\s*\.\s*tasks/.test(mt)) return null;
+  return { method: m[1], refText: mt };
 }
 
 /** If `node` is `page.evaluate(ref)` (optionally awaited), return its span +
@@ -142,6 +148,49 @@ function asEvalCall(src, node) {
   };
 }
 
+/** Function declaration / assigned function expression → a nested function
+ * block. Function bodies stay visible as ordinary child blocks, so a helper is
+ * identifiable as one unit without hiding the actions, branches, or returns it
+ * performs. */
+function functionToBlock(src, stmt, fnNode, assignedName = '') {
+  const fnKids = children(fnNode);
+  const ownName = fnKids.find((n) => n.name === 'VariableDefinition');
+  const params = childByName(fnNode, 'ParamList');
+  const bodyNode = childByName(fnNode, 'Block');
+  const arrow = childByName(fnNode, 'Arrow');
+  let paramsText = params ? slice(src, params.from, params.to).trim() : '';
+  if (paramsText.startsWith('(') && paramsText.endsWith(')')) {
+    paramsText = paramsText.slice(1, -1).trim();
+  }
+
+  let body = bodyNode ? blockBody(src, bodyNode) : [];
+  // `const label = (value) => value.name` has an implicit return instead of a
+  // Block. Project it as a real return child rather than opaque code.
+  if (!bodyNode && arrow) {
+    const expr = fnKids.find((n) => n.from >= arrow.to && n.name !== ';');
+    if (expr) {
+      body = [{
+        id: nodeId(expr.from, expr.to),
+        kind: 'return',
+        valueText: slice(src, expr.from, expr.to),
+        text: slice(src, expr.from, expr.to),
+        implicit: true,
+      }];
+    }
+  }
+
+  return {
+    id: nodeId(stmt.from, stmt.to),
+    kind: 'function',
+    name: assignedName || (ownName ? slice(src, ownName.from, ownName.to) : 'anonymous'),
+    paramsText,
+    async: fnKids.some((n) => n.name === 'async'),
+    functionKind: fnNode.name === 'ArrowFunction' ? 'arrow' : 'function',
+    body,
+    text: slice(src, stmt.from, stmt.to),
+  };
+}
+
 /** Statement node → one block (recursing into branch/loop/switch bodies). */
 function statementToBlock(src, stmt) {
   const id = nodeId(stmt.from, stmt.to);
@@ -152,6 +201,10 @@ function statementToBlock(src, stmt) {
     return { id, kind: 'comment', text };
   }
 
+  if (stmt.name === 'FunctionDeclaration') {
+    return functionToBlock(src, stmt, stmt);
+  }
+
   // A `return …` is a step (the closing summary).
   if (stmt.name === 'ReturnStatement') {
     const expr = children(stmt).find((n) => n.name !== 'return' && n.name !== ';');
@@ -160,6 +213,21 @@ function statementToBlock(src, stmt) {
 
   // An expression statement whose expression is an action call → action block.
   if (stmt.name === 'ExpressionStatement' || stmt.name === 'VariableDeclaration') {
+    // `const helper = (…) => { … }` / `const helper = function (…) { … }`.
+    // Detect this before the ordinary variable path so its body is projected.
+    if (stmt.name === 'VariableDeclaration') {
+      const stmtKids = children(stmt);
+      const eq = stmtKids.find((n) => n.name === 'Equals');
+      const fnNode = eq
+        ? stmtKids.find((n) => n.from >= eq.to
+          && (n.name === 'ArrowFunction' || n.name === 'FunctionExpression'))
+        : null;
+      if (fnNode) {
+        const def = childByName(stmt, 'VariableDefinition');
+        const assignedName = def ? slice(src, def.from, def.to) : '';
+        return functionToBlock(src, stmt, fnNode, assignedName);
+      }
+    }
     const expr = stmt.name === 'ExpressionStatement'
       ? children(stmt)[0]
       : (() => {

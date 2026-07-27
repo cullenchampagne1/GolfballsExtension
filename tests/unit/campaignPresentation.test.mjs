@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CAMPAIGN_MANAGER_SCALE_DEFAULT,
   fitCampaignManagerScale,
@@ -7,6 +8,11 @@ import {
 } from '../../src/lib/campaign/presentation.js';
 import { applyFloatingHostScale } from '../../src/lib/floatingHost.js';
 import { DEV_SETTINGS } from '../../src/lib/devSettings.js';
+
+const managerSource = readFileSync(
+  new URL('../../src/modals/CampaignManager.jsx', import.meta.url),
+  'utf8',
+);
 
 function fakeHost() {
   const attributes = new Map();
@@ -41,5 +47,12 @@ describe('Campaign Manager presentation scale', () => {
     assert.equal(fitCampaignManagerScale(1.2, 1920, 1080), 1.2);
     assert.equal(fitCampaignManagerScale(1.2, 800, 600), 0.5875);
     assert.equal(fitCampaignManagerScale(0.5, 1920, 1080), 0.5);
+  });
+
+  it('keeps campaign identity and completed-run navigation discoverable', () => {
+    assert.match(managerSource, /<Field label="Campaign name"/);
+    assert.match(managerSource, />\s*Back to campaigns\s*</);
+    assert.match(managerSource, /@keyframes cm-repeat-hit/);
+    assert.match(managerSource, /advanceRunRow\(current\[contact\._key\], event, pipeline\)/);
   });
 });

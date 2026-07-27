@@ -163,7 +163,7 @@ export async function simulateProgram(
     }
     actionResults.set(String(id), result);
     if (isEffect && typeof onEffect === 'function') {
-      onEffect({ id, name, entry, status: entry.status, result });
+      await onEffect({ id, name, entry, status: entry.status, result });
     }
     return result;
   };

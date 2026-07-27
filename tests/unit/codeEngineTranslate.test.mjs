@@ -94,6 +94,50 @@ describe('translate · control flow', () => {
   });
 });
 
+describe('translate · functions', () => {
+  it('projects a function declaration as a container with its individual steps', () => {
+    const { blocks, actions } = translateProgram(`
+      async function followUp(contact) {
+        const subject = "Call " + contact.name;
+        await actions.createTask({ subject });
+        return subject;
+      }
+    `);
+    const [fn] = blocks;
+    assert.equal(fn.kind, 'function');
+    assert.equal(fn.name, 'followUp');
+    assert.equal(fn.paramsText, 'contact');
+    assert.equal(fn.async, true);
+    assert.deepEqual(fn.body.map((block) => block.kind), ['setVar', 'action', 'return']);
+    assert.equal(fn.body[1].contract, 'createTask');
+    assert.deepEqual(actions, ['createTask']);
+    assert.deepEqual(
+      flattenBlocks(blocks).map((block) => block.kind),
+      ['function', 'setVar', 'action', 'return'],
+    );
+  });
+
+  it('projects an assigned arrow function and its implicit return', () => {
+    const [fn] = translateProgram('const month = (order) => order.date.slice(0, 7);').blocks;
+    assert.equal(fn.kind, 'function');
+    assert.equal(fn.functionKind, 'arrow');
+    assert.equal(fn.name, 'month');
+    assert.equal(fn.paramsText, 'order');
+    assert.equal(fn.body[0].kind, 'return');
+    assert.equal(fn.body[0].implicit, true);
+    assert.equal(fn.body[0].valueText, 'order.date.slice(0, 7)');
+  });
+
+  it('recognizes completion on a task alias inside a loop', () => {
+    const [loop] = translateProgram(
+      'for (const task of page.tasks.open) { await task.complete(); }',
+    ).blocks;
+    assert.equal(loop.body[0].kind, 'complete');
+    assert.equal(loop.body[0].method, 'complete');
+    assert.equal(loop.body[0].refText, 'task.complete');
+  });
+});
+
 describe('translate · robustness & ids', () => {
   it('keeps a stable id across a re-parse of unchanged code', () => {
     const code = 'await actions.createTask({ subject: "x" })';

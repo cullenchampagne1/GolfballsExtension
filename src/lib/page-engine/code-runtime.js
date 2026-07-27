@@ -57,8 +57,8 @@ import {
 import { loadCatalog } from '../giftCatalog.js';
 import { extract } from './extract.js';
 import { detectSchema } from '../page-schemas/registry.js';
+import { codeBodyLengthError } from './code-limits.js';
 
-const MAX_BODY_LENGTH = 8192;
 /* Async path only — server calls route through the background worker,
    so allow enough headroom for several slow CDN / Solr round-trips
    (e.g. the recommended-replacement recipe hits the catalog once per
@@ -453,10 +453,8 @@ export function helpersFor(doc) {
 /* Shared pre-compile validation: length + blocklist. Throws on the
    first problem (caller surfaces the message). */
 function precheck(body) {
-  if (typeof body !== 'string') throw new Error('code body must be a string');
-  if (body.length > MAX_BODY_LENGTH) {
-    throw new Error(`code body exceeds ${MAX_BODY_LENGTH} characters`);
-  }
+  const lengthIssue = codeBodyLengthError(body);
+  if (lengthIssue) throw new Error(lengthIssue);
   for (const { re, reason } of BLOCKED_PATTERNS) {
     if (re.test(body)) throw new Error(`blocked: ${reason}`);
   }
@@ -469,8 +467,8 @@ function precheck(body) {
  *  body passes the static checks. The real compile happens at
  *  resolution time, in the page context. */
 export function staticCheck(body) {
-  if (typeof body !== 'string') return 'code body must be a string';
-  if (body.length > MAX_BODY_LENGTH) return `code body exceeds ${MAX_BODY_LENGTH} characters`;
+  const lengthIssue = codeBodyLengthError(body);
+  if (lengthIssue) return lengthIssue;
   for (const { re, reason } of BLOCKED_PATTERNS) {
     if (re.test(body)) return `blocked: ${reason}`;
   }
