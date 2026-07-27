@@ -252,7 +252,7 @@ describe('campaign code flow', () => {
     assert.equal(result.ok, true);
     const actionTrace = result.trace.filter((entry) => entry.kind !== 'function');
     const functionTrace = result.trace.filter((entry) => entry.kind === 'function');
-    assert.equal(actionTrace.length, 11);
+    assert.equal(actionTrace.length, 13);
     assert.ok(functionTrace.length > 7, 'helper calls should remain visible to Simulate');
     assert.ok(
       [...new Set(functionTrace.map((entry) => entry.id))]
@@ -261,8 +261,8 @@ describe('campaign code flow', () => {
     );
     assert.deepEqual(writes.map(([name]) => name), [
       'completeTask', 'completeTask',
-      'createTask', 'createTask', 'createTask',
-      'createTask', 'createTask', 'createTask',
+      'createTask', 'createTask', 'createTask', 'createTask',
+      'createTask', 'createTask', 'createTask', 'createTask',
       'createTask', 'createTask', 'createTask',
     ]);
     assert.equal(writes[0][1].id, 'old-1');
@@ -273,9 +273,11 @@ describe('campaign code flow', () => {
       [
         'Prior Year #1 [2026]',
         'Prior Year #2 [2026]',
+        'Prior Year Call - [April]',
         'Prior Year #3 [2026]',
         'Prior Year #1 [2025]',
         'Prior Year #2 [2025]',
+        'Prior Year Call - [December]',
         'Prior Year #3 [2025]',
         'Callaway Customer - Tier 1',
         'Titleist Customer - Tier 2',
@@ -285,9 +287,12 @@ describe('campaign code flow', () => {
     assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut > 0));
     assert.match(created[0].body, /Titleist Pro V1 Personalized/);
     assert.match(created[0].body, /Averaged reorder anniversary: April 15/);
-    assert.match(created[3].body, /Vice Drive Custom Logo/);
+    assert.match(created[4].body, /Vice Drive Custom Logo/);
+    assert.ok(created[2].daysOut > created[1].daysOut);
+    assert.ok(created[2].daysOut < created[3].daysOut);
+    assert.match(created[2].body, /Follow-up timing: 1 week before/);
 
-    const brandTasks = created.slice(6);
+    const brandTasks = created.slice(8);
     assert.deepEqual(brandTasks.map((task) => task.daysOut), [
       brandTasks[0].daysOut,
       brandTasks[0].daysOut,
@@ -310,7 +315,7 @@ describe('campaign code flow', () => {
       ],
       [2030, 12, 17],
     );
-    assert.match(result.result, /created 6 fresh Prior Year task\(s\) across 2 anniversary date\(s\)/);
+    assert.match(result.result, /created 8 fresh Prior Year task\(s\) across 2 anniversary date\(s\)/);
     assert.match(result.result, /created 3 brand task\(s\)/);
   });
 

@@ -187,13 +187,14 @@ for (const anniversary of anniversaries) {
       tasks: [
         { number: 1, timing: "3 weeks before", date: addDays(anniversaryDate, -21) },
         { number: 2, timing: "2 weeks before", date: addDays(anniversaryDate, -14) },
+        { kind: "call", timing: "1 week before", date: addDays(anniversaryDate, -7) },
         { number: 3, timing: "Monday before", date: mondayBefore(anniversaryDate) }
       ]
     };
   };
 
   let cycle = buildCycle(cycleYear);
-  // Keep the three-task sequence together. Once its first step is no longer
+  // Keep the four-task sequence together. Once its first step is no longer
   // in the future, schedule the whole fresh sequence for next year's cycle.
   if (calendarDayNumber(cycle.tasks[0].date) <= calendarDayNumber(today)) {
     cycleYear += 1;
@@ -218,7 +219,9 @@ for (const anniversary of anniversaries) {
     ].join("\n").slice(0, 4000);
 
     await actions.createTask({
-      subject: `Prior Year #${task.number} [${anniversary.sourceYear}]`,
+      subject: task.kind === "call"
+        ? `Prior Year Call - [${MONTHS[anniversary.month]}]`
+        : `Prior Year #${task.number} [${anniversary.sourceYear}]`,
       body,
       priority: "med",
       daysOut: Math.max(0, Math.round(

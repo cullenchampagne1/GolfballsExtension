@@ -231,15 +231,16 @@ runs against contact or account records. Each invocation stays scoped to the
 selected page: contact orders/tasks for a contact, account orders/tasks for an
 account. It groups orders by source year + month, averages the day within each
 group, completes existing open tasks whose subject contains `Prior Year`, and
-creates a fresh three-task future cycle:
+creates a fresh four-task future cycle:
 
 1. `Prior Year #1 [source year]` — three weeks before the anniversary.
 2. `Prior Year #2 [source year]` — two weeks before the anniversary.
-3. `Prior Year #3 [source year]` — the Monday before the anniversary.
+3. `Prior Year Call - [month]` — one week before the anniversary.
+4. `Prior Year #3 [source year]` — the Monday before the anniversary.
 
 Every subject retains the source year in brackets, and every description lists
 the source orders used to derive the averaged date. If the first step in this
-year's sequence has passed, the whole sequence rolls to next year so the three
+year's sequence has passed, the whole sequence rolls to next year so the four
 tasks remain chronological. Physical anniversary dates stay in the task body,
 not the subject.
 
