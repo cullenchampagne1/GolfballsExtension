@@ -117,7 +117,11 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
     // the finders + outbound helpers. Use the RAW page data (not the node Proxy /
     // task methods, which can't be structured-cloned into the realm).
     const src = (scope && scope.__pageData) || (scope && scope.page) || {};
-    const pageData = { contact: src.contact, contacts: src.contacts, count: src.count, tasks: src.tasks };
+    // Carry the full parsed record model (orders, account, items, proofs,
+    // activities, etc.) into the isolated realm. `serializable` strips the
+    // content-side task/edit methods; buildTraceBody installs only the
+    // approved write controls again inside the sandbox.
+    const pageData = serializable(src) || {};
     const user = { emails: u.emails || {}, tasks: u.tasks || {}, calls: u.calls || {} };
     const record = scope && scope.actions && scope.actions.__trace;
     const recordEval = scope && scope.page && scope.page.__eval;

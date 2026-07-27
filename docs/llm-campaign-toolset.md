@@ -52,9 +52,20 @@ unless nested audience work is intentional.
 page.contact      // current hydrated CRM contact
 page.contacts     // selected audience
 page.count        // selected record count
+page.account      // current account fields
+page.orders       // order history: number, summary, date, revenue, status
+page.items        // aggregate ordered items
+page.relatedContacts // contacts listed on an account page
 page.tasks.open   // current record's open tasks
 page.tasks.done   // current record's completed tasks
 ```
+
+`page` retains the parsed schema for the hydrated record. Account campaigns can
+therefore group `page.orders`, inspect `page.account`, and complete the
+account-wide `page.tasks.open` rows. CRM task writes are contact-indexed; on an
+account audience row the engine uses the account schema's first related contact
+as the writer contact while retaining the account id and account-wide read
+model.
 
 Editable contact fields:
 
@@ -211,3 +222,20 @@ This is the safest full helper check because it performs no email send:
 
 Run it first as a dry run, select one disposable test contact, inspect the
 preview, and only then switch off Dry run.
+
+## Prior-year anniversary account campaign
+
+The paste-ready example at
+[`docs/examples/prior-year-anniversary-campaign.js`](examples/prior-year-anniversary-campaign.js)
+runs against account records. It groups orders by source year + month, averages
+the day within each group, completes existing open tasks whose subject contains
+`Prior Year`, and creates a fresh three-task future cycle:
+
+1. `Prior Year #1` — three weeks before the anniversary.
+2. `Prior Year #2` — two weeks before the anniversary.
+3. `Prior Year #3` — the Monday before the anniversary.
+
+Every subject retains the source year in brackets, and every description lists
+the source orders used to derive the averaged date. If the first step in this
+year's sequence has passed, the whole sequence rolls to next year so the three
+tasks remain chronological.

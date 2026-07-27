@@ -52,11 +52,15 @@ const STATIC = {
   page: {
     title: 'page.*',
     kind: 'data',
-    summary: 'The read-only audience model for this run. page.contact is the one being simulated; page.contacts is the whole selection.',
+    summary: 'The hydrated CRM record for this run. Parsed account/order data is read-only; page.contact and page.tasks expose the approved write controls.',
     rows: [
       ['page.contact', 'the current contact (object)'],
       ['page.contacts', 'the whole selected audience (array)'],
       ['page.count', 'how many contacts are selected'],
+      ['page.account', 'the current account fields'],
+      ['page.orders', 'the record’s order history (array)'],
+      ['page.items', 'aggregate ordered items (array)'],
+      ['page.relatedContacts', 'contacts listed on an account page'],
       ['contact.contactName', 'display name (also .name)'],
       ['contact.email', 'email address (may be empty)'],
       ['contact.account', 'company / account name'],
@@ -68,6 +72,7 @@ const STATIC = {
     ],
     examples: [
       'const c = page.contact;\nif (c.email) await actions.sendEmail(user.email("Win-back"));',
+      'const orderDates = page.orders.map((order) => order.date);',
       'page.contact.jobTitle = "VP Sales";   // grouped, one write',
       'if (page.tasks.open.length) page.tasks.open[0].complete();',
     ],

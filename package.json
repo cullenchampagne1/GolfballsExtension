@@ -434,6 +434,10 @@
       "file": "tests/integration/campaign-code-flow.test.mjs"
     },
     {
+      "name": "flow \u00b7 account audience page model",
+      "file": "tests/unit/pageEngineAccount.test.mjs"
+    },
+    {
       "name": "flow \u00b7 campaign code import validation",
       "file": "tests/unit/campaignImport.test.mjs"
     },

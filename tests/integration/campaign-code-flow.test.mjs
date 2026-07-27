@@ -4,14 +4,23 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
-import { hydrateCampaignContact } from '../../src/lib/campaign/codeContext.js';
+import {
+  campaignPageFromContext,
+  hydrateCampaignContact,
+  resolveCampaignRecordIds,
+} from '../../src/lib/campaign/codeContext.js';
 import { runCodeCampaign } from '../../src/lib/campaign/codeRunner.js';
 import { makeExecutor } from '../../src/lib/codeEngine/executor.js';
 import { makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+const PRIOR_YEAR_CAMPAIGN = readFileSync(
+  new URL('../../docs/examples/prior-year-anniversary-campaign.js', import.meta.url),
+  'utf8',
+);
 async function fakeSandbox(body, ctx, vars = {}, _doc) {
   const fn = new AsyncFunction('ctx', 'vars', 'h', `"use strict";\n${body}`);
   return fn(ctx || {}, vars || {}, {});
@@ -49,6 +58,47 @@ function contextFor(contact) {
 }
 
 describe('campaign code flow', () => {
+  it('preserves hydrated account/order data and resolves an account writer contact', async () => {
+    const context = {
+      contact: {
+        accountId: '902',
+        contactName: 'Northwind Golf',
+        contactUrl: 'https://crm.test/Default.aspx?Page=271&AccountID=902',
+      },
+      contactId: '771',
+      accountId: '902',
+      data: {
+        ids: { contact: '771', account: '902' },
+        contact: { firstName: 'Avery', lastName: 'Buyer' },
+        account: { name: 'Northwind Golf', state: 'IL' },
+        orders: [
+          { number: '1001', summary: 'Logo towels', date: '2024-08-04T00:00:00.000Z' },
+          { number: '1002', summary: 'Logo hats', date: '2024-12-02T00:00:00.000Z' },
+        ],
+        items: [{ name: 'Venture Towel', orderCount: 1 }],
+        contacts: [{ firstName: 'Avery', lastName: 'Buyer', detailUrl: 'https://crm.test/?customerID=771' }],
+        tasks: { open: [{ id: '9', subject: 'Prior Year #1 [2023]' }], done: [] },
+      },
+    };
+
+    const page = campaignPageFromContext(context, [context.contact]);
+    assert.equal(page.account.name, 'Northwind Golf');
+    assert.equal(page.orders.length, 2);
+    assert.equal(page.items[0].name, 'Venture Towel');
+    assert.equal(page.relatedContacts[0].firstName, 'Avery');
+    assert.equal(page.contact.contactId, '771');
+    assert.equal(page.contacts.length, 1);
+    assert.equal(page.tasks.open[0].id, '9');
+
+    assert.deepEqual(
+      resolveCampaignRecordIds(
+        { accountId: '902', contactUrl: 'https://crm.test/Default.aspx?Page=271&AccountID=902' },
+        context.data,
+      ),
+      { contactId: '771', accountId: '902' },
+    );
+  });
+
   it('hydrates and executes every non-email write against each ordered record', async () => {
     const audience = [
       { contactId: '1', contactName: 'One', contactUrl: 'https://crm.test/?customerID=1', value: 10, _key: '1' },
@@ -145,6 +195,62 @@ describe('campaign code flow', () => {
     assert.equal(output.effects, 10);
     assert.deepEqual(output.results.map((row) => row.result), ['2', '1']);
     assert.ok(output.results.every((row) => row.status === 'sent'));
+  });
+
+  it('builds a fresh averaged prior-year timeline for an account', async () => {
+    const page = {
+      contact: { contactId: '771', contactName: 'Avery Buyer' },
+      account: { name: 'Northwind Golf' },
+      orders: [
+        { number: '1001', summary: 'Blue logo towels', date: '2024-08-04' },
+        { number: '1002', summary: 'White logo towels', date: '2024-08-06' },
+        { number: '1003', summary: 'Embroidered hats', date: '2025-12-12' },
+      ],
+      tasks: {
+        open: [
+          { id: 'old-1', subject: 'Prior Year #1 [2023]' },
+          { id: 'keep-1', subject: 'Normal follow up' },
+        ],
+        done: [],
+      },
+    };
+    const writes = [];
+    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: {
+        async run(name, input) {
+          writes.push([name, input]);
+          return { ok: true, taskId: `task-${writes.length}` };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.trace.length, 7);
+    assert.deepEqual(writes.map(([name]) => name), [
+      'completeTask',
+      'createTask', 'createTask', 'createTask',
+      'createTask', 'createTask', 'createTask',
+    ]);
+    assert.equal(writes[0][1].id, 'old-1');
+    const created = writes.slice(1).map(([, input]) => input);
+    assert.deepEqual(
+      created.map((task) => task.subject),
+      [
+        'Prior Year #1 [2024] · August 5',
+        'Prior Year #2 [2024] · August 5',
+        'Prior Year #3 [2024] · August 5',
+        'Prior Year #1 [2025] · December 12',
+        'Prior Year #2 [2025] · December 12',
+        'Prior Year #3 [2025] · December 12',
+      ],
+    );
+    assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut > 0));
+    assert.match(created[0].body, /Blue logo towels/);
+    assert.match(created[0].body, /White logo towels/);
+    assert.match(created[3].body, /Embroidered hats/);
+    assert.match(result.result, /created 6 fresh task\(s\) across 2 anniversary date\(s\)/);
   });
 
   it('honors suppression and the run-wide action cap', async () => {

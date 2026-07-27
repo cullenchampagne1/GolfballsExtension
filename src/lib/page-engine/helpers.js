@@ -327,6 +327,7 @@ export function accountContactRows(doc) {
  *      phone       → cell 2 text
  *      contactType → cell 3 text
  *      partnerCampaign → cell 4 text
+ *      contactId   → customerID from cell 0's Page=240 link
  *      detailUrl   → cell 0 first anchor's href (Page=240 link) */
 export function firstAccountContactField(doc, field) {
   const rows = accountContactRows(doc);
@@ -354,9 +355,14 @@ export function firstAccountContactField(doc, field) {
     case 'phone':           return cellText(2) || null;
     case 'contactType':     return cellText(3) || null;
     case 'partnerCampaign': return cellText(4) || null;
+    case 'contactId':
     case 'detailUrl': {
       const a = cells[0]?.querySelector?.('a[href]');
-      return a ? (a.href || a.getAttribute('href')) : null;
+      if (!a) return null;
+      const href = a.href || a.getAttribute('href') || '';
+      if (field === 'detailUrl') return href || null;
+      const match = href.match(/[?&](?:customerID|customerId|contactID|contactId)=(\d+)/i);
+      return match ? match[1] : null;
     }
     default:                return null;
   }

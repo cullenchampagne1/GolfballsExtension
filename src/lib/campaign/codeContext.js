@@ -12,6 +12,34 @@ function text(value) {
   return value == null ? '' : String(value);
 }
 
+function idFromUrl(url, names) {
+  const m = String(url || '').match(new RegExp(`[?&](?:${names})=(\\d+)`, 'i'));
+  return m ? m[1] : '';
+}
+
+/** Resolve the concrete CRM ids used by campaign writers.
+ *
+ * Account audience rows intentionally have no contact id of their own. The
+ * unified account schema supplies `ids.contact` from the first related
+ * contact so contact-indexed CRM writes (tasks/notes) can still belong to the
+ * account.
+ */
+export function resolveCampaignRecordIds(contact = {}, data = {}) {
+  return {
+    contactId: text(
+      contact.crmContactId
+      || contact.contactId
+      || data?.ids?.contact
+      || idFromUrl(contact.contactUrl, 'customerID|customerId|id|contactId'),
+    ).trim(),
+    accountId: text(
+      data?.ids?.account
+      || contact.accountId
+      || idFromUrl(contact.contactUrl, 'accountID|accountId'),
+    ).trim(),
+  };
+}
+
 /** Build the serializable page.* value consumed by the code sandbox. */
 export function campaignPageFromContext(context, audience = []) {
   const ctx = context || {};
@@ -21,8 +49,8 @@ export function campaignPageFromContext(context, audience = []) {
   const contact = {
     ...extracted,
     ...source,
-    contactId: text(ctx.contactId || source.contactId || source.crmContactId || extracted.id),
-    accountId: text(ctx.accountId || source.accountId || extracted.accountId),
+    contactId: text(ctx.contactId || source.contactId || source.crmContactId || data.ids?.contact || extracted.id),
+    accountId: text(ctx.accountId || source.accountId || data.ids?.account || extracted.accountId),
     contactName: text(ctx.contactName || source.contactName || source.name),
     firstName: text(ctx.firstName || source.firstName || extracted.firstName),
     lastName: text(ctx.lastName || source.lastName || extracted.lastName),
@@ -37,10 +65,24 @@ export function campaignPageFromContext(context, audience = []) {
     return sourceKey && rowKey === sourceKey ? { ...row, ...contact } : row;
   });
 
+  // Preserve the entire parsed schema model instead of maintaining a second,
+  // lossy campaign-specific field list. `contact`, `contacts`, and `tasks`
+  // have campaign control semantics, so they are deliberately overlaid below;
+  // an account page's own contacts table remains available as
+  // `page.relatedContacts`.
+  const {
+    contact: _recordContact,
+    contacts: relatedContacts = [],
+    tasks: _recordTasks,
+    ...record
+  } = data;
+
   return {
+    ...record,
     contact,
     contacts,
     count: contacts.length,
+    relatedContacts: Array.isArray(relatedContacts) ? relatedContacts : [],
     tasks: data.tasks || { open: [], done: [] },
   };
 }

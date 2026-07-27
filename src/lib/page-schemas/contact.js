@@ -60,7 +60,7 @@ const FIELDS = {
              surface the FIRST related contact's ID from the table
              link's Page=240 query string so single-contact templates
              still resolve a meaningful customerID on account pages. */
-          account: { fn: 'firstAccountContactField', args: ['detailUrl'] },
+          account: { fn: 'firstAccountContactField', args: ['contactId'] },
         },
         validate: { required: true, pattern: /^\d+$/, message: 'expected numeric contact ID' },
       },

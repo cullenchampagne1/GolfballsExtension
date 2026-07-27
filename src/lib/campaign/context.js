@@ -22,6 +22,7 @@
 
 import { runEngine, resolvePath, evaluateCode } from '../page-engine/index.js';
 import { SIGNAL_BY_ID } from './fields.js';
+import { resolveCampaignRecordIds } from './codeContext.js';
 
 function parseDoc(html) {
   try { return new DOMParser().parseFromString(String(html || ''), 'text/html'); }
@@ -33,11 +34,6 @@ function daysSince(dateVal) {
   const d = new Date(dateVal);
   if (Number.isNaN(d.getTime())) return null;
   return Math.floor((Date.now() - d.getTime()) / 86400000);
-}
-
-function contactIdFromUrl(url) {
-  const m = String(url || '').match(/[?&](?:customerID|customerId|id|contactId)=(\d+)/i);
-  return m ? m[1] : '';
 }
 
 /* Derive campaign signals from the parsed page + page-engine data.
@@ -118,8 +114,8 @@ export async function buildContactContext(contact, deps = {}) {
   const bounceCode = (stats.lastBounceCode || resolvePath(doc, 'stats.lastBounceCode') || '').toString().trim();
   const mailerRemoved = !!parseInt(stats.mailerRemoved ?? resolvePath(doc, 'stats.mailerRemoved'), 10);
 
-  const contactId = contact.crmContactId || contact.contactId || contactIdFromUrl(contact.contactUrl)
-    || resolvePath(doc, 'contact.id') || '';
+  const recordIds = resolveCampaignRecordIds(contact, data);
+  const contactId = recordIds.contactId;
   const phone = (resolvePath(doc, 'contact.phone') || '').toString().replace(/\D/g, '');
   const first = (contact.imported ? contact.firstName : resolvePath(doc, 'contact.firstName'))
     || resolvePath(doc, 'contact.firstName') || contact.firstName || '';
@@ -128,7 +124,7 @@ export async function buildContactContext(contact, deps = {}) {
   const email = ((contact.imported ? contact.email : resolvePath(doc, 'contact.email'))
     || resolvePath(doc, 'contact.email') || contact.email || '').toString();
   const contactName = `${first} ${last}`.trim() || contact.contactName || contact.name || '';
-  const accountId = resolvePath(doc, 'account.id') || contact.accountId || '';
+  const accountId = recordIds.accountId;
 
   // "Do not contact" flag — set when the phrase appears in the name or email
   // (case-insensitive, flexible whitespace). Reps stash it in those fields.

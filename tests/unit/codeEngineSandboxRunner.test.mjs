@@ -34,6 +34,28 @@ describe('sandboxRunner · body shape', () => {
 });
 
 describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
+  it('carries hydrated account and order arrays into the isolated runner', async () => {
+    const page = {
+      account: { name: 'Northwind Golf' },
+      orders: [
+        { number: '1001', summary: 'Towels', date: '2024-08-04T00:00:00.000Z' },
+        { number: '1002', summary: 'Hats', date: '2024-08-06T00:00:00.000Z' },
+      ],
+      tasks: { open: [], done: [] },
+    };
+    const source = `
+      const avg = Math.round(page.orders.reduce((sum, order) => sum + new Date(order.date).getUTCDate(), 0) / page.orders.length);
+      await actions.createTask({ subject: page.account.name + " · day " + avg });
+    `;
+    const viaSandbox = await simulateProgram(source, page, {
+      run: makeSandboxRunner({ exec: fakeExec }),
+    });
+
+    assert.equal(viaSandbox.ok, true);
+    assert.equal(viaSandbox.trace.length, 1);
+    assert.equal(viaSandbox.trace[0].summary, 'Create task “Northwind Golf · day 5”');
+  });
+
   it('produces the same validated trace as the Node runner', async () => {
     const source = `
       for (const c of page.contacts) {
