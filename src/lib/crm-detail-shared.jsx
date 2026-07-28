@@ -201,7 +201,15 @@ export async function crmUpdateAccount(edits = {}) {
     return (el.value != null ? el.value : (el.textContent || '')).toString();
   };
   const payload = buildAccountPayload(edits, readEl);
-  if (!payload.AccountID) throw new Error('No account id on this page');
+  /* Safety net: this is a FULL-replacement write sourced from the live
+     form. If the native account form isn't present/loaded, the fields
+     read empty and we'd blank the account. A real account always has an
+     AccountID and a Name, so their absence means "form not there" — abort
+     rather than post an empty payload. (The server's own required-field
+     validation is only a partial backstop; not every field is required.) */
+  if (!payload.AccountID || !payload.Name) {
+    throw new Error('Account form not loaded — reload the page and try again');
+  }
 
   const base = crmOrigin();
   const resp = await fetch(accountUpdateUrl(base, payload), { credentials: 'include' });
