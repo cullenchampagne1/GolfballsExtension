@@ -1049,6 +1049,21 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         >Query Builder</Btn>
         <Btn
           size="sm"
+          variant="ghost"
+          icon={<I.ext size={11} />}
+          title="Open the full CRM Search page (carries this query)"
+          onClick={() => {
+            try {
+              const u = new URL('https://api.golfballs.com/golfballs/adminnew/Default.aspx');
+              u.searchParams.set('Page', '360');
+              if (query && query.trim()) u.searchParams.set('q', query.trim());
+              if (typeFilter && typeFilter !== 'all') u.searchParams.set('t', typeFilter);
+              window.location.assign(u.href);
+            } catch (e) {}
+          }}
+        >Full page</Btn>
+        <Btn
+          size="sm"
           variant="secondary"
           icon={importing ? <Spinner /> : <I.upload size={11} />}
           disabled={importing}

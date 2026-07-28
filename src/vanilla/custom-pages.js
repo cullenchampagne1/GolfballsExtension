@@ -79,6 +79,11 @@
       if (!e) return false;
       return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.OPPORTUNITY : 'opportunity');
     },
+    search: function (doc) {
+      var e = engine();
+      if (!e) return false;
+      return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.SEARCH : 'search');
+    },
   };
 
   // ── enabled-set helpers ──────────────────────────────────────

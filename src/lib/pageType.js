@@ -27,6 +27,9 @@ export function detectPageType(doc = (typeof document !== 'undefined' ? document
   if (/[?&]Page=271\b/i.test(url)) return PAGE_TYPE.ACCOUNT;
   // Opportunity pages also render a contact id, so URL detection must win.
   if (/[?&]Page=280\b/i.test(url)) return PAGE_TYPE.OPPORTUNITY;
+  // CRM Search (Page 360). The native search mutates the URL with its own
+  // params, so match Page=360 regardless of any trailing query state.
+  if (/[?&]Page=360\b/i.test(url)) return PAGE_TYPE.SEARCH;
   if (doc && typeof doc.getElementById === 'function' && doc.getElementById('tbContactId')) return PAGE_TYPE.CONTACT;
   if (/[?&]accountID=\d+/i.test(url)) return PAGE_TYPE.ACCOUNT;
   if (/[?&]customerID=\d+/i.test(url)) return PAGE_TYPE.CONTACT;

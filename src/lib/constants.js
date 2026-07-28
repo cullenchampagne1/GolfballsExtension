@@ -14,6 +14,7 @@ export const PAGE_TYPE = Object.freeze({
   ACCOUNT:     'account',
   OPPORTUNITY: 'opportunity',
   ORDER_INDEX: 'order-index',
+  SEARCH:      'search',
   OTHER:       'other',
 });
 
