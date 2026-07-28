@@ -125,11 +125,40 @@
     } catch (e) {}
   }
 
+  /* The CRM renders tasks / opportunities / activities as jQuery
+     DataTables that paginate at 10 rows/page — so only the current
+     page's <tr> exist in the DOM, and the schema (which scrapes rendered
+     rows) never sees the rest. All rows are already loaded client-side,
+     so switching each table to "show all" (page length -1) materializes
+     every row in the DOM with no server round-trip. The host page sits
+     hidden UNDER our takeover, so this is invisible to the user.
+
+     Guarded: we only .draw() a table whose length isn't already -1, so
+     re-running this on each extract is a no-op once expanded (and the one
+     redraw it does trigger just converges — the next extract sees -1). */
+  var HOST_DATATABLES = ['#TableTasks', '#TableCompletedTasks', '#TableOpportunities', '#ActivityTable'];
+  function expandHostTables() {
+    try {
+      var jq = window.jQuery;
+      if (!jq || !jq.fn || !jq.fn.dataTable) return;
+      for (var i = 0; i < HOST_DATATABLES.length; i++) {
+        var sel = HOST_DATATABLES[i];
+        try {
+          if (!jq.fn.dataTable.isDataTable(sel)) continue;
+          var dt = jq(sel).DataTable();
+          if (dt.page.len() !== -1) dt.page.len(-1).draw(false);
+        } catch (inner) { /* one bad table shouldn't stop the rest */ }
+      }
+    } catch (e) {}
+  }
+
   // ── live data store (schema engine + debounced host observer) ──
   function extract() {
     var e = engine();
     if (!e || typeof e.runEngine !== 'function') return null;
     try {
+      // Materialize every paginated row before scraping (see above).
+      expandHostTables();
       // clearCache(doc) is a no-op without the doc arg — runEngine caches
       // per-document, and the host DOM mutates as DataTables load.
       if (typeof e.clearCache === 'function') e.clearCache(document);

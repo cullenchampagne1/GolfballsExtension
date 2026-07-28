@@ -16,6 +16,8 @@ import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
+import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
+import { TASK_CATEGORY_OPTIONS } from './taskCategories.js';
 import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
 import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
 import { submitCallLog } from './submitCallLog.js';
@@ -93,11 +95,36 @@ export function gbToast(msg, tone = 'info') {
   try { const t = window.__gbToast; (t && (t[tone] || t.info) || function () {})(msg); } catch (e) {}
 }
 
+/* Read a host <select>'s options as [{value,label}] — lets our modals reuse
+   the CRM's own live employee/assignment lists instead of a hardcoded copy
+   that would drift as staff change. The host page still lives (hidden) under
+   the takeover, so its selects are present in the document. */
+export function readHostSelectOptions(id, fallback) {
+  try {
+    const el = document.getElementById(id);
+    if (el && el.options && el.options.length) {
+      return Array.prototype.map.call(el.options, (o) => ({ value: String(o.value), label: (o.text || '').trim() }));
+    }
+  } catch (e) {}
+  return fallback || [];
+}
+
 async function crmSetDnc(customerID, add) {
   const base = crmOrigin();
   const action = add ? 'AddToDoNotCallList' : 'RemoveFromDoNotCallList';
   const r = await fetch(`${base}/golfballs/crm/Admin/Contact/${action}.ajax?${customerID}`, { credentials: 'include' });
   if (!r.ok) throw new Error('dnc failed');
+}
+
+/* Fetch + normalize a contact, parsing the CustomData JSON blob (which holds
+   LinkedInURL / Archived / Context alongside server-managed dates). Returns
+   the raw record plus a parsed `customData` object for the edit modal. */
+export async function crmGetContact(customerId) {
+  const res = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Contact/Get.ajax?${customerId}`, { credentials: 'include' });
+  const cur = JSON.parse(await res.text());
+  let customData = {};
+  try { customData = cur.CustomData ? (typeof cur.CustomData === 'string' ? JSON.parse(cur.CustomData) : cur.CustomData) : {}; } catch (e) { customData = {}; }
+  return { ...cur, customData };
 }
 
 export async function crmUpdateContact(customerId, edits) {
@@ -106,7 +133,6 @@ export async function crmUpdateContact(customerId, edits) {
   const cur = JSON.parse(await res.text());
   const has = (k) => Object.prototype.hasOwnProperty.call(edits, k);
   const pick = (k, src) => (has(k) ? edits[k] : (src == null ? '' : src));
-  const cd = cur.CustomData;
   const payload = {
     customerId: String(customerId),
     firstName: pick('firstName', cur.firstName),
@@ -119,11 +145,12 @@ export async function crmUpdateContact(customerId, edits) {
     zipCode: pick('zipCode', cur.zipCode),
     UserType: String(has('UserType') ? edits.UserType : (cur.userType == null ? 1 : cur.userType)),
     userCountry: pick('userCountry', cur.userCountry) || 'US',
-    CustomData: cd == null ? '' : (typeof cd === 'string' ? cd : JSON.stringify(cd)),
+    CustomData: mergeContactCustomData(cur.CustomData, edits),
   };
   const up = await fetch(`${base}/golfballs/crm/Admin/Contact/Update.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
   if (!up.ok) throw new Error('update failed');
 }
+
 
 async function crmGetTask(taskId) {
   const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Task/Get.ajax?${taskId}`, { credentials: 'include' });
@@ -138,9 +165,11 @@ async function crmUpdateTaskFull(taskId, e) {
     TaskId: taskId,
     Subject: encodeURIComponent(has('Subject') ? e.Subject : (obj.Subject || '')),
     Description: encodeURIComponent(has('Description') ? e.Description : (obj.Description || '')),
-    LiveDate: obj.LiveDate,
+    LiveDate: has('LiveDate') ? e.LiveDate : obj.LiveDate,
     DueDate: has('DueDate') ? e.DueDate : obj.DueDate,
-    taskCategoryID: obj.taskCategoryID,
+    // taskCategoryID is the CRM enum wire value (see taskCategories.js) —
+    // send the edited id when the modal changed it, else preserve.
+    taskCategoryID: has('Category') ? Number(e.Category) : obj.taskCategoryID,
     taskStatusID: obj.taskStatusID,
     contactID: obj.contactID,
     employeeID: obj.employeeID,
@@ -547,16 +576,31 @@ export function ModalShell({ title, icon, subtitle, children, footer, width = 46
   );
 }
 
+/* Task-category picker options for the modal (skip the '0' / "Select"
+   placeholder — a real task always has a category, and the payload wants a
+   concrete id). */
+export const TASK_CATEGORY_SELECT = TASK_CATEGORY_OPTIONS.filter((o) => o.id !== '0').map((o) => ({ value: o.id, label: o.label }));
+
 export function EditTaskModal({ taskId }) {
   const { closeModal } = useModal();
   const patch = usePatch();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [t, setT] = useState({ Subject: '', Description: '', DueDate: '', Priority: '2' });
+  const [t, setT] = useState({ Subject: '', Description: '', DueDate: '', LiveDate: '', Category: '1', Priority: '2' });
   useEffect(() => {
     let live = true;
     crmGetTask(taskId)
-      .then((o) => { if (live) { setT({ Subject: o.Subject || '', Description: o.Description || '', DueDate: o.DueDate || '', Priority: String(o.Priority || 2) }); setLoading(false); } })
+      .then((o) => { if (live) {
+        setT({
+          Subject: o.Subject || '',
+          Description: o.Description || '',
+          DueDate: o.DueDate || '',
+          LiveDate: o.LiveDate || '',
+          Category: String(o.taskCategoryID || o.TaskCategoryID || '1'),
+          Priority: String(o.Priority || 2),
+        });
+        setLoading(false);
+      } })
       .catch(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [taskId]);
@@ -564,7 +608,8 @@ export function EditTaskModal({ taskId }) {
     setBusy(true);
     try {
       await crmUpdateTaskFull(taskId, t);
-      patch((D) => ({ ...D, openTasks: (D.openTasks || []).map((x) => x.id === taskId ? { ...x, subject: t.Subject, dueDate: t.DueDate, priority: priLabel(t.Priority) } : x) }));
+      const catLabel = (TASK_CATEGORY_SELECT.find((o) => o.value === String(t.Category)) || {}).label || '';
+      patch((D) => ({ ...D, openTasks: (D.openTasks || []).map((x) => x.id === taskId ? { ...x, subject: t.Subject, dueDate: t.DueDate, liveDate: t.LiveDate, category: catLabel, priority: priLabel(t.Priority) } : x) }));
       closeModal();
     } catch (e) { gbToast('Could not update task', 'error'); setBusy(false); }
   };
@@ -578,9 +623,11 @@ export function EditTaskModal({ taskId }) {
         : <>
           <FormField label="Subject"><TInput value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} /></FormField>
           <FormField label="Description"><TArea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={4} /></FormField>
+          <FormField label="Category"><MiniSelect value={t.Category} options={TASK_CATEGORY_SELECT} onChange={(v) => setT({ ...t, Category: v })} /></FormField>
           <div style={{ display: 'flex', gap: 12 }}>
+            <FormField label="Live date" style={{ flex: 1 }}><DatePicker includeTime={false} value={toDateInput(t.LiveDate)} onChange={(v) => setT({ ...t, LiveDate: v ? fromDateInput(String(v).slice(0,10)) : "" })} /></FormField>
             <FormField label="Due date" style={{ flex: 1 }}><DatePicker includeTime={false} value={toDateInput(t.DueDate)} onChange={(v) => setT({ ...t, DueDate: v ? fromDateInput(String(v).slice(0,10)) : "" })} /></FormField>
-            <FormField label="Priority" style={{ width: 130 }}>
+            <FormField label="Priority" style={{ width: 120 }}>
               <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
             </FormField>
           </div>
@@ -597,6 +644,9 @@ export function OpportunityModal({ opportunityId }) {
   const [loading, setLoading] = useState(editing);
   const [busy, setBusy] = useState(false);
   const [o, setO] = useState({ opportunityId: opportunityId || '', Subject: '', Description: '', EstimatedValue: '', EstimatedClosedDate: '', OpportunityStageId: '1', empAssignedId: '0' });
+  // Assigned-to list comes straight from the CRM's own OpportunityModal
+  // employee <select>, so it never drifts as staff change.
+  const empOpts = useMemo(() => readHostSelectOptions('empAssignedId', [{ value: '0', label: 'Account Owner' }]), []);
   useEffect(() => {
     if (!editing) return;
     let live = true;
@@ -644,7 +694,10 @@ export function OpportunityModal({ opportunityId }) {
             <FormField label="Est. value" style={{ flex: 1 }}><TInput value={o.EstimatedValue} onChange={(e) => setO({ ...o, EstimatedValue: e.target.value })} placeholder="0" /></FormField>
             <FormField label="Est. close" style={{ flex: 1 }}><DatePicker includeTime={false} value={toDateInputAny(o.EstimatedClosedDate)} onChange={(v) => setO({ ...o, EstimatedClosedDate: v ? toOppDate(String(v).slice(0,10)) : "" })} /></FormField>
           </div>
-          <FormField label="Stage"><MiniSelect value={o.OpportunityStageId} options={OPP_STAGES} onChange={(v) => setO({ ...o, OpportunityStageId: v })} /></FormField>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <FormField label="Stage" style={{ flex: 1 }}><MiniSelect value={o.OpportunityStageId} options={OPP_STAGES} onChange={(v) => setO({ ...o, OpportunityStageId: v })} /></FormField>
+            <FormField label="Assigned to" style={{ flex: 1 }}><MiniSelect value={o.empAssignedId} options={empOpts} onChange={(v) => setO({ ...o, empAssignedId: v })} /></FormField>
+          </div>
         </>}
     </ModalShell>
   );
@@ -678,36 +731,75 @@ export function ContactEditModal() {
   const D = useD();
   const c = D.contact;
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  // Seed from the schema-extracted contact so the form paints instantly,
+  // then reconcile with the authoritative Contact/Get (adds middle initial,
+  // company, user type, and the CustomData fields the schema doesn't carry).
   const [f, setF] = useState({
-    firstName: c.firstName || '', lastName: c.lastName || '', jobTitle: c.jobTitle || '',
-    email: c.email || '', phoneNumber: c.phone || '', zipCode: c.zipCode || '', userCountry: c.country || '',
+    firstName: c.firstName || '', middleInit: '', lastName: c.lastName || '', companyName: '',
+    jobTitle: c.jobTitle || '', email: c.email || '', phoneNumber: c.phone || '',
+    zipCode: c.zipCode || '', userCountry: c.country || 'US', UserType: '1',
+    LinkedInURL: '', Archived: false, Context: '',
   });
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  useEffect(() => {
+    let live = true;
+    crmGetContact(D.ids.contact)
+      .then((g) => { if (!live) return;
+        const cd = g.customData || {};
+        setF({
+          firstName: g.firstName || '', middleInit: g.middleInit || '', lastName: g.lastName || '',
+          companyName: g.companyName || '', jobTitle: g.jobTitle || '', email: g.email || '',
+          phoneNumber: g.phoneNumber || '', zipCode: g.zipCode || '',
+          userCountry: g.userCountry || 'US', UserType: String(g.userType == null ? 1 : g.userType),
+          LinkedInURL: cd.LinkedInURL || '', Archived: !!cd.Archived, Context: cd.Context || '',
+        });
+        setLoading(false);
+      })
+      .catch(() => { if (live) setLoading(false); });   // keep the seeded values
+    return () => { live = false; };
+  }, [D.ids.contact]);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const save = async () => {
     if (busy) return;
     setBusy(true);
     try {
       await crmUpdateContact(D.ids.contact, f);
-      patch((Dd) => ({ ...Dd, contact: { ...Dd.contact, firstName: f.firstName, lastName: f.lastName, jobTitle: f.jobTitle, email: f.email, phone: f.phoneNumber, zipCode: f.zipCode, country: f.userCountry } }));
+      patch((Dd) => ({ ...Dd,
+        contact: { ...Dd.contact, firstName: f.firstName, lastName: f.lastName, jobTitle: f.jobTitle, email: f.email, phone: f.phoneNumber, zipCode: f.zipCode, country: f.userCountry, linkedInUrl: f.LinkedInURL, archived: f.Archived },
+        account: { ...Dd.account, name: f.companyName || Dd.account.name, contextNotes: f.Context, linkedInUrl: f.LinkedInURL },
+      }));
       closeModal();
     } catch (e) { gbToast('Could not save contact', 'error'); setBusy(false); }
   };
   return (
-    <ModalShell title="Edit Contact" icon={<I.user />} width={520} footer={<>
+    <ModalShell title="Edit Contact" icon={<I.user />} width={560} footer={<>
       <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
       <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Btn>
     </>}>
       <div style={{ display: 'flex', gap: 12 }}>
         <FormField label="First name" style={{ flex: 1 }}><TInput autoFocus value={f.firstName} onChange={set('firstName')} /></FormField>
+        <FormField label="MI" style={{ width: 64 }}><TInput value={f.middleInit} onChange={set('middleInit')} maxLength={4} /></FormField>
         <FormField label="Last name" style={{ flex: 1 }}><TInput value={f.lastName} onChange={set('lastName')} /></FormField>
       </div>
-      <FormField label="Job title"><TInput value={f.jobTitle} onChange={set('jobTitle')} /></FormField>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <FormField label="Company" style={{ flex: 1 }}><TInput value={f.companyName} onChange={set('companyName')} /></FormField>
+        <FormField label="Job title" style={{ flex: 1 }}><TInput value={f.jobTitle} onChange={set('jobTitle')} /></FormField>
+      </div>
       <FormField label="Email"><TInput value={f.email} onChange={set('email')} /></FormField>
       <div style={{ display: 'flex', gap: 12 }}>
         <FormField label="Phone" style={{ flex: 1 }}><TInput value={f.phoneNumber} onChange={set('phoneNumber')} /></FormField>
         <FormField label="Zip" style={{ width: 110 }}><TInput value={f.zipCode} onChange={set('zipCode')} /></FormField>
-        <FormField label="Country" style={{ width: 90 }}><TInput value={f.userCountry} onChange={set('userCountry')} /></FormField>
+        <FormField label="Country" style={{ width: 150 }}><MiniSelect value={f.userCountry} options={CONTACT_COUNTRY_OPTS} onChange={(v) => setF((p) => ({ ...p, userCountry: v }))} /></FormField>
       </div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <FormField label="User type" style={{ flex: 1 }}><MiniSelect value={f.UserType} options={CONTACT_USER_TYPE_OPTS} onChange={(v) => setF((p) => ({ ...p, UserType: v }))} /></FormField>
+        <FormField label="LinkedIn URL" style={{ flex: 1 }}><TInput value={f.LinkedInURL} onChange={set('LinkedInURL')} placeholder="https://linkedin.com/in/…" /></FormField>
+      </div>
+      <FormField label="Context"><TArea value={f.Context} onChange={set('Context')} rows={3} placeholder="Internal context notes…" /></FormField>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--gb-text-secondary)', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
+        <input type="checkbox" checked={f.Archived} onChange={(e) => setF((p) => ({ ...p, Archived: e.target.checked }))} />
+        Archived
+      </label>
     </ModalShell>
   );
 }

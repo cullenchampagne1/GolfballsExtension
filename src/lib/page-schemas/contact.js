@@ -597,9 +597,9 @@ const FIELDS = {
       open: {
         type: 'array',
         label: 'Open tasks',
-        extract: { keyedRows: { container: '#TableTasks', rowPrefix: 'taskrow_' }, max: 50 },
+        extract: { keyedRows: { container: '#TableTasks', rowPrefix: 'taskrow_' }, max: 300 },
         extractByPage: {
-          account: { fn: 'openTaskRows', max: 50 },
+          account: { fn: 'openTaskRows', max: 300 },
         },
         itemFields: {
           id: {
@@ -644,9 +644,9 @@ const FIELDS = {
       done: {
         type: 'array',
         label: 'Completed tasks',
-        extract: { keyedRows: { container: '#TableCompletedTasks', rowPrefix: 'taskrow_' }, max: 50 },
+        extract: { keyedRows: { container: '#TableCompletedTasks', rowPrefix: 'taskrow_' }, max: 300 },
         extractByPage: {
-          account: { fn: 'completedTaskRows', max: 50 },
+          account: { fn: 'completedTaskRows', max: 300 },
         },
         itemFields: {
           id: {
@@ -685,7 +685,7 @@ const FIELDS = {
   opportunities: {
     type: 'array',
     label: 'Opportunities',
-    extract: { sel: '#TableOpportunities tbody tr', max: 50 },
+    extract: { sel: '#TableOpportunities tbody tr', max: 300 },
     itemFields: {
       id: {
         type: 'string', label: 'Opportunity ID',
@@ -717,7 +717,7 @@ const FIELDS = {
   activities: {
     type: 'array',
     label: 'Activities',
-    extract: { sel: '#ActivityTable tbody tr', max: 100 },
+    extract: { sel: '#ActivityTable tbody tr', max: 300 },
     itemFields: {
       id: {
         type: 'string', label: 'Activity ID',
