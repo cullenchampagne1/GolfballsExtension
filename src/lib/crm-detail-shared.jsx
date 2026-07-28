@@ -1301,7 +1301,7 @@ export function OpenTaskRow({ t }) {
   );
 }
 
-export function Sidebar({ collapsed, setCollapsed, currentLabel }) {
+export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) {
   const D = useD();
   const [openIds, setOpenIds] = useState(['crm']);
   const toggle = (id) => setOpenIds((s) => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -1403,8 +1403,13 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel }) {
                 <div style={{ padding: '2px 0 6px 22px', display: 'flex', flexDirection: 'column' }}>
                   {g.children.map((c, i) => {
                     const obj = typeof c === 'string' ? { label: c } : c;
+                    // When highlighting an EXISTING child (currentPage, e.g. the
+                    // search page → "Search"), drop the "__CURRENT__" record
+                    // placeholder so we don't add a phantom nav item.
+                    if (obj.current && (currentPage || !currentLabel)) return null;
+                    const isCurrent = obj.current || (!!currentPage && obj.label === currentPage);
                     const label = obj.current ? currentLabel : obj.label;
-                    const page = (!obj.current && CRM_CHILD_PAGE[obj.label]) || null;
+                    const page = (!isCurrent && CRM_CHILD_PAGE[obj.label]) || null;
                     const href = page ? crmHref(page) : '#';
                     return (
                       <a key={i} href={href}
@@ -1412,17 +1417,17 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel }) {
                         style={{
                           display: 'block', position: 'relative',
                           padding: '5px 10px 5px 14px',
-                          fontSize: 11.5, color: obj.current ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-                          textDecoration: 'none', fontWeight: obj.current ? 700 : 500,
+                          fontSize: 11.5, color: isCurrent ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+                          textDecoration: 'none', fontWeight: isCurrent ? 700 : 500,
                           borderLeft: '1px solid var(--gb-border-subtle)',
-                          background: obj.current ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                          background: isCurrent ? 'var(--gb-brand-tint-soft)' : 'transparent',
                           borderRadius: '0 4px 4px 0',
                           transition: 'all var(--gb-anim)',
                         }}
-                        onMouseEnter={(e) => { if (!obj.current) e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
-                        onMouseLeave={(e) => { if (!obj.current) e.currentTarget.style.color = 'var(--gb-text-muted)'; }}
+                        onMouseEnter={(e) => { if (!isCurrent) e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+                        onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.color = 'var(--gb-text-muted)'; }}
                       >
-                        {obj.current && (
+                        {isCurrent && (
                           <span style={{
                             position: 'absolute', left: -1, top: 4, bottom: 4, width: 2,
                             background: 'var(--gb-brand-label)', borderRadius: 2,
@@ -1528,7 +1533,7 @@ export function BackChip({ href, label, title }) {
  *   <DetailPageFrame currentLabel="…" topBar={<TopBar>…</TopBar>}
  *     ready={D.ready} modalHost={modalHost}>{sections}</DetailPageFrame>
  */
-export function DetailPageFrame({ currentLabel, topBar, ready = true, modalHost, children }) {
+export function DetailPageFrame({ currentLabel, currentPage, topBar, ready = true, modalHost, children }) {
   const [sideCollapsed, setSideCollapsed] = useState(false);
   return (
     <>
@@ -1552,7 +1557,7 @@ export function DetailPageFrame({ currentLabel, topBar, ready = true, modalHost,
         display: 'flex', alignItems: 'stretch',
       }}>
         <style>{UI_CSS}</style>
-        <Sidebar currentLabel={currentLabel} collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
+        <Sidebar currentLabel={currentLabel} currentPage={currentPage} collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
         <div className="gb-scroll" style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
           {topBar}
           {!ready && <Spinner />}

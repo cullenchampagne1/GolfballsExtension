@@ -53,13 +53,13 @@ function writeUrlSearch(q, type, solrFq) {
 /* Segmented type switcher (All / Contacts / Accounts). */
 function TypeTabs({ value, onChange }) {
   return (
-    <div style={{ display: 'inline-flex', padding: 3, gap: 2, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', flexShrink: 0 }}>
+    <div style={{ display: 'inline-flex', padding: 3, gap: 2, height: 36, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', flexShrink: 0, boxSizing: 'border-box' }}>
       {TYPE_OPTS.map((o) => {
         const on = value === o.id;
         return (
           <button key={o.id} onClick={() => onChange(o.id)}
             style={{
-              height: 26, padding: '0 12px', border: 0, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer',
+              height: '100%', padding: '0 13px', border: 0, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer',
               fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: on ? 700 : 600,
               color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
               background: on ? 'var(--gb-surface-1)' : 'transparent',
@@ -145,10 +145,12 @@ function App({ store }) {
     }
   }, []);
 
-  // On mount: if the URL carried a term or filter, run it immediately.
+  // On mount: always run an initial search so the page opens on a populated
+  // list (match-all → most-recent records) like the native page, seeded with
+  // any term/filter the URL carried. Then focus the field.
   useEffect(() => {
-    if (url0.q || url0.fq) runSearch(url0.q, url0.type, url0.fq ? { solrFq: url0.fq } : null, 0);
-    else setTimeout(() => { try { inputRef.current && inputRef.current.focus(); } catch (e) {} }, 60);
+    runSearch(url0.q, url0.type, url0.fq ? { solrFq: url0.fq } : null, 0);
+    setTimeout(() => { try { inputRef.current && inputRef.current.focus(); } catch (e) {} }, 60);
   }, []);   // eslint-disable-line
 
   const submit = () => {
@@ -164,44 +166,36 @@ function App({ store }) {
     <DataCtx.Provider value={D}>
     <ModalCtx.Provider value={modalHost}>
       <DetailPageFrame
-        currentLabel="CRM Search"
+        currentPage="Search"
         ready
         modalHost={modalHost}
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
         {/* ── Search hero ─────────────────────────────────────── */}
         <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
-          <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)' }}><I.search size={17} /></span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.2 }}>Search the CRM</div>
-                <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Name, account, email or phone — or build an advanced filter.</div>
-              </div>
-            </div>
-
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              {/* Big search input */}
+              {/* Search input — height matched to the buttons (36) */}
               <div style={{
-                flex: 1, minWidth: 260, display: 'flex', alignItems: 'center', gap: 9, height: 42, padding: '0 12px',
+                flex: 1, minWidth: 260, display: 'flex', alignItems: 'center', gap: 9, height: 36, padding: '0 11px',
                 background: 'var(--gb-fill-inverse-medium)',
                 border: '1px solid ' + (focused ? 'var(--gb-border-focus)' : 'var(--gb-border-default)'),
                 borderRadius: 'var(--gb-r-md)',
                 boxShadow: focused ? '0 0 0 3px color-mix(in srgb, var(--gb-brand-label) 18%, transparent)' : 'none',
                 transition: 'box-shadow var(--gb-anim), border-color var(--gb-anim)',
               }}>
-                <I.search size={16} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
+                <I.search size={15} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
                 <input ref={inputRef} value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                   onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
                   placeholder="Search customers, accounts, emails…"
-                  style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 14 }} />
+                  style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 13 }} />
                 {query && <IconBtn size="xs" ghost icon={<I.close />} title="Clear" onClick={() => { setQuery(''); try { inputRef.current.focus(); } catch (e) {} }} />}
               </div>
               <TypeTabs value={type} onChange={onTypeChange} />
-              <Btn variant="secondary" icon={<I.filter />} onClick={() => setQbOpen(true)}>Query Builder</Btn>
-              <Btn variant="primary" icon={<I.search />} onClick={submit}>Search</Btn>
+              <Btn variant="secondary" size="lg" icon={<I.filter />} onClick={() => setQbOpen(true)}>Query Builder</Btn>
+              <Btn variant="primary" size="lg" icon={<I.search />} onClick={submit}>Search</Btn>
             </div>
 
             {/* Active QB filter chip */}
