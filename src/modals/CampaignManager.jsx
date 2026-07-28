@@ -28,7 +28,7 @@ import { readEmailConfig, sendEmail } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { submitCallLog } from '../lib/submitCallLog.js';
-import { completeTaskById } from '../lib/crmTasks.js';
+import { completeTaskById, updateTaskById } from '../lib/crmTasks.js';
 import { crmUpdateContact } from '../lib/contact-detail-shared.jsx';
 import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
 import { useDevSettings } from '../lib/devSettings.js';
@@ -340,6 +340,7 @@ function makeContactExecutor(context, runDeps, dispatch) {
     },
     submitQuickTask,
     submitCallLog,
+    updateTaskById,
     completeTaskById,
     updateContact: crmUpdateContact,
   });

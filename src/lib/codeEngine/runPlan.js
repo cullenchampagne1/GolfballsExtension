@@ -10,7 +10,7 @@
 import { contractGate } from './contracts.js';
 
 const GATE_RANK = { auto: 0, confirm: 1, hard: 2 };
-const EFFECT_CONTRACTS = ['sendEmail', 'createTask', 'logCall', 'addNote', 'completeTask', 'editContact'];
+const EFFECT_CONTRACTS = ['sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask', 'editContact'];
 
 /**
  * @param {Array<{contract:string, status:string}>} trace  simulateProgram trace
@@ -30,7 +30,7 @@ export function planRun(trace, audienceCount = 1) {
   }
   const outward = counts.sendEmail;
   const writes = counts.createTask + counts.logCall + counts.addNote
-    + counts.completeTask + counts.editContact;
+    + counts.updateTask + counts.completeTask + counts.editContact;
   const perContact = outward + writes;
   return {
     counts,
@@ -51,6 +51,7 @@ export function planSummary(plan) {
   const parts = [];
   if (c.sendEmail) parts.push(plural(c.sendEmail, 'email'));
   if (c.editContact) parts.push(plural(c.editContact, 'contact edit'));
+  if (c.updateTask) parts.push(plural(c.updateTask, 'task edit'));
   if (c.completeTask) parts.push(`${plural(c.completeTask, 'task')} completed`);
   if (c.createTask) parts.push(`${plural(c.createTask, 'task')} created`);
   if (c.logCall) parts.push(plural(c.logCall, 'call log'));

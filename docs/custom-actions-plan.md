@@ -23,8 +23,8 @@ front (which scopes what `page.*` exposes, exactly like campaigns).
 **Code engine** (`src/lib/codeEngine/*` + `src/ui/components/CodeAutomationPanel.jsx`, `BlocksView.jsx`, `CodeDocsSidebar.jsx`, `CodeVarEditor.jsx`):
 - `CodeAutomationPanel` is a **controlled display** — the parent owns code + sim state and feeds it `value/onChange`, `blocks/errors/blockCount` (from `translateProgram(source)`), `view/onView`, `onContext`, `bindings`, and the sim outputs `trace/runningId/done/result/error/simStatus`. It renders the Code⇆Blocks switch and cross-fades `CodeVarEditor`↔`BlocksView`.
 - `simulateProgram(source, page, { run, user, executor })` → `{ ok, trace, calls, error, result }`. Dry when `executor` is null; performs real writes when an executor is passed. Browser realm = `makeSandboxRunner({ exec: runInSandbox })` (opaque-origin iframe — works in the Manage window with **no CRM page present**).
-- `page` preserves the full schema extracted by `runEngine(document)` — including orders, items, activities, proofs, stats, account, ids, and future registered fields. Campaigns and live custom actions share one page-model shaper; only `contact`, `contacts`, and `tasks` receive execution-control overlays. Authoring uses a representative sample fixture per page type. `page.tasks.open[i].complete()`, `page.contact.field = v` (Proxy, approved fields only, grouped `editContact`).
-- Contracts (all **confirm**-gated today): `sendEmail`, `createTask`, `logCall`, `completeTask`, `editContact`. `APPROVED_CONTACT_FIELDS` allowlist. A custom action reuses the same `makeExecutor(deps)` and inherits these gates.
+- `page` preserves the full schema extracted by `runEngine(document)` — including orders, items, activities, proofs, stats, account, ids, and future registered fields. Campaigns and live custom actions share one page-model shaper; only `contact`, `contacts`, and `tasks` receive execution-control overlays. Authoring uses a representative sample fixture per page type. `page.tasks.open[i].complete()`, direct approved task-field assignment, and `page.contact.field = v` all use grouped, confirm-gated writes.
+- Contracts (all **confirm**-gated today): `sendEmail`, `createTask`, `logCall`, `completeTask`, `updateTask`, `editContact`. `APPROVED_CONTACT_FIELDS` and `APPROVED_TASK_FIELDS` are explicit allowlists. A custom action reuses the same `makeExecutor(deps)` and inherits these gates.
 - **No raw-DOM page context exists today.** Page types are fixed to order/contact/account/opportunity. A read-only DOM escape hatch (`h.dom/h.domAll/h.domText/h.doc`) exists in `page-engine/code-runtime.js` but is NOT on the campaign `page` surface — we'd wire a `page.dom` for the "custom" type.
 
 ---
@@ -114,6 +114,15 @@ all loaded task rows plus unique contacts, current filters, visibility, and
 selection state. The provider snapshot is resolved only after the action is
 clicked.
 
+Task List rows are available as both `page.entryPoint.data.tasks` and the
+convenience collection `page.tasks.items`. Assigning `subject`, `description`
+(`body` alias), `liveDate`, `dueDate`, `categoryId`, or `priority` directly on
+a row stages one grouped task update. Snake-case aliases are accepted. The
+same proxy is installed on campaign `page.tasks.open` / `done`, so code can
+move between custom actions and campaigns without changing its task logic.
+See `docs/examples/task-list-live-date-action.js` for a complete bulk date
+action.
+
 For bulk task creation, `actions.createTask` accepts optional `contactId`,
 `contactName`, and `accountId` routing fields. The remote-effect confirmation
 gate is unchanged; routing fields select the target context and are not written
@@ -130,7 +139,7 @@ into the CRM task template.
   1. Freshly extract `runEngine(document)` and shape it through the shared full-schema page model.
   2. Dry preview: `simulateProgram(rec.source, page, { run: makeSandboxRunner({exec: runInSandbox}), user })` → `planRun(trace)`.
   3. If it has effects → show a **confirm** (reuse the campaign `ConfirmRunModal` / a lightweight page-mounted confirm) summarizing e.g. "Will create 5 tasks."
-  4. On confirm → `simulateProgram(rec.source, page, { …, executor: makeExecutor(liveDeps) })` where `liveDeps` = the real writers (`emailSender.sendEmail`, `submitQuickTask`, `submitCallLog`, `completeTaskById`, `crmUpdateContact`) + `ctx` ids from the page — the exact wiring `makeContactExecutor` already does.
+  4. On confirm → `simulateProgram(rec.source, page, { …, executor: makeExecutor(liveDeps) })` where `liveDeps` = the real writers (`emailSender.sendEmail`, `submitQuickTask`, `submitCallLog`, `completeTaskById`, `updateTaskById`, `crmUpdateContact`) + `ctx` ids from the page — the exact wiring `makeContactExecutor` already does.
 - **Popup**: actions with `showInPopup` join the popup Tools list; the button launches via the existing `GB_RUN_SHELF_ACTION` bridge (already built), which runs the registered handler on the tab.
 
 The Settings **Custom Actions table** manages `enabled` / `pages` / `showInShelf` / `showInPopup` per action (the grid's `onToggleCell` writes `rec.pages` via `togglePage`).

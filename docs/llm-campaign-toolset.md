@@ -58,6 +58,7 @@ page.items        // aggregate ordered items
 page.relatedContacts // contacts listed on an account page
 page.tasks.open   // current record's open tasks
 page.tasks.done   // current record's completed tasks
+page.tasks.items  // Task List entry-point rows; otherwise open + done
 ```
 
 `page` retains the parsed schema for whichever record was selected. A contact
@@ -92,6 +93,28 @@ await page.tasks.open[0].complete();
 await page.tasks.completeLatest();
 await page.tasks.completeAll();
 ```
+
+Existing tasks are mutable in both campaigns and custom actions. Direct
+assignments are grouped into one confirm-gated CRM write per task:
+
+```js
+for (const task of page.tasks.items) {
+  task.liveDate = "2026-08-01";
+  task.priority = "high";
+}
+
+// Accepted aliases:
+task.live_date = "2026-08-01";
+task.due_date = "2026-08-08";
+task.body = "Updated task description";
+
+await task.commit(); // optional early flush
+```
+
+Approved fields are `subject`, `description`/`body`, `liveDate`/`live_date`,
+`dueDate`/`due_date`/`due`, `categoryId`/`category_id`, and `priority`.
+Task List custom actions receive every loaded row through `page.tasks.items`;
+campaigns receive the same mutable task objects through `open` and `done`.
 
 ## Saved templates
 
@@ -145,6 +168,11 @@ const created = await actions.createTask({
 });
 
 await actions.completeTask({ id: created.taskId });
+
+await actions.updateTask({
+  id: page.tasks.open[0].id,
+  fields: { liveDate: "2026-08-01", priority: "high" }
+});
 
 await actions.logCall({
   subject,

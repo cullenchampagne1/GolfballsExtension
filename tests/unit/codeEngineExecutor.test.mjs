@@ -6,12 +6,30 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeExecutor, mapEditFields } from '../../src/lib/codeEngine/executor.js';
+import {
+  makeExecutor,
+  mapEditFields,
+  mapTaskEditFields,
+} from '../../src/lib/codeEngine/executor.js';
 import { simulateProgram, asyncFunctionRunner } from '../../src/lib/codeEngine/simulate.js';
 
 describe('executor · field mapping', () => {
   it('maps approved schema fields to crmUpdateContact payload keys', () => {
     assert.deepEqual(mapEditFields({ phone: '555', jobTitle: 'VP', ssn: 'x' }), { phoneNumber: '555', jobTitle: 'VP' });
+  });
+
+  it('normalizes task field aliases without forwarding unsupported fields', () => {
+    const date = new Date(2026, 7, 1, 12);
+    assert.deepEqual(mapTaskEditFields({
+      live_date: date,
+      due: '2026-08-08',
+      body: 'Follow up',
+      ownerId: 'blocked',
+    }), {
+      liveDate: date,
+      dueDate: '2026-08-08',
+      description: 'Follow up',
+    });
   });
 });
 
@@ -22,6 +40,7 @@ describe('executor · routing', () => {
     sendEmail: (i, ctx) => { calls.push(['sendEmail', i.subject, ctx.contactId]); },
     submitQuickTask: (a) => { calls.push(['task', a.template.subject, a.context.contactId]); },
     submitCallLog: (a) => { calls.push(['call', a.template.subject, a.context.phone]); },
+    updateTaskById: (id, fields) => { calls.push(['updateTask', id, fields]); },
     completeTaskById: (id) => { calls.push(['complete', id]); },
     updateContact: (id, payload) => { calls.push(['edit', id, payload]); },
   };
@@ -32,6 +51,7 @@ describe('executor · routing', () => {
     await ex.run('createTask', { subject: 'Do it' });
     await ex.run('logCall', { subject: 'Called' });
     await ex.run('addNote', { subject: 'Reviewed', body: 'QA note' });
+    await ex.run('updateTask', { id: 't8', fields: { live_date: '2026-08-01' } });
     await ex.run('completeTask', { id: 't9' });
     await ex.commitEdits({ jobTitle: 'VP', phone: '999' });
     assert.deepEqual(calls, [
@@ -39,6 +59,7 @@ describe('executor · routing', () => {
       ['task', 'Do it', '42'],
       ['call', 'Called', '555'],
       ['call', 'Reviewed', '555'],
+      ['updateTask', 't8', { liveDate: '2026-08-01' }],
       ['complete', 't9'],
       ['edit', '42', { jobTitle: 'VP', phoneNumber: '999' }],
     ]);

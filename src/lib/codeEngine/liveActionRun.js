@@ -43,7 +43,7 @@ export async function makeLiveExecutor(page) {
     { pickFromAddress },
     { submitQuickTask },
     { submitCallLog },
-    { completeTaskById },
+    { completeTaskById, updateTaskById },
     { crmUpdateContact },
     { dispatchBackgroundMessage },
   ] = await Promise.all([
@@ -80,6 +80,7 @@ export async function makeLiveExecutor(page) {
     },
     submitQuickTask,
     submitCallLog,
+    updateTaskById,
     completeTaskById,
     updateContact: crmUpdateContact,
   });

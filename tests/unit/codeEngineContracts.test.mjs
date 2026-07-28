@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CONTRACTS, EFFECT_CLASSES, GATE_BY_EFFECT, APPROVED_CONTACT_FIELDS,
+  APPROVED_TASK_FIELDS,
   contractFor, contractGate, describeContract, listContracts, validateContractInput,
 } from '../../src/lib/codeEngine/contracts.js';
 
@@ -101,6 +102,31 @@ describe('contracts · input validation (template OR custom object)', () => {
     assert.equal(validateContractInput('completeTask', {}).ok, false);
     assert.equal(validateContractInput('completeTask', { id: 't1', subject: 'Follow up' }).ok, true);
     assert.equal(describeContract('completeTask', { subject: 'Follow up' }), 'Complete task “Follow up”');
+  });
+
+  it('updateTask accepts approved aliases and rejects unknown task fields', () => {
+    assert.equal(contractGate('updateTask'), 'confirm');
+    assert.equal(validateContractInput('updateTask', { id: '91', fields: {} }).ok, false);
+    assert.equal(validateContractInput('updateTask', {
+      id: '91',
+      subject: 'Future follow-up',
+      fields: { live_date: '2026-08-01', dueDate: '2026-08-08' },
+    }).ok, true);
+    const bad = validateContractInput('updateTask', {
+      id: '91',
+      fields: { contactId: 'replace-owner' },
+    });
+    assert.equal(bad.ok, false);
+    assert.match(bad.errors.join(' '), /not an editable task field/);
+    assert.equal(APPROVED_TASK_FIELDS.live_date, 'liveDate');
+    assert.equal(
+      describeContract('updateTask', {
+        id: '91',
+        subject: 'Future follow-up',
+        fields: { live_date: '2026-08-01', due_date: '2026-08-08' },
+      }),
+      'Edit task “Future follow-up” — liveDate, dueDate',
+    );
   });
 
   it('registers a first-class activity note contract', () => {

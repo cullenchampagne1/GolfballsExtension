@@ -155,6 +155,44 @@ export const CONTRACTS = Object.freeze({
       return label ? `Add activity note “${label}”` : 'Add an activity note';
     },
   },
+  // Apply grouped field edits to an existing CRM task. This is the effect
+  // behind direct task assignments such as `task.liveDate = value`; the task
+  // proxy batches all changes for that task into one Update.ajax write.
+  updateTask: {
+    name: 'updateTask',
+    verb: 'update_task',
+    object: 'task',
+    effect: 'remote',
+    summary: 'Edit an existing CRM task',
+    accepts: 'a task id plus approved fields, or direct task.field assignments followed by task.commit()',
+    params: {
+      id: { type: 'string' },
+      subject: { type: 'string', max: 500 },
+      fields: { type: 'object' },
+    },
+    validate: (i) => {
+      const fields = i && i.fields && typeof i.fields === 'object' ? i.fields : {};
+      const keys = Object.keys(fields);
+      const errors = [];
+      if (!i || i.id == null || !str(i.id)) errors.push('updateTask needs a task id');
+      if (!keys.length) errors.push('updateTask has no changes');
+      for (const key of keys) {
+        if (!Object.hasOwn(APPROVED_TASK_FIELDS, key)) {
+          errors.push(`“${key}” is not an editable task field`);
+        }
+      }
+      return { errors, value: i };
+    },
+    describe: (i) => {
+      const fields = i && i.fields && typeof i.fields === 'object' ? i.fields : {};
+      const keys = [...new Set(
+        Object.keys(fields).map((key) => APPROVED_TASK_FIELDS[key] || key),
+      )];
+      const label = clip(i?.subject || i?.id, 44);
+      if (!keys.length) return label ? `Edit task “${label}”` : 'Edit a task';
+      return `Edit task${label ? ` “${label}”` : ''} — ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? ` +${keys.length - 3}` : ''}`;
+    },
+  },
   // Complete a CRM task — the effect behind page.tasks.open[0].complete().
   // Executor: crmTasks.completeTaskById(id) (Task/Update.ajax, taskStatusID:3).
   completeTask: {
@@ -226,6 +264,28 @@ export const APPROVED_CONTACT_FIELDS = Object.freeze({
   zipCode: 'zipCode',
   userType: 'UserType',
   country: 'userCountry',
+});
+
+/**
+ * Task-object field aliases → canonical task update fields.
+ * Both JavaScript-style camelCase and the snake_case names people naturally
+ * paste into custom actions are accepted. `body` is an ergonomic alias for
+ * the CRM task Description field; `due` mirrors the Task List row property.
+ */
+export const APPROVED_TASK_FIELDS = Object.freeze({
+  subject: 'subject',
+  description: 'description',
+  body: 'description',
+  liveDate: 'liveDate',
+  live_date: 'liveDate',
+  dueDate: 'dueDate',
+  due_date: 'dueDate',
+  due: 'dueDate',
+  categoryId: 'categoryId',
+  category_id: 'categoryId',
+  taskCategoryId: 'categoryId',
+  task_category_id: 'categoryId',
+  priority: 'priority',
 });
 
 /** The contract for a call name, or null. Also accepts the snake_case verb. */

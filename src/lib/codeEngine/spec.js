@@ -24,7 +24,9 @@ export function buildCodeSpec(bindings = {}) {
         'page.contact.<field> = value': 'edit an APPROVED contact field (firstName, lastName, middleInitial, companyName, jobTitle, email, phone, zipCode, userType, country); edits are grouped into one write at run end (or page.contact.commit())',
         'page.contacts': 'array — the whole selected audience',
         'page.count': 'number — audience size',
-        'page.tasks': '{ open[], done[] } for the current audience record; page.tasks.open[i].complete() / completeAll() / completeLatest()',
+        'page.tasks': '{ open[], done[], items[] } — campaign rows use open/done; a Task List entry point also exposes its complete row set as items',
+        'page.tasks.items': 'the Task List entry-point rows when present, otherwise open + done; each row supports approved direct edits and complete()',
+        'task.liveDate / dueDate / subject / description / categoryId / priority = value': 'edit an existing task; snake_case aliases are accepted and changes group into one write per task at run end (or task.commit())',
         'page.evaluate(ref)': 'render a saved-template REFERENCE into a sendable outbound object; await it — it is its own (slow) step',
       },
       user: {
@@ -58,6 +60,8 @@ export function buildCodeSpec(bindings = {}) {
       'Custom objects are allowed too: actions.sendEmail({ subject, body }); actions.createTask({ subject, priority, daysOut }).',
       'actions.createTask returns { taskId }; complete the same task with actions.completeTask({ id: created.taskId }).',
       'actions.addNote({ subject, body }) adds a CRM activity note to the current audience record.',
+      'Existing task rows are mutable through the same shared engine in campaigns and custom actions. Approved edits are subject, description/body, liveDate/live_date, dueDate/due_date/due, categoryId/category_id, and priority.',
+      'Task edits are grouped into one confirm-gated write per task at run end. Use await task.commit() only when later code must create a separate update.',
       'The campaign body already runs once per audience record. Do not loop page.contacts unless you intentionally want nested audience work.',
       'Recipient defaults to page.contact; the signature is appended by the send engine — never include it.',
       'Guard on data you use, e.g. `if (page.contact.email) …`.',
@@ -66,6 +70,7 @@ export function buildCodeSpec(bindings = {}) {
     examples: [
       'const c = page.contact;\nif (c.email && c.value > 1000) {\n  const email = await page.evaluate(user.email("VIP thank-you"));\n  await actions.sendEmail(email);\n  await actions.createTask(user.task("Confirm VIP touch"));\n} else {\n  await actions.createTask(user.task("Re-engage"));\n}\nreturn c.value > 1000 ? "vip" : "nurture";',
       'const task = await actions.createTask({ subject: "Campaign test", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: "Campaign test", body: "Non-email workflow verified." });\nreturn "verified";',
+      'for (const task of page.tasks.items) {\n  const due = new Date(task.dueDate + "T12:00:00");\n  const live = new Date(due);\n  live.setDate(live.getDate() - 7);\n  task.liveDate = live;\n}\nreturn "rescheduled";',
     ],
   };
 }

@@ -13,7 +13,12 @@ import { JSDOM } from 'jsdom';
 const dom = new JSDOM('');
 globalThis.DOMParser = dom.window.DOMParser;
 
-const { fetchOpenTasksForContact, completeTaskById, completeContactTasks } = await import('../../src/lib/crmTasks.js');
+const {
+  fetchOpenTasksForContact,
+  updateTaskById,
+  completeTaskById,
+  completeContactTasks,
+} = await import('../../src/lib/crmTasks.js');
 
 /* ── Fixtures ─────────────────────────────────────────────────── */
 
@@ -39,7 +44,8 @@ const TASK_LIST_HTML = `<!doctype html><html><body><table>
 const TASK_101 = {
   TaskId: '101', Subject: 'Call back re: order', Description: 'Ring the customer',
   LiveDate: '7/1/2026', DueDate: '7/10/2026', taskCategoryID: 4,
-  contactID: 555, employeeID: 77, Priority: '2',
+  taskStatusID: 1, contactID: 555, leadID: '', employeeID: 77, caseID: 12,
+  Priority: '2',
 };
 const TASK_104 = { ...TASK_101, TaskId: '104', Subject: 'Confirm logo art', DueDate: '7/12/2026' };
 
@@ -115,6 +121,59 @@ describe('completeTaskById', () => {
     globalThis.fetch = async () => { fetched += 1; return { ok: true }; };
     await assert.rejects(() => completeTaskById('abc'), /Invalid task ID/);
     assert.equal(fetched, 0);
+  });
+});
+
+describe('updateTaskById', () => {
+  it('edits approved fields while preserving the untouched CRM task payload', async () => {
+    const updates = installFetch();
+    const result = await updateTaskById('101', {
+      subject: 'Rescheduled follow-up',
+      description: 'Live date moved to one week before due date.',
+      liveDate: new Date(2026, 6, 3, 12),
+      dueDate: '2026-07-10',
+      categoryId: 9,
+      priority: 'high',
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      taskId: '101',
+      changed: ['subject', 'description', 'liveDate', 'dueDate', 'categoryId', 'priority'],
+    });
+    assert.deepEqual(updates, [{
+      TaskID: '101',
+      Subject: 'Rescheduled follow-up',
+      Description: 'Live date moved to one week before due date.',
+      LiveDate: '07/03/2026',
+      DueDate: '07/10/2026',
+      taskCategoryID: '9',
+      taskStatusID: '1',
+      Priority: '1',
+      contactID: '555',
+      leadID: '',
+      employeeID: '77',
+      caseID: 12,
+    }]);
+  });
+
+  it('rejects unsupported-only edits before loading the task', async () => {
+    let fetched = 0;
+    globalThis.fetch = async () => { fetched += 1; return { ok: true }; };
+    await assert.rejects(
+      () => updateTaskById('101', { contactId: '999' }),
+      /no supported fields/,
+    );
+    assert.equal(fetched, 0);
+  });
+
+  it('rejects malformed dates without writing an update', async () => {
+    const updates = installFetch();
+    await assert.rejects(
+      () => updateTaskById('101', { liveDate: 'not a date' }),
+      /Invalid task live date/,
+    );
+    assert.deepEqual(updates, []);
   });
 });
 

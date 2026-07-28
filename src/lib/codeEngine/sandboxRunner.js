@@ -71,14 +71,58 @@ export function buildTraceBody(instrumentedCode) {
     '  __gbTrace.push({ kind: "evaluate", id: id, name: ref && ref.name, ref: ref || {}, outbound: plain });',
     '  return out;',
     '};',
-    // Page control (mirror of simulate.js): record complete/edit/commit intents.
+    // Page control (mirror of simulate.js): grouped contact/task edits and
+    // completion intents. Modal entry-point task arrays use the same proxy as
+    // campaign page.tasks.open/done.
     'const __approved = (ctx && ctx.approvedFields) || [];',
-    'const __openTasks = ((page.tasks && page.tasks.open) || []).map((tk) => Object.assign({}, tk, { complete: () => { __gbTrace.push({ kind: "complete", id: tk.id, subject: tk.subject }); return { ok: true, dry: true }; } }));',
+    'const __approvedTask = (ctx && ctx.approvedTaskFields) || {};',
+    'const __taskEdits = Object.create(null);',
+    'const __taskById = Object.create(null);',
+    'const __taskId = (task) => String((task && (task.id != null ? task.id : task.taskId)) || "").trim();',
+    'const __commitTask = (task) => {',
+    '  const id = __taskId(task); const fields = __taskEdits[id];',
+    '  if (!id || !fields || !Object.keys(fields).length) return { ok: true, changed: [] };',
+    '  delete __taskEdits[id];',
+    '  __gbTrace.push({ kind: "task-edit", id, subject: (task && task.subject) || "", fields: Object.assign({}, fields) });',
+    '  return { ok: true, dry: true, simulated: true };',
+    '};',
+    'const __commitAllTaskEdits = () => { for (const id of Object.keys(__taskEdits)) __commitTask(__taskById[id] || { id }); };',
+    'const __wrapTask = (tk) => {',
+    '  const target = Object.assign({}, tk || {}); const id = __taskId(target); if (id) __taskById[id] = target;',
+    '  return new Proxy(target, {',
+    '    set: (t, p, v) => {',
+    '      const canonical = typeof p === "string" ? __approvedTask[p] : null;',
+    '      if (!canonical) throw new Error("task." + String(p) + " is not an editable field. Editable: " + Object.keys(__approvedTask).join(", ") + ".");',
+    '      const taskId = __taskId(t); if (!taskId) throw new Error("task editing requires a task id");',
+    '      const fields = __taskEdits[taskId] || (__taskEdits[taskId] = {}); fields[canonical] = v;',
+    '      t[canonical] = v; if (p !== canonical) t[p] = v; __taskById[taskId] = t; return true;',
+    '    },',
+    '    get: (t, p) => {',
+    '      if (p === "commit") return () => __commitTask(t);',
+    '      if (p === "complete") return () => { __commitTask(t); __gbTrace.push({ kind: "complete", id: t.id, subject: t.subject }); return { ok: true, dry: true }; };',
+    '      const canonical = typeof p === "string" ? __approvedTask[p] : null;',
+    '      if (canonical && !Object.prototype.hasOwnProperty.call(t, p)) return t[canonical];',
+    '      return t[p];',
+    '    },',
+    '  });',
+    '};',
+    'const __rawTasks = page.tasks || {};',
+    'const __openTasks = (__rawTasks.open || []).map(__wrapTask);',
+    'const __doneTasks = (__rawTasks.done || []).map(__wrapTask);',
+    'const __primaryEntryId = page.entryPoint && page.entryPoint.id;',
+    'const __entrySource = Array.isArray(page.entryPoints) && page.entryPoints.length ? page.entryPoints : (page.entryPoint ? [page.entryPoint] : []);',
+    'page.entryPoints = __entrySource.map((entry) => {',
+    '  const data = entry && entry.data && typeof entry.data === "object" ? Object.assign({}, entry.data) : entry && entry.data;',
+    '  if (data && Array.isArray(data.tasks)) data.tasks = data.tasks.map(__wrapTask);',
+    '  return Object.assign({}, entry || {}, { data });',
+    '});',
+    'page.entryPoint = page.entryPoints.find((entry) => entry && entry.id === __primaryEntryId) || page.entryPoints[0] || null;',
+    'const __entryTasks = page.entryPoint && page.entryPoint.data && Array.isArray(page.entryPoint.data.tasks) ? page.entryPoint.data.tasks : [];',
     'page.contact = new Proxy(Object.assign({}, page.contact || {}), {',
     '  set: (t, p, v) => { if (typeof p === "string" && __approved.indexOf(p) === -1) throw new Error("page.contact." + p + " is not an editable field. Editable: " + __approved.join(", ") + "."); __gbTrace.push({ kind: "edit", prop: p, value: v }); t[p] = v; return true; },',
     '  get: (t, p) => { if (p === "commit") return () => { __gbTrace.push({ kind: "commit" }); }; return t[p]; },',
     '});',
-    'page.tasks = { open: __openTasks, done: (page.tasks && page.tasks.done) || [], completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
+    'page.tasks = { open: __openTasks, done: __doneTasks, items: __entryTasks.length ? __entryTasks : __openTasks.concat(__doneTasks), completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
     'const actions = {',
     '  __function(id, name) { __gbTrace.push({ kind: "function", id, name }); },',
     '  __trace(id, name, input) {',
@@ -90,6 +134,7 @@ export function buildTraceBody(instrumentedCode) {
     'const __gbRet = await (async () => {',
     String(instrumentedCode ?? ''),
     '})();',
+    '__commitAllTaskEdits();',
     'return { __gbTrace, __gbRet };',
   ].join('\n');
 }
@@ -131,10 +176,11 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
     const recordEval = scope && scope.page && scope.page.__eval;
     const pageRec = (scope && scope.__pageRecord) || {};
     const approvedFields = (scope && scope.__approvedFields) || [];
+    const approvedTaskFields = (scope && scope.__approvedTaskFields) || {};
     const evaluated = {};
     const runOnce = () => exec(
       buildTraceBody(code),
-      { page: pageData, user, approvedFields, evaluated },
+      { page: pageData, user, approvedFields, approvedTaskFields, evaluated },
       {},
       doc,
     );
@@ -174,6 +220,11 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
       else if (e.kind === 'complete') { if (pageRec.complete) await pageRec.complete({ id: e.id, subject: e.subject }); }
       else if (e.kind === 'edit') { if (pageRec.edit) pageRec.edit(e.prop, e.value); }
       else if (e.kind === 'commit') { if (pageRec.commit) await pageRec.commit(); }
+      else if (e.kind === 'task-edit') {
+        if (pageRec.taskEdit) {
+          await pageRec.taskEdit({ id: e.id, subject: e.subject }, e.fields || {});
+        }
+      }
       else if (typeof record === 'function') await record(e.id, e.contract, e.input);
     }
     if (pageRec.commit) await pageRec.commit(); // auto-commit any staged edits

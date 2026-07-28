@@ -9,13 +9,17 @@
      sendEmail        → emailSender.sendEmail(...)       (arbitrary `to`)
      createTask       → submitQuickTask({template,context})
      logCall          → submitCallLog({template,context})
+     updateTask       → crmTasks.updateTaskById(id, fields)
      completeTask     → crmTasks.completeTaskById(id)
      editContact      → crmUpdateContact(contactId, payload)  (grouped)
 
    One executor is built per contact (deps.ctx carries the contact's ids).
 ─────────────────────────────────────────────────────────────── */
 
-import { APPROVED_CONTACT_FIELDS } from './contracts.js';
+import {
+  APPROVED_CONTACT_FIELDS,
+  APPROVED_TASK_FIELDS,
+} from './contracts.js';
 
 /** Staged schema-name edits → crmUpdateContact payload keys (only approved). */
 export function mapEditFields(fields) {
@@ -23,6 +27,16 @@ export function mapEditFields(fields) {
   for (const [k, v] of Object.entries(fields || {})) {
     const key = APPROVED_CONTACT_FIELDS[k];
     if (key) out[key] = v == null ? '' : String(v);
+  }
+  return out;
+}
+
+/** User-facing aliases → the canonical field names updateTaskById accepts. */
+export function mapTaskEditFields(fields) {
+  const out = {};
+  for (const [key, value] of Object.entries(fields || {})) {
+    const canonical = APPROVED_TASK_FIELDS[key];
+    if (canonical) out[canonical] = value;
   }
   return out;
 }
@@ -135,6 +149,16 @@ export function makeExecutor(deps = {}) {
             },
           }),
           'activity note failed',
+        );
+      }
+      if (contract === 'updateTask') {
+        if (!deps.updateTaskById) throw new Error('task editing is not configured');
+        if (!i.id) throw new Error('updateTask needs a task id');
+        const fields = mapTaskEditFields(i.fields);
+        if (!Object.keys(fields).length) throw new Error('updateTask has no supported changes');
+        return assertHelperResult(
+          await deps.updateTaskById(i.id, fields),
+          'task update failed',
         );
       }
       if (contract === 'completeTask') {

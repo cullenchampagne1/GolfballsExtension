@@ -9,6 +9,7 @@
 const CONTRACT_LABELS = Object.freeze({
   sendEmail: 'Send email',
   createTask: 'Create task',
+  updateTask: 'Edit task',
   completeTask: 'Complete task',
   logCall: 'Log call',
   addNote: 'Add note',

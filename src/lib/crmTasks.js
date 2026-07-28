@@ -64,6 +64,87 @@ async function fetchTaskRaw(id) {
   return r.json();
 }
 
+function formatTaskDate(value, label) {
+  let date;
+  if (value instanceof Date) {
+    date = new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12);
+  } else {
+    const raw = String(value ?? '').trim();
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+    const mdy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (iso) date = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), 12);
+    else if (mdy) date = new Date(Number(mdy[3]), Number(mdy[1]) - 1, Number(mdy[2]), 12);
+    else date = new Date(raw);
+  }
+  if (!date || Number.isNaN(date.getTime())) throw new Error(`Invalid task ${label}`);
+  return [
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+    date.getFullYear(),
+  ].join('/');
+}
+
+function taskPriority(value) {
+  const aliases = { high: 1, med: 2, medium: 2, normal: 2, low: 3 };
+  const normalized = typeof value === 'string'
+    ? (aliases[value.toLowerCase().trim()] ?? Number(value))
+    : Number(value);
+  if (![1, 2, 3].includes(normalized)) throw new Error('Invalid task priority');
+  return String(normalized);
+}
+
+/**
+ * Update approved mutable fields on one existing CRM task. The current task is
+ * fetched first and round-tripped so fields the action did not touch survive.
+ * Campaigns and custom actions share this writer through the common executor.
+ */
+export async function updateTaskById(id, fields = {}) {
+  const safeId = numericId(id, 'task ID');
+  const allowed = new Set([
+    'subject', 'description', 'liveDate', 'dueDate', 'categoryId', 'priority',
+  ]);
+  const changes = Object.entries(fields || {})
+    .filter(([key]) => allowed.has(key));
+  if (!changes.length) throw new Error('Task update has no supported fields');
+
+  const task = await fetchTaskRaw(safeId);
+  const params = {
+    TaskID: String(task.TaskId),
+    Subject: task.Subject ?? '',
+    Description: task.Description ?? '',
+    LiveDate: task.LiveDate ?? '',
+    DueDate: task.DueDate ?? '',
+    taskCategoryID: String(task.taskCategoryID ?? 0),
+    taskStatusID: String(task.taskStatusID ?? 1),
+    Priority: String(task.Priority ?? 2),
+    contactID: String(task.contactID ?? 0),
+    leadID: task.leadID || '',
+    employeeID: String(task.employeeID ?? 0),
+    caseID: task.caseID || 0,
+  };
+
+  for (const [key, value] of changes) {
+    if (key === 'subject') params.Subject = String(value ?? '').slice(0, 500);
+    else if (key === 'description') params.Description = String(value ?? '').slice(0, 4_000);
+    else if (key === 'liveDate') params.LiveDate = formatTaskDate(value, 'live date');
+    else if (key === 'dueDate') params.DueDate = formatTaskDate(value, 'due date');
+    else if (key === 'categoryId') {
+      const categoryId = Number(value);
+      if (!Number.isInteger(categoryId) || categoryId < 0 || categoryId > 999_999) {
+        throw new Error('Invalid task category');
+      }
+      params.taskCategoryID = String(categoryId);
+    } else if (key === 'priority') params.Priority = taskPriority(value);
+  }
+
+  const response = await fetch(
+    `${BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`,
+    { credentials: 'include' },
+  );
+  if (!response.ok) throw new Error(`Task update returned HTTP ${response.status}`);
+  return { ok: true, taskId: safeId, changed: changes.map(([key]) => key) };
+}
+
 /* Mark one task complete — the legacy tlCompleteTask payload shape
    (TaskId numeric, taskStatusID 3). */
 export async function completeTaskById(id) {

@@ -19,6 +19,7 @@ import { CONTRACTS, describeContract, contractGate } from './contracts.js';
 const CONTRACT_ICON = Object.freeze({
   sendEmail: 'mail',
   createTask: 'task',
+  updateTask: 'edit',
   completeTask: 'check',
   logCall: 'phone',
   addNote: 'edit',

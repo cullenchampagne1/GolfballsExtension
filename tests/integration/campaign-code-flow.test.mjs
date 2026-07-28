@@ -226,6 +226,75 @@ describe('campaign code flow', () => {
     assert.match(String(result.result), /Created 6 quarterly reach-out task\(s\)/);
   });
 
+  it('edits Task List rows through the same executor used by campaigns', async () => {
+    const atNoon = (offset) => {
+      const date = new Date();
+      date.setHours(12, 0, 0, 0);
+      date.setDate(date.getDate() + offset);
+      return date;
+    };
+    const isoDate = (date) => [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+    const nearDue = atNoon(7);
+    const farDue = atNoon(30);
+    const expectedLive = new Date(farDue);
+    expectedLive.setDate(expectedLive.getDate() - 7);
+    const page = {
+      entryPoint: {
+        id: 'task-list',
+        data: {
+          tasks: [
+            { id: 'task-near', subject: 'Near follow-up', dueDate: isoDate(nearDue), liveDate: isoDate(atNoon(0)) },
+            { id: 'task-far', subject: 'Future follow-up', dueDate: isoDate(farDue), liveDate: isoDate(atNoon(0)) },
+          ],
+        },
+      },
+    };
+    const writes = [];
+    const source = `
+      const cutoff = new Date();
+      cutoff.setHours(12, 0, 0, 0);
+      cutoff.setDate(cutoff.getDate() + 14);
+      let changed = 0;
+      for (const task of page.tasks.items) {
+        const due = new Date(task.dueDate + "T12:00:00");
+        if (Number.isNaN(due.getTime()) || due <= cutoff) continue;
+        const live = new Date(due);
+        live.setDate(live.getDate() - 7);
+        task.live_date = live;
+        changed++;
+      }
+      return "Updated " + changed + " task(s)";
+    `;
+    const result = await simulateProgram(source, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: makeExecutor({
+        updateTaskById: async (id, fields) => {
+          writes.push({ id, fields });
+          return { ok: true };
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result, 'Updated 1 task(s)');
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].id, 'task-far');
+    const writtenLiveDate = new Date(writes[0].fields.liveDate);
+    assert.equal(Number.isNaN(writtenLiveDate.getTime()), false);
+    assert.deepEqual(
+      [
+        writtenLiveDate.getFullYear(),
+        writtenLiveDate.getMonth(),
+        writtenLiveDate.getDate(),
+      ],
+      [expectedLive.getFullYear(), expectedLive.getMonth(), expectedLive.getDate()],
+    );
+  });
+
   it('maintains quarterly coverage in the main campaign even without orders', async () => {
     const now = new Date();
     now.setHours(12, 0, 0, 0);

@@ -31,6 +31,8 @@ function actionDoc(c) {
         ? ['await actions.createTask(user.task("Follow up"))', 'const task = await actions.createTask({ subject: "Call", daysOut: 2 })']
         : c.name === 'completeTask'
           ? ['const task = await actions.createTask({ subject: "Test" });\nawait actions.completeTask({ id: task.taskId });', 'await page.tasks.open[0].complete()']
+          : c.name === 'updateTask'
+            ? ['await actions.updateTask({ id: task.id, fields: { liveDate: "2026-08-01" } })', 'task.live_date = newLiveDate;   // grouped automatically']
           : c.name === 'addNote'
             ? ['await actions.addNote({ subject: "Follow-up", body: "Reviewed account with customer." })']
             : ['await actions.logCall(user.call("Left VM"))'],
@@ -67,6 +69,11 @@ const STATIC = {
       ['contact.value', 'handed-off value ($), if any'],
       ['contact.contactId', 'CRM id'],
       ['page.contact.field = …', 'edit a field (approved fields, grouped write)'],
+      ['page.tasks.items', 'Task List rows, or open + done on a campaign record'],
+      ['task.liveDate / dueDate = …', 'edit dates (live_date / due_date aliases work too)'],
+      ['task.subject / description = …', 'edit task copy; body aliases description'],
+      ['task.categoryId / priority = …', 'edit category or priority'],
+      ['task.commit()', 'flush this task’s grouped edits now'],
       ['page.tasks.open[i].complete()', 'complete a CRM task'],
       ['page.tasks.completeAll()', 'complete every open task'],
     ],
@@ -74,6 +81,7 @@ const STATIC = {
       'const c = page.contact;\nif (c.email) await actions.sendEmail(user.email("Win-back"));',
       'const orderDates = page.orders.map((order) => order.date);',
       'page.contact.jobTitle = "VP Sales";   // grouped, one write',
+      'for (const task of page.tasks.items) {\n  task.liveDate = task.dueDate;\n}',
       'if (page.tasks.open.length) page.tasks.open[0].complete();',
     ],
   },
@@ -124,6 +132,7 @@ const STATIC = {
       ['logCall(call)', 'log a call activity'],
       ['addNote(note)', 'add a CRM activity note'],
       ['completeTask({id})', 'complete a task returned by createTask'],
+      ['updateTask({id, fields})', 'edit approved fields on an existing task'],
     ],
     examples: ['await actions.sendEmail(user.email("Win-back"))'],
   },

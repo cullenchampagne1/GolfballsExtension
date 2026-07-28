@@ -18,7 +18,12 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { instrument } from './instrument.js';
-import { validateContractInput, describeContract, APPROVED_CONTACT_FIELDS } from './contracts.js';
+import {
+  validateContractInput,
+  describeContract,
+  APPROVED_CONTACT_FIELDS,
+  APPROVED_TASK_FIELDS,
+} from './contracts.js';
 import { buildUserBinding } from './userBinding.js';
 import { hydrateOutbound, makeOutbound } from './runtime.js';
 
@@ -47,7 +52,7 @@ export function asyncFunctionRunner(code, scope) {
  */
 /* Contracts that perform a real effect (routed to the executor on a live run). */
 const EFFECT_CONTRACTS = new Set([
-  'sendEmail', 'createTask', 'logCall', 'addNote', 'completeTask', 'editContact',
+  'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask', 'editContact',
 ]);
 const ACTION_RESULT_PREFIX = '__gb_action_result__:';
 
@@ -71,6 +76,9 @@ function resolveActionResults(value, results, preserveMissing) {
   if (Array.isArray(value)) {
     return value.map((item) => resolveActionResults(item, results, preserveMissing));
   }
+  // Date is a supported task-field value. Do not recursively flatten it into
+  // an empty plain object while resolving action-result references.
+  if (Object.prototype.toString.call(value) === '[object Date]') return value;
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
@@ -196,7 +204,7 @@ export async function simulateProgram(
     return makeOutbound(r);
   };
 
-  // ── Page control: complete tasks + grouped contact edits (records only) ──
+  // ── Page control: grouped task/contact edits + task completion ──────────
   let seq = 0;
   const edits = {};                          // staged field edits (grouped)
   const recordComplete = (task) => record(`ct_${(task && task.id) || (seq += 1)}`, 'completeTask', { id: task && task.id, subject: task && task.subject });
@@ -216,17 +224,115 @@ export async function simulateProgram(
   };
   const latestOpen = (list) => (list || []).reduce((best, t) => (!best || String(t.dueDate || '') > String(best.dueDate || '') ? t : best), null);
 
+  // Task edits are grouped independently per task. A direct assignment updates
+  // the in-run object immediately, while commit() (or the automatic flush at
+  // program end) records one confirm-gated updateTask effect for that task.
+  const taskEdits = new Map();
+  const taskMeta = new Map();
+  const pendingTaskOperations = new Set();
+  const taskIdOf = (task) => String(task?.id ?? task?.taskId ?? '').trim();
+  const stageTaskEdit = (task, prop, value) => {
+    if (typeof prop !== 'string') return;
+    const canonical = APPROVED_TASK_FIELDS[prop];
+    if (!canonical) {
+      throw new Error(`task.${prop} is not an editable field. Editable: ${Object.keys(APPROVED_TASK_FIELDS).join(', ')}.`);
+    }
+    const id = taskIdOf(task);
+    if (!id) throw new Error('task editing requires a task id');
+    const current = taskEdits.get(id) || {};
+    current[canonical] = value;
+    taskEdits.set(id, current);
+    taskMeta.set(id, task);
+  };
+  const commitTaskEdits = async (task) => {
+    const id = taskIdOf(task);
+    const fields = taskEdits.get(id);
+    if (!id || !fields || !Object.keys(fields).length) return { ok: true, changed: [] };
+    taskEdits.delete(id);
+    return record(`ut_${id}`, 'updateTask', {
+      id,
+      subject: task?.subject || taskMeta.get(id)?.subject || '',
+      fields: { ...fields },
+    });
+  };
+  const commitAllTaskEdits = async () => {
+    for (const id of [...taskEdits.keys()]) {
+      await commitTaskEdits(taskMeta.get(id) || { id });
+    }
+  };
+  const waitForTaskOperations = async () => {
+    if (pendingTaskOperations.size) {
+      await Promise.allSettled([...pendingTaskOperations]);
+    }
+  };
+  const wrapTask = (sourceTask) => {
+    const target = { ...(sourceTask || {}) };
+    const id = taskIdOf(target);
+    if (id) taskMeta.set(id, target);
+    return new Proxy(target, {
+      set(t, prop, value) {
+        stageTaskEdit(t, prop, value);
+        const canonical = APPROVED_TASK_FIELDS[prop];
+        t[canonical] = value;
+        if (prop !== canonical) t[prop] = value;
+        return true;
+      },
+      get(t, prop) {
+        if (prop === 'commit') return () => commitTaskEdits(t);
+        if (prop === 'complete') {
+          return () => {
+            const operation = (async () => {
+              await commitTaskEdits(t);
+              return recordComplete(t);
+            })();
+            pendingTaskOperations.add(operation);
+            operation.finally(() => pendingTaskOperations.delete(operation));
+            return operation;
+          };
+        }
+        const canonical = typeof prop === 'string' ? APPROVED_TASK_FIELDS[prop] : null;
+        if (canonical && !Object.hasOwn(t, prop)) return t[canonical];
+        return t[prop];
+      },
+    });
+  };
+
   // Node-path `page` — the Proxy set-trap captures `page.contact.x = y`; each
-  // task carries a `.complete()`. (The sandbox mirrors this inline.)
+  // task carries `.complete()`, `.commit()`, and approved editable fields.
+  // The sandbox mirrors this inline.
   const nodePage = { ...page, __eval: recordEval };
   nodePage.contact = new Proxy({ ...(page.contact || {}) }, {
     set(t, p, v) { stageEdit(p, v); t[p] = v; return true; },
     get(t, p) { if (p === 'commit') return () => commitEdits(); return t[p]; },
   });
-  const openTasks = ((page.tasks && page.tasks.open) || []).map((tk) => ({ ...tk, complete: () => recordComplete(tk) }));
+  const openTasks = ((page.tasks && page.tasks.open) || []).map(wrapTask);
+  const doneTasks = ((page.tasks && page.tasks.done) || []).map(wrapTask);
+
+  // Modal entry points can publish task arrays independently of the current
+  // CRM page. Decorate those rows with the exact same task proxy, then expose
+  // the primary collection as page.tasks.items for concise bulk actions.
+  const entrySource = Array.isArray(page.entryPoints) && page.entryPoints.length
+    ? page.entryPoints
+    : (page.entryPoint ? [page.entryPoint] : []);
+  const entryPoints = entrySource.map((entryPoint) => {
+    const data = entryPoint?.data && typeof entryPoint.data === 'object'
+      ? { ...entryPoint.data }
+      : entryPoint?.data;
+    if (data && Array.isArray(data.tasks)) data.tasks = data.tasks.map(wrapTask);
+    return { ...(entryPoint || {}), data };
+  });
+  const primaryId = page.entryPoint?.id;
+  nodePage.entryPoints = entryPoints;
+  nodePage.entryPoint = entryPoints.find((entryPoint) => entryPoint.id === primaryId)
+    || entryPoints[0]
+    || null;
+  const entryTasks = Array.isArray(nodePage.entryPoint?.data?.tasks)
+    ? nodePage.entryPoint.data.tasks
+    : [];
   nodePage.tasks = {
     open: openTasks,
-    done: (page.tasks && page.tasks.done) || [],
+    done: doneTasks,
+    items: entryTasks.length ? entryTasks : [...openTasks, ...doneTasks],
     completeAll: () => { openTasks.forEach((t) => t.complete()); },
     completeLatest: () => { const t = latestOpen(openTasks); if (t) t.complete(); },
   };
@@ -236,8 +342,19 @@ export async function simulateProgram(
     page: nodePage,
     user: buildUserBinding(user),
     // Sandbox replay hooks + the write allowlist (for the in-sandbox proxy).
-    __pageRecord: { complete: (t) => recordComplete(t), edit: stageEdit, commit: commitEdits },
+    __pageRecord: {
+      complete: (t) => recordComplete(t),
+      edit: stageEdit,
+      commit: commitEdits,
+      taskEdit: (task, fields) => {
+        for (const [prop, value] of Object.entries(fields || {})) {
+          stageTaskEdit(task, prop, value);
+        }
+        return commitTaskEdits(task);
+      },
+    },
     __approvedFields: Object.keys(APPROVED_CONTACT_FIELDS),
+    __approvedTaskFields: APPROVED_TASK_FIELDS,
     // The RAW (serializable, method-free) page data for the sandbox realm.
     __pageData: page,
   };
@@ -245,9 +362,13 @@ export async function simulateProgram(
     // The runner returns the program's final value (the closing-step summary).
     const result = await run(code, scope);
     await commitEdits(); // auto-commit any staged edits as one grouped step
+    await commitAllTaskEdits();
+    await waitForTaskOperations();
     return { ok: true, trace, calls, error: null, result: result == null ? null : result };
   } catch (error) {
     await commitEdits(); // flush whatever was staged before the error
+    await commitAllTaskEdits();
+    await waitForTaskOperations();
     // A thrown program error stops the trace where it happened — still useful.
     return { ok: false, trace, calls, error: String(error?.message || error), result: null };
   }

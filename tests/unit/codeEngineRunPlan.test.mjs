@@ -9,6 +9,7 @@ const TRACE = [
   { contract: 'evaluate', status: 'ran' },
   { contract: 'sendEmail', status: 'ran' },
   { contract: 'editContact', status: 'ran' },
+  { contract: 'updateTask', status: 'ran' },
   { contract: 'completeTask', status: 'ran' },
   { contract: 'addNote', status: 'ran' },
   { contract: 'createTask', status: 'skipped' },
@@ -20,18 +21,19 @@ describe('runPlan', () => {
     const plan = planRun(TRACE, 10);
     assert.equal(plan.counts.sendEmail, 1);
     assert.equal(plan.counts.editContact, 1);
+    assert.equal(plan.counts.updateTask, 1);
     assert.equal(plan.counts.completeTask, 1);
     assert.equal(plan.counts.addNote, 1);
     assert.equal(plan.counts.createTask, 0);
     assert.equal(plan.failed, 1);
     assert.equal(plan.maxGate, 'confirm'); // outward/remote
-    assert.equal(plan.perContact, 4);
-    assert.equal(plan.total, 40);
+    assert.equal(plan.perContact, 5);
+    assert.equal(plan.total, 50);
     assert.equal(plan.hasEffects, true);
   });
 
   it('summarizes for the confirm dialog', () => {
-    assert.match(planSummary(planRun(TRACE)), /1 email · 1 contact edit · 1 task completed · 1 activity note/);
+    assert.match(planSummary(planRun(TRACE)), /1 email · 1 contact edit · 1 task edit · 1 task completed · 1 activity note/);
     assert.equal(planSummary(planRun([{ contract: 'evaluate', status: 'ran' }])), 'no effects');
   });
 });
