@@ -79,15 +79,16 @@ const MODEL_VERSION = '20250607-15-markerflat';
 const BALL_NORMALIZE_RADIUS = 100;
 
 // printAreaScale is the fraction of the ball's DIAMETER (the visible face) that
-// the printed logo spans. The decal box is a WIDTH in world units and
-// diameter = 2·radius, so every decal size is `radius * 2 * printAreaScale`.
+// the printed logo spans. The decal box is a WIDTH in world units and, since
+// the decal projects into the ball geometry's OWN local space (matrixWorld's
+// scale isn't baked in when DecalGeometry runs — the decal mesh re-applies
+// ballMesh.scale afterward), the box must be sized off that geometry's radius.
+// So the box width = (geometry radius) * 2 * printAreaScale.
 //
-// Real imprint spec: a 0.875" max imprint circle on a 2.68" standard ball, so
-// the print covers 0.875 / 2.68 = 32.65% of the diameter. (Note 52.08% would be
-// 0.875 / 1.68 — the wrong ball diameter.) The old 0.7 radius-relative default
-// happened to render ~35% of the face, close to this; keeping the intuitive
-// diameter semantics, the correct default is the spec ratio itself.
-const PRINT_AREA_SCALE_DEFAULT = 0.875 / 2.68;  // ≈ 0.3265 → 32.65% of the face
+// Real imprint spec: a 0.875" max imprint circle on a regulation 1.680" ball
+// (USGA/R&A minimum diameter), so the print covers 0.875 / 1.680 = 52.08% of
+// the diameter. (0.875 / 2.68 = 32.65% used the wrong ball diameter.)
+const PRINT_AREA_SCALE_DEFAULT = 0.875 / 1.680;  // ≈ 0.5208 → 52.08% of the face
 
 async function loadThreeAndModel(shape = 'ball', makeProgress) {
   if (!cache.three) {
@@ -1386,11 +1387,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           for (const s of giftSet.ballSlots) {
             const mat = new THREE.MeshStandardMaterial({ color: ballColor.clone(), emissive: 0x101418, emissiveIntensity: 0.4, roughness: 0.28, metalness: 0.02 });
             const m = new THREE.Mesh(ballCG.geo.clone(), mat);
-            // Box WIDTH = BALL_NORMALIZE_RADIUS * 2 * printAreaScale — i.e. the
-            // fraction of the DIAMETER the print spans (the SAME absolute size the
-            // single-ball path uses) so the logo matches the 3D-view ball; posZ/
-            // depth stay relative to this geo's own radius (projection origin).
-            addDecal(m, 0, 0, ballCG.radius * 0.999, BALL_NORMALIZE_RADIUS * 2 * gsPrintAreaScale, ballCG.radius * 2);
+            // Box WIDTH = ballCG.radius * 2 * printAreaScale — printAreaScale of
+            // this geo's DIAMETER, so the print covers the same face fraction as
+            // the single-ball path (both size off their own geometry radius, and
+            // it's the SAME ball OBJ). posZ/depth are already this geo's radius.
+            addDecal(m, 0, 0, ballCG.radius * 0.999, ballCG.radius * 2 * gsPrintAreaScale, ballCG.radius * 2);
             m.scale.setScalar(giftSet.ballRadius / ballCG.radius);
             m.position.set(s.x, s.y, s.z);
             contentGroup.add(m); ballMats.push(mat);
@@ -1818,10 +1819,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const w = divotDiscR * 1.8;
             decalSize = new THREE.Vector3(w, w, divotFaceZ * 1.8);
           } else {
-            decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
-            // width/height = printAreaScale of the DIAMETER (2·radius) = the
-            // fraction of the visible face the print covers; z is the projection depth.
-            decalSize = new THREE.Vector3(targetRadius * 2 * printAreaScale, targetRadius * 2 * printAreaScale, targetRadius * 2);
+            // The decal projects into the ball GEOMETRY's own local space (its
+            // native radius = bsphere.radius, NOT the normalized 100 — the decal
+            // mesh re-applies ballMesh.scale afterward). So size the projector box
+            // off bsphere.radius: width = printAreaScale of the DIAMETER
+            // (2·bsphere.radius) → the print covers exactly printAreaScale of the
+            // visible face for ANY model size. (Using targetRadius=100 here
+            // inflated the print by 100/bsphere.radius ≈ 1.66× on the 60.4-radius
+            // Golf_ball.obj.) z is the projection depth through the front cap.
+            const R = bsphere.radius;
+            decalPosition = new THREE.Vector3(0, 0, sign * R * 0.999);
+            decalSize = new THREE.Vector3(R * 2 * printAreaScale, R * 2 * printAreaScale, R * 2);
           }
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
@@ -1854,7 +1862,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Lift the decal a hair off the surface along its own pole so it wins
           // the depth test by REAL depth separation rather than polygonOffset
           // (Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno does not).
-          mesh.position.z += sign * (isChip ? chipFaceZ * scale * 0.08 : isDivot ? divotFaceZ * scale * 0.08 : targetRadius * 0.015);
+          mesh.position.z += sign * (isChip ? chipFaceZ * scale * 0.08 : isDivot ? divotFaceZ * scale * 0.08 : bsphere.radius * 0.015);
           objectsToDispose.push(decalGeo, decalMat);
           return { mesh, params: { position: decalPosition.clone(), orientation: decalOrientation.clone(), size: decalSize.clone(), texture: decalTexture } };
         }

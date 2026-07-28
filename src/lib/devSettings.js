@@ -175,9 +175,9 @@ export const DEV_SETTINGS = [
   {
     key:     'golfballViewer.printAreaScale',
     label:   'Golfball viewer: print area scale',
-    desc:    'Size of the printed logo on the ball, as a fraction of the ball DIAMETER (the visible face). Spec: 0.875" imprint on a 2.68" ball = 0.875/2.68 ≈ 0.3265 (32.65% of the face). Higher = larger print.',
+    desc:    'Size of the printed logo on the ball, as a fraction of the ball DIAMETER (the visible face). Spec: 0.875" imprint on a regulation 1.680" ball = 0.875/1.680 ≈ 0.5208 (52.08% of the face). Higher = larger print.',
     type:    'number',
-    default: 0.3265,
+    default: 0.5208,
     min:     0.1, max: 1.0, step: 0.0001,
   },
   {
