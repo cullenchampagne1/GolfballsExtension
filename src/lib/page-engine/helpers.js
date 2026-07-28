@@ -183,6 +183,23 @@ export function contactOrderRows(doc) {
   }).slice(0, 50);
 }
 
+/** Email-history rows on the contact page's Email portlet. Found by each
+ *  row's native "view message" link (Page=268 + MessageID=…) rather than
+ *  the `data-gb-ep="1"` marker the email-preview content script stamps at
+ *  RUNTIME on the live page. That marker is absent from freshly-fetched
+ *  raw HTML, so a `tr[data-gb-ep="1"]` selector returns zero rows when the
+ *  EmailRunner fetches a contact page in the background — which silently
+ *  broke the "skip if emailed within N days" guard (it saw no history, so
+ *  every contact looked never-emailed). The native link is in the raw HTML
+ *  and covers the same rows, so this works live AND fetched. Cells match
+ *  the email-preview reader: [1:from][2:to][3:subject][4:date][5:size]. */
+export function contactEmailRows(doc) {
+  if (!doc || typeof doc.querySelectorAll !== 'function') return [];
+  return Array.from(doc.querySelectorAll('tr'))
+    .filter((tr) => tr.querySelector('a[href*="Page=268" i][href*="MessageID=" i]'))
+    .slice(0, 100);
+}
+
 /** Logo-proof table rows (#Table2 on contact/account pages). Keyed off each
  *  row's "View History" link (logoProofing?logoGUID=…) — not the table id —
  *  so it works on a statically-fetched page too. Sorted newest-first by the
@@ -742,6 +759,7 @@ export const FN_REGISTRY = {
   queryKeyedRows,
   readHrefParam,
   contactOrderRows,
+  contactEmailRows,
   contactItemRows,
   contactProofRows,
   proofLogoUrl,

@@ -776,17 +776,21 @@ const FIELDS = {
     },
   },
 
-  /* ── Email history (separate from activities; rows carry the
-      data-gb-ep="1" marker the mailer-platform stamps onto
-      sent messages). ── */
+  /* ── Email history (separate from activities; the contact's full
+      native Email portlet — every rep's messages, found by the
+      Page=268/MessageID view link so it reads from raw fetched HTML,
+      not just the live page). ── */
   emails: {
     type: 'array',
     label: 'Email history',
     /* Row layout: [0:icon] [1:from] [2:to] [3:subject] [4:date]
-       [5:size] [6:download-link]. The first cell is just an icon
-       slot the marketing platform stamps onto its own rows
-       (data-gb-ep="1" — note the dash). */
-    extract: { sel: 'tr[data-gb-ep="1"]', max: 100 },
+       [5:size] [6:download-link]. Found by each row's native
+       Page=268/MessageID view link (present in raw fetched HTML), NOT
+       the data-gb-ep="1" marker — that is injected at runtime by the
+       email-preview content script and is absent when EmailRunner
+       fetches the page in the background, which silently zeroed out the
+       "skip if emailed within N days" guard. See contactEmailRows. */
+    extract: { fn: 'contactEmailRows', max: 100 },
     itemFields: {
       from: {
         type: 'string', label: 'From',

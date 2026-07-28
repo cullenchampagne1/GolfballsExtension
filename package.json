@@ -138,6 +138,10 @@
       "file": "tests/unit/accountUpdate.test.mjs"
     },
     {
+      "name": "email \u00b7 recently-emailed guard reads native history",
+      "file": "tests/unit/contactEmailRows.test.mjs"
+    },
+    {
       "name": "crm \u00b7 Solr search query-string contract",
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },
