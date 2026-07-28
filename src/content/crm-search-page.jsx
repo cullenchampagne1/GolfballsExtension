@@ -13,7 +13,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
-import { crmSolrQuery, SOLR_ROWS } from '../lib/crmSolrSearch.js';
+import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import {
   ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, ScrollArea, SectionTitle, Spinner,
@@ -76,7 +76,106 @@ function typeTone(t) {
   const s = (t || '').toLowerCase();
   if (s === 'contact') return 'info';
   if (s === 'account') return 'brand';
+  if (s === 'lead') return 'warning';
   return 'neutral';
+}
+
+/* Pull the numeric customer id out of a Solr id ("contact_4421" → "4421"). */
+function customerIdOf(r) {
+  const m = String(r.id || '').match(/(\d+)/);
+  return m ? m[1] : '';
+}
+
+const fmtCount = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k' : String(n));
+
+/* One selectable facet value row (label + count + check). */
+function FacetRow({ label, count, checked, onClick }) {
+  return (
+    <button onClick={onClick} title={label}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '5px 8px', border: 0, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', textAlign: 'left', background: checked ? 'var(--gb-brand-tint-soft)' : 'transparent', transition: 'background var(--gb-anim)' }}
+      onMouseEnter={(e) => { if (!checked) e.currentTarget.style.background = 'var(--gb-fill-subtle)'; }}
+      onMouseLeave={(e) => { if (!checked) e.currentTarget.style.background = 'transparent'; }}>
+      <span style={{ width: 13, height: 13, borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid ' + (checked ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), background: checked ? 'var(--gb-brand-label)' : 'transparent', color: 'var(--gb-text-on-brand)' }}>{checked && <I.check size={9} sw={3} />}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: checked ? 600 : 500, color: checked ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      {count != null && <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', flexShrink: 0 }}>{fmtCount(count)}</span>}
+    </button>
+  );
+}
+
+/* A collapsible facet section (value list). Long lists (Sales Rep) get an
+   in-facet filter box. */
+function FacetSection({ facet, rows, selected, onToggle, defaultOpen }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const [q, setQ] = useState('');
+  const items = (facet.searchable && q.trim())
+    ? rows.filter((r) => String(r.value).toLowerCase().includes(q.trim().toLowerCase()))
+    : rows;
+  return (
+    <Card>
+      <button onClick={() => setOpen((o) => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 0, background: 'transparent', cursor: 'pointer' }}>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>{facet.label}</span>
+        {selected.size > 0 && <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 99, padding: '0 6px' }}>{selected.size}</span>}
+        <I.chevd size={12} style={{ color: 'var(--gb-text-muted)', transition: 'transform var(--gb-anim)', transform: open ? 'none' : 'rotate(-90deg)' }} />
+      </button>
+      {open && (
+        <div style={{ padding: '0 8px 8px' }}>
+          {facet.searchable && rows.length > 8 && (
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Filter ${facet.label.toLowerCase()}…`}
+              style={{ width: '100%', height: 26, padding: '0 8px', marginBottom: 6, boxSizing: 'border-box', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11, outline: 'none' }} />
+          )}
+          <ScrollArea max={230}>
+            {items.length ? items.slice(0, 300).map((r) => (
+              <FacetRow key={r.value} label={facet.type === 'int' ? `Pod ${r.value}` : r.value} count={r.count}
+                checked={selected.has(String(r.value))} onClick={() => onToggle(String(r.value))} />
+            )) : <div style={{ padding: '8px', fontSize: 11, color: 'var(--gb-text-muted)', textAlign: 'center' }}>No values.</div>}
+          </ScrollArea>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* A date-bucket facet section (Last Order Age / Next Task). */
+function DateFacetSection({ group, queries, selected, onToggle }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <button onClick={() => setOpen((o) => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', border: 0, background: 'transparent', cursor: 'pointer' }}>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>{group.label}</span>
+        {selected.size > 0 && <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 99, padding: '0 6px' }}>{selected.size}</span>}
+        <I.chevd size={12} style={{ color: 'var(--gb-text-muted)', transition: 'transform var(--gb-anim)', transform: open ? 'none' : 'rotate(-90deg)' }} />
+      </button>
+      {open && (
+        <div style={{ padding: '0 8px 8px' }}>
+          {group.buckets.map((b) => (
+            <FacetRow key={b.key} label={b.label} count={queries[b.fq]} checked={selected.has(b.key)} onClick={() => onToggle(b.key)} />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
+  const anySel = Object.values(selected).some((s) => s.size > 0);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: 64 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Refine</span>
+        {anySel && <Btn variant="ghost" size="xs" icon={<I.close />} onClick={onClearAll}>Clear</Btn>}
+      </div>
+      {SOLR_FACETS.map((f) => (
+        <FacetSection key={f.field} facet={f} rows={(facets && facets.fields && facets.fields[f.field]) || []}
+          selected={selected[f.field]} onToggle={(v) => onToggle(f.field, v)} defaultOpen={f.field === 'recordType_s'} />
+      ))}
+      {SOLR_DATE_FACETS.map((g) => (
+        <DateFacetSection key={g.field} group={g} queries={(facets && facets.queries) || {}}
+          selected={selected[g.field]} onToggle={(k) => onToggle(g.field, k)} />
+      ))}
+    </div>
+  );
 }
 
 /* One result row — staggered fade-in, click-through to the record. */
@@ -89,21 +188,23 @@ function ResultRow({ r, i }) {
   return (
     <tr className="gb-actrow" onClick={go} title={url ? 'Open record' : undefined}
       style={{ ...trStyle, cursor: url ? 'pointer' : 'default', animation: 'gb-fade-slide var(--gb-anim) both', animationDelay: Math.min(i, 16) * 18 + 'ms' }}>
+      <Td align="center">{r.recordType_s ? <Tag tone={typeTone(r.recordType_s)} size="xs">{r.recordType_s}</Tag> : DASH}</Td>
       <Td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `var(--gb-${typeTone(r.recordType_s)}-tint-medium)`, border: `1px solid var(--gb-${typeTone(r.recordType_s)}-tint-border)`, color: `var(--gb-${typeTone(r.recordType_s)}-fg)` }}>
-            {isAcct ? <I.briefcase size={13} /> : <I.user size={13} />}
+          <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `var(--gb-${typeTone(r.recordType_s)}-tint-medium)`, border: `1px solid var(--gb-${typeTone(r.recordType_s)}-tint-border)`, color: `var(--gb-${typeTone(r.recordType_s)}-fg)` }}>
+            {isAcct ? <I.briefcase size={12} /> : <I.user size={12} />}
           </span>
           <span style={{ fontWeight: 600, color: 'var(--gb-text-primary)' }}>{name}</span>
         </div>
       </Td>
       <Td muted>{r.accountName_t || DASH}</Td>
-      <Td align="center">{r.recordType_s ? <Tag tone={typeTone(r.recordType_s)} size="xs">{r.recordType_s}</Tag> : DASH}</Td>
+      <Td mono muted>{r.accountID_s || DASH}</Td>
+      <Td mono muted>{customerIdOf(r) || DASH}</Td>
+      <Td muted>{r.salesRep_s && r.salesRep_s !== 'None' ? r.salesRep_s : DASH}</Td>
       <Td muted>{email || DASH}</Td>
-      <Td align="right" mono>{num(r.orderCount_i) != null ? r.orderCount_i : DASH}</Td>
-      <Td align="right" mono>{num(r.yearToDateRevenue_f) != null ? fmt$(r.yearToDateRevenue_f) : DASH}</Td>
-      <Td align="right" mono>{num(r.priorYearRevenue_f) != null ? fmt$(r.priorYearRevenue_f) : DASH}</Td>
       <Td align="right" mono muted>{r.lastOrderDate_dt ? fmtDate(r.lastOrderDate_dt) : DASH}</Td>
+      <Td align="right" mono>{num(r.orderCount_i) != null ? r.orderCount_i : DASH}</Td>
+      <Td align="right" mono muted>{r.nextTaskDate_dt ? fmtDate(r.nextTaskDate_dt) : DASH}</Td>
     </tr>
   );
 }
@@ -116,6 +217,12 @@ function App({ store }) {
   const [query, setQuery] = useState(url0.q);
   const [type, setType] = useState(url0.type);
   const [qbFilter, setQbFilter] = useState(url0.fq ? { label: 'Saved filter', solrFq: url0.fq, conditions: [], state: null } : null);
+  // Facet selections (Sets per field) + the facet counts from the last search.
+  const emptySel = () => ({ recordType_s: new Set(), salesRep_s: new Set(), role_s: new Set(), podID_i: new Set(), lastOrderDate_dt: new Set(), nextTaskDate_dt: new Set() });
+  const [selected, setSelected] = useState(emptySel);
+  const [facets, setFacets] = useState(null);
+  const selRef = useRef(selected);
+  selRef.current = selected;
   const [rows, setRows] = useState([]);
   const [numFound, setNumFound] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -142,10 +249,15 @@ function App({ store }) {
     if (start === 0) { setLoading(true); setError(false); } else setLoadingMore(true);
     setSearched(true);
     try {
-      const { docs, numFound } = await crmSolrQuery({ query: q, type: t, solrFq: qb?.solrFq || '', start });
+      const { docs, numFound, facets: fc } = await crmSolrQuery({
+        query: q, type: t, solrFq: qb?.solrFq || '',
+        filters: facetFilters(selRef.current), start,
+        facet: start === 0,   // only need facet counts on the first page
+      });
       if (gen.current !== g) return;
       setRows((prev) => (start === 0 ? docs : prev.concat(docs)));
       setNumFound(numFound);
+      if (fc) setFacets(fc);
     } catch (e) {
       if (gen.current !== g) return;
       setError(true); if (start === 0) setRows([]);
@@ -154,6 +266,23 @@ function App({ store }) {
       if (gen.current === g) { setLoading(false); setLoadingMore(false); }
     }
   }, []);
+
+  // Toggle a facet value and re-run (selRef gives runSearch the fresh set).
+  const toggleFacet = (field, value) => {
+    setSelected((prev) => {
+      const next = { ...prev, [field]: new Set(prev[field]) };
+      if (next[field].has(value)) next[field].delete(value); else next[field].add(value);
+      selRef.current = next;
+      return next;
+    });
+    setTimeout(() => runSearch(query.trim(), type, qbFilter, 0), 0);
+  };
+  const clearFacets = () => {
+    const cleared = emptySel();
+    setSelected(cleared); selRef.current = cleared;
+    setTimeout(() => runSearch(query.trim(), type, qbFilter, 0), 0);
+  };
+  const facetCount = Object.values(selected).reduce((n, s) => n + s.size, 0);
 
   // On mount: always run an initial search so the page opens on a populated
   // list (match-all → most-recent records) like the native page, seeded with
@@ -181,6 +310,12 @@ function App({ store }) {
         modalHost={modalHost}
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
+        <div style={{ display: 'grid', gridTemplateColumns: '238px minmax(0, 1fr)', gap: 14, alignItems: 'flex-start' }}>
+          {/* ── Facet filter sidebar (Entity Types / Sales Rep / Role / Pod / dates) ── */}
+          <FacetSidebar facets={facets} selected={selected} onToggle={toggleFacet} onClearAll={clearFacets} />
+
+          {/* ── Search + results column ─────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
         {/* ── Search hero ─────────────────────────────────────── */}
         <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -246,14 +381,16 @@ function App({ store }) {
               <ScrollArea max={listMax}>
                 <table style={tableStyle}>
                   <thead><tr>
-                    <Th>Name</Th>
-                    <Th>Account</Th>
                     <Th align="center">Type</Th>
+                    <Th>Contact</Th>
+                    <Th>Account</Th>
+                    <Th>Account ID</Th>
+                    <Th>Customer ID</Th>
+                    <Th>Sales Rep</Th>
                     <Th>Email</Th>
-                    <Th align="right">Orders</Th>
-                    <Th align="right">YTD</Th>
-                    <Th align="right">Prior Yr</Th>
                     <Th align="right">Last Order</Th>
+                    <Th align="right">Orders</Th>
+                    <Th align="right">Next Task</Th>
                   </tr></thead>
                   <tbody>
                     {rows.map((r, i) => <ResultRow key={(r.id || '') + i} r={r} i={i} />)}
@@ -271,6 +408,8 @@ function App({ store }) {
             </>
           )}
         </Card>
+          </div>
+        </div>
       </DetailPageFrame>
 
       {/* Query Builder overlay (its own FloatingPanel); applies a Solr fq. */}

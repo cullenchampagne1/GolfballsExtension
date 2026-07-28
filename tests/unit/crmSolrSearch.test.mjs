@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSolrQ, buildSolrBody } from '../../src/lib/crmSolrSearch.js';
+import { buildSolrQ, buildSolrBody, parseFacets, facetFilters } from '../../src/lib/crmSolrSearch.js';
 
 describe('crm · Solr search query building', () => {
   it('empty term → match-all', () => {
@@ -49,5 +49,52 @@ describe('crm · Solr search query building', () => {
   it('adds a start offset only past page 0 (pagination)', () => {
     assert.doesNotMatch(buildSolrBody({ query: 'x', start: 0 }), /&start=/);
     assert.match(buildSolrBody({ query: 'x', start: 100 }), /&start=100&/);
+  });
+
+  it('appends each selected facet as its own fq', () => {
+    const b = buildSolrBody({ query: 'x', filters: ['recordType_s:("Contact")', 'role_s:("BDR")'] });
+    assert.ok(b.includes('&fq=' + encodeURIComponent('recordType_s:("Contact")')));
+    assert.ok(b.includes('&fq=' + encodeURIComponent('role_s:("BDR")')));
+  });
+
+  it('requests value + date facets when facet:true', () => {
+    const b = buildSolrBody({ facet: true });
+    assert.match(b, /facet=true/);
+    assert.ok(b.includes('facet.field=' + encodeURIComponent('recordType_s')));
+    assert.ok(b.includes('facet.field=' + encodeURIComponent('salesRep_s')));
+    assert.ok(b.includes('facet.query='));   // date-bucket counts
+  });
+});
+
+describe('crm · Solr facets', () => {
+  it('parseFacets flattens facet_fields into {value,count} rows and keeps queries', () => {
+    const data = { facet_counts: {
+      facet_fields: { recordType_s: ['Contact', 4202914, 'Account', 147274] },
+      facet_queries: { 'nextTaskDate_dt:[* TO NOW]': 122861 },
+    } };
+    const f = parseFacets(data);
+    assert.deepEqual(f.fields.recordType_s, [{ value: 'Contact', count: 4202914 }, { value: 'Account', count: 147274 }]);
+    assert.equal(f.queries['nextTaskDate_dt:[* TO NOW]'], 122861);
+  });
+
+  it('facetFilters quotes string values, ORs within a field, and leaves ints unquoted', () => {
+    const fqs = facetFilters({
+      recordType_s: new Set(['Contact', 'Account']),
+      podID_i: new Set(['0', '3']),
+      salesRep_s: new Set(['Cullen Champagne']),
+    });
+    assert.ok(fqs.includes('recordType_s:("Contact" OR "Account")'));
+    assert.ok(fqs.includes('podID_i:(0 OR 3)'));
+    assert.ok(fqs.includes('salesRep_s:("Cullen Champagne")'));
+  });
+
+  it('facetFilters maps a picked date bucket to its range fq', () => {
+    const fqs = facetFilters({ nextTaskDate_dt: new Set(['pastdue']) });
+    assert.ok(fqs.includes('nextTaskDate_dt:[* TO NOW]'));
+  });
+
+  it('facetFilters returns nothing when no facets are selected', () => {
+    assert.deepEqual(facetFilters({}), []);
+    assert.deepEqual(facetFilters({ recordType_s: new Set() }), []);
   });
 });
