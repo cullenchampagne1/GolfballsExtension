@@ -12,7 +12,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { Btn, ContactPill, Card, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, IconBtn, KV, LazySection, OrdersPanel, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, fmtDate, goUrl, isEmpty, readBackTo, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
-import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, OpportunityModal, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
+import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, OpportunityModal, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, crmUpdateAccount, gbToast, useDetailData, useModal, useModalHost, usePatch } from '../lib/crm-detail-shared.jsx';
 
 /* ════════════════════════════════════════════════════════════
    HERO / PROFILE CARD
@@ -120,24 +120,52 @@ function ContactsPanel() {
    no account Update transport yet, so EditToggle only flips the row styling. */
 function AccountInfoCard() {
   const D = useD();
+  const patch = usePatch();
   const a = D.account;
   const [editing, setEditing] = useState(false);
+  /* Edits keyed by the CRM's DTO field names (crmUpdateAccount reads
+     every un-edited field back off the live host form, so we only carry
+     the ones the user actually changed). */
+  const [edits, setEdits] = useState({});
+  const set = (field, value) => setEdits((e) => ({ ...e, [field]: value }));
+  const startEdit = () => { setEdits({}); setEditing(true); };
+
+  const onSave = async () => {
+    if (!Object.keys(edits).length) return;   // nothing changed
+    try {
+      await crmUpdateAccount(edits);
+      gbToast('Account updated', 'success');
+      /* Reflect the saved text into the schema so the card shows the new
+         values without a reload; the DTO keys map onto D.account fields. */
+      const map = { Name: 'name', AccountWebAddress: 'webAddress', MainCity: 'city', MainState: 'state', Context: 'contextNotes', LinkedInURL: 'linkedInUrl' };
+      const patched = Object.fromEntries(Object.entries(edits).map(([k, v]) => [map[k] || k, v]));
+      patch((Dd) => ({ ...Dd, account: { ...Dd.account, ...patched } }));
+    } catch (e) {
+      gbToast(e?.message || 'Could not update account', 'error');
+      throw e;   // keep the editor open so the fix isn't lost
+    }
+  };
+
+  /* Select-backed CRM fields (Industry / Territory / User Type / Tax
+     Exempt) can't be safely edited as free text — they post option
+     values, not the display labels we render — so they stay read-only
+     during edit and crmUpdateAccount preserves their current host value. */
   return (
     <Card>
       <SectionTitle
         icon={<I.briefcase />} title="Account Information"
         sub={`#${D.ids.account || DASH} · ${txt(a.name) || DASH}`}
-        right={<EditToggle editing={editing} setEditing={setEditing} />}
+        right={<EditToggle editing={editing} setEditing={(v) => (v ? startEdit() : setEditing(false))} onSave={onSave} />}
       />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px', padding: '8px 18px 14px' }}>
         <div>
-          <EKV label="Account Name" value={txt(a.name)} editing={editing} />
+          <EKV label="Account Name" value={txt(a.name)} editing={editing} field="Name" onEdit={set} />
           <KV label="Account ID" mono copyable>{txt(D.ids.account)}</KV>
           <EKV label="Industry" value={txt(a.industry)} editing={editing} />
-          <EKV label="Web Address" value={txt(a.webAddress)} editing={editing} />
-          <EKV label="City" value={txt(a.city)} editing={editing} />
-          <EKV label="State" value={txt(a.state)} editing={editing} />
-          <EKV label="Context" value={txt(a.contextNotes)} editing={editing} />
+          <EKV label="Web Address" value={txt(a.webAddress)} editing={editing} field="AccountWebAddress" onEdit={set} />
+          <EKV label="City" value={txt(a.city)} editing={editing} field="MainCity" onEdit={set} />
+          <EKV label="State" value={txt(a.state)} editing={editing} field="MainState" onEdit={set} />
+          <EKV label="Context" value={txt(a.contextNotes)} editing={editing} field="Context" onEdit={set} />
         </div>
         <div>
           {editing
@@ -151,7 +179,7 @@ function AccountInfoCard() {
           <EKV label="User Type" value={txt(a.userType)} editing={editing} />
           <EKV label="Tax Exempt" value={a.taxExempt ? 'Yes' : 'No'} editing={editing} />
           <EKV label="Credit Approved" value={fmtDate(a.creditApproved) === DASH ? '' : fmtDate(a.creditApproved)} editing={editing} />
-          <EKV label="LinkedIn URL" value={txt(a.linkedInUrl)} editing={editing} />
+          <EKV label="LinkedIn URL" value={txt(a.linkedInUrl)} editing={editing} field="LinkedInURL" onEdit={set} />
           <KV label="Created By">{txt(a.createdBy)}</KV>
           <KV label="Created On" mono>{fmtDate(a.createdDate) === DASH ? null : fmtDate(a.createdDate)}</KV>
         </div>

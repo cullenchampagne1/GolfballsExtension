@@ -16,6 +16,7 @@ import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
+import { buildAccountPayload, accountUpdateUrl, checkAccountResponse } from './accountUpdate.js';
 import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
 import { TASK_CATEGORY_OPTIONS } from './taskCategories.js';
 import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
@@ -177,6 +178,35 @@ export async function crmUpdateContact(customerId, edits) {
   };
   const up = await fetch(`${base}/golfballs/crm/Admin/Contact/Update.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
   if (!up.ok) throw new Error('update failed');
+}
+
+/**
+ * Persist account edits via the CRM's own Account/UpdateFromContactPage
+ * endpoint. `edits` is a partial map keyed by DTO name (e.g.
+ * { Name, AccountWebAddress, MainCity }); every unedited field is read
+ * back from the live host form so the full payload matches what the
+ * native Save would send — no field is blanked (Account/Get.ajax errors
+ * on this CRM, so the host form is the source of truth). Throws with the
+ * CRM's own ErrorMessage (+ ErrorFields) when the server rejects the
+ * write, so the caller can toast it. Runs in the content-script world,
+ * which shares the host page DOM, so the account inputs are reachable.
+ * Payload/response contract lives in accountUpdate.js (unit-tested).
+ */
+export async function crmUpdateAccount(edits = {}) {
+  const doc = (typeof document !== 'undefined') ? document : null;
+  if (!doc) throw new Error('Account update needs a page context');
+  const readEl = (id) => {
+    const el = doc.getElementById(id) || doc.querySelector(`[name="${id}"]`);
+    if (!el) return '';
+    return (el.value != null ? el.value : (el.textContent || '')).toString();
+  };
+  const payload = buildAccountPayload(edits, readEl);
+  if (!payload.AccountID) throw new Error('No account id on this page');
+
+  const base = crmOrigin();
+  const resp = await fetch(accountUpdateUrl(base, payload), { credentials: 'include' });
+  if (!resp.ok) throw new Error(`CRM returned HTTP ${resp.status}`);
+  return checkAccountResponse(await resp.text());
 }
 
 
