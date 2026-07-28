@@ -79,12 +79,15 @@ const MODEL_VERSION = '20250607-15-markerflat';
 const BALL_NORMALIZE_RADIUS = 100;
 
 // printAreaScale is the fraction of the ball's DIAMETER (the visible face) that
-// the printed logo spans — so 0.5208 renders a print occupying 52.08% of the
-// face, matching the real print-area-to-ball ratio. The decal box is a WIDTH in
-// world units, and diameter = 2·radius, so every decal size is
-// `radius * 2 * printAreaScale`. (Historically this knob was radius-relative
-// with a 0.7 default, which rendered ~35% of the face — half the true size.)
-const PRINT_AREA_SCALE_DEFAULT = 0.5208;
+// the printed logo spans. The decal box is a WIDTH in world units and
+// diameter = 2·radius, so every decal size is `radius * 2 * printAreaScale`.
+//
+// Real imprint spec: a 0.875" max imprint circle on a 2.68" standard ball, so
+// the print covers 0.875 / 2.68 = 32.65% of the diameter. (Note 52.08% would be
+// 0.875 / 1.68 — the wrong ball diameter.) The old 0.7 radius-relative default
+// happened to render ~35% of the face, close to this; keeping the intuitive
+// diameter semantics, the correct default is the spec ratio itself.
+const PRINT_AREA_SCALE_DEFAULT = 0.875 / 2.68;  // ≈ 0.3265 → 32.65% of the face
 
 async function loadThreeAndModel(shape = 'ball', makeProgress) {
   if (!cache.three) {
