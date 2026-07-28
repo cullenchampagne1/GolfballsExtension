@@ -124,6 +124,16 @@ function App({ store }) {
   const [searched, setSearched] = useState(false);
   const [qbOpen, setQbOpen] = useState(false);
   const [focused, setFocused] = useState(false);
+  // Results list fills the leftover vertical space. The takeover renders at
+  // PAGE_ZOOM (1.375), so a height in this coordinate space shows scaled — divide
+  // the real viewport by the zoom, minus the top bar + hero + card chrome.
+  const [listMax, setListMax] = useState(560);
+  useEffect(() => {
+    const calc = () => setListMax(Math.max(340, Math.round((window.innerHeight || 900) / 1.375) - 250));
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, []);
   const inputRef = useRef(null);
   const gen = useRef(0);   // ignore stale responses
 
@@ -233,7 +243,7 @@ function App({ store }) {
             </div>
           ) : (
             <>
-              <ScrollArea max={640}>
+              <ScrollArea max={listMax}>
                 <table style={tableStyle}>
                   <thead><tr>
                     <Th>Name</Th>
