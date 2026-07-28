@@ -1303,7 +1303,7 @@ export function OrdersPanel() {
   );
 }
 
-export function EmailsPanel() {
+export function EmailsPanel({ onCompose }) {
   const D = useD();
   const me = (D.contact.email || '').toLowerCase();
   const dirOf = (e) => {
@@ -1317,12 +1317,9 @@ export function EmailsPanel() {
       <SectionTitle
         icon={<I.mail />} title="Email History" count={`${D.emails.length} shown`}
         sub="All emails to or from this contact"
-        right={
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Btn variant="ghost" size="sm" icon={<I.filter />}>Filter</Btn>
-            <Btn variant="tinted" size="sm" icon={<I.send />}>Compose</Btn>
-          </div>
-        }
+        right={onCompose && (
+          <Btn variant="tinted" size="sm" icon={<I.send />} onClick={onCompose}>Compose</Btn>
+        )}
       />
       <ScrollArea max={420}>
       <table style={tableStyle}>

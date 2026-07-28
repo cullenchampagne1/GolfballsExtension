@@ -98,6 +98,13 @@ function App({ store }) {
   const modalHost = useModalHost();
   const name = fullName(D.contact) || 'Contact';
 
+  // One compose entry used by both the hero "Send Email" and the Email
+  // History "Compose" button.
+  const openCompose = () => {
+    if (!String(D.contact.email || '').trim()) { gbToast('This contact has no email address', 'error'); return; }
+    modalHost.openModal(<ContactEmailModal />);
+  };
+
   return (
     <DataCtx.Provider value={D}>
     <PatchCtx.Provider value={patch}>
@@ -111,10 +118,7 @@ function App({ store }) {
             <Breadcrumb items={[{ label: 'CRM', page: 261 }, { label: 'Customers', page: 360 }]} current={name} id={D.ids.contact} />
           </TopBar>
         }>
-        <Hero onSendEmail={() => {
-          if (!String(D.contact.email || '').trim()) { gbToast('This contact has no email address', 'error'); return; }
-          modalHost.openModal(<ContactEmailModal />);
-        }} />
+        <Hero onSendEmail={openCompose} />
 
         {/* Account Info + Contact Info side-by-side, always visible */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -131,7 +135,7 @@ function App({ store }) {
               popover can overflow the card. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
             <ActivityPanel onAddNote={() => modalHost.openModal(<AddNoteModal />)} />
-            <LazySection><EmailsPanel /></LazySection>
+            <LazySection><EmailsPanel onCompose={openCompose} /></LazySection>
             <LazySection><OpportunitiesPanel /></LazySection>
             <LazySection minHeight={860}><OrdersPanel /></LazySection>
             <LazySection minHeight={300}><ProofsPanel /></LazySection>

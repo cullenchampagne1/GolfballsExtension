@@ -855,10 +855,18 @@ export function ContactEditModal() {
         <FormField label="LinkedIn URL" style={{ flex: 1 }}><TInput value={f.LinkedInURL} onChange={set('LinkedInURL')} placeholder="https://linkedin.com/in/…" /></FormField>
       </div>
       <FormField label="Context"><TArea value={f.Context} onChange={set('Context')} rows={3} placeholder="Internal context notes…" /></FormField>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--gb-text-secondary)', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
-        <input type="checkbox" checked={f.Archived} onChange={(e) => setF((p) => ({ ...p, Archived: e.target.checked }))} />
-        Archived
-      </label>
+      <div onClick={() => setF((p) => ({ ...p, Archived: !p.Archived }))}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', border: '1px solid ' + (f.Archived ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-subtle)'), background: f.Archived ? 'var(--gb-warning-tint-soft)' : 'var(--gb-fill-faint)', cursor: 'pointer', transition: 'all var(--gb-anim)' }}>
+        {/* themed toggle switch */}
+        <span style={{ width: 34, height: 19, borderRadius: 99, flexShrink: 0, padding: 2, background: f.Archived ? 'var(--gb-warning-fg)' : 'var(--gb-border-strong)', display: 'flex', alignItems: 'center', justifyContent: f.Archived ? 'flex-end' : 'flex-start', transition: 'background var(--gb-anim)' }}>
+          <span style={{ width: 15, height: 15, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.35)', transition: 'all var(--gb-anim)' }} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: f.Archived ? 'var(--gb-warning-fg)' : 'var(--gb-text-secondary)' }}>Archived</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{f.Archived ? 'This contact is archived (hidden from active lists).' : 'Active contact.'}</div>
+        </div>
+        <I.arch size={14} style={{ color: f.Archived ? 'var(--gb-warning-fg)' : 'var(--gb-text-ghost)', flexShrink: 0 }} />
+      </div>
     </ModalShell>
   );
 }
