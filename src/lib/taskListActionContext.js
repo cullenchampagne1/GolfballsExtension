@@ -80,10 +80,18 @@ export function buildTaskListActionContext({
   const contacts = new Map();
 
   for (const task of tasks) {
-    if (!task.contactId) continue;
-    if (!contacts.has(task.contactId)) {
-      contacts.set(task.contactId, {
-        contactId: task.contactId,
+    // Group by the real contact id when the row exposed one; otherwise fall
+    // back to the task's own id so the contact is still surfaced — its real
+    // contactId is resolved at write time from `taskId` via Task/Get (task-list
+    // rows frequently expose the contact only via an onclick link with no
+    // usable href). Only truly id-less rows are skipped.
+    const key = task.contactId || (task.id ? `task:${task.id}` : '');
+    if (!key) continue;
+    if (!contacts.has(key)) {
+      contacts.set(key, {
+        key,
+        contactId: task.contactId || '',
+        taskId: task.id || '',   // representative task for reliable contactId resolution
         contactName: task.contact,
         contactUrl: task.contactUrl,
         accountId: task.accountId,
@@ -92,7 +100,7 @@ export function buildTaskListActionContext({
         taskIds: [],
       });
     }
-    contacts.get(task.contactId).taskIds.push(task.id);
+    contacts.get(key).taskIds.push(task.id);
   }
 
   return {

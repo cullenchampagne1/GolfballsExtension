@@ -47,11 +47,14 @@ function assertHelperResult(result, fallback) {
   return result;
 }
 
+const isNumericId = (v) => /^\d{1,12}$/.test(String(v == null ? '' : v).trim()) && Number(v) > 0;
+
 function taskTemplate(input) {
   const {
     contactId: _contactId,
     contactName: _contactName,
     accountId: _accountId,
+    taskId: _taskId,
     ...value
   } = (input || {});
   const priorities = { high: 1, med: 2, medium: 2, low: 3 };
@@ -77,6 +80,17 @@ function activityTemplate(input, { note = false } = {}) {
 
 export function makeExecutor(deps = {}) {
   const ctx = deps.ctx || {};
+  // Cache Task/Get contactId lookups so a contact that gets several tasks in
+  // one run (e.g. four quarterly reach-outs) only resolves its id once.
+  const taskContactCache = new Map();
+  const resolveContactFromTask = async (taskId) => {
+    const key = String(taskId);
+    if (taskContactCache.has(key)) return taskContactCache.get(key);
+    let id = '';
+    try { id = await deps.getTaskContactId(taskId); } catch (e) { id = ''; }
+    taskContactCache.set(key, id);
+    return id;
+  };
   const prepare = async (contract, input) => (
     typeof deps.prepareInput === 'function'
       ? (await deps.prepareInput(contract, input || {})) || {}
@@ -104,15 +118,23 @@ export function makeExecutor(deps = {}) {
       }
       if (contract === 'createTask') {
         if (!deps.submitQuickTask) throw new Error('task creation is not configured');
+        let contactId = i.contactId || ctx.contactId;
+        // Task-list rows often can't expose a usable contact id (onclick links,
+        // or mock ids). When the given id isn't a real numeric contact but a
+        // representative task id was passed, resolve the real contact from the
+        // task via Task/Get — the same reliable path the modal bulk-create uses.
+        if (!isNumericId(contactId) && i.taskId && typeof deps.getTaskContactId === 'function') {
+          contactId = await resolveContactFromTask(i.taskId);
+        }
+        if (!isNumericId(contactId)) {
+          throw new Error('no valid contact id — pass createTask({ contactId }) or a { taskId } to resolve one');
+        }
         const target = {
-          contactId: i.contactId || ctx.contactId,
+          contactId: String(contactId),
           employeeId: ctx.employeeId,
           contactName: i.contactName || ctx.contactName,
           accountId: i.accountId || ctx.accountId,
         };
-        if (!target.contactId) {
-          throw new Error('no contact id — provide createTask({ contactId }) or run on a contact');
-        }
         return assertHelperResult(
           await deps.submitQuickTask({
             template: taskTemplate(i),

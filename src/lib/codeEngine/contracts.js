@@ -93,6 +93,7 @@ export const CONTRACTS = Object.freeze({
       contactId: { type: 'string', max: 80 },
       contactName: { type: 'string', max: 300 },
       accountId: { type: 'string', max: 80 },
+      taskId: { type: 'string', max: 40 },
     },
     validate: (i) => {
       const errors = [];

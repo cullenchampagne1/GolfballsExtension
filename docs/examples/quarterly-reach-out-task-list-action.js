@@ -120,12 +120,23 @@ for (const task of taskRows) {
   if (result.renamed) renamedTaskCount += 1;
 }
 
+// Group by a stable key: the real contact id when the row exposed one, else
+// the task's own id (the executor resolves the real contact from taskId at
+// write time). This keeps contacts whose row had no usable contact link.
+function contactKey(row) {
+  const cid = String(row?.contactId || "");
+  if (cid) return cid;
+  return row?.id ? "task:" + row.id : "";
+}
+
 for (const contact of contacts) {
-  const contactId = String(contact?.contactId || "");
-  if (!contactId) continue;
-  contactPlans.set(contactId, {
-    contactId,
-    contactName: String(contact.contactName || contactId),
+  const key = String(contact?.key || contactKey(contact) || "");
+  if (!key) continue;
+  contactPlans.set(key, {
+    key,
+    contactId: String(contact.contactId || ""),
+    taskId: String(contact.taskId || ""),
+    contactName: String(contact.contactName || contact.contactId || key),
     accountId: String(contact.accountId || ""),
     accountName: String(contact.accountName || ""),
     occupied: new Set()
@@ -133,9 +144,9 @@ for (const contact of contacts) {
 }
 
 for (const task of taskRows) {
-  const contactId = String(task?.contactId || "");
+  const key = contactKey(task);
   const dueDate = calendarDate(task?.dueDate || task?.due);
-  const plan = contactPlans.get(contactId);
+  const plan = key ? contactPlans.get(key) : null;
   if (plan && dueDate) plan.occupied.add(quarterKey(dueDate));
 }
 
@@ -158,6 +169,7 @@ for (const plan of contactPlans.values()) {
 
     const created = await actions.createTask({
       contactId: plan.contactId,
+      taskId: plan.taskId,   // executor resolves the real contact from this when contactId is unusable
       contactName: plan.contactName,
       accountId: plan.accountId,
       subject: `Q${slot.quarter} Reach Out Opportunity`,

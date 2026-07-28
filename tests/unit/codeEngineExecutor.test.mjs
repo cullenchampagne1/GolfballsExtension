@@ -135,7 +135,7 @@ describe('executor · routing', () => {
     });
     await assert.rejects(
       () => ex.run('createTask', { subject: 'Quarterly reach out' }),
-      /provide createTask\(\{ contactId \}\)/,
+      /no valid contact id/,
     );
   });
 });

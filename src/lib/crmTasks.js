@@ -145,6 +145,18 @@ export async function updateTaskById(id, fields = {}) {
   return { ok: true, taskId: safeId, changed: changes.map(([key]) => key) };
 }
 
+/* Resolve a task's real CRM contactID from its task id via Task/Get — the
+   reliable source the Task List's own bulk-create uses (apiGetTaskContactId).
+   Task-list rows often expose the contact only through an onclick link with no
+   usable href (or a mock id), so parsing the row is unreliable; the task id is
+   always the numeric taskrow_<id>. Returns '' when there is no valid contact. */
+export async function getTaskContactId(id) {
+  const safeId = numericId(id, 'task ID');
+  const task = await fetchTaskRaw(safeId);
+  const cid = String(task?.contactID ?? '').trim();
+  return /^\d{1,12}$/.test(cid) && Number(cid) > 0 ? cid : '';
+}
+
 /* Mark one task complete — the legacy tlCompleteTask payload shape
    (TaskId numeric, taskStatusID 3). */
 export async function completeTaskById(id) {

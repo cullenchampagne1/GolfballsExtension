@@ -142,6 +142,10 @@
       "file": "tests/unit/actionProgressCancel.test.mjs"
     },
     {
+      "name": "flow \u00b7 createTask resolves contact from taskId",
+      "file": "tests/unit/actionCreateTaskContact.test.mjs"
+    },
+    {
       "name": "ui \u00b7 task list virtualized row window",
       "file": "tests/unit/taskListVirtualizer.test.mjs"
     },
