@@ -338,6 +338,11 @@ export function EmailComposer({
   savedProposals, onApplySavedProposal, initiallyExpanded = false,
   editableSubject = false, onDiscard, transportLabel = 'Power Automate',
   placeholder = 'Write your reply…  Type / for commands', sticky = true,
+  // `fill` = dedicated compose modal: drop the sticky inline-reply chrome
+  // (the surface-canvas band + top shadow meant for fading a message list
+  // above it), always render expanded, and make the box + editor fill the
+  // modal's height.
+  fill = false,
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [draftSubject, setDraftSubject] = useState(subject || '');
@@ -411,8 +416,11 @@ export function EmailComposer({
     return () => clearTimeout(t);
   }, [expanded, nonce]);
 
+  const isOpen = fill || expanded;
   return (
-    <div style={{
+    <div style={fill ? {
+      position: 'relative',
+    } : {
       position: sticky ? 'sticky' : 'relative', bottom: sticky ? 0 : 'auto',
       background: 'var(--gb-surface-canvas)',
       boxShadow: '0 -24px 28px -16px var(--gb-surface-canvas)',
@@ -420,11 +428,11 @@ export function EmailComposer({
     }}>
       <div style={{
         background: 'var(--gb-surface-1)',
-        border: '1px solid ' + (expanded ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
-        borderRadius: 'var(--gb-r-md)',
-        boxShadow: expanded
+        border: '1px solid ' + (isOpen ? 'var(--gb-border-default)' : 'var(--gb-border-default)'),
+        borderRadius: fill ? 'var(--gb-r-lg)' : 'var(--gb-r-md)',
+        boxShadow: fill ? 'none' : (expanded
           ? '0 6px 24px -8px color-mix(in srgb, var(--gb-brand-label) 28%, transparent)'
-          : '0 2px 10px -4px rgba(0,0,0,.35)',
+          : '0 2px 10px -4px rgba(0,0,0,.35)'),
         overflow: 'hidden',
         transition: 'border-color .25s, box-shadow .25s',
       }}>
@@ -468,7 +476,7 @@ export function EmailComposer({
         {/* grid-rows collapse — smooth open/close via CSS, no framer
             height measurement (was jittery). The editor stays mounted so
             the close animates too; discard bumps `nonce` to clear it. */}
-        <div style={{ display: 'grid', gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows .28s cubic-bezier(.32, .72, 0, 1)' }}>
+        <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: fill ? 'none' : 'grid-template-rows .28s cubic-bezier(.32, .72, 0, 1)' }}>
           <div style={{ overflow: 'hidden', minHeight: 0 }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
@@ -486,13 +494,14 @@ export function EmailComposer({
                 <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{draftSubject}</span>
               )}
             </div>
-            <div ref={editorWrapRef} style={{ position: 'relative', padding: '4px 6px' }}>
+            <div ref={editorWrapRef} style={{ position: 'relative', padding: fill ? 0 : '4px 6px' }}>
               <RichTextEditor
                 key={nonce}
                 initialHtml={body}
                 onChange={setBody}
+                bare={fill}
                 placeholder={placeholder}
-                minHeight={120}
+                minHeight={fill ? 360 : 120}
                 onSlashQueryChange={onSlashQueryChange}
                 onSlashNavigate={(direction) => setActiveIndex((index) => Math.max(0, Math.min(index + direction, Math.max(0, slashResults.length - 1))))}
                 onSlashExecute={(api) => chooseSlashResult(slashResults[activeIndex], api)}

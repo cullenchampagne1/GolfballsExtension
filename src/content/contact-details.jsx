@@ -81,7 +81,7 @@ function ContactEmailModal() {
         onApplySavedProposal={async (proposal) => ({ ok: true, mode: 'insert', text: savedProposalPlaceholder(proposal) })}
         initiallyExpanded
         editableSubject
-        sticky={false}
+        fill
         onDiscard={closeModal}
         transportLabel={config ? (config.paReady ? 'Power Automate' : 'Outlook') : 'Checking…'}
         placeholder="Write your email…  Type / for commands"

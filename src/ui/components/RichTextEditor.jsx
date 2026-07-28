@@ -333,6 +333,10 @@ export function RichTextEditor({
   initialHtml, onChange, onChipClick, variables = [], singleLine = false,
   size = 'md', minHeight, placeholder = '', onAttachmentResize,
   onSlashQueryChange, onSlashExecute, onSlashNavigate, onSlashCancel,
+  // `bare` = no outer border/radius/background — the editor blends into a
+  // parent that already frames it (e.g. the compose modal), instead of
+  // drawing a redundant nested box.
+  bare = false,
 }) {
   const sz       = SIZES[size] || SIZES.md;
   const bodyMinH = minHeight != null ? minHeight : sz.minHeight;
@@ -585,13 +589,13 @@ export function RichTextEditor({
 
   return (
     <div style={{
-      border: '1px solid var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-md)',
+      border: bare ? 'none' : '1px solid var(--gb-border-default)',
+      borderRadius: bare ? 0 : 'var(--gb-r-md)',
       // Clip children to the rounded corners. Without this, the singleLine
       // overflow:auto scroll layer + the body's content paint extend past
       // the wrapper's border-radius and the corners look square.
       overflow: 'hidden',
-      background: 'var(--gb-surface-canvas)',
+      background: bare ? 'transparent' : 'var(--gb-surface-canvas)',
     }}>
       {/* ── Toolbar (full mode only) ── */}
       {!singleLine && (
