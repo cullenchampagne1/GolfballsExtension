@@ -108,6 +108,12 @@ const contactPlans = new Map();
 let liveDateUpdateCount = 0;
 let renamedTaskCount = 0;
 
+// progress.* drives the run modal (percentage, section label, live log) and
+// gives the run a cancel point. The percentage total is derived automatically
+// from the write plan; here we just label the phases and yield for cancel.
+progress.log(`Evaluating ${taskRows.length} task(s) across ${contacts.length} contact(s).`);
+progress.section("Reconciling existing task live dates & names");
+
 for (const task of taskRows) {
   const result = reconcileExistingTask(task);
   if (result.liveDate) liveDateUpdateCount += 1;
@@ -137,7 +143,12 @@ let createdCount = 0;
 let coveredCount = 0;
 let touchedContacts = 0;
 
+progress.section(`Creating quarterly reach-outs for ${contactPlans.size} contact(s)`);
+
 for (const plan of contactPlans.values()) {
+  // Yield once per contact: repaints the modal and, if the user hit Cancel,
+  // throws to stop the run before any more tasks are created.
+  await progress.checkpoint();
   let contactCreated = 0;
   for (const slot of targetQuarters) {
     if (plan.occupied.has(slot.key)) {

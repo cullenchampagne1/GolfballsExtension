@@ -51,9 +51,28 @@ export function asyncFunctionRunner(code, scope) {
  *           params), surfaced as a preflight without ever sending anything.
  */
 /* Contracts that perform a real effect (routed to the executor on a live run). */
-const EFFECT_CONTRACTS = new Set([
+export const EFFECT_CONTRACTS = new Set([
   'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask', 'editContact',
 ]);
+
+/* Count the real-write steps in a trace — the denominator for the run
+   progress bar (computed from the dry-run trace before the live replay). */
+export function countEffectSteps(trace) {
+  if (!Array.isArray(trace)) return 0;
+  let n = 0;
+  for (const t of trace) if (t && t.contract && EFFECT_CONTRACTS.has(t.contract)) n += 1;
+  return n;
+}
+
+/* Cooperative-cancel sentinel. isCancelled() → true makes the next effect
+   (or a progress.checkpoint) throw this, which unwinds the live replay so no
+   further writes fire. Recognised so the caller can render "cancelled" rather
+   than "failed". */
+export const RUN_CANCELLED = '__gb_run_cancelled__';
+function cancelledError() { const e = new Error(RUN_CANCELLED); e.__gbCancelled = true; return e; }
+export function isCancelledError(error) {
+  return !!(error && (error.__gbCancelled || String(error.message || error).includes(RUN_CANCELLED)));
+}
 const ACTION_RESULT_PREFIX = '__gb_action_result__:';
 
 /** Serializable pointer returned inside the sandbox before live replay. */
@@ -104,6 +123,8 @@ export async function simulateProgram(
     executor = null,
     beforeEffect = null,
     onEffect = null,
+    onProgress = null,
+    isCancelled = null,
     evaluateRef = null,
   } = {},
 ) {
@@ -127,7 +148,18 @@ export async function simulateProgram(
     });
   };
 
+  /* Fire the live progress callback and, on a checkpoint, honour a cancel
+     request by throwing the sentinel (unwinds the run). Shared by the Node
+     `progress` scope object and the browser replay's progress entries. */
+  const emitProgress = (op, payload) => {
+    if (typeof onProgress === 'function') { try { onProgress({ op, ...payload }); } catch (e) {} }
+    if (op === 'checkpoint' && typeof isCancelled === 'function' && isCancelled()) throw cancelledError();
+  };
+
   const record = async (id, name, input) => {
+    // Cancel is checked at the single write chokepoint: on a live replay this
+    // stops before any further real write fires.
+    if (typeof isCancelled === 'function' && isCancelled()) throw cancelledError();
     const resolvedInput = resolveActionResults(input, actionResults, !executor);
     const check = validateContractInput(name, resolvedInput);
     const entry = {
@@ -337,10 +369,25 @@ export async function simulateProgram(
     completeLatest: () => { const t = latestOpen(openTasks); if (t) t.complete(); },
   };
 
+  // The action-facing progress API. Scripts call progress.total()/section()/
+  // log()/checkpoint() to drive the run modal and to yield a cancel point.
+  // (Node path calls these directly; the browser sandbox records them and the
+  // replay routes them here via __pageRecord.progress.)
+  const progressApi = {
+    total: (n, label) => emitProgress('total', { total: Number(n) || 0, label: label != null ? String(label) : undefined }),
+    section: (label) => emitProgress('section', { label: String(label == null ? '' : label) }),
+    label: (label) => emitProgress('section', { label: String(label == null ? '' : label) }),
+    step: (o) => emitProgress('step', (o && typeof o === 'object') ? o : { label: String(o == null ? '' : o) }),
+    log: (message, level) => emitProgress('log', { message: String(message == null ? '' : message), level: level ? String(level) : 'info' }),
+    checkpoint: async () => { emitProgress('checkpoint', {}); },
+    get cancelled() { return !!(typeof isCancelled === 'function' && isCancelled()); },
+  };
+
   const scope = {
     actions: { __trace: record, __function: recordFunction },
     page: nodePage,
     user: buildUserBinding(user),
+    progress: progressApi,
     // Sandbox replay hooks + the write allowlist (for the in-sandbox proxy).
     __pageRecord: {
       complete: (t) => recordComplete(t),
@@ -352,6 +399,9 @@ export async function simulateProgram(
         }
         return commitTaskEdits(task);
       },
+      // Browser replay: a recorded progress marker → fire the live callback
+      // (and throw on a checkpoint if cancelled).
+      progress: (entry) => emitProgress(entry && entry.op, entry || {}),
     },
     __approvedFields: Object.keys(APPROVED_CONTACT_FIELDS),
     __approvedTaskFields: APPROVED_TASK_FIELDS,
@@ -370,6 +420,7 @@ export async function simulateProgram(
     await commitAllTaskEdits();
     await waitForTaskOperations();
     // A thrown program error stops the trace where it happened — still useful.
-    return { ok: false, trace, calls, error: String(error?.message || error), result: null };
+    // A cancel sentinel is flagged so the caller shows "cancelled", not "failed".
+    return { ok: false, trace, calls, error: String(error?.message || error), result: null, cancelled: isCancelledError(error) };
   }
 }

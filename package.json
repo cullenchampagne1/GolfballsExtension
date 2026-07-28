@@ -138,6 +138,10 @@
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },
     {
+      "name": "flow \u00b7 custom-action progress API + cancellation",
+      "file": "tests/unit/actionProgressCancel.test.mjs"
+    },
+    {
       "name": "ui \u00b7 task list virtualized row window",
       "file": "tests/unit/taskListVirtualizer.test.mjs"
     },

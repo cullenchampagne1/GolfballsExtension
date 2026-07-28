@@ -123,6 +123,18 @@ export function buildTraceBody(instrumentedCode) {
     '  get: (t, p) => { if (p === "commit") return () => { __gbTrace.push({ kind: "commit" }); }; return t[p]; },',
     '});',
     'page.tasks = { open: __openTasks, done: __doneTasks, items: __entryTasks.length ? __entryTasks : __openTasks.concat(__doneTasks), completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
+    // Progress API (mirror of simulate.js progressApi). Records markers into
+    // the trace; the content-side replay fires the live run-modal callback and
+    // turns a checkpoint into a cancel point.
+    'const progress = {',
+    '  total: (n, label) => { __gbTrace.push({ kind: "progress", op: "total", total: Number(n) || 0, label: label == null ? undefined : String(label) }); },',
+    '  section: (label) => { __gbTrace.push({ kind: "progress", op: "section", label: String(label == null ? "" : label) }); },',
+    '  label: (label) => { __gbTrace.push({ kind: "progress", op: "section", label: String(label == null ? "" : label) }); },',
+    '  step: (o) => { __gbTrace.push({ kind: "progress", op: "step", label: (o && typeof o === "object") ? String(o.label == null ? "" : o.label) : String(o == null ? "" : o), status: o && o.status, error: o && o.error }); },',
+    '  log: (message, level) => { __gbTrace.push({ kind: "progress", op: "log", message: String(message == null ? "" : message), level: level ? String(level) : "info" }); },',
+    '  checkpoint: async () => { __gbTrace.push({ kind: "progress", op: "checkpoint" }); },',
+    '  cancelled: false,',
+    '};',
     'const actions = {',
     '  __function(id, name) { __gbTrace.push({ kind: "function", id, name }); },',
     '  __trace(id, name, input) {',
@@ -225,6 +237,7 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
           await pageRec.taskEdit({ id: e.id, subject: e.subject }, e.fields || {});
         }
       }
+      else if (e.kind === 'progress') { if (pageRec.progress) await pageRec.progress(e); }
       else if (typeof record === 'function') await record(e.id, e.contract, e.input);
     }
     if (pageRec.commit) await pageRec.commit(); // auto-commit any staged edits
