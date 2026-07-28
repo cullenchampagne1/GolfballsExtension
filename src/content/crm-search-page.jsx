@@ -89,6 +89,29 @@ function customerIdOf(r) {
 const fmtCount = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k' : String(n));
 
 /* One selectable facet value row (label + count + check). */
+/* Smoothly animates its children open/closed by transitioning the grid row
+   from 0fr → 1fr (modern height-auto animation), so facet sections expand and
+   collapse instead of snapping. The inner wrapper clips content mid-animation. */
+function Collapse({ open, children }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows var(--gb-anim)' }}>
+      <div style={{ overflow: 'hidden', minHeight: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+/* Small ghost text button for the "Show N more / Show less" facet toggle. */
+function MoreToggle({ label, onClick }) {
+  return (
+    <button onClick={onClick}
+      style={{ display: 'block', width: '100%', padding: '5px 8px', marginTop: 2, border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--gb-brand-label)', borderRadius: 'var(--gb-r-sm)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-subtle)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+      {label}
+    </button>
+  );
+}
+
 function FacetRow({ label, count, checked, onClick }) {
   return (
     <button onClick={onClick} title={label}
@@ -107,9 +130,20 @@ function FacetRow({ label, count, checked, onClick }) {
 function FacetSection({ facet, rows, selected, onToggle, defaultOpen }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const [q, setQ] = useState('');
-  const items = (facet.searchable && q.trim())
+  const [showAll, setShowAll] = useState(false);
+  const searching = facet.searchable && !!q.trim();
+  const filtered = searching
     ? rows.filter((r) => String(r.value).toLowerCase().includes(q.trim().toLowerCase()))
     : rows;
+  const selRows = filtered.filter((r) => selected.has(String(r.value)));
+  const unselRows = filtered.filter((r) => !selected.has(String(r.value)));
+  /* Once something is picked, collapse the unselected values out of view so
+     the active picks read cleanly. The checkboxes still mean multiple-select —
+     "Show N more" re-reveals the rest to add another. Searching a long list
+     overrides the collapse so filtering always shows matches. */
+  const collapseUnsel = selected.size > 0 && !showAll && !searching;
+  const visible = collapseUnsel ? selRows : selRows.concat(unselRows);
+  const label = (r) => (facet.type === 'int' ? `Pod ${r.value}` : r.value);
   return (
     <Card>
       <button onClick={() => setOpen((o) => !o)}
@@ -118,20 +152,26 @@ function FacetSection({ facet, rows, selected, onToggle, defaultOpen }) {
         {selected.size > 0 && <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 99, padding: '0 6px' }}>{selected.size}</span>}
         <I.chevd size={12} style={{ color: 'var(--gb-text-muted)', transition: 'transform var(--gb-anim)', transform: open ? 'none' : 'rotate(-90deg)' }} />
       </button>
-      {open && (
+      <Collapse open={open}>
         <div style={{ padding: '0 8px 8px' }}>
           {facet.searchable && rows.length > 8 && (
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Filter ${facet.label.toLowerCase()}…`}
               style={{ width: '100%', height: 26, padding: '0 8px', marginBottom: 6, boxSizing: 'border-box', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11, outline: 'none' }} />
           )}
           <ScrollArea max={230}>
-            {items.length ? items.slice(0, 300).map((r) => (
-              <FacetRow key={r.value} label={facet.type === 'int' ? `Pod ${r.value}` : r.value} count={r.count}
+            {visible.length ? visible.slice(0, 300).map((r) => (
+              <FacetRow key={r.value} label={label(r)} count={r.count}
                 checked={selected.has(String(r.value))} onClick={() => onToggle(String(r.value))} />
             )) : <div style={{ padding: '8px', fontSize: 11, color: 'var(--gb-text-muted)', textAlign: 'center' }}>No values.</div>}
+            {collapseUnsel && unselRows.length > 0 && (
+              <MoreToggle label={`Show ${unselRows.length} more`} onClick={() => setShowAll(true)} />
+            )}
+            {!collapseUnsel && showAll && !searching && selected.size > 0 && unselRows.length > 0 && (
+              <MoreToggle label="Show less" onClick={() => setShowAll(false)} />
+            )}
           </ScrollArea>
         </div>
-      )}
+      </Collapse>
     </Card>
   );
 }
@@ -147,13 +187,13 @@ function DateFacetSection({ group, queries, selected, onToggle }) {
         {selected.size > 0 && <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 99, padding: '0 6px' }}>{selected.size}</span>}
         <I.chevd size={12} style={{ color: 'var(--gb-text-muted)', transition: 'transform var(--gb-anim)', transform: open ? 'none' : 'rotate(-90deg)' }} />
       </button>
-      {open && (
+      <Collapse open={open}>
         <div style={{ padding: '0 8px 8px' }}>
           {group.buckets.map((b) => (
             <FacetRow key={b.key} label={b.label} count={queries[b.fq]} checked={selected.has(b.key)} onClick={() => onToggle(b.key)} />
           ))}
         </div>
-      )}
+      </Collapse>
     </Card>
   );
 }
@@ -168,7 +208,8 @@ function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
       </div>
       {SOLR_FACETS.map((f) => (
         <FacetSection key={f.field} facet={f} rows={(facets && facets.fields && facets.fields[f.field]) || []}
-          selected={selected[f.field]} onToggle={(v) => onToggle(f.field, v)} defaultOpen={f.field === 'recordType_s'} />
+          selected={selected[f.field]} onToggle={(v) => onToggle(f.field, v)}
+          defaultOpen={['recordType_s', 'salesRep_s', 'role_s', 'podID_i'].includes(f.field)} />
       ))}
       {SOLR_DATE_FACETS.map((g) => (
         <DateFacetSection key={g.field} group={g} queries={(facets && facets.queries) || {}}
@@ -405,6 +446,9 @@ function App({ store }) {
                 </div>
               )}
               {loadingMore && <div style={{ padding: 12 }}><Spinner size={20} pad="4px 0" label="" /></div>}
+              {/* Bottom breathing room when the list ends flush (no load-more
+                  footer to provide it) so the last row isn't glued to the card. */}
+              {!canLoadMore && !loadingMore && <div style={{ height: 12 }} />}
             </>
           )}
         </Card>
