@@ -78,6 +78,14 @@ const MODEL_VERSION = '20250607-15-markerflat';
 // smaller than the 3D-view ball whenever the OBJ's native radius != this value.
 const BALL_NORMALIZE_RADIUS = 100;
 
+// printAreaScale is the fraction of the ball's DIAMETER (the visible face) that
+// the printed logo spans — so 0.5208 renders a print occupying 52.08% of the
+// face, matching the real print-area-to-ball ratio. The decal box is a WIDTH in
+// world units, and diameter = 2·radius, so every decal size is
+// `radius * 2 * printAreaScale`. (Historically this knob was radius-relative
+// with a 0.7 default, which rendered ~35% of the face — half the true size.)
+const PRINT_AREA_SCALE_DEFAULT = 0.5208;
+
 async function loadThreeAndModel(shape = 'ball', makeProgress) {
   if (!cache.three) {
     cache.three = getThreeRuntime();
@@ -548,7 +556,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       rotX: deg('golfballViewer.ballRotX', 0),
       rotY: deg('golfballViewer.ballRotY', 0),
       rotZ: deg('golfballViewer.ballRotZ', 0),
-      printAreaScale: Number(dev['golfballViewer.printAreaScale'] ?? 0.7),
+      printAreaScale: Number(dev['golfballViewer.printAreaScale'] ?? PRINT_AREA_SCALE_DEFAULT),
     };
   }
   // Auto-spin speed (radians/frame) — live-tunable, read each render so the
@@ -1371,14 +1379,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Match the single-ball 3D view EXACTLY: same print-area extent driven by
           // the `golfballViewer.printAreaScale` dev setting (was hardcoded 0.62, so
           // the gift-set logo was smaller than the standalone ball + ignored the knob).
-          const gsPrintAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
+          const gsPrintAreaScale = initialBallRef.current.printAreaScale ?? PRINT_AREA_SCALE_DEFAULT;
           for (const s of giftSet.ballSlots) {
             const mat = new THREE.MeshStandardMaterial({ color: ballColor.clone(), emissive: 0x101418, emissiveIntensity: 0.4, roughness: 0.28, metalness: 0.02 });
             const m = new THREE.Mesh(ballCG.geo.clone(), mat);
-            // Box WIDTH = BALL_NORMALIZE_RADIUS * printAreaScale (the SAME absolute
-            // size the single-ball path uses) so the logo matches the 3D-view ball;
-            // posZ/depth stay relative to this geo's own radius (projection origin).
-            addDecal(m, 0, 0, ballCG.radius * 0.999, BALL_NORMALIZE_RADIUS * gsPrintAreaScale, ballCG.radius * 2);
+            // Box WIDTH = BALL_NORMALIZE_RADIUS * 2 * printAreaScale — i.e. the
+            // fraction of the DIAMETER the print spans (the SAME absolute size the
+            // single-ball path uses) so the logo matches the 3D-view ball; posZ/
+            // depth stay relative to this geo's own radius (projection origin).
+            addDecal(m, 0, 0, ballCG.radius * 0.999, BALL_NORMALIZE_RADIUS * 2 * gsPrintAreaScale, ballCG.radius * 2);
             m.scale.setScalar(giftSet.ballRadius / ballCG.radius);
             m.position.set(s.x, s.y, s.z);
             contentGroup.add(m); ballMats.push(mat);
@@ -1736,7 +1745,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         let decalProjectionParams = null;  // { position, orientation, size, texture }
         // Print-area extent (x/y) is dev-tunable; z is the projection depth
         // through the ball and stays fixed. Shared by both poles.
-        const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
+        const printAreaScale = initialBallRef.current.printAreaScale ?? PRINT_AREA_SCALE_DEFAULT;
         // Chip print fills most of the white center inlay (~0.9 of disc radius).
         const chipPrintScale = 0.95;
         /* Build one projected decal. `back=false` is the camera-facing +Z pole
@@ -1807,7 +1816,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             decalSize = new THREE.Vector3(w, w, divotFaceZ * 1.8);
           } else {
             decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
-            decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
+            // width/height = printAreaScale of the DIAMETER (2·radius) = the
+            // fraction of the visible face the print covers; z is the projection depth.
+            decalSize = new THREE.Vector3(targetRadius * 2 * printAreaScale, targetRadius * 2 * printAreaScale, targetRadius * 2);
           }
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
@@ -3797,7 +3808,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 rad2deg(ballGroup.rotation.y),
                 rad2deg(ballGroup.rotation.z),
               ],
-              printAreaScale: initialBallRef.current.printAreaScale ?? 0.7,
+              printAreaScale: initialBallRef.current.printAreaScale ?? PRINT_AREA_SCALE_DEFAULT,
               // Live render diagnostics — surfaced + copyable when the
               // golfballViewer.renderDebug dev setting is on, so we can see
               // exactly why the print does / doesn't draw on a given GPU.
@@ -4266,7 +4277,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                     `golfballViewer.ballRotX  = ${debug.rotDeg[0].toFixed(1)}°\n` +
                     `golfballViewer.ballRotY  = ${debug.rotDeg[1].toFixed(1)}°\n` +
                     `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°\n` +
-                    `golfballViewer.printAreaScale = ${(debug.printAreaScale ?? 0.7).toFixed(2)}`;
+                    `golfballViewer.printAreaScale = ${(debug.printAreaScale ?? PRINT_AREA_SCALE_DEFAULT).toFixed(4)}`;
                 navigator.clipboard?.writeText(snippet)
                   .then(() => { setDebugCopied(true); setTimeout(() => setDebugCopied(false), 1500); })
                   .catch(() => {});
@@ -4342,7 +4353,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           '-- Ball --',
           shape === 'giftset'
             ? `giftSetScale (applied): ${debug.scale.toFixed(2)}   tilt X/Y: ${debug.rotDeg[0].toFixed(1)} / ${debug.rotDeg[1].toFixed(1)}   turntable: ${debug.rotDeg[2].toFixed(1)}`
-            : `${shape === 'chip' ? 'chipScale' : 'ballScale'} (applied): ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? 0.7).toFixed(2)}`,
+            : `${shape === 'chip' ? 'chipScale' : 'ballScale'} (applied): ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? PRINT_AREA_SCALE_DEFAULT).toFixed(4)}`,
         ].join('\n');
         const row = (k, v, warn) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>

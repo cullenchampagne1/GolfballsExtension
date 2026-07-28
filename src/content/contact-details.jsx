@@ -2,20 +2,21 @@
 /**
  * Contact-detail custom page (CRM Page 240).
  *
- * This entry owns contact-specific glue only: the email composer modal and
- * the local-note annotation layer. Everything visual comes from the shared
- * detail modules — the page is a thin composition over DetailPageFrame.
+ * This entry owns contact-specific glue only: the email composer modal.
+ * Everything visual comes from the shared detail modules — the page is a thin
+ * composition over DetailPageFrame. Notes now write real CRM Lead Notes via
+ * the shared AddNoteModal (the old chrome.storage local-note layer is gone).
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { sendContactEmail } from '../lib/contactEmail.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
 import { EmailComposer } from '../modals/EmailPreview.jsx';
-import { Btn, CasesPanel, DataCtx, DetailErrorBoundary, EmailsPanel, I, LazySection, OrdersPanel, StatsStrip, SystemCard, fullName, useD } from '../lib/detail-shared.jsx';
-import { AccountInfoCard, ActivityPanel, AltLookupsCard, Breadcrumb, ContactInfoCard, DetailPageFrame, FormField, Hero, MailerCard, ModalCtx, ModalShell, OpportunitiesPanel, PatchCtx, ProofsPanel, QuickLogCard, TArea, TasksPanel, TopBar, gbToast, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
+import { CasesPanel, DataCtx, DetailErrorBoundary, EmailsPanel, I, LazySection, OrdersPanel, StatsStrip, SystemCard, fullName, useD } from '../lib/detail-shared.jsx';
+import { AccountInfoCard, AddNoteModal, ActivityPanel, AltLookupsCard, Breadcrumb, ContactInfoCard, DetailPageFrame, Hero, MailerCard, ModalCtx, ModalShell, OpportunitiesPanel, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, gbToast, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
 
 function ContactEmailModal() {
   const D = useD();
@@ -89,102 +90,12 @@ function ContactEmailModal() {
   );
 }
 
-/* Add a local note — stored in our storage (not the CRM); shows as a yellow
-   row in the Activity Feed. */
-function NoteModal({ onSave }) {
-  const { closeModal } = useModal();
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const save = async () => {
-    const t = text.trim();
-    if (!t || busy) return;
-    setBusy(true);
-    try { await onSave(t); closeModal(); } catch (e) { setBusy(false); }
-  };
-  return (
-    <ModalShell title="Add note" icon={<I.note />} subtitle="Personal — stored locally, shown in the activity feed" width={460} footer={<>
-      <Btn variant="ghost" onClick={closeModal}>Cancel</Btn>
-      <Btn variant="primary" disabled={!text.trim() || busy} onClick={save}>Add note</Btn>
-    </>}>
-      <FormField label="Note">
-        <TArea value={text} maxLength={LOCAL_NOTE_MAX_CHARS} onChange={(e) => setText(e.target.value)} rows={5} placeholder="Type a note about this contact…" />
-      </FormField>
-    </ModalShell>
-  );
-}
-
-/* ── Local notes — a personal annotation layer the CRM doesn't have. Stored in
-   chrome.storage.local under gbLocalNotes, keyed by contact id, and merged into
-   the Activity Feed as yellow-tinted rows. (Not synced to the CRM; the native
-   Activity/SaveLeadNote endpoint exists if real CRM notes are wanted later.) */
-const LOCAL_NOTES_KEY = 'gbLocalNotes';
-const LOCAL_NOTE_MAX_CHARS = 4_000;
-const LOCAL_NOTE_MAX_PER_CONTACT = 100;
-function loadLocalNotesMap() {
-  return new Promise((res) => {
-    try {
-      chrome.storage.local.get(LOCAL_NOTES_KEY, (d) => {
-        const value = d && d[LOCAL_NOTES_KEY];
-        res(value && typeof value === 'object' && !Array.isArray(value) ? value : {});
-      });
-    }
-    catch (e) { res({}); }
-  });
-}
-function localNoteContactKey(value) {
-  const key = String(value == null ? '' : value).trim();
-  return /^\d{1,12}$/.test(key) ? key : '';
-}
-function normalizeLocalNotes(value) {
-  return (Array.isArray(value) ? value : [])
-    .filter((note) => note && typeof note === 'object' && typeof note.text === 'string')
-    .slice(0, LOCAL_NOTE_MAX_PER_CONTACT)
-    .map((note) => ({
-      id: String(note.id || '').slice(0, 64),
-      text: note.text.slice(0, LOCAL_NOTE_MAX_CHARS),
-      ts: Number.isFinite(Number(note.ts)) ? Number(note.ts) : Date.now(),
-    }));
-}
-function useLocalNotes(key) {
-  const safeKey = localNoteContactKey(key);
-  const [notes, setNotes] = useState([]);
-  useEffect(() => {
-    if (!safeKey) { setNotes([]); return undefined; }
-    let live = true;
-    const read = () => loadLocalNotesMap().then((m) => { if (live) setNotes(normalizeLocalNotes(m[safeKey])); });
-    read();
-    const onChg = (ch, area) => { if (area === 'local' && ch[LOCAL_NOTES_KEY]) read(); };
-    try { chrome.storage.onChanged.addListener(onChg); } catch (e) {}
-    return () => { live = false; try { chrome.storage.onChanged.removeListener(onChg); } catch (e) {} };
-  }, [safeKey]);
-  const add = async (text) => {
-    const t = String(text || '').trim().slice(0, LOCAL_NOTE_MAX_CHARS);
-    if (!t || !safeKey) return;
-    const m = await loadLocalNotesMap();
-    const list = normalizeLocalNotes(m[safeKey]);
-    m[safeKey] = [{ id: 'ln_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: t, ts: Date.now() }, ...list]
-      .slice(0, LOCAL_NOTE_MAX_PER_CONTACT);
-    try { chrome.storage.local.set({ [LOCAL_NOTES_KEY]: m }); } catch (e) {}
-  };
-  const remove = async (id) => {
-    if (!safeKey) return;
-    const m = await loadLocalNotesMap();
-    m[safeKey] = normalizeLocalNotes(m[safeKey]).filter((n) => n.id !== String(id || ''));
-    try { chrome.storage.local.set({ [LOCAL_NOTES_KEY]: m }); } catch (e) {}
-  };
-  return { notes, add, remove };
-}
-
 /* ════════════════════════════════════════════════════════════
    ROOT
 ════════════════════════════════════════════════════════════ */
 function App({ store }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
-  const ln = useLocalNotes(D.ids.contact);
-  // Local notes ride at the top of the feed (newest annotations first), then
-  // the real CRM activity.
-  const noteRows = useMemo(() => ln.notes.map((n) => ({ localNote: true, noteId: n.id, subject: n.text, category: 'Note', employee: 'You', date: new Date(n.ts).toLocaleString() })), [ln.notes]);
   const name = fullName(D.contact) || 'Contact';
 
   return (
@@ -219,11 +130,7 @@ function App({ store }) {
               LazySection; ActivityPanel stays unwrapped so its filter
               popover can overflow the card. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
-            <ActivityPanel
-              extraRows={noteRows}
-              onAddNote={() => modalHost.openModal(<NoteModal onSave={ln.add} />)}
-              onDeleteNote={ln.remove}
-            />
+            <ActivityPanel onAddNote={() => modalHost.openModal(<AddNoteModal />)} />
             <LazySection><EmailsPanel /></LazySection>
             <LazySection><OpportunitiesPanel /></LazySection>
             <LazySection minHeight={860}><OrdersPanel /></LazySection>

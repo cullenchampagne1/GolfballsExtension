@@ -12,9 +12,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { Btn, ContactPill, Card, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, IconBtn, KV, LazySection, OrdersPanel, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, fmtDate, goUrl, isEmpty, readBackTo, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
-import { ActivityPanel, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, OpportunityModal, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
-
-const openGlobalNote = () => { try { window.__gbOpenNote && window.__gbOpenNote({}); } catch (e) {} };
+import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, OpportunityModal, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
 
 /* ════════════════════════════════════════════════════════════
    HERO / PROFILE CARD
@@ -42,7 +40,7 @@ function Hero() {
         <Btn variant="primary" icon={<I.target />} full onClick={() => openModal(<OpportunityModal />)}>New Opportunity</Btn>
         <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
         <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-          <Btn variant="ghost" size="sm" icon={<I.note />} onClick={openGlobalNote}>Add note</Btn>
+          <Btn variant="ghost" size="sm" icon={<I.note />} onClick={() => openModal(<AddNoteModal />)}>Add note</Btn>
           <IconBtn size="sm" icon={<I.more />} />
         </div>
       </>}>
@@ -199,7 +197,7 @@ function App({ store }) {
               stays unwrapped so its filter popover can overflow the card. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
             <ContactsPanel />
-            <ActivityPanel onAddNote={openGlobalNote} />
+            <ActivityPanel onAddNote={() => modalHost.openModal(<AddNoteModal />)} />
             <LazySection><EmailsPanel /></LazySection>
             <LazySection><OpportunitiesPanel /></LazySection>
             <LazySection minHeight={860}><OrdersPanel /></LazySection>

@@ -109,6 +109,19 @@ export function readHostSelectOptions(id, fallback) {
   return fallback || [];
 }
 
+/* Create a real CRM "Lead Note" activity on the contact — the native
+   ActivityNoteModal's endpoint (captured from generate_proposal.har). The
+   note lands in crm.TblActivities and shows up in the activity feed on the
+   next extract; the response is the rendered <tr>, not JSON, so a 200 is
+   success. Replaces the old chrome.storage local-only note layer. */
+export async function crmSaveLeadNote(contactId, note) {
+  const base = crmOrigin();
+  const payload = { ActivityCustomerID: Number(contactId), ActivityNote: String(note) };
+  const r = await fetch(`${base}/golfballs/crm/Admin/Activity/SaveLeadNote.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('note failed');
+  return true;
+}
+
 async function crmSetDnc(customerID, add) {
   const base = crmOrigin();
   const action = add ? 'AddToDoNotCallList' : 'RemoveFromDoNotCallList';
@@ -699,6 +712,37 @@ export function OpportunityModal({ opportunityId }) {
             <FormField label="Assigned to" style={{ flex: 1 }}><MiniSelect value={o.empAssignedId} options={empOpts} onChange={(v) => setO({ ...o, empAssignedId: v })} /></FormField>
           </div>
         </>}
+    </ModalShell>
+  );
+}
+
+/* Shared "Add note" modal — writes a REAL CRM Lead Note (crmSaveLeadNote) and
+   optimistically prepends it to the activity feed. Used by the contact and
+   account pages; replaces the old local-only note annotation layer. */
+export function AddNoteModal() {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const D = useD();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    const t = text.trim();
+    if (!t || busy) return;
+    if (!D.ids.contact) { gbToast('No contact on this record to note', 'error'); return; }
+    setBusy(true);
+    try {
+      await crmSaveLeadNote(D.ids.contact, t);
+      patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Lead Note', subject: t, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
+      gbToast('Note added', 'success');
+      closeModal();
+    } catch (e) { gbToast('Could not add note', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title="Add Note" icon={<I.note />} subtitle="Saved to this contact's CRM activity feed" width={480} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || !text.trim()}>{busy ? 'Saving…' : 'Add note'}</Btn>
+    </>}>
+      <FormField label="Note"><TArea autoFocus value={text} onChange={(e) => setText(e.target.value)} rows={5} placeholder="Type a note about this contact…" /></FormField>
     </ModalShell>
   );
 }

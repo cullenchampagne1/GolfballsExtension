@@ -175,10 +175,10 @@ export const DEV_SETTINGS = [
   {
     key:     'golfballViewer.printAreaScale',
     label:   'Golfball viewer: print area scale',
-    desc:    'Size of the printed image (decal) on the ball, as a fraction of the ball radius. Higher = larger print area. Default 0.7.',
+    desc:    'Size of the printed logo on the ball, as a fraction of the ball DIAMETER (the visible face). 0.5208 = the print covers 52.08% of the face — the real print-area-to-ball ratio. Higher = larger print.',
     type:    'number',
-    default: 0.7,
-    min:     0.2, max: 1.5, step: 0.05,
+    default: 0.5208,
+    min:     0.1, max: 1.0, step: 0.0001,
   },
   {
     key:     'golfballViewer.spinSpeed',
