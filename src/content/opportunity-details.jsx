@@ -14,7 +14,7 @@ import { ProposalEmailComposer } from '../modals/ProposalEmail.jsx';
 import { buildEmailSourceFromCartIds } from '../lib/proposalEmailSource.js';
 import { MarginBreakdown } from '../ui/components/MarginBreakdown.jsx';
 import { Btn, Card, ContactPill, DASH, DataCtx, DetailErrorBoundary, Dot, EmailsPanel, I, KV, LazySection, ScrollArea, SectionTitle, Spinner, StatCardGrid, Tag, Td, Th, fmt$, fullName, goUrl, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
-import { BackChip, Breadcrumb, DetailPageFrame, HeroShell, ModalCtx, OPP_STAGES, OpportunityModal, PatchCtx, TasksPanel, TopBar, crmGetOpportunity, gbToast, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
+import { BackChip, Breadcrumb, DetailPageFrame, HeroShell, ModalCtx, OPP_STAGES, OpportunityModal, PatchCtx, TasksPanel, TopBar, crmGetOpportunity, gbToast, hostInputValue, hostSelectLabel, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
 
 /* Proposals live in the host DOM as checkboxes whose ONCHANGE is
    ProposalCheckToggle(this, '<cartId>', '<name>', '<expiration>', '<newSite>'). */
@@ -48,13 +48,34 @@ function adaptOpp(g, id) {
   if (!g) return null;
   const stage = (OPP_STAGES.find((s) => String(s.value) === String(g.OpportunityStageId)) || {}).label || g.Status || '';
   const source = (OPP_SOURCES.find((s) => String(s.value) === String(g.sourceID)) || {}).label || '';
+  // MetaData is a JSON blob carrying CreatedBy + the proposal list.
+  let meta = {};
+  try { meta = g.MetaData ? (typeof g.MetaData === 'string' ? JSON.parse(g.MetaData) : g.MetaData) : {}; } catch (e) { meta = {}; }
+  const createdById = String(g.empCreatedId ?? meta.CreatedBy ?? '');
+  const assignedById = String(g.empAssignedId ?? '0');
   return {
     id: String(id || g.opportunityId || ''),
-    subject: g.Subject || '', stage, stageId: g.OpportunityStageId, source,
+    subject: g.Subject || '', stage, stageId: g.OpportunityStageId, source, sourceId: g.sourceID,
     estimatedValue: Number(g.EstimatedValue) || 0,
     estimatedClosedDate: g.EstimatedClosedDate || '',
-    closedProbability: g.ClosedProbability,
+    // Get returns probability as a 0–1 fraction ("0.75"); the CRM displays it
+    // as a whole percent (75). Normalize to percent for display.
+    closedProbability: (function (v) {
+      if (v == null || v === '') return null;
+      const n = Number(v);
+      if (!isFinite(n)) return null;
+      return Math.round(n <= 1 ? n * 100 : n);
+    })(g.ClosedProbability),
     description: g.Description || '',
+    // audit / assignment fields the native page shows but we never surfaced
+    createdById,
+    assignedById,
+    createdBy: hostSelectLabel('empCreatedId', createdById, createdById ? '#' + createdById : ''),
+    assignedTo: hostSelectLabel('empAssignedId', assignedById, 'Account Owner'),
+    actualValue: Number(g.ActualValue) || 0,
+    actualClosedDate: g.ActualCloseDate || '',
+    lastModified: hostInputValue('LastModifiedDate', ''),
+    proposalCount: Array.isArray(meta.Proposals) ? meta.Proposals.length : 0,
   };
 }
 function oppStageTone(stage) {
@@ -84,12 +105,14 @@ function OppHeader() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
             <Tag tone={tone} size="md" icon={<Dot tone={tone} glow />}>{opp.stage || '—'}</Tag>
             <Tag tone="neutral" size="md">Opportunity #{opp.id}</Tag>
+            {opp.createdBy && <Tag tone="neutral" size="md" icon={<I.user />}>Created by {opp.createdBy}</Tag>}
           </div>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', paddingTop: 12, borderTop: '1px dashed var(--gb-border-subtle)' }}>
         <ContactPill icon={<I.briefcase />} label="Account" value={txt(D.account.name)} />
         <ContactPill icon={<I.user />} label="Contact" value={cname || DASH} />
+        <ContactPill icon={<I.user />} label="Assigned To" value={opp.assignedTo || 'Account Owner'} muted={!opp.assignedTo || opp.assignedTo === 'Account Owner'} />
         <ContactPill icon={<I.phone />} label="Phone" value={txt(D.contact.phone)} />
         <ContactPill icon={<I.mail />} label="Email" value={txt(D.contact.email)} />
       </div>
@@ -124,8 +147,13 @@ function OppInfoCard() {
           <KV label="Estimated Value" mono>{fmt$(opp.estimatedValue)}</KV>
           <KV label="Est. Closed Date" mono>{opp.estimatedClosedDate || DASH}</KV>
           <KV label="Closed Probability" mono>{opp.closedProbability != null ? opp.closedProbability + '%' : DASH}</KV>
+          {opp.actualValue > 0 && <KV label="Actual Value" mono>{fmt$(opp.actualValue)}</KV>}
+          {opp.actualClosedDate && <KV label="Actual Close Date" mono>{opp.actualClosedDate}</KV>}
         </div>
         <div>
+          <KV label="Created By">{opp.createdBy || DASH}</KV>
+          <KV label="Assigned To">{opp.assignedTo || DASH}</KV>
+          <KV label="Last Modified" mono>{opp.lastModified || DASH}</KV>
           <KV label="Opportunity ID" mono copyable>{opp.id}</KV>
           <KV label="Account ID" mono copyable>{txt(D.ids.account)}</KV>
           <KV label="Contact ID" mono copyable>{txt(D.ids.contact)}</KV>

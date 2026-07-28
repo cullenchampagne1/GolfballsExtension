@@ -109,6 +109,21 @@ export function readHostSelectOptions(id, fallback) {
   return fallback || [];
 }
 
+/* Resolve an id to its label via a host <select>'s options (e.g. an employee
+   or source id → display name from the CRM's own dropdown). */
+export function hostSelectLabel(selectId, value, fallback = '') {
+  const v = String(value == null ? '' : value);
+  const hit = readHostSelectOptions(selectId, []).find((o) => o.value === v);
+  return hit ? hit.label : fallback;
+}
+
+/* Read a host <input>'s current value (fields the CRM renders but doesn't
+   expose via an .ajax Get, e.g. LastModifiedDate). */
+export function hostInputValue(id, fallback = '') {
+  try { const el = document.getElementById(id); if (el && el.value != null) return String(el.value).trim() || fallback; } catch (e) {}
+  return fallback;
+}
+
 /* Create a real CRM "Lead Note" activity on the contact — the native
    ActivityNoteModal's endpoint (captured from generate_proposal.har). The
    note lands in crm.TblActivities and shows up in the activity feed on the
