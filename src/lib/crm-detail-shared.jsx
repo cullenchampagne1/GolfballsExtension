@@ -1707,7 +1707,14 @@ export async function taskContext(fallbackContactId, extra = {}) {
   let ctx = {};
   try { ctx = await readTaskContext(); } catch (e) {}
   if (!ctx.employeeId || ctx.employeeId === '0') { const fb = currentEmployeeId(); if (fb && fb !== '0') ctx.employeeId = fb; }
-  if (!ctx.contactId && fallbackContactId) ctx.contactId = String(fallbackContactId);
+  /* Account pages have no current contact, so the native page context
+     hands back contactId '0' (from #tbContactId=0). '0' is a truthy
+     string, so a bare `!ctx.contactId` check would keep it and every
+     task would be created against contact 0 (silent failure). Treat
+     0/'0'/'' as absent and fall back to the schema's representative
+     contact — the reason opp/task creation "only worked for contacts". */
+  const missingContact = !ctx.contactId || ctx.contactId === '0' || ctx.contactId === 0;
+  if (missingContact && fallbackContactId) ctx.contactId = String(fallbackContactId);
   return { ...ctx, ...extra };
 }
 
@@ -1735,9 +1742,16 @@ export function TasksPanel() {
   };
   // Reuse the proven QuickTask composer (correct preset templates, employee
   // resolution, CRM create); animate the row in on its onCreated callback.
-  const openComposer = () => {
+  const openComposer = async () => {
     try {
+      /* Resolve the contact through taskContext so the account-page
+         '0' → representative-contact fallback applies; pass it as an
+         override so the composer uses it instead of the native page
+         context (which is contactId '0' on account pages). */
+      const ctx = await taskContext(D.ids.contact);
       window.__gbShowQuickTaskModal && window.__gbShowQuickTaskModal({
+        contactId: ctx.contactId,
+        employeeId: ctx.employeeId,
         onCreated: ({ template }) => addRow({
           subject: (template && (template.subject || template.name)) || 'New task',
           priority: priLabel((template && (template.priorityId || template.priority)) || 2),

@@ -215,4 +215,29 @@ describe('readTaskContext — parsing the contact/account page', () => {
       globalThis.location = saved.location;
     }
   });
+
+  it('drops a zero contact id so account pages fall back to the rep contact', async () => {
+    // Account pages render #tbContactId=0 (no current contact). A raw
+    // '0' is truthy and would be created against contact 0 (fails).
+    const dom3 = new JSDOM(
+      `<body>
+        <input id="tbContactId" value="0">
+        <input id="AccountID" value="159590">
+        <input id="Name" value="Scott Plumbing">
+      </body>`,
+      { url: 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=271&accountID=159590' },
+    );
+    const saved = { document: globalThis.document, location: globalThis.location };
+    globalThis.document = dom3.window.document;
+    globalThis.location = dom3.window.location;
+    try {
+      const ctx = await readTaskContext();
+      assert.equal(ctx.contactId, '');            // '0' normalized to empty
+      assert.equal(!ctx.contactId, true);          // so the fallback check now fires
+      assert.equal(ctx.accountId, '159590');
+    } finally {
+      globalThis.document = saved.document;
+      globalThis.location = saved.location;
+    }
+  });
 });

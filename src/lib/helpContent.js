@@ -5537,9 +5537,9 @@ export const HELP_CONTENT = {
               [
                 "Golfball viewer: print area scale",
                 "number",
-                "0.7",
-                "0.2–1.5",
-                "Size of the printed image (decal) on the ball, as a fraction of the ball radius. Higher = larger print area. Default 0.7."
+                "0.5208",
+                "0.1–1",
+                "Size of the printed logo on the ball, as a fraction of the ball DIAMETER (the visible face). Spec: 0.875\" imprint on a regulation 1.680\" ball = 0.875/1.680 ≈ 0.5208 (52.08% of the face). Higher = larger print."
               ],
               [
                 "Golfball viewer: auto-spin speed",
@@ -9729,7 +9729,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "golfballViewer.printAreaScale"
       ],
-      "description": "Size of the printed image (decal) on the ball, as a fraction of the ball radius. Higher = larger print area. Default 0.7.",
+      "description": "Size of the printed logo on the ball, as a fraction of the ball DIAMETER (the visible face). Spec: 0.875\" imprint on a regulation 1.680\" ball = 0.875/1.680 ≈ 0.5208 (52.08% of the face). Higher = larger print.",
       "article": "developer-settings"
     },
     {

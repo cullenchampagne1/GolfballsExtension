@@ -315,6 +315,43 @@ export function accountContactRows(doc) {
   return Array.from(table.querySelectorAll('tbody tr'));
 }
 
+/** Order rows on the ACCOUNT page. The account Orders portlet renders
+ *  a 6-column table — Order / Contact / Summary / Date / Revenue /
+ *  Status — i.e. one extra "Contact" column versus the contact page's
+ *  5-column Orders table. We can't reuse `contactOrderRows` cell
+ *  indices (they'd be shifted by one), so the account schema points
+ *  its `orders` array here and uses account-specific itemField cells.
+ *
+ *  Scoped by the "Orders" portlet caption (substring — also matches
+ *  "Account Orders") rather than #DataTables_Table_0, whose id is
+ *  assigned live by DataTables and absent on a statically-fetched
+ *  page. Rows are any <tbody tr> with a linked first cell (the order
+ *  #), which excludes the footer/summary row. */
+export function accountOrderRows(doc) {
+  const table = findTableByPortletCaption(doc, 'Orders');
+  if (!table) return [];
+  return Array.from(table.querySelectorAll('tbody tr'))
+    .filter((tr) => tr.querySelector('td:first-child a[href]'))
+    .slice(0, 50);
+}
+
+/** Account-page order totals — the "Total: N  Revenue: $X" summary the
+ *  CRM prints in the Orders portlet footer. On the contact page the
+ *  stat TILES (Order Count / Total Revenue) carry these numbers, but
+ *  the account page has no tiles, so `findStat` resolves null and the
+ *  stat blocks read zero. This reads the portlet's own realtime totals
+ *  instead. `which` is 'count' | 'revenue'. Returns the raw string so
+ *  the schema's currency/number coercion handles formatting. */
+export function accountOrdersSummary(doc, which) {
+  const portlet = findPortletByCaption(doc, 'Orders');
+  const text = ((portlet || (doc && doc.body) || {}).textContent || '').replace(/\s+/g, ' ');
+  const m = text.match(/Total:\s*(\d+)[\s\S]*?Revenue:\s*\$?([\d,]+(?:\.\d+)?)/i);
+  if (!m) return null;
+  if (which === 'count') return m[1];
+  if (which === 'revenue') return m[2];
+  return null;
+}
+
 /** Read a single field off the FIRST row of the Account Contacts
  *  table — used by `contact.*` fields on the account page so the
  *  unified schema collapses to the "most representative contact"
@@ -712,6 +749,8 @@ export const FN_REGISTRY = {
   keyedField,
   accountContactRows,
   firstAccountContactField,
+  accountOrderRows,
+  accountOrdersSummary,
   splitNameCell,
   firstCellHref,
   openTaskRows,

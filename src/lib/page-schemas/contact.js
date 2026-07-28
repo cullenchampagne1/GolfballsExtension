@@ -371,11 +371,16 @@ const FIELDS = {
         type: 'number',
         label: 'Order count',
         extract: { fn: 'findStat', args: ['Order Count'] },
+        /* Account pages have no stat tiles — read the Orders portlet's
+           own realtime "Total: N" footer so the stat blocks aren't
+           stuck at zero. */
+        extractByPage: { account: { fn: 'accountOrdersSummary', args: ['count'] } },
       },
       totalRevenue: {
         type: 'currency',
         label: 'Total revenue (lifetime)',
         extract: { fn: 'findStat', args: ['Total Revenue'] },
+        extractByPage: { account: { fn: 'accountOrdersSummary', args: ['revenue'] } },
       },
       lastOrderDate: {
         type: 'date',
@@ -433,6 +438,14 @@ const FIELDS = {
        that id is assigned by DataTables in the browser and is absent when the
        page is fetched as static HTML (bulk send). See contactOrderRows. */
     extract: { fn: 'contactOrderRows' },
+    /* The ACCOUNT page's Orders portlet has an extra "Contact" column
+       (Order / Contact / Summary / Date / Revenue / Status), so every
+       cell after the order # is shifted +1. Point the row-finder at
+       the account-scoped helper and override the shifted itemFields
+       below. Without this the contact-page cell indices read the wrong
+       columns on account pages — the "order details don't pull
+       correctly" bug. */
+    extractByPage: { account: { fn: 'accountOrderRows' } },
     itemFields: {
       number: {
         type: 'string',
@@ -455,26 +468,39 @@ const FIELDS = {
            no host/path reconstruction. */
         extract: { rowFn: 'firstCellHref', args: [0] },
       },
+      /* Account-only column (the related contact on the order). Null on
+         the contact page, which has no such column. */
+      contact: {
+        type: 'string',
+        label: 'Contact',
+        extract: { const: null },
+        extractByPage: { account: { cell: 1, attr: 'innerText' } },
+        transform: 'trim',
+      },
       summary: {
         type: 'string',
         label: 'Summary',
         extract: { cell: 1, attr: 'innerText' },
+        extractByPage: { account: { cell: 2, attr: 'innerText' } },
         transform: 'trim',
       },
       date: {
         type: 'date',
         label: 'Order date',
         extract: { cell: 2, attr: 'innerText' },
+        extractByPage: { account: { cell: 3, attr: 'innerText' } },
       },
       revenue: {
         type: 'currency',
         label: 'Revenue',
         extract: { cell: 3, attr: 'innerText' },
+        extractByPage: { account: { cell: 4, attr: 'innerText' } },
       },
       status: {
         type: 'string',
         label: 'Status',
         extract: { cell: 4, attr: 'innerText' },
+        extractByPage: { account: { cell: 5, attr: 'innerText' } },
         transform: 'trim',
       },
     },

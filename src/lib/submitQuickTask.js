@@ -79,6 +79,12 @@ export async function readTaskContext() {
   } else {
     out.contactId = document.getElementById('tbContactId')?.value?.trim() || '';
   }
+  /* Account pages carry #tbContactId=0 (no current contact). '0' is a
+     truthy string, so callers doing `!ctx.contactId` would keep it and
+     attach the task to contact 0 (silent failure). Normalize it to ''
+     the same way accountId is below, so the empty check works and the
+     representative-contact fallback can kick in. */
+  if (out.contactId === '0') out.contactId = '';
 
   // accountId — separate URL param + Name input on account pages.
   const acctMatch = (typeof location !== 'undefined' ? location.href : '').match(/[?&]accountID=(\d+)/i);
