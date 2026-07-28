@@ -8,9 +8,11 @@
 // page.entryPoint.data.tasks, independent of the modal's current filters.
 // Any dated task counts as scheduled contact for its contact + quarter.
 // Every loaded dated task is reconciled so its live date is exactly two
-// weeks before its due date. Legacy "Prior Year #N" subjects are renamed to
-// "Order Anniversary Follow Up #N". Missing rolling quarters receive one
-// task, and those new tasks receive the same two-week live-date offset.
+// weeks before its due date. Legacy "Prior Year #N [year]" subjects are renamed
+// to "Order Anniversary Follow Up #N [followUpYear]" — the number is kept and
+// the year is refreshed to the task's due-date year. Missing rolling quarters
+// receive one task, and those new tasks receive the same two-week live-date
+// offset.
 
 const data = page.entryPoint?.data;
 const taskRows = Array.isArray(data?.tasks) ? data.tasks : [];
@@ -60,11 +62,23 @@ function liveDateFor(dueDate) {
   return isoDate(liveDate);
 }
 
-function anniversarySubject(subject) {
-  return String(subject || "").replace(
-    /\bPrior\s+Year\s*#\s*(\d+)\b/gi,
-    "Order Anniversary Follow Up #$1"
-  );
+// Rename a legacy "Prior Year …" subject to the "Order Anniversary Follow Up"
+// wording, keeping the sequence number exactly (#2 stays #2) and refreshing the
+// [year] bracket to the follow-up year when one is known. `followUpYear` comes
+// from the task's own due date — the year the reach-out actually happens — so
+// "Prior Year #1 [2018]" due in 2028 becomes "Order Anniversary Follow Up #1
+// [2028]". With no follow-up year the original bracket is left intact. The Call
+// variant ("Prior Year Call - [Month]") is renamed too, month bracket kept.
+function anniversarySubject(subject, followUpYear) {
+  const yr = followUpYear ? String(followUpYear) : null;
+  return String(subject || "")
+    .replace(
+      /\bPrior\s+Year\s*#\s*(\d+)\s*(\[[^\]]*\])?/gi,
+      (_match, number, bracket) =>
+        `Order Anniversary Follow Up #${number}` +
+        (yr ? ` [${yr}]` : bracket ? ` ${bracket}` : "")
+    )
+    .replace(/\bPrior\s+Year\s+Call\b/gi, "Order Anniversary Follow Up Call");
 }
 
 function reconcileExistingTask(task) {
@@ -78,7 +92,10 @@ function reconcileExistingTask(task) {
     liveDateChanged = true;
   }
 
-  const nextSubject = anniversarySubject(task.subject);
+  // Follow-up year = the due-date year, so the bracket tracks when the
+  // reach-out is scheduled rather than the original order year.
+  const followUpYear = dueDate ? dueDate.getFullYear() : null;
+  const nextSubject = anniversarySubject(task.subject, followUpYear);
   if (nextSubject !== String(task.subject || "")) {
     task.subject = nextSubject;
     renamed = true;
