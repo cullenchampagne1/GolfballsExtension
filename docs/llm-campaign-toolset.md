@@ -315,8 +315,11 @@ While Task List is open, the action appears in the shelf. Its provider exposes
 every loaded task under `page.entryPoint.data.tasks` and unique contact routing
 under `page.entryPoint.data.contacts`, independent of the modal's visible
 filter. The action groups tasks by contact, treats any dated task as quarter
-coverage, and creates each missing task in the rolling four-quarter window
-through the ordinary confirmation-gated executor.
+coverage, sets every loaded dated task's live date to fourteen days before its
+due date, and renames `Prior Year #N` subjects to
+`Order Anniversary Follow Up #N`. It creates each missing task in the rolling
+four-quarter window and immediately gives the new task the same two-week
+live-date offset through the ordinary confirmation-gated executor.
 
 Contacts with no contact ID are skipped because the CRM cannot attach a task
 to them. A contact with no Task List row cannot be discovered from this surface;

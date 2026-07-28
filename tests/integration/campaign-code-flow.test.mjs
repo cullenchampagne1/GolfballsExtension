@@ -175,18 +175,23 @@ describe('campaign code flow', () => {
             { contactId: '202', contactName: 'Grace Buyer', accountId: 'a2', accountName: 'Compiler Golf' },
           ],
           tasks: [
-            { id: 'a-current', contactId: '101', dueDate: slots[0].date, subject: 'Existing Ada follow-up' },
+            { id: 'a-current', contactId: '101', dueDate: slots[0].date, subject: 'Prior Year #1 [2025]' },
             { id: 'g-later', contactId: '202', dueDate: slots[2].date, subject: 'Existing Grace follow-up' },
           ],
         },
       },
     };
-    const writes = [];
+    const createWrites = [];
+    const updateWrites = [];
     const executor = makeExecutor({
       ctx: { employeeId: '7' },
       submitQuickTask: async ({ template, context }) => {
-        writes.push({ template, context });
-        return { ok: true, taskId: `quarter-${writes.length}` };
+        createWrites.push({ template, context });
+        return { ok: true, taskId: `quarter-${createWrites.length}` };
+      },
+      updateTaskById: async (id, fields) => {
+        updateWrites.push({ id, fields });
+        return { ok: true };
       },
     });
     const result = await simulateProgram(QUARTERLY_REACH_OUT_ACTION, page, {
@@ -195,34 +200,58 @@ describe('campaign code flow', () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(writes.length, 6);
+    assert.equal(createWrites.length, 6);
+    assert.equal(updateWrites.length, 8);
     assert.deepEqual(
-      [...new Set(writes.map((write) => write.context.contactId))].sort(),
+      [...new Set(createWrites.map((write) => write.context.contactId))].sort(),
       ['101', '202'],
     );
     assert.equal(
-      writes.filter((write) => write.context.contactId === '101').length,
+      createWrites.filter((write) => write.context.contactId === '101').length,
       3,
     );
     assert.equal(
-      writes.filter((write) => write.context.contactId === '202').length,
+      createWrites.filter((write) => write.context.contactId === '202').length,
       3,
     );
     assert.ok(
-      !writes.some((write) => (
+      !createWrites.some((write) => (
         write.context.contactId === '101'
         && write.template.subject === `Q${slots[0].quarter} Reach Out Opportunity`
       )),
       'Ada already has coverage in the current quarter',
     );
     assert.ok(
-      !writes.some((write) => (
+      !createWrites.some((write) => (
         write.context.contactId === '202'
         && write.template.subject === `Q${slots[2].quarter} Reach Out Opportunity`
       )),
       'Grace already has coverage in the third rolling quarter',
     );
-    assert.ok(writes.every((write) => write.template.daysOut >= 0));
+    assert.ok(createWrites.every((write) => write.template.daysOut >= 0));
+    assert.deepEqual(
+      updateWrites.find((write) => write.id === 'a-current')?.fields,
+      {
+        liveDate: (() => {
+          const date = new Date(`${slots[0].date}T12:00:00`);
+          date.setDate(date.getDate() - 14);
+          return [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, '0'),
+            String(date.getDate()).padStart(2, '0'),
+          ].join('-');
+        })(),
+        subject: 'Order Anniversary Follow Up #1 [2025]',
+      },
+    );
+    assert.ok(
+      updateWrites
+        .filter((write) => String(write.id).startsWith('quarter-'))
+        .every((write) => /^\d{4}-\d{2}-\d{2}$/.test(write.fields.liveDate)),
+      'every newly-created quarterly task receives an exact live date',
+    );
+    assert.match(String(result.result), /Updated 2 existing live date\(s\)/);
+    assert.match(String(result.result), /renamed 1 anniversary task\(s\)/);
     assert.match(String(result.result), /Created 6 quarterly reach-out task\(s\)/);
   });
 

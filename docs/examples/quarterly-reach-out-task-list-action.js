@@ -7,14 +7,17 @@
 // The Task List provider supplies every loaded row under
 // page.entryPoint.data.tasks, independent of the modal's current filters.
 // Any dated task counts as scheduled contact for its contact + quarter.
-// Missing quarters in the rolling four-quarter window receive one task.
+// Every loaded dated task is reconciled so its live date is exactly two
+// weeks before its due date. Legacy "Prior Year #N" subjects are renamed to
+// "Order Anniversary Follow Up #N". Missing rolling quarters receive one
+// task, and those new tasks receive the same two-week live-date offset.
 
 const data = page.entryPoint?.data;
 const taskRows = Array.isArray(data?.tasks) ? data.tasks : [];
 const contacts = Array.isArray(data?.contacts) ? data.contacts : [];
 
-if (!taskRows.length || !contacts.length) {
-  return "Skipped — Task List has no contact-linked tasks to evaluate";
+if (!taskRows.length) {
+  return "Skipped — Task List has no tasks to evaluate";
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -43,6 +46,49 @@ function quarterKey(value) {
   return `${value.getFullYear()}-Q${quarterNumber(value)}`;
 }
 
+function isoDate(value) {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, "0"),
+    String(value.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function liveDateFor(dueDate) {
+  const liveDate = new Date(dueDate);
+  liveDate.setDate(liveDate.getDate() - 14);
+  return isoDate(liveDate);
+}
+
+function anniversarySubject(subject) {
+  return String(subject || "").replace(
+    /\bPrior\s+Year\s*#\s*(\d+)\b/gi,
+    "Order Anniversary Follow Up #$1"
+  );
+}
+
+function reconcileExistingTask(task) {
+  if (!task?.id) return { liveDate: false, renamed: false };
+
+  let liveDateChanged = false;
+  let renamed = false;
+  const dueDate = calendarDate(task.dueDate || task.due);
+  if (dueDate) {
+    task.liveDate = liveDateFor(dueDate);
+    liveDateChanged = true;
+  }
+
+  const nextSubject = anniversarySubject(task.subject);
+  if (nextSubject !== String(task.subject || "")) {
+    task.subject = nextSubject;
+    renamed = true;
+  }
+
+  // The task proxy automatically groups both assignments into one
+  // confirmation-gated updateTask write at the end of the program.
+  return { liveDate: liveDateChanged, renamed };
+}
+
 function rollingQuarter(offset, today) {
   const absolute = today.getFullYear() * 4 + Math.floor(today.getMonth() / 3) + offset;
   const year = Math.floor(absolute / 4);
@@ -59,6 +105,14 @@ const today = new Date();
 today.setHours(12, 0, 0, 0);
 const targetQuarters = [0, 1, 2, 3].map((offset) => rollingQuarter(offset, today));
 const contactPlans = new Map();
+let liveDateUpdateCount = 0;
+let renamedTaskCount = 0;
+
+for (const task of taskRows) {
+  const result = reconcileExistingTask(task);
+  if (result.liveDate) liveDateUpdateCount += 1;
+  if (result.renamed) renamedTaskCount += 1;
+}
 
 for (const contact of contacts) {
   const contactId = String(contact?.contactId || "");
@@ -91,7 +145,7 @@ for (const plan of contactPlans.values()) {
       continue;
     }
 
-    await actions.createTask({
+    const created = await actions.createTask({
       contactId: plan.contactId,
       contactName: plan.contactName,
       accountId: plan.accountId,
@@ -108,6 +162,14 @@ for (const plan of contactPlans.values()) {
         Math.round(calendarDayNumber(slot.dueDate) - calendarDayNumber(today))
       )
     });
+    if (created?.taskId) {
+      await actions.updateTask({
+        id: created.taskId,
+        fields: {
+          liveDate: liveDateFor(slot.dueDate)
+        }
+      });
+    }
     plan.occupied.add(slot.key);
     createdCount += 1;
     contactCreated += 1;
@@ -116,7 +178,10 @@ for (const plan of contactPlans.values()) {
 }
 
 return [
+  `Updated ${liveDateUpdateCount} existing live date(s)`,
+  `and renamed ${renamedTaskCount} anniversary task(s).`,
   `Created ${createdCount} quarterly reach-out task(s)`,
   `for ${touchedContacts} contact(s)`,
-  `and preserved ${coveredCount} already-covered contact-quarter(s)`
+  `with live dates two weeks before due,`,
+  `and preserved ${coveredCount} already-covered contact-quarter(s).`
 ].join(" ");
