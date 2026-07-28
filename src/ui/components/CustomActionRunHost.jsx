@@ -17,10 +17,38 @@ import { customActionEntryPoints } from '../../lib/customActionEntryPoints.js';
    always-loaded shelf bundle stays lean.
 ─────────────────────────────────────────────────────────────── */
 
+/* True when an action declared entry points but none of them resolved to
+   real data at run time (e.g. the quarterly reach-out action needs the Task
+   List modal open + loaded — otherwise its `tasks`/`contacts` are empty and
+   the script early-returns without writing anything). */
+function entryDataEmpty(action, page) {
+  if (!action?.entryPoints?.length) return false;
+  const eps = (page?.entryPoints || []);
+  if (!eps.length) return true;
+  const empty = (d) => {
+    if (d == null) return true;
+    if (Array.isArray(d)) return d.length === 0;
+    if (typeof d === 'object') {
+      const vals = Object.values(d);
+      if (!vals.length) return true;
+      return vals.every((v) => v == null || (Array.isArray(v) && v.length === 0));
+    }
+    return false;
+  };
+  return eps.every((ep) => empty(ep.data));
+}
+
+/* Warn to the toast layer, falling back through the tones a given ToastHost
+   actually implements. */
+function warn(toast, msg, duration = 6500) {
+  (toast?.warning || toast?.error || toast?.info)?.(msg, { duration });
+}
+
 export function CustomActionRunHost() {
   const toast = useToast();
   const [pending, setPending] = useState(null); // { action, page, summary }
   const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState('Preparing…');
 
   useEffect(() => {
     const onRun = (e) => {
@@ -55,6 +83,7 @@ export function CustomActionRunHost() {
 
   async function prepare(action, suppliedEntryPoints) {
     if (busy) return;
+    setBusyLabel('Preparing “' + (action?.name || 'action') + '”…');
     setBusy(true);
     try {
       const eng = await loadEngine();
@@ -77,9 +106,17 @@ export function CustomActionRunHost() {
       if (dry.error) { toast?.error?.(`“${action.name}” error: ${dry.error}`, { duration: 5000 }); setBusy(false); return; }
       const plan = eng.planRun(dry.trace, 1);
       if (!plan.hasEffects) {
-        // Nothing to write — surface the script's own result string, if any.
-        const msg = typeof dry.result === 'string' && dry.result ? dry.result : `“${action.name}” has nothing to run on this page.`;
-        toast?.info?.(msg, { duration: 3200 });
+        // Nothing to write. Distinguish "required context missing" from a
+        // benign no-op, and use a persistent-ish warning (not an ephemeral
+        // info pill the user misses) so it's clear WHY nothing happened.
+        if (entryDataEmpty(action, page)) {
+          const label = (page.entryPoint && page.entryPoint.label) || 'its data source';
+          warn(toast, `“${action.name}” had no data to act on — open and load ${label} first, then run it again.`);
+        } else if (typeof dry.result === 'string' && dry.result) {
+          warn(toast, `“${action.name}”: ${dry.result}`);   // e.g. "Skipped — Task List has no tasks to evaluate"
+        } else {
+          warn(toast, `“${action.name}” has nothing to change on this page.`);
+        }
         setBusy(false);
         return;
       }
@@ -95,6 +132,7 @@ export function CustomActionRunHost() {
     const p = pending;
     setPending(null);
     if (!p) return;
+    setBusyLabel('Running “' + (p.action?.name || 'action') + '”…');
     setBusy(true);
     try {
       const eng = await loadEngine();
@@ -104,16 +142,43 @@ export function CustomActionRunHost() {
         action: p.action,
         result: res,
       });
-      if (res.error) toast?.error?.(`“${p.action.name}” failed: ${res.error}`, { duration: 6000 });
-      else toast?.success?.(typeof res.result === 'string' && res.result ? res.result : `“${p.action.name}” done.`, { duration: 3600 });
+      // Per-step effect failures are recorded in the trace but do NOT set
+      // res.error (simulateProgram only errors if the program itself throws),
+      // so surface them explicitly — otherwise a run that silently failed to
+      // write anything looks like success.
+      const failed = (res.trace || []).filter((t) => t && t.status === 'failed');
+      if (res.error) {
+        toast?.error?.(`“${p.action.name}” failed: ${res.error}`, { duration: 6500 });
+      } else if (failed.length) {
+        const first = failed[0];
+        const why = (first && (first.error || first.message)) || 'unknown error';
+        toast?.error?.(`“${p.action.name}”: ${failed.length} step${failed.length > 1 ? 's' : ''} failed — ${why}`, { duration: 7000 });
+      } else {
+        toast?.success?.(typeof res.result === 'string' && res.result ? res.result : `“${p.action.name}” done.`, { duration: 3600 });
+      }
     } catch (err) {
-      toast?.error?.(`“${p.action.name}” failed: ${String(err?.message || err)}`, { duration: 6000 });
+      toast?.error?.(`“${p.action.name}” failed: ${String(err?.message || err)}`, { duration: 6500 });
     }
     setBusy(false);
   }
 
   return (
     <AnimatePresence>
+      {/* Blocking loading overlay — shown during the (slow) dry-run prepare
+          AND during the real write run, which previously happened with zero
+          feedback. Sits above everything but below its own confirm modal
+          (they never overlap: busy is false while `pending` is set). */}
+      {busy && !pending && (
+        <motion.div key="cah-busy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'rgba(0,0,0,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(1px)' }}>
+          <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, opacity: 0 }} transition={{ duration: 0.16 }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '26px 34px', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+            <motion.span animate={{ rotate: 360 }} transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+              style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid var(--gb-border-strong)', borderTopColor: 'var(--gb-brand-label)' }} />
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)', maxWidth: 260, textAlign: 'center' }}>{busyLabel}</div>
+          </motion.div>
+        </motion.div>
+      )}
       {pending && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}
           onClick={() => setPending(null)}
