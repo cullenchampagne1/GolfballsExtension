@@ -76,20 +76,24 @@ export function activityType(activity = {}) {
   return { key: 'workflow', icon: <I.cog />, tone: 'info' };
 }
 
-export function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, full, status, disabled, style, onClick }) {
-  const [hover, setHover] = useState(false);
+/* Hover states across the detail primitives are CSS `:hover` classes (see
+   UI_CSS), NOT JS mouseenter state. JS hover setState re-rendered every
+   button/card/row the pointer crossed, which stuttered scrolling on older
+   hardware. Inline styles win over stylesheet rules, so the hover rules in
+   UI_CSS carry !important. */
+export function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, full, status, disabled, style, onClick, onContextMenu, title }) {
   const tint = {
-    brand:   { fg: 'var(--gb-brand-label)', bg: 'var(--gb-brand-tint-medium)', bd: 'var(--gb-brand-tint-border)', hov: 'var(--gb-brand-tint-strong)' },
-    error:   { fg: 'var(--gb-error-fg)',    bg: 'var(--gb-error-tint-medium)', bd: 'var(--gb-error-tint-border)', hov: 'var(--gb-error-tint-strong)' },
-    warning: { fg: 'var(--gb-warning-fg)',  bg: 'var(--gb-warning-tint-medium)',bd: 'var(--gb-warning-tint-border)',hov:'var(--gb-warning-tint-strong)' },
-    info:    { fg: 'var(--gb-info-fg)',     bg: 'var(--gb-info-tint-medium)',  bd: 'var(--gb-info-tint-border)',  hov: 'var(--gb-info-tint-strong)' },
+    brand:   { fg: 'var(--gb-brand-label)', bg: 'var(--gb-brand-tint-medium)', bd: 'var(--gb-brand-tint-border)' },
+    error:   { fg: 'var(--gb-error-fg)',    bg: 'var(--gb-error-tint-medium)', bd: 'var(--gb-error-tint-border)' },
+    warning: { fg: 'var(--gb-warning-fg)',  bg: 'var(--gb-warning-tint-medium)',bd: 'var(--gb-warning-tint-border)' },
+    info:    { fg: 'var(--gb-info-fg)',     bg: 'var(--gb-info-tint-medium)',  bd: 'var(--gb-info-tint-border)' },
   }[status || 'brand'];
   const V = {
-    primary:   { bg: hover ? 'linear-gradient(180deg, var(--gb-brand-label) 0%, var(--gb-brand) 100%)' : 'linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)', fg: 'var(--gb-text-on-brand)', bd: 'var(--gb-brand-border)' },
-    secondary: { bg: hover ? 'var(--gb-fill-soft)' : 'var(--gb-fill-subtle)',  fg: 'var(--gb-text-secondary)', bd: 'var(--gb-border-default)' },
-    tinted:    { bg: hover ? tint.hov : tint.bg, fg: tint.fg, bd: tint.bd },
-    ghost:     { bg: hover ? 'var(--gb-fill-subtle)' : 'transparent', fg: 'var(--gb-text-tertiary)', bd: 'transparent' },
-    danger:    { bg: hover ? 'var(--gb-error-tint-strong)' : 'var(--gb-error-tint-medium)', fg: 'var(--gb-error-fg)', bd: 'var(--gb-error-tint-border)' },
+    primary:   { bg: 'linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)', fg: 'var(--gb-text-on-brand)', bd: 'var(--gb-brand-border)' },
+    secondary: { bg: 'var(--gb-fill-subtle)',  fg: 'var(--gb-text-secondary)', bd: 'var(--gb-border-default)' },
+    tinted:    { bg: tint.bg, fg: tint.fg, bd: tint.bd },
+    ghost:     { bg: 'transparent', fg: 'var(--gb-text-tertiary)', bd: 'transparent' },
+    danger:    { bg: 'var(--gb-error-tint-medium)', fg: 'var(--gb-error-fg)', bd: 'var(--gb-error-tint-border)' },
   }[variant];
   const S = {
     xs: { h: 22, px: 8,  fs: 10.5, gap: 4, ic: 10 },
@@ -100,9 +104,10 @@ export function Btn({ variant = 'secondary', size = 'md', icon, iconRight, child
   // primary's gradient background can't be transitioned without flashing —
   // skip background in its transition (gradient↔gradient swaps cleanly).
   const animBg = variant !== 'primary';
+  const cls = 'gb-btn-' + variant + (variant === 'tinted' ? '-' + (status || 'brand') : '');
   return (
-    <button onClick={onClick} disabled={disabled}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+    <button onClick={onClick} disabled={disabled} onContextMenu={onContextMenu} title={title}
+      className={cls}
       style={{
         ...ARMOR,
         background: V.bg, color: V.fg, border: `1px solid ${V.bd}`,
@@ -124,19 +129,18 @@ export function Btn({ variant = 'secondary', size = 'md', icon, iconRight, child
 }
 
 export function IconBtn({ icon, size = 'md', danger, ghost, active, style, onClick, title }) {
-  const [hover, setHover] = useState(false);
   const px = { xs: 22, sm: 26, md: 30, lg: 36 }[size];
   const ic = { xs: 11, sm: 12, md: 14, lg: 16 }[size];
   const pal = danger
-    ? { bg: hover ? 'var(--gb-error-tint-strong)' : 'var(--gb-error-tint-medium)', fg: 'var(--gb-error-fg)', bd: 'var(--gb-error-tint-border)' }
+    ? { bg: 'var(--gb-error-tint-medium)', fg: 'var(--gb-error-fg)', bd: 'var(--gb-error-tint-border)' }
     : active
     ? { bg: 'var(--gb-brand-tint-medium)', fg: 'var(--gb-brand-label)', bd: 'var(--gb-brand-tint-border)' }
     : ghost
-    ? { bg: hover ? 'var(--gb-fill-subtle)' : 'transparent', fg: 'var(--gb-text-tertiary)', bd: 'transparent' }
-    : { bg: hover ? 'var(--gb-fill-soft)' : 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)', bd: 'var(--gb-border-default)' };
+    ? { bg: 'transparent', fg: 'var(--gb-text-tertiary)', bd: 'transparent' }
+    : { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)', bd: 'var(--gb-border-default)' };
+  const cls = danger ? 'gb-ibtn-danger' : active ? '' : ghost ? 'gb-ibtn-ghost' : 'gb-ibtn-default';
   return (
-    <button title={title} onClick={onClick}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+    <button title={title} onClick={onClick} className={cls}
       style={{
         ...ARMOR,
         width: px, height: px, borderRadius: 'var(--gb-r-sm)',
@@ -197,10 +201,8 @@ export function Dot({ tone = 'brand', size = 6, glow }) {
 }
 
 export function Card({ children, style, pad = 0, hover, onClick, className }) {
-  const [h, setH] = useState(false);
   return (
-    <div onClick={onClick} className={className}
-      onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+    <div onClick={onClick} className={(hover ? 'gb-card-hover ' : '') + (className || '')}
       style={{
         ...ARMOR,
         // reset boundary: re-establish inherited basics for descendants
@@ -210,7 +212,6 @@ export function Card({ children, style, pad = 0, hover, onClick, className }) {
         borderRadius: 'var(--gb-r-lg)',
         padding: pad, overflow: 'hidden',
         transition: 'all var(--gb-anim)',
-        ...(hover && h ? { borderColor: 'var(--gb-border-default)' } : null),
         ...(onClick ? { cursor: 'pointer' } : null),
         ...style,
       }}>{children}</div>
@@ -393,6 +394,51 @@ export function fullName(c) {
 export const PAGE_ZOOM = 1.375;
 
 export const ARMOR = { boxSizing: 'border-box' };
+
+/* Page-level stylesheet injected once by DetailPageFrame (inside the shadow
+   tree). Holds every rule the detail primitives rely on: themed scrollbars,
+   modal keyframes, and the CSS `:hover` states that replaced JS hover state.
+   Inline styles beat stylesheet rules, so hover overrides carry !important. */
+export const UI_CSS =
+  '.gbcp-stat:hover {' +
+  '  box-shadow: inset 0 0 0 1px var(--gb-brand-tint-border),' +
+  '              inset 0 0 28px -10px var(--gb-brand-label);' +
+  '}' +
+  /* Thin themed scrollbar for the capped-height panel scroll areas. */
+  '.gb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }' +
+  '.gb-scroll::-webkit-scrollbar-track { background: transparent; }' +
+  '.gb-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }' +
+  '.gb-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); background-clip: padding-box; }' +
+  '.gb-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }' +
+  /* Confirmation pulse after an optimistic save — a brief brand ring/glow. */
+  '@keyframes gb-saved-pulse {' +
+  '  0% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong), inset 0 0 0 1px var(--gb-brand-tint-border); }' +
+  '  100% { box-shadow: 0 0 0 0 transparent, inset 0 0 0 1px transparent; }' +
+  '}' +
+  '.gb-saved { animation: gb-saved-pulse .7s ease-out; }' +
+  '@keyframes gb-pop-in { 0% { opacity: 0; transform: translateY(8px) scale(.985); } 100% { opacity: 1; transform: none; } }' +
+  '@keyframes gb-pop-out { 0% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(6px) scale(.975); } }' +
+  '@keyframes gb-backdrop-out { 0% { opacity: 1; } 100% { opacity: 0; } }' +
+  /* strip the native number-spinner arrows (snooze "weeks", etc.) */
+  'input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }' +
+  'input[type=number] { -moz-appearance: textfield; }' +
+  /* CSS hover states for the primitives (formerly JS mouseenter state). */
+  '.gb-btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, var(--gb-brand-label) 0%, var(--gb-brand) 100%) !important; }' +
+  '.gb-btn-secondary:hover:not(:disabled) { background: var(--gb-fill-soft) !important; }' +
+  '.gb-btn-ghost:hover:not(:disabled) { background: var(--gb-fill-subtle) !important; }' +
+  '.gb-btn-danger:hover:not(:disabled) { background: var(--gb-error-tint-strong) !important; }' +
+  '.gb-btn-tinted-brand:hover:not(:disabled) { background: var(--gb-brand-tint-strong) !important; }' +
+  '.gb-btn-tinted-error:hover:not(:disabled) { background: var(--gb-error-tint-strong) !important; }' +
+  '.gb-btn-tinted-warning:hover:not(:disabled) { background: var(--gb-warning-tint-strong) !important; }' +
+  '.gb-btn-tinted-info:hover:not(:disabled) { background: var(--gb-info-tint-strong) !important; }' +
+  '.gb-ibtn-default:hover { background: var(--gb-fill-soft) !important; }' +
+  '.gb-ibtn-ghost:hover { background: var(--gb-fill-subtle) !important; }' +
+  '.gb-ibtn-danger:hover { background: var(--gb-error-tint-strong) !important; }' +
+  '.gb-card-hover:hover { border-color: var(--gb-border-default) !important; }' +
+  '.gb-proof:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,.14); border-color: var(--gb-brand-tint-border) !important; }' +
+  '.gb-actrow:hover { background: var(--gb-fill-faint) !important; }' +
+  '.gb-actrow-del { opacity: 0; transition: opacity var(--gb-anim); }' +
+  '.gb-actrow-note:hover .gb-actrow-del { opacity: 1; }';
 
 export function ScrollArea({ max = 380, children, style }) {
   return (
@@ -741,21 +787,12 @@ export function ContactPill({ icon, label, value, muted }) {
   );
 }
 
-export function StatsStrip() {
-  const D = useD();
-  const s = D.stats;
-  const last = daysAgo(s.lastOrderDate);
-  const removed = num(s.mailerRemoved) ? true : false;
-  const cells = [
-    { label: 'Lifetime Revenue', value: fmt$(s.totalRevenue), sub: `${num(s.orderCount) ?? 0} orders`, tone: 'brand', glow: true },
-    { label: 'Orders',           value: num(s.orderCount) ?? 0,  sub: 'avg ' + fmt$(s.avgOrderSize) },
-    { label: 'YTD Revenue',      value: fmt$(s.ytdRevenue),   sub: 'this year' },
-    { label: 'Prior Year',       value: fmt$(s.priorYearRevenue), sub: 'last year' },
-    { label: 'Last Order',       value: fmtDate(s.lastOrderDate), sub: last != null ? `${last} days ago` : '', mono: true },
-    { label: 'Mailer Status',    value: removed ? 'Removed' : 'Subscribed', sub: `${num(s.mailerPoints) ?? 0} points`, tone: removed ? 'neutral' : 'success' },
-  ];
+/* THE stat-tile row. Every page's stat strip renders through this so new
+   pages match by construction. cells: [{ label, value, sub, tone, glow, mono }]
+   tone: 'brand' (tinted card) | 'success' | 'error' | 'warning' | undefined. */
+export function StatCardGrid({ cells }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 1fr)`, gap: 10 }}>
       {cells.map((c, i) => (
         <Card key={i} className="gbcp-stat" pad="14px 16px" style={{
           ...(c.tone === 'brand' ? { background: 'var(--gb-brand-tint-soft)', borderColor: 'var(--gb-brand-tint-border)' } : null),
@@ -765,17 +802,102 @@ export function StatsStrip() {
             color: c.tone === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
           }}>{c.label}</div>
           <div style={{
-            fontSize: 22, fontWeight: 700, marginTop: 4,
+            fontSize: 20, fontWeight: 700, marginTop: 4,
             color: c.tone === 'brand' ? 'var(--gb-brand-label)' :
                    c.tone === 'success' ? 'var(--gb-success-fg)' :
+                   c.tone === 'error' ? 'var(--gb-error-fg)' :
+                   c.tone === 'warning' ? 'var(--gb-warning-fg)' :
                    'var(--gb-text-primary)',
             fontFamily: c.mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
-            letterSpacing: -.5, lineHeight: 1.1,
+            letterSpacing: -.5, lineHeight: 1.15,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             textShadow: c.glow ? `0 0 18px color-mix(in srgb, var(--gb-brand-label) 35%, transparent)` : 'none',
           }}>{c.value}</div>
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 3, fontWeight: 500 }}>{c.sub}</div>
         </Card>
       ))}
+    </div>
+  );
+}
+
+export function StatsStrip() {
+  const D = useD();
+  const s = D.stats;
+  const last = daysAgo(s.lastOrderDate);
+  const removed = num(s.mailerRemoved) ? true : false;
+  return <StatCardGrid cells={[
+    { label: 'Lifetime Revenue', value: fmt$(s.totalRevenue), sub: `${num(s.orderCount) ?? 0} orders`, tone: 'brand', glow: true },
+    { label: 'Orders',           value: num(s.orderCount) ?? 0,  sub: 'avg ' + fmt$(s.avgOrderSize) },
+    { label: 'YTD Revenue',      value: fmt$(s.ytdRevenue),   sub: 'this year' },
+    { label: 'Prior Year',       value: fmt$(s.priorYearRevenue), sub: 'last year' },
+    { label: 'Last Order',       value: fmtDate(s.lastOrderDate), sub: last != null ? `${last} days ago` : '', mono: true },
+    { label: 'Mailer Status',    value: removed ? 'Removed' : 'Subscribed', sub: `${num(s.mailerPoints) ?? 0} points`, tone: removed ? undefined : 'success' },
+  ]} />;
+}
+
+/* Centered spinner block — the ONE loading indicator for detail pages. */
+export function Spinner({ size = 30, label = 'Loading…', pad = '90px 0' }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: pad, color: 'var(--gb-text-muted)' }}>
+      <span style={{ width: size, height: size, borderRadius: '50%', borderStyle: 'solid', borderWidth: 3, borderColor: 'var(--gb-border-strong)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin 0.7s linear infinite' }} />
+      {label && <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>}
+    </div>
+  );
+}
+
+/* The 15px task check square used in open/completed task tables.
+   tone 'brand' = the static filled check in Completed tables;
+   tone 'success' = the just-completed green fill in OpenTaskRow. */
+export function TaskCheckbox({ done, onClick, disabled, title, tone = 'brand' }) {
+  const pal = tone === 'success'
+    ? { bd: done ? 'var(--gb-success-fg)' : 'var(--gb-border-strong)', bg: done ? 'var(--gb-success-fg)' : 'transparent', fg: 'var(--gb-text-on-brand)' }
+    : { bd: done ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)', bg: done ? 'var(--gb-brand-tint-medium)' : 'transparent', fg: 'var(--gb-brand-label)' };
+  return (
+    <button onClick={onClick} disabled={disabled || !onClick} title={title}
+      style={{
+        width: 15, height: 15, borderRadius: 4, flexShrink: 0, padding: 0,
+        border: '1.5px solid ' + pal.bd, background: pal.bg, color: pal.fg,
+        cursor: onClick && !disabled ? 'pointer' : 'default',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+      {done && <I.check size={9} sw={3} />}
+    </button>
+  );
+}
+
+/* Defers layout/paint of below-the-fold sections until they scroll near the
+   viewport (content-visibility). Do NOT wrap panels whose popovers must
+   overflow the card (e.g. the activity filter) — paint containment clips them. */
+export function LazySection({ children, minHeight = 420 }) {
+  return (
+    <div style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${minHeight}px` }}>
+      {children}
+    </div>
+  );
+}
+
+/* The bolt quick-add input row (input + Add button). */
+export function QuickAddInput({ value, onChange, onSubmit, placeholder = 'Quick add a task… (Enter to save)', disabled, extra }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+      <div style={{
+        flex: 1, height: 30, borderRadius: 'var(--gb-r-md)',
+        background: 'var(--gb-fill-inverse-medium)',
+        border: '1px solid var(--gb-border-default)',
+        display: 'flex', alignItems: 'center', padding: '0 10px', gap: 7,
+      }}>
+        <I.bolt size={11} style={{ color: 'var(--gb-text-muted)' }} />
+        <input value={value} onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(); }}
+          placeholder={placeholder}
+          style={{
+            flex: 1, border: 0, outline: 0, background: 'transparent',
+            fontFamily: 'var(--gb-font-sans)', fontSize: 11.5,
+            color: 'var(--gb-text-primary)',
+          }} />
+      </div>
+      {extra}
+      <Btn variant="primary" size="sm" icon={<I.check />} disabled={disabled || !String(value || '').trim()} onClick={onSubmit}>Add</Btn>
     </div>
   );
 }
@@ -1029,7 +1151,6 @@ export function blobToPng(blob) {
 
 export function ProofCard({ p }) {
   const [imgOk, setImgOk] = useState(true);
-  const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
   const thumb = p.logo_ball || p.logo;
   const tone = proofTone(p.status);
@@ -1047,17 +1168,15 @@ export function ProofCard({ p }) {
     }
   };
   return (
-    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+    <div className="gb-proof"
       onClick={() => { if (p.history) goUrl(p.history); }}
       title={p.history ? 'View proof history' : undefined}
       style={{
         width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
         borderRadius: 'var(--gb-r-md)', overflow: 'hidden',
-        border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
+        border: '1px solid var(--gb-border-subtle)',
         background: 'var(--gb-surface-1)',
         cursor: p.history ? 'pointer' : 'default',
-        transform: hover ? 'translateY(-2px)' : 'none',
-        boxShadow: hover ? '0 3px 8px rgba(0,0,0,.14)' : '0 0 0 transparent',
         transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), box-shadow .22s, border-color .22s',
       }}>
       {/* image controls its own height (show all of it), rounded corners, inset */}
@@ -1257,8 +1376,6 @@ export function DirArrow({ dir }) {
     }}>{cfg.label}</span>
   );
 }
-
-export const QUICK_TASK = ['F-UP', 'P F-UP', 'P F-UP #2', 'PY2', 'PY3', 'SP-C', 'SP-E', 'SP-E2'];
 
 export function priTone(p) {
   const s = (p || '').toLowerCase();

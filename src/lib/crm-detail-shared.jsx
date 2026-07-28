@@ -1,11 +1,14 @@
 /**
- * Shared contact-centric CRM detail behavior.
+ * Shared stateful CRM detail behavior — used by ALL THREE detail pages
+ * (contact, account, opportunity).
  *
- * Contact and opportunity pages both embed the same contact activity, task,
- * opportunity, lookup, mailer, and edit flows. Page-specific roots and proposal
- * behavior remain in their entry modules.
+ * Owns the page frame (DetailPageFrame + TopBar/Breadcrumb), the modal host,
+ * the live-store adapter hooks, and every cross-page panel (activity, tasks,
+ * quick log, opportunities, lookups, mailer) plus the CRM write transports.
+ * Stateless visual primitives live in detail-shared.jsx; page entries should
+ * only compose these pieces.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Field as UIField } from '../ui/components/Field.jsx';
 import { Input as UIInput } from '../ui/components/Input.jsx';
 import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
@@ -13,10 +16,12 @@ import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
-import { loadTaskTemplates } from './quickTask.js';
+import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
+import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
+import { submitCallLog } from './submitCallLog.js';
 import { loadCallTemplates } from './callLog.js';
-import { isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
-import { ARMOR, AVATAR_COLOR, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, KV, NAV, PAGE_ZOOM, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Tag, Td, Th, accountHref, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
+import { chatTranscriptSummary, isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
+import { ARMOR, AVATAR_COLOR, ActivityFilter, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, InlineSearch, KV, NAV, PAGE_ZOOM, QuickAddInput, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Spinner, Tag, TaskCheckbox, Td, Th, ThemeSelector, UI_CSS, accountHref, activityType, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
 
 export const PatchCtx = React.createContext(() => {});
 
@@ -43,32 +48,41 @@ export function adapt(data) {
     activities: Array.isArray(d.activities) ? d.activities : [],
     emails: Array.isArray(d.emails) ? d.emails : [],
     proofs: Array.isArray(d.proofs) ? d.proofs : [],
+    contacts: Array.isArray(d.contacts) ? d.contacts : [],   // account → related contacts
   };
 }
 
-export const UI_CSS =
-  '.gbcp-stat:hover {' +
-  '  box-shadow: inset 0 0 0 1px var(--gb-brand-tint-border),' +
-  '              inset 0 0 28px -10px var(--gb-brand-label);' +
-  '}' +
-  /* Thin themed scrollbar for the capped-height panel scroll areas. */
-  '.gb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }' +
-  '.gb-scroll::-webkit-scrollbar-track { background: transparent; }' +
-  '.gb-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }' +
-  '.gb-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); background-clip: padding-box; }' +
-  '.gb-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }' +
-  /* Confirmation pulse after an optimistic save — a brief brand ring/glow. */
-  '@keyframes gb-saved-pulse {' +
-  '  0% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong), inset 0 0 0 1px var(--gb-brand-tint-border); }' +
-  '  100% { box-shadow: 0 0 0 0 transparent, inset 0 0 0 1px transparent; }' +
-  '}' +
-  '.gb-saved { animation: gb-saved-pulse .7s ease-out; }' +
-  '@keyframes gb-pop-in { 0% { opacity: 0; transform: translateY(8px) scale(.985); } 100% { opacity: 1; transform: none; } }' +
-  '@keyframes gb-pop-out { 0% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(6px) scale(.975); } }' +
-  '@keyframes gb-backdrop-out { 0% { opacity: 1; } 100% { opacity: 0; } }' +
-  /* strip the native number-spinner arrows (snooze "weeks", etc.) */
-  'input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }' +
-  'input[type=number] { -moz-appearance: textfield; }';
+/* UI_CSS moved to detail-shared.jsx (injected by DetailPageFrame). */
+export { UI_CSS } from './detail-shared.jsx';
+
+/**
+ * The page-data hook every detail page uses: live schema-engine data +
+ * optimistic patch queue. The store only notifies when an extract actually
+ * changed (custom-pages.js diffs), so D stays reference-stable between real
+ * changes. Patches are capped so a long session can't grow the per-render
+ * reduce without bound — beyond 200 the oldest 50 are folded away (their
+ * effect is almost always reflected in a later extract by then).
+ */
+export function useDetailData(store, adaptFn) {
+  const data = useSyncExternalStore(store.subscribe, store.get);
+  const [patches, setPatches] = useState([]);
+  const patch = useCallback((fn) => setPatches((p) => (p.length >= 200 ? [...p.slice(50), fn] : [...p, fn])), []);
+  const D = useMemo(
+    () => patches.reduce((acc, fn) => { try { return fn(acc) || acc; } catch (e) { return acc; } }, (adaptFn || adapt)(data)),
+    [data, patches, adaptFn],
+  );
+  return [D, patch];
+}
+
+/* Modal open/close state machine (the 190ms close matches gb-pop-out). The
+   returned object is also a valid ModalCtx value. */
+export function useModalHost() {
+  const [modal, setModal] = useState(null);
+  const [closing, setClosing] = useState(false);
+  const openModal = useCallback((node) => { setClosing(false); setModal(node); }, []);
+  const closeModal = useCallback(() => { setClosing(true); setTimeout(() => { setModal(null); setClosing(false); }, 190); }, []);
+  return useMemo(() => ({ modal, closing, openModal, closeModal }), [modal, closing, openModal, closeModal]);
+}
 
 export function crmOrigin() {
   try { if (/(^|\.)golfballs\.com$/i.test(location.hostname)) return location.origin; } catch (e) {}
@@ -252,6 +266,79 @@ async function crmCreateLookup(contactId, lookupTypeId, content) {
   if (!r.ok) throw new Error('lookup failed');
 }
 
+/* ── Hero layout, shared by every detail page ─────────────────
+   HeroShell owns the card grid: [avatar column] | info | actions.
+   Pass avatar=null for heroes without the 160px avatar column (opportunity).
+   HeroAvatar is the standard round initials avatar with a corner badge. */
+export function HeroShell({ avatar, actions, minActionsWidth = 200, children }) {
+  return (
+    <Card pad={0}>
+      <div style={{ display: 'grid', gridTemplateColumns: avatar ? '160px 1fr auto' : '1fr auto', gap: 0 }}>
+        {avatar && (
+          <div style={{
+            padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRight: '1px solid var(--gb-border-subtle)',
+            background: 'radial-gradient(circle at 50% 40%, var(--gb-fill-soft), transparent 70%)',
+            position: 'relative',
+          }}>{avatar}</div>
+        )}
+        <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+          {children}
+        </div>
+        <div style={{
+          padding: 18, display: 'flex', flexDirection: 'column', gap: 7, flexShrink: 0,
+          borderLeft: '1px solid var(--gb-border-subtle)',
+          background: 'var(--gb-fill-faint)',
+          minWidth: minActionsWidth,
+        }}>
+          {actions}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+export function HeroAvatar({ text, badge }) {
+  return (
+    <div style={{
+      width: 96, height: 96, borderRadius: '50%',
+      background: `linear-gradient(135deg, ${AVATAR_COLOR}, color-mix(in srgb, ${AVATAR_COLOR} 60%, black))`,
+      color: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 30, fontWeight: 700, letterSpacing: -.5,
+      boxShadow: '0 1px 0 var(--gb-fill-soft), inset 0 1px 0 rgba(255,255,255,.15), 0 0 0 4px var(--gb-surface-1), 0 0 0 5px var(--gb-border-subtle)',
+      position: 'relative',
+    }}>
+      {text}
+      {badge}
+    </div>
+  );
+}
+
+/* The hero title row: h1 + tags, id pinned right. */
+export function HeroTitleRow({ title, tags, id }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <h1 style={{
+        margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -.4,
+        color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)',
+      }}>{title}</h1>
+      {tags}
+      {id && <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-muted)', marginLeft: 'auto' }}>#{id}</span>}
+    </div>
+  );
+}
+
+/* The dashed-top strip of ContactPills under a hero's title/link rows. */
+export function HeroPillStrip({ children }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+      paddingTop: 6, borderTop: '1px dashed var(--gb-border-subtle)', marginTop: 2,
+    }}>{children}</div>
+  );
+}
+
 export function Hero({ onSendEmail }) {
   const D = useD();
   const { openModal } = useModal();
@@ -262,100 +349,61 @@ export function Hero({ onSendEmail }) {
   const years = yearsSince(a.createdDate);
   const territory = txt(a.territoryName);
   return (
-    <Card pad={0}>
-      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto', gap: 0 }}>
-        {/* Avatar block */}
+    <HeroShell
+      avatar={<HeroAvatar text={initials(c.firstName, c.lastName)} badge={
         <div style={{
-          padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRight: '1px solid var(--gb-border-subtle)',
-          background: 'radial-gradient(circle at 50% 40%, var(--gb-fill-soft), transparent 70%)',
-          position: 'relative',
-        }}>
-          <div style={{
-            width: 96, height: 96, borderRadius: '50%',
-            background: `linear-gradient(135deg, ${AVATAR_COLOR}, color-mix(in srgb, ${AVATAR_COLOR} 60%, black))`,
-            color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 30, fontWeight: 700, letterSpacing: -.5,
-            boxShadow: '0 1px 0 var(--gb-fill-soft), inset 0 1px 0 rgba(255,255,255,.15), 0 0 0 4px var(--gb-surface-1), 0 0 0 5px var(--gb-border-subtle)',
-            position: 'relative',
-          }}>
-            {initials(c.firstName, c.lastName)}
-            <div style={{
-              position: 'absolute', bottom: 2, right: 2,
-              width: 18, height: 18, borderRadius: '50%',
-              background: 'var(--gb-success)',
-              border: '3px solid var(--gb-surface-1)',
-              boxShadow: '0 0 6px var(--gb-success)',
-            }} />
-          </div>
+          position: 'absolute', bottom: 2, right: 2,
+          width: 18, height: 18, borderRadius: '50%',
+          background: 'var(--gb-success)',
+          border: '3px solid var(--gb-surface-1)',
+          boxShadow: '0 0 6px var(--gb-success)',
+        }} />
+      } />}
+      actions={<>
+        <Btn variant="primary" icon={<I.edit />} full onClick={() => openModal(<ContactEditModal />)}>Edit Contact</Btn>
+        <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
+        <Btn variant="tinted" status="info" icon={<I.send />} full onClick={() => {
+          if (onSendEmail) onSendEmail();
+          else { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }
+        }}>Send Email</Btn>
+        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+          <DncButton />
+          <IconBtn size="sm" icon={<I.more />} />
         </div>
+      </>}>
+      <HeroTitleRow title={fullName(c) || 'Unknown Contact'} id={D.ids.contact} tags={<>
+        {territory && <Tag tone="brand" size="md" icon={<I.briefcase />}>{territory}{a.salesRep ? ' · ' + a.salesRep : ''}</Tag>}
+        {a.industry && <Tag tone="info" size="md">{a.industry}</Tag>}
+        {years != null && <Tag tone="neutral" size="md">Active · {years}y</Tag>}
+      </>} />
 
-        {/* Info */}
-        <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h1 style={{
-              margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -.4,
-              color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)',
-            }}>{fullName(c) || 'Unknown Contact'}</h1>
-            {territory && <Tag tone="brand" size="md" icon={<I.briefcase />}>{territory}{a.salesRep ? ' · ' + a.salesRep : ''}</Tag>}
-            {a.industry && <Tag tone="info" size="md">{a.industry}</Tag>}
-            {years != null && <Tag tone="neutral" size="md">Active · {years}y</Tag>}
-            {D.ids.contact && <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-muted)', marginLeft: 'auto' }}>#{D.ids.contact}</span>}
-          </div>
-
-          {/* Account link */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            fontSize: 13, color: 'var(--gb-text-tertiary)', fontWeight: 500, flexWrap: 'wrap',
+      {/* Account link */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 9,
+        fontSize: 13, color: 'var(--gb-text-tertiary)', fontWeight: 500, flexWrap: 'wrap',
+      }}>
+        <I.briefcase size={13} style={{ color: 'var(--gb-text-muted)' }} />
+        <span>Works at</span>
+        <a href={D.ids.account ? accountHref(D.ids.account) : '#'}
+          onClick={(e) => { e.preventDefault(); if (D.ids.account) { recordBackTo((fullName(c) || 'Contact') + ' · #' + (D.ids.contact || '')); goUrl(accountHref(D.ids.account)); } }}
+          style={{
+            color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            cursor: D.ids.account ? 'pointer' : 'default',
           }}>
-            <I.briefcase size={13} style={{ color: 'var(--gb-text-muted)' }} />
-            <span>Works at</span>
-            <a href={D.ids.account ? accountHref(D.ids.account) : '#'}
-              onClick={(e) => { e.preventDefault(); if (D.ids.account) { recordBackTo((fullName(c) || 'Contact') + ' · #' + (D.ids.contact || '')); goUrl(accountHref(D.ids.account)); } }}
-              style={{
-                color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none',
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                cursor: D.ids.account ? 'pointer' : 'default',
-              }}>
-              {txt(a.name) || 'Account'}
-              <I.ext size={11} />
-            </a>
-            {c.jobTitle && (<><span style={{ color: 'var(--gb-text-ghost)' }}>·</span><span>{c.jobTitle}</span></>)}
-          </div>
-
-          {/* Contact strip */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
-            paddingTop: 6, borderTop: '1px dashed var(--gb-border-subtle)', marginTop: 2,
-          }}>
-            <ContactPill icon={<I.mail />}  label="Email" value={txt(c.email) || DASH} muted={isEmpty(c.email)} />
-            <ContactPill icon={<I.phone />} label="Phone" value={txt(c.phone) || DASH} muted={isEmpty(c.phone)} />
-            <ContactPill icon={<I.pin />}   label="Location" value={loc || DASH} muted={!loc} />
-            <ContactPill icon={<I.linkedin />} label="LinkedIn" value={c.linkedInUrl ? 'Profile' : 'Add link'} muted={!c.linkedInUrl} />
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div style={{
-          padding: 18, display: 'flex', flexDirection: 'column', gap: 7, flexShrink: 0,
-          borderLeft: '1px solid var(--gb-border-subtle)',
-          background: 'var(--gb-fill-faint)',
-          minWidth: 200,
-        }}>
-          <Btn variant="primary" icon={<I.edit />} full onClick={() => openModal(<ContactEditModal />)}>Edit Contact</Btn>
-          <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
-          <Btn variant="tinted" status="info" icon={<I.send />} full onClick={() => {
-            if (onSendEmail) onSendEmail();
-            else { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }
-          }}>Send Email</Btn>
-          <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-            <DncButton />
-            <IconBtn size="sm" icon={<I.more />} />
-          </div>
-        </div>
+          {txt(a.name) || 'Account'}
+          <I.ext size={11} />
+        </a>
+        {c.jobTitle && (<><span style={{ color: 'var(--gb-text-ghost)' }}>·</span><span>{c.jobTitle}</span></>)}
       </div>
-    </Card>
+
+      <HeroPillStrip>
+        <ContactPill icon={<I.mail />}  label="Email" value={txt(c.email) || DASH} muted={isEmpty(c.email)} />
+        <ContactPill icon={<I.phone />} label="Phone" value={txt(c.phone) || DASH} muted={isEmpty(c.phone)} />
+        <ContactPill icon={<I.pin />}   label="Location" value={loc || DASH} muted={!loc} />
+        <ContactPill icon={<I.linkedin />} label="LinkedIn" value={c.linkedInUrl ? 'Profile' : 'Add link'} muted={!c.linkedInUrl} />
+      </HeroPillStrip>
+    </HeroShell>
   );
 }
 
@@ -1088,16 +1136,7 @@ export function OpenTaskRow({ t }) {
     }}>
       <Td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={complete} disabled={state !== 'idle'} title="Complete task"
-            style={{
-              width: 15, height: 15, borderRadius: 4, flexShrink: 0, padding: 0,
-              border: '1.5px solid ' + (done ? 'var(--gb-success-fg)' : 'var(--gb-border-strong)'),
-              background: done ? 'var(--gb-success-fg)' : 'transparent',
-              cursor: state === 'idle' ? 'pointer' : 'default',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-            {done && <I.check size={10} style={{ color: 'var(--gb-text-on-brand)' }} />}
-          </button>
+          <TaskCheckbox tone="success" done={done} disabled={state !== 'idle'} onClick={complete} title="Complete task" />
           <span style={{ color: 'var(--gb-text-primary)', fontWeight: 500, textDecoration: done ? 'line-through' : 'none' }}>{t.subject}</span>
         </div>
       </Td>
@@ -1271,5 +1310,428 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel }) {
         {!collapsed && <IconBtn size="xs" ghost icon={<I.cog />} />}
       </div>
     </aside>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   PAGE FRAME — TopBar / Breadcrumb / BackChip / DetailPageFrame
+════════════════════════════════════════════════════════════ */
+
+/* The 48px sticky top bar. Children fill the left side (BackChip and/or
+   Breadcrumb); search + theme picker are always pinned right. */
+export function TopBar({ children }) {
+  return (
+    <div style={{
+      height: 48, flexShrink: 0,
+      background: 'var(--gb-surface-canvas)',
+      borderBottom: '1px solid var(--gb-border-subtle)',
+      display: 'flex', alignItems: 'center',
+      padding: '0 18px', gap: 14, position: 'sticky', top: 0, zIndex: 10,
+    }}>
+      {children}
+      <div style={{ flex: 1 }} />
+      <InlineSearch />
+      <ThemeSelector />
+    </div>
+  );
+}
+
+/* items: [{ label, page }] CRM page links; current: the trailing label. */
+export function Breadcrumb({ items = [], current, id }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gb-text-muted)', fontWeight: 500, minWidth: 0 }}>
+      {items.map((it, i) => (
+        <React.Fragment key={i}>
+          <a href={crmHref(it.page)} onClick={(e) => { e.preventDefault(); crmGo(it.page); }} style={{ color: 'inherit', textDecoration: 'none' }}>{it.label}</a>
+          <I.chevr size={10} />
+        </React.Fragment>
+      ))}
+      <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{current}</span>
+      {id && <span style={{ marginLeft: 6, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-ghost)', fontSize: 10.5 }}>#{id}</span>}
+    </div>
+  );
+}
+
+/* Pill link back to the record this page was opened from. */
+export function BackChip({ href, label, title }) {
+  if (!href) return null;
+  return (
+    <a href={href} onClick={(e) => { e.preventDefault(); goUrl(href); }} title={title || label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        height: 26, padding: '0 11px 0 8px', borderRadius: 'var(--gb-r-pill)',
+        background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)',
+        color: 'var(--gb-brand-label)', textDecoration: 'none', fontSize: 11.5, fontWeight: 600, flexShrink: 0,
+      }}>
+      <I.chevr size={12} style={{ transform: 'scaleX(-1)' }} />{label}
+    </a>
+  );
+}
+
+/**
+ * THE page shell every custom detail page renders through: zoomed root,
+ * shared stylesheet, sidebar, scrolling content column, sticky top bar,
+ * loading spinner, centered content wrapper, and (optionally) the modal
+ * backdrop from useModalHost. A new page is:
+ *
+ *   <DetailPageFrame currentLabel="…" topBar={<TopBar>…</TopBar>}
+ *     ready={D.ready} modalHost={modalHost}>{sections}</DetailPageFrame>
+ */
+export function DetailPageFrame({ currentLabel, topBar, ready = true, modalHost, children }) {
+  const [sideCollapsed, setSideCollapsed] = useState(false);
+  return (
+    <>
+      {/* data-gb-scale="custom-page" is intentionally NOT one of
+          scales.js's SCALE_CATEGORIES, so applyScales() emits no zoom rule
+          for it — the takeover renders at the host website's own scale,
+          unaffected by the extension's UI-scale sliders. The bare
+          [data-gb-scale] selector still applies the host-CSS reset
+          (box-sizing / line-height / font). height:100% + own scroll so it
+          fills the fixed root the engine mounts. */}
+      <div data-gb-scale="custom-page" style={{
+        ...ARMOR,
+        zoom: PAGE_ZOOM,                 // fixed scale — not slider-driven
+        // No PAGE scroll — the sidebar and content column each scroll
+        // themselves. This also kills the page-scrollbar appear/disappear
+        // that was flickering a scrollbar onto the quick-actions menu.
+        height: '100%', overflow: 'hidden',
+        background: 'var(--gb-surface-deep)',
+        color: 'var(--gb-text-secondary)',
+        fontFamily: 'var(--gb-font-sans)',
+        display: 'flex', alignItems: 'stretch',
+      }}>
+        <style>{UI_CSS}</style>
+        <Sidebar currentLabel={currentLabel} collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
+        <div className="gb-scroll" style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
+          {topBar}
+          {!ready && <Spinner />}
+          <div style={{
+            maxWidth: 2200, margin: '0 auto',
+            padding: '20px 28px 60px',
+            display: 'flex', flexDirection: 'column', gap: 14,
+          }}>
+            {children}
+          </div>
+        </div>
+      </div>
+      {modalHost && modalHost.modal && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) modalHost.closeModal(); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 400,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,.55)', padding: 20,
+            animation: modalHost.closing ? 'gb-backdrop-out .19s ease both' : 'gb-fade-slide var(--gb-anim) both',
+          }}>
+          {modalHost.modal}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   ACTIVITY FEED (shared by all three pages)
+════════════════════════════════════════════════════════════ */
+export function ActivityRow({ a, last, onDelete }) {
+  const { openModal } = useModal();
+  const meta = activityType(a);
+  const chat = meta.key === 'chat' ? chatTranscriptSummary(a.subject || a.description || '') : null;
+  const isNote = !!a.localNote;
+  const clickable = !!a.id && !isNote;
+  return (
+    <div
+      className={isNote ? 'gb-actrow-note' : 'gb-actrow'}
+      onClick={clickable ? () => openModal(<ActivityDetailModal activityId={a.id} />) : undefined}
+      title={clickable ? 'View activity detail' : (isNote ? 'Personal note (local)' : undefined)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 12,
+        padding: '11px 18px',
+        cursor: clickable ? 'pointer' : 'default',
+        borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)',
+        borderLeft: isNote ? '3px solid var(--gb-warning-tint-border)' : '3px solid transparent',
+        background: isNote ? 'var(--gb-warning-tint-soft)' : 'transparent',
+        transition: 'background var(--gb-anim)',
+      }}>
+      <span style={{
+        width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginTop: 1,
+        background: `var(--gb-${meta.tone}-tint-medium)`,
+        border: `1px solid var(--gb-${meta.tone}-tint-border)`,
+        color: `var(--gb-${meta.tone}-fg)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>{React.cloneElement(meta.icon, { size: 13 })}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--gb-text-primary)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {chat ? (
+            <>
+              <span style={{ display: 'block', fontWeight: 700 }}>Live Chat · {chat.count} message{chat.count === 1 ? '' : 's'}</span>
+              <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.last.name}: {chat.last.body}</span>
+            </>
+          ) : (a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>)}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
+          {a.category && <Tag tone={meta.tone} size="xs">{a.category}</Tag>}
+          {chat && <Tag tone="success" size="xs">Transcript</Tag>}
+          {a.direction && <Tag tone="neutral" size="xs">{a.direction}</Tag>}
+          {a.employee && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 600 }}>{a.employee}</span>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginTop: 3 }}>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{fmtDateTime(a.date)}</span>
+        {isNote && onDelete && (
+          <button className="gb-actrow-del" onClick={(e) => { e.stopPropagation(); onDelete(a.noteId); }} title="Delete note"
+            style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', color: 'var(--gb-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, lineHeight: 1 }}>×</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* extraRows ride at the top of the feed (e.g. the contact page's local
+   notes); onAddNote renders the "Add note" button; onDeleteNote enables the
+   per-note delete control. */
+export function ActivityPanel({ extraRows = [], onAddNote, onDeleteNote }) {
+  const D = useD();
+  const rows = useMemo(() => [...extraRows, ...D.activities], [extraRows, D.activities]);
+  const [filter, setFilter] = useState('all');
+  const counts = useMemo(() => {
+    const c = { all: rows.length };
+    rows.forEach((a) => { const k = activityType(a).key; c[k] = (c[k] || 0) + 1; });
+    return c;
+  }, [rows]);
+  const filtered = filter === 'all' ? rows : rows.filter((a) => activityType(a).key === filter);
+  return (
+    // overflow:visible + raised z so the filter dropdown isn't clipped by the
+    // card (or covered by the panels below) when the list is short.
+    <Card style={{ overflow: 'visible', position: 'relative', zIndex: 2 }}>
+      <SectionTitle
+        icon={<I.history />}
+        title="Activity Feed"
+        count={filter === 'all' ? `${rows.length}` : `${filtered.length} of ${rows.length}`}
+        sub="System, workflow, and human-logged events"
+        right={
+          <div style={{ display: 'flex', gap: 6 }}>
+            <ActivityFilter value={filter} onChange={setFilter} counts={counts} />
+            {onAddNote && <Btn variant="tinted" size="sm" icon={<I.note />} onClick={onAddNote}>Add note</Btn>}
+          </div>
+        }
+      />
+      <ScrollArea max={460}>
+        {/* key by filter → the list fades/slides in on each filter change */}
+        <div key={filter} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          {filtered.map((a, idx) => <ActivityRow key={a.noteId || idx} a={a} last={idx === filtered.length - 1} onDelete={onDeleteNote} />)}
+          {filtered.length === 0 && (
+            <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>
+              {rows.length ? 'No matching activity.' : 'No activity recorded.'}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </Card>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   TASKS + QUICK LOG (shared by all three pages)
+════════════════════════════════════════════════════════════ */
+
+/**
+ * Resolve the authenticated task/call context from storage and the current
+ * CRM page. The schema contact ID is used only when the native page context
+ * does not expose one.
+ */
+export async function taskContext(fallbackContactId, extra = {}) {
+  let ctx = {};
+  try { ctx = await readTaskContext(); } catch (e) {}
+  if (!ctx.employeeId || ctx.employeeId === '0') { const fb = currentEmployeeId(); if (fb && fb !== '0') ctx.employeeId = fb; }
+  if (!ctx.contactId && fallbackContactId) ctx.contactId = String(fallbackContactId);
+  return { ...ctx, ...extra };
+}
+
+export function TasksPanel() {
+  const D = useD();
+  const patch = usePatch();
+  const { openModal } = useModal();
+  const qt = useTemplates(QT_KEY);
+  const [manage, setManage] = useState(false);
+  const editTask = (t) => openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />);
+  const [quickTask, setQuickTask] = useState('');
+  const [adding, setAdding] = useState(false);
+  // Optimistically prepend a row (after a real create) and animate it in.
+  const addRow = (row) => patch((Dd) => ({ ...Dd, openTasks: [{ id: `new-${nextTaskTempId()}`, category: '', status: 'Open', ...row }, ...(Dd.openTasks || [])] }));
+  // A quick-task button: fire the referenced saved template directly, no modal.
+  const runTaskTemplate = async (chip) => {
+    try {
+      const all = await loadTaskTemplates();
+      const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
+      if (!tpl) { gbToast('Template not found', 'error'); return; }
+      const r = await submitQuickTask({ template: tpl, context: await taskContext(D.ids.contact) });
+      if (r && r.ok) addRow({ subject: tpl.subject || tpl.name || chip.label, priority: priLabel(tpl.priorityId || tpl.priority || 2), dueDate: todayMDY() });
+      else gbToast((r && r.error) || 'Could not create task', 'error');
+    } catch (e) { gbToast('Could not create task', 'error'); }
+  };
+  // Reuse the proven QuickTask composer (correct preset templates, employee
+  // resolution, CRM create); animate the row in on its onCreated callback.
+  const openComposer = () => {
+    try {
+      window.__gbShowQuickTaskModal && window.__gbShowQuickTaskModal({
+        onCreated: ({ template }) => addRow({
+          subject: (template && (template.subject || template.name)) || 'New task',
+          priority: priLabel((template && (template.priorityId || template.priority)) || 2),
+          dueDate: (template && (template.crmDate || template.dueDate)) || todayMDY(),
+        }),
+      });
+    } catch (e) {}
+  };
+  // Typed quick-add: subject = exactly what was typed (correct freeform task).
+  const quickCreate = async (subject) => {
+    const subj = (subject || '').trim();
+    if (!subj || adding) return;
+    setAdding(true);
+    try {
+      const ctx = await taskContext(D.ids.contact);
+      const r = await submitQuickTask({ template: buildCustomTaskTemplate({ subject: subj }), context: ctx });
+      if (!r || !r.ok) { gbToast((r && r.error) || 'Could not create task', 'error'); return; }
+      addRow({ id: r.taskId || `new-${nextTaskTempId()}`, subject: subj, priority: priLabel(2), dueDate: todayMDY() });
+      setQuickTask('');
+    } catch (e) { gbToast('Could not create task', 'error'); }
+    finally { setAdding(false); }
+  };
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <Card>
+        <SectionTitle
+          icon={<I.task />} title="Open Tasks" count={D.openTasks.length}
+          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={openComposer}>New task</Btn>}
+        />
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>
+              {manage ? 'Manage — click to edit · × to remove' : 'Quick create — one click adds a task'}
+            </span>
+            {qt.list.length > 0 && <IconBtn size="xs" ghost active={manage} icon={<I.edit />} title="Manage buttons" onClick={() => setManage((m) => !m)} />}
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {qt.list.map((t) => (
+              <span key={t.id} style={{ position: 'relative', display: 'inline-flex' }}>
+                <Btn variant={manage ? 'tinted' : 'secondary'} size="xs"
+                  title={manage ? 'Click to edit' : 'Click to add · right-click to edit'}
+                  onClick={() => (manage ? editTask(t) : runTaskTemplate(t))}
+                  onContextMenu={(e) => { e.preventDefault(); editTask(t); }}>{t.label}</Btn>
+                {manage && <span onClick={(e) => { e.stopPropagation(); qt.remove(t.id); }} title="Remove"
+                  style={{ position: 'absolute', top: -5, right: -5, width: 15, height: 15, borderRadius: '50%', background: 'var(--gb-error-tint-medium)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, lineHeight: 1, cursor: 'pointer' }}>×</span>}
+              </span>
+            ))}
+            <IconBtn size="xs" ghost icon={<I.plus />} title="New quick task" onClick={() => openModal(<TemplateModal kind="task" onSave={qt.add} />)} />
+            {qt.list.length === 0 && <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>Add a quick task with +</span>}
+          </div>
+          <QuickAddInput value={quickTask} onChange={setQuickTask} onSubmit={() => quickCreate(quickTask)} disabled={adding} />
+        </div>
+        <ScrollArea max={320}>
+        <table style={tableStyle}>
+          <thead><tr>
+            <Th>Subject</Th>
+            <Th>Category</Th>
+            <Th align="center">Pri</Th>
+            <Th align="right">Due</Th>
+            <Th></Th>
+          </tr></thead>
+          <tbody>
+            {D.openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
+            {D.openTasks.length === 0 && <EmptyRow colSpan={5} label="No open tasks." />}
+          </tbody>
+        </table>
+        </ScrollArea>
+      </Card>
+
+      <Card>
+        <SectionTitle icon={<I.check />} title="Completed Tasks" count={D.doneTasks.length} />
+        <ScrollArea max={320}>
+        <table style={tableStyle}>
+          <thead><tr>
+            <Th>Subject</Th>
+            <Th>Category</Th>
+            <Th align="right">Completed</Th>
+          </tr></thead>
+          <tbody>
+            {D.doneTasks.map((t, i) => (
+              <tr key={i} style={trStyle}>
+                <Td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <TaskCheckbox done />
+                    <span style={{ color: 'var(--gb-text-muted)', textDecoration: 'line-through', fontWeight: 500 }}>{t.subject}</span>
+                  </div>
+                </Td>
+                <Td muted>{t.category}</Td>
+                <Td align="right" mono muted>{fmtDate(t.dueDate)}</Td>
+              </tr>
+            ))}
+            {D.doneTasks.length === 0 && <EmptyRow colSpan={3} label="No completed tasks." />}
+          </tbody>
+        </table>
+        </ScrollArea>
+      </Card>
+    </div>
+  );
+}
+
+export function QuickLogCard() {
+  const D = useD();
+  const patch = usePatch();
+  const { openModal } = useModal();
+  const ql = useTemplates(QL_KEY);
+  const [busy, setBusy] = useState(null);
+  const [manage, setManage] = useState(false);
+  const editLog = (t) => openModal(<TemplateModal kind="call" initial={t} onSave={(tpl) => ql.update(t.id, tpl)} onDelete={() => ql.remove(t.id)} />);
+  // A quick-log button: fire the referenced saved call template directly.
+  const runLog = async (chip) => {
+    if (busy) return;
+    setBusy(chip.id);
+    try {
+      const all = await loadCallTemplates();
+      const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
+      if (!tpl) { gbToast('Template not found', 'error'); setBusy(null); return; }
+      const ctx = await taskContext(D.ids.contact, {
+        phone: String(D.contact.phone || '').replace(/\D/g, ''),
+        contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
+      });
+      const r = await submitCallLog({ template: tpl, context: ctx });
+      if (r && r.ok) {
+        patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Call', direction: tpl.callDirection === 1 ? 'In' : 'Out', subject: tpl.subject || tpl.name || chip.label, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
+      } else { gbToast((r && r.error) || 'Could not log call', 'error'); }
+    } catch (e) { gbToast('Could not log call', 'error'); }
+    finally { setBusy(null); }
+  };
+  return (
+    <Card>
+      <SectionTitle icon={<I.zap />} title="Quick Log" sub={manage ? 'Click a button to edit · × to remove' : 'Log a call instantly — one click'}
+        right={<div style={{ display: 'flex', gap: 4 }}>
+          {ql.list.length > 0 && <IconBtn size="xs" ghost active={manage} icon={<I.edit />} title="Manage buttons" onClick={() => setManage((m) => !m)} />}
+          <IconBtn size="xs" ghost icon={<I.plus />} title="New quick log" onClick={() => openModal(<TemplateModal kind="call" onSave={ql.add} />)} />
+        </div>} />
+      <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+        {ql.list.map((t) => (
+          <button key={t.id} disabled={busy === t.id && !manage}
+            onClick={() => (manage ? editLog(t) : runLog(t))}
+            onContextMenu={(e) => { e.preventDefault(); editLog(t); }}
+            title={manage ? 'Click to edit' : 'Click to log · right-click to edit'}
+            style={{
+              position: 'relative', minWidth: 0,   // let the grid cell constrain width so text can wrap
+              background: 'var(--gb-fill-subtle)',
+              border: '1px ' + (manage ? 'dashed var(--gb-brand-tint-border)' : 'solid var(--gb-border-default)'),
+              borderRadius: 'var(--gb-r-md)', padding: '10px 9px',
+              display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
+              cursor: busy === t.id && !manage ? 'default' : 'pointer', textAlign: 'left', opacity: busy === t.id && !manage ? 0.6 : 1,
+              transition: 'all var(--gb-anim)', fontFamily: 'var(--gb-font-sans)',
+            }}>
+            {manage && <span onClick={(e) => { e.stopPropagation(); ql.remove(t.id); }} title="Remove"
+              style={{ position: 'absolute', top: 5, right: 5, width: 16, height: 16, borderRadius: '50%', background: 'var(--gb-error-tint-medium)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, lineHeight: 1, cursor: 'pointer' }}>×</span>}
+            <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}><I.phone size={13} /></span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.25, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.label}</span>
+            <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 600, color: 'var(--gb-text-muted)', lineHeight: 1.3, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.templateName || ''}</span>
+          </button>
+        ))}
+        {ql.list.length === 0 && <div style={{ gridColumn: '1 / -1', padding: 14, textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Add a quick-log button with +</div>}
+      </div>
+    </Card>
   );
 }

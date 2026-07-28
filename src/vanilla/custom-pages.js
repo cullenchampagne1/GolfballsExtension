@@ -138,6 +138,37 @@
     } catch (err) { return null; }
   }
 
+  /* Structural equality for extracted data. Emits fire from mutation
+     bursts AND fixed backstop timers, so once the host settles most
+     re-extracts are identical — comparing here lets the store keep the
+     SAME object reference, which is what useSyncExternalStore keys
+     re-renders off. */
+  function deepEqual(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+      return a !== a && b !== b; // NaN
+    }
+    var aArr = Array.isArray(a);
+    if (aArr !== Array.isArray(b)) return false;
+    if (aArr) {
+      if (a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) { if (!deepEqual(a[i], b[i])) return false; }
+      return true;
+    }
+    var ak = Object.keys(a);
+    var bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    for (var j = 0; j < ak.length; j++) {
+      var k = ak[j];
+      if (!Object.prototype.hasOwnProperty.call(b, k) || !deepEqual(a[k], b[k])) return false;
+    }
+    return true;
+  }
+
+  // Test hook — the unit suite imports this file with stubbed globals and
+  // exercises the pure store helpers through here.
+  window.__gbCustomPagesInternals = { deepEqual: deepEqual };
+
   function createStore() {
     var data = extract();
     var subs = [];
@@ -146,6 +177,9 @@
 
     function emit() {
       var next = extract();
+      // Unchanged extract → keep the old reference and DON'T notify, so
+      // React never re-renders for a no-op host mutation / backstop timer.
+      if (deepEqual(next, data)) return;
       data = next;
       for (var i = 0; i < subs.length; i++) { try { subs[i](data); } catch (e) {} }
     }

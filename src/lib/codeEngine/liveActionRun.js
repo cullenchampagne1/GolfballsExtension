@@ -53,7 +53,7 @@ export async function makeLiveExecutor(page) {
     import('../submitQuickTask.js'),
     import('../submitCallLog.js'),
     import('../crmTasks.js'),
-    import('../contact-detail-shared.jsx'),
+    import('../crm-detail-shared.jsx'),
     import('../backgroundMessage.js'),
   ]);
 

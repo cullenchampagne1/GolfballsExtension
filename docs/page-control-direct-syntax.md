@@ -35,7 +35,7 @@ final, opt-in wiring step.
   content-side. So the sim RECORDS intent; the executor performs it content-side.
 
 ### Contact field edits — the write mechanism
-- **`crmUpdateContact(customerId, edits)`** — `src/lib/contact-detail-shared.jsx:89`.
+- **`crmUpdateContact(customerId, edits)`** — `src/lib/crm-detail-shared.jsx:89`.
   Read-modify-write: `Contact/Get.ajax` → merge changed keys → `Contact/Update.ajax`
   (`credentials:'include'`, content-script realm).
 - **Batching already exists**: `ContactInfoCard` stages field edits in
@@ -55,7 +55,7 @@ final, opt-in wiring step.
 - `completeContactTasks(contactId, { mode:'completeAll'|'completeLatest' })`
   (`:94`), `fetchOpenTasksForContact(contactId)` (`:35`).
 - Inline UI already binds this: `OpenTaskRow.complete()` →
-  `completeTaskById(t.id)` (`contact-detail-shared.jsx:1070`), with `t.id` from
+  `completeTaskById(t.id)` (`crm-detail-shared.jsx:1070`), with `t.id` from
   the extracted `tasks.open[]` item — exactly what `page.tasks.open[0].complete()`
   targets.
 
@@ -95,7 +95,7 @@ page.contact.commit()             // optional; else auto-commit at run end
 | syntax | effect | executor (existing) |
 |---|---|---|
 | `page.contact.addNote(text)` | remote | order-note / activity note bridge (`submitOrderNote.js`) — needs a contact-note variant |
-| `page.contact.setDnc(true)` | remote | `crmSetDnc` (`contact-detail-shared.jsx:82`) |
+| `page.contact.setDnc(true)` | remote | `crmSetDnc` (`crm-detail-shared.jsx:82`) |
 | `page.contact.categorizeCase(id, cat)` | remote | `submitCaseCategory.js:36` |
 | `page.tasks.create({subject, …})` | remote | already `actions.createTask` |
 | `page.order.setDates({approval, commit})` | money | `submitOrderDates.js` (admin iframe bridge) |
