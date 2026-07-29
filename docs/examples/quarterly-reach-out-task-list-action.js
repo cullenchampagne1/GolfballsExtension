@@ -13,8 +13,9 @@
 // and those anniversary tasks get a live date exactly two weeks before their
 // due date. Every other task (promotion follow-ups, manual follow-ups, brand
 // tiers) counts toward quarter coverage but keeps its subject, live date, and
-// category untouched. Missing rolling quarters receive one task, and those
-// new tasks receive the same two-week live-date offset.
+// category untouched. Missing rolling quarters receive one task placed at the
+// middle of the gap between the contact's surrounding touches (same rule as
+// the reconciliation campaign), with the same two-week live-date offset.
 
 const data = page.entryPoint?.data;
 const taskRows = Array.isArray(data?.tasks) ? data.tasks : [];
@@ -73,6 +74,46 @@ function liveDateFor(dueDate) {
   const liveDate = new Date(dueDate);
   liveDate.setDate(liveDate.getDate() - 14);
   return isoDate(liveDate);
+}
+
+// Inverse of calendarDayNumber — read the UTC fields so negative-offset
+// timezones don't slide the calendar day back by one.
+function dateFromDayNumber(dayNumber) {
+  const utc = new Date(dayNumber * DAY_MS);
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 12);
+}
+
+/* Same placement rule as the reconciliation campaign: the reach-out sits at
+   the middle of the real gap around the quarter — from the last touch at or
+   before the window to the next touch landing by the end of the FOLLOWING
+   quarter (else the start of the following quarter); touches inside the
+   window split it and the largest gap wins; clamped into the quarter, never
+   in the past. Here `busy` is the contact's dated Task List rows (including
+   existing quarterly tasks — this surface never re-places them). */
+function gapMidpointForSlot(slot, busy, today) {
+  const todayNum = calendarDayNumber(today);
+  const qStartNum = calendarDayNumber(new Date(slot.year, (slot.quarter - 1) * 3, 1, 12));
+  const qEndNum = calendarDayNumber(new Date(slot.year, (slot.quarter - 1) * 3 + 3, 0, 12));
+  const windowStart = Math.max(qStartNum, todayNum);
+  if (windowStart > qEndNum) return null;
+  const followingQuarterEnd = calendarDayNumber(new Date(slot.year, (slot.quarter - 1) * 3 + 6, 0, 12));
+
+  const sorted = [...busy].sort((a, b) => a - b);
+  const before = sorted.filter((day) => day <= windowStart);
+  const gapStart = before.length ? before[before.length - 1] : windowStart;
+  const inside = sorted.filter((day) => day > windowStart && day <= qEndNum);
+  const after = sorted.find((day) => day > qEndNum && day <= followingQuarterEnd);
+  const gapEnd = after != null ? after : qEndNum + 1;
+
+  const boundaries = [gapStart, ...inside, gapEnd];
+  let best = null;
+  for (let i = 0; i + 1 < boundaries.length; i += 1) {
+    const span = boundaries[i + 1] - boundaries[i];
+    if (!best || span > best.span) {
+      best = { span, mid: Math.round((boundaries[i] + boundaries[i + 1]) / 2) };
+    }
+  }
+  return dateFromDayNumber(Math.min(qEndNum, Math.max(windowStart, best.mid)));
 }
 
 // Rename a legacy "Prior Year …" subject to the "Order Anniversary Follow Up"
@@ -144,12 +185,7 @@ function rollingQuarter(offset, today) {
   const absolute = today.getFullYear() * 4 + Math.floor(today.getMonth() / 3) + offset;
   const year = Math.floor(absolute / 4);
   const quarter = (absolute % 4) + 1;
-  // Middle of the quarter keeps opportunities away from quarter boundaries.
-  let dueDate = new Date(year, (quarter - 1) * 3 + 1, 15, 12);
-  if (offset === 0 && calendarDayNumber(dueDate) < calendarDayNumber(today)) {
-    dueDate = new Date(today);
-  }
-  return { year, quarter, key: `${year}-Q${quarter}`, dueDate };
+  return { year, quarter, key: `${year}-Q${quarter}` };
 }
 
 const today = new Date();
@@ -190,7 +226,8 @@ for (const contact of contacts) {
     contactName: String(contact.contactName || contact.contactId || key),
     accountId: String(contact.accountId || ""),
     accountName: String(contact.accountName || ""),
-    occupied: new Set()
+    occupied: new Set(),
+    busy: []
   });
 }
 
@@ -199,7 +236,10 @@ for (const task of taskRows) {
   const dueDate = calendarDate(task?.dueDate || task?.due);
   const plan = key ? contactPlans.get(key) : null;
   if (!plan) continue;
-  if (dueDate) plan.occupied.add(quarterKey(dueDate));
+  if (dueDate) {
+    plan.occupied.add(quarterKey(dueDate));
+    plan.busy.push(calendarDayNumber(dueDate));
+  }
   // Belt-and-braces dedupe: an EXISTING "QN Reach Out Opportunity" on this
   // contact claims its quarter even when its due date was cleared/moved, so
   // re-running the action can never create a second copy of the same slot.
@@ -229,6 +269,11 @@ for (const plan of contactPlans.values()) {
       continue;
     }
 
+    const dueDate = gapMidpointForSlot(slot, plan.busy, today);
+    if (!dueDate) {
+      coveredCount += 1;
+      continue;
+    }
     const created = await actions.createTask({
       contactId: plan.contactId,
       taskId: plan.taskId,   // executor resolves the real contact from this when contactId is unusable
@@ -239,24 +284,26 @@ for (const plan of contactPlans.values()) {
         `Quarterly reach-out coverage for ${plan.contactName}.`,
         plan.accountName ? `Account: ${plan.accountName}.` : "",
         `Coverage period: Q${slot.quarter} ${slot.year}.`,
-        "Created from the Task List because no dated task covered this quarter."
+        "Created from the Task List because no dated task covered this quarter.",
+        "Scheduled at the middle of the gap between surrounding touches."
       ].filter(Boolean).join("\n"),
       categoryId: QUARTERLY_CATEGORY_ID,   // "Workflow Task"
       priority: "med",
       daysOut: Math.max(
         0,
-        Math.round(calendarDayNumber(slot.dueDate) - calendarDayNumber(today))
+        Math.round(calendarDayNumber(dueDate) - calendarDayNumber(today))
       )
     });
     if (created?.taskId) {
       await actions.updateTask({
         id: created.taskId,
         fields: {
-          liveDate: liveDateFor(slot.dueDate)
+          liveDate: liveDateFor(dueDate)
         }
       });
     }
     plan.occupied.add(slot.key);
+    plan.busy.push(calendarDayNumber(dueDate));
     createdCount += 1;
     contactCreated += 1;
   }

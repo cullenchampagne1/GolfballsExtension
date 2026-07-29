@@ -259,46 +259,67 @@ This is the safest full helper check because it performs no email send:
 Run it first as a dry run, select one disposable test contact, inspect the
 preview, and only then switch off Dry run.
 
-## Prior-year anniversary campaign
+## Full task reconciliation campaign
 
-The paste-ready example at
-[`docs/examples/prior-year-anniversary-campaign.js`](examples/prior-year-anniversary-campaign.js)
-runs against contact or account records. Each invocation stays scoped to the
-selected page: contact orders/tasks for a contact, account orders/tasks for an
-account. It groups orders by source year + month, keeps only the newest source
-year represented in each calendar month, and averages the day using orders
-from that retained period. It then completes existing open tasks whose subject
-contains `Prior Year` and creates a fresh four-task future cycle:
+The paste-ready campaign at
+[`docs/examples/task-reconciliation-campaign.js`](examples/task-reconciliation-campaign.js)
+is the ONE campaign that both initiates and reconciles every owned task flow.
+Run it against any contact or account audience, as often as needed: each
+record converges to the same consistent state. Existing tasks are edited in
+place — never completed and remade — missing tasks are created, and running
+it twice back-to-back performs zero writes. Any task outside the owned flows
+is read-only context: it counts as a scheduled touch and as quarter coverage
+but is never edited.
 
-1. `Prior Year #1 [source year]` — three weeks before the anniversary.
-2. `Prior Year #2 [source year]` — two weeks before the anniversary.
-3. `Prior Year Call - [month]` — one week before the anniversary.
-4. `Prior Year #3 [source year]` — the Monday before the anniversary.
+**Anniversary cycles.** Orders are grouped by source year + month, only the
+newest source year per calendar month is retained, and the day is the rounded
+average of that period's orders. Each retained anniversary wants four tasks —
+`Order Anniversary Follow Up #1` three weeks before, `#2` two weeks before,
+`… Call - [Month]` one week before, and `#3` the Monday before — with the
+bracket year set to the follow-up cycle year, category Order History Special
+(id 7), and live date two weeks before due. Existing tasks (including legacy
+`Prior Year …` naming) are matched to slots by kind and nearest due date and
+edited in place; a completed task within two weeks of a slot fulfills it; an
+in-flight cycle is preserved (overdue open tasks keep their dates and only
+naming/category are corrected, past slots with no task are skipped, not
+created late); a cycle with no evidence whose first task passed rolls to next
+year; surplus anniversary tasks with no slot are retired. Candidate monthly
+campaigns are ranked by newest supporting order and a lower-ranked candidate
+is skipped entirely when any of its tasks would land within 20 days of an
+accepted campaign's task.
 
-Every subject retains the source year in brackets, and every description lists
-the source orders used to derive the averaged date. If the first step in this
-year's sequence has passed, the whole sequence rolls to next year so the four
-tasks remain chronological. Physical anniversary dates stay in the task body,
-not the subject.
+**Promotion tasks.** Configure `PROMO_SUBJECT_RE` and `PROMO_TASKS` at the
+top of the file for the active promotion. After a run every open promotion
+task is live TODAY (future or unreadable live dates are set to today;
+already-live tasks are untouched). Missing subjects are created with their
+configured daysOut; an open or completed task with the subject counts as
+covered.
 
-Before creating tasks, candidate monthly campaigns are ranked by their newest
-supporting order. If any task in a lower-ranked candidate would fall within 20
-calendar days of a task in a different accepted campaign, the entire candidate
-is skipped. The four tasks belonging to the same campaign are exempt, so their
-normal one-week cadence remains intact.
+**Quarterly reach-outs.** Coverage spans the rolling four quarters — the
+whole scheduling year. Any other dated task covers its quarter. An uncovered
+quarter receives one `Q<N> Reach Out Opportunity` placed at the middle of the
+real gap between the surrounding touches: from the last touch at or before
+the quarter's window to the next scheduled task when one lands by the end of
+the following quarter, otherwise to the start of the following quarter;
+touches inside the quarter split it and the reach-out takes the middle of the
+largest gap, clamped into the quarter and never in the past. Existing
+quarterly tasks are re-mediated to the same rule — legacy arbitrary dates get
+rescheduled — duplicates for one slot are retired, live dates sit two weeks
+before due, category Workflow Task (id 14). Quarters are processed
+chronologically so each placement becomes a touch for the next gap. This
+coverage still runs for records with no usable orders.
 
-The same campaign also derives a brand from the first word of every order
-summary and refreshes one `Brand Customer - Tier N` task per brand for
-December 17, 2030. Tiering counts matching order rows: one order is Tier 3,
-two or three are Tier 2, and four or more are Tier 1. Existing tier tasks for
-the detected brands are completed before their replacements are created.
+**Brand tier tasks.** A brand is the first word of each order summary; one
+`<Brand> Customer - Tier N` task per brand reviews on December 17, 2030 (live
+two weeks before). Tiering counts matching order rows — one order is Tier 3,
+two or three Tier 2, four or more Tier 1 — and when the tier moves, the
+existing task's subject is edited in place; duplicates are retired; missing
+brand tasks are created.
 
-It additionally maintains quarterly coverage over the current and next three
-calendar quarters. Any dated existing task—or a Prior Year task planned by the
-same run—covers that record's quarter. A missing quarter receives
-`Q<N> Reach Out Opportunity`, due at the quarter midpoint or immediately when
-the current quarter's midpoint has passed. This coverage still runs for
-contacts that have no usable orders.
+Field writes are minimal by design: only fields that differ are staged, the
+description refreshes only when another field changed (the page schema cannot
+read descriptions back), and a category is only corrected when its label is
+visible and wrong. That is what makes an immediate re-run write nothing.
 
 ## Task List quarterly reach-out custom action
 
@@ -320,8 +341,10 @@ subjects are renamed to `Order Anniversary Follow Up #N` and those anniversary
 tasks get a live date fourteen days before their due date. Every other task —
 promotion follow-ups, manual follow-ups, brand tiers — keeps its subject,
 live date, and category untouched. It creates each missing task in the rolling
-four-quarter window and immediately gives the new task the same two-week
-live-date offset through the ordinary confirmation-gated executor.
+four-quarter window, placed at the middle of the gap between that contact's
+surrounding touches (the same rule the reconciliation campaign uses), and
+immediately gives the new task the same two-week live-date offset through the
+ordinary confirmation-gated executor.
 
 Do not widen the reconcile scope to every dated task: a task list's rows
 include tasks other flows own, and setting live date to due − 14 on a task due
@@ -329,25 +352,11 @@ more than two weeks out pushes it past "live", which removes it from the Task
 List pull entirely (the CRM only renders already-live tasks there).
 
 Contacts with no contact ID are skipped because the CRM cannot attach a task
-to them. A contact with no Task List row cannot be discovered from this surface;
-run the per-record campaign once to seed those contacts before using the faster
-Task List reconciliation action.
-
-## Promotion task recovery campaign
-
-The paste-ready campaign at
-[`docs/examples/promotion-task-recovery-campaign.js`](examples/promotion-task-recovery-campaign.js)
-repairs promotion tasks whose live dates were pushed into the future and
-back-fills any that are missing. Run it against the same contact/account
-audience the promotion campaign targeted. Because each record hydrates from
-its own contact/account page, `page.tasks.open` still includes non-live tasks
-that the Task List pull cannot show.
-
-Per record it revives open promotion tasks (matched by the configurable
-`PROMO_SUBJECT_RE`) whose live date is in the future by setting live date to
-today, creates any subject from `PROMO_TASKS` that is neither open nor
-completed, refuses to edit Q1–Q4 reach-out / Prior Year / Order Anniversary /
-brand tier tasks, and lists every other still-not-live task in its result line
-so hidden tasks stay visible from the run log. Edit the config block's
-subjects and cadence to the active promotion before running, dry-run one
-record, then run live.
+to them. A contact with no Task List row cannot be discovered from this
+surface; the full reconciliation campaign is the authoritative flow — this
+action is only the quick in-modal surface, and anything it creates is
+re-mediated by the campaign's gap-midpoint rule on the next campaign run.
+Note that promotion repair CANNOT run from this surface: the Task List pull
+only renders already-live tasks, so tasks with future live dates are
+invisible here; per-record campaign hydration (the contact/account page) is
+the surface that still sees them.

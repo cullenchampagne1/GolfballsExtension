@@ -18,18 +18,101 @@ import { makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-const PRIOR_YEAR_CAMPAIGN = readFileSync(
-  new URL('../../docs/examples/prior-year-anniversary-campaign.js', import.meta.url),
+const RECONCILIATION_CAMPAIGN = readFileSync(
+  new URL('../../docs/examples/task-reconciliation-campaign.js', import.meta.url),
   'utf8',
 );
 const QUARTERLY_REACH_OUT_ACTION = readFileSync(
   new URL('../../docs/examples/quarterly-reach-out-task-list-action.js', import.meta.url),
   'utf8',
 );
-const PROMOTION_RECOVERY_CAMPAIGN = readFileSync(
-  new URL('../../docs/examples/promotion-task-recovery-campaign.js', import.meta.url),
-  'utf8',
-);
+
+/* ── Shared helpers for reconciliation expectations ──────────────
+   These restate the campaign's DOCUMENTED rules (not its code) so the
+   fixtures stay correct on any run date. */
+const atNoonDay = (offset) => {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + offset);
+  return date;
+};
+const isoOf = (date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-');
+const DAY_MS = 24 * 60 * 60 * 1000;
+const dayNumOf = (date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS;
+const dateOfDayNum = (dayNumber) => {
+  const utc = new Date(dayNumber * DAY_MS);
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 12);
+};
+const mondayBeforeOf = (date) => {
+  const monday = new Date(date);
+  const weekday = monday.getDay();
+  const daysBack = weekday === 0 ? 6 : weekday === 1 ? 7 : weekday - 1;
+  monday.setDate(monday.getDate() - daysBack);
+  return monday;
+};
+/* Anniversary cycles roll to next year once their first task has passed
+   (with no in-flight evidence), so derive each cycle's bracket year, task
+   dates, and the chronological creation order the way the docs specify. */
+const anniversaryCycleFor = (month, day, monthName) => {
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  let year = now.getFullYear();
+  const build = (y) => {
+    const anniversary = new Date(y, month, day, 12);
+    const first = new Date(anniversary);
+    first.setDate(first.getDate() - 21);
+    return { anniversary, first };
+  };
+  let cycle = build(year);
+  if (cycle.first.getTime() <= now.getTime()) {
+    year += 1;
+    cycle = build(year);
+  }
+  const dates = [
+    new Date(cycle.anniversary.getTime() - 21 * DAY_MS),
+    new Date(cycle.anniversary.getTime() - 14 * DAY_MS),
+    new Date(cycle.anniversary.getTime() - 7 * DAY_MS),
+    mondayBeforeOf(cycle.anniversary),
+  ];
+  return { year, monthName, firstTime: cycle.first.getTime(), dates };
+};
+const rollingSlotOf = (offset) => {
+  const now = new Date();
+  const absolute = now.getFullYear() * 4 + Math.floor(now.getMonth() / 3) + offset;
+  return { year: Math.floor(absolute / 4), quarter: (absolute % 4) + 1 };
+};
+/* The documented gap-midpoint rule: from the last touch at/before the
+   quarter window to the next touch landing by the end of the FOLLOWING
+   quarter (else the start of the following quarter); touches inside split
+   the window and the largest gap wins; clamp into the quarter, never in
+   the past. */
+const gapMidpointOf = (slotOffset, busyDayNums) => {
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  const todayN = dayNumOf(now);
+  const slot = rollingSlotOf(slotOffset);
+  const qStart = dayNumOf(new Date(slot.year, (slot.quarter - 1) * 3, 1, 12));
+  const qEnd = dayNumOf(new Date(slot.year, (slot.quarter - 1) * 3 + 3, 0, 12));
+  const windowStart = Math.max(qStart, todayN);
+  if (windowStart > qEnd) return null;
+  const followingEnd = dayNumOf(new Date(slot.year, (slot.quarter - 1) * 3 + 6, 0, 12));
+  const sorted = [...busyDayNums].sort((a, b) => a - b);
+  const before = sorted.filter((day) => day <= windowStart);
+  const gapStart = before.length ? before[before.length - 1] : windowStart;
+  const inside = sorted.filter((day) => day > windowStart && day <= qEnd);
+  const after = sorted.find((day) => day > qEnd && day <= followingEnd);
+  const boundaries = [gapStart, ...inside, after != null ? after : qEnd + 1];
+  let best = null;
+  for (let i = 0; i + 1 < boundaries.length; i += 1) {
+    const span = boundaries[i + 1] - boundaries[i];
+    if (!best || span > best.span) best = { span, mid: Math.round((boundaries[i] + boundaries[i + 1]) / 2) };
+  }
+  return Math.min(qEnd, Math.max(windowStart, best.mid));
+};
 async function fakeSandbox(body, ctx, vars = {}, _doc) {
   const fn = new AsyncFunction('ctx', 'vars', 'h', `"use strict";\n${body}`);
   return fn(ctx || {}, vars || {}, {});
@@ -141,14 +224,13 @@ describe('campaign code flow', () => {
 
     assert.equal(page.orders.length, 2);
     assert.equal(page.items[0].quantity, 2);
-    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
     });
 
     assert.equal(result.ok, true);
-    assert.doesNotMatch(String(result.result), /^Skipped/);
-    assert.match(String(result.result), /created 4 fresh Prior Year task\(s\)/);
-    assert.match(String(result.result), /created 1 brand task\(s\)/);
+    assert.match(String(result.result), /Anniversary: 0 edited, 0 unchanged, 4 created/);
+    assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 1 created/);
     assert.ok(
       result.trace.some((entry) => /Titleist Customer - Tier 2/.test(entry.summary || '')),
       'the live custom-action trace should include the derived Titleist tier task',
@@ -266,97 +348,7 @@ describe('campaign code flow', () => {
     assert.match(String(result.result), /Created 6 quarterly reach-out task\(s\)/);
   });
 
-  it('revives hidden promotion tasks and creates missing ones without touching other flows', async () => {
-    const atNoon = (offset) => {
-      const date = new Date();
-      date.setHours(12, 0, 0, 0);
-      date.setDate(date.getDate() + offset);
-      return date;
-    };
-    const isoDate = (date) => [
-      date.getFullYear(),
-      String(date.getMonth() + 1).padStart(2, '0'),
-      String(date.getDate()).padStart(2, '0'),
-    ].join('-');
-    const page = shapeLivePage({
-      data: {
-        ids: { contact: '101', account: '' },
-        contact: { id: '101', contactId: '101', contactName: 'Ada Buyer' },
-        orders: [],
-        tasks: {
-          open: [
-            {
-              id: 'promo-1',
-              subject: '#1 Srixon Promotion Campaign Follow Up',
-              dueDate: isoDate(atNoon(20)),
-              liveDate: isoDate(atNoon(6)),
-            },
-            {
-              id: 'quarter',
-              subject: 'Q3 Reach Out Opportunity',
-              dueDate: isoDate(atNoon(30)),
-              liveDate: isoDate(atNoon(16)),
-            },
-            {
-              id: 'anniv',
-              subject: 'Order Anniversary Follow Up #1 [2026]',
-              dueDate: isoDate(atNoon(40)),
-              liveDate: isoDate(atNoon(26)),
-            },
-            {
-              id: 'manual',
-              subject: 'Client proof follow-up',
-              dueDate: isoDate(atNoon(25)),
-              liveDate: isoDate(atNoon(11)),
-            },
-          ],
-          done: [],
-        },
-      },
-    });
-    const createWrites = [];
-    const updateWrites = [];
-    const result = await simulateProgram(PROMOTION_RECOVERY_CAMPAIGN, page, {
-      run: makeSandboxRunner({ exec: fakeSandbox }),
-      executor: makeExecutor({
-        ctx: { contactId: '101', contactName: 'Ada Buyer', employeeId: '7' },
-        submitQuickTask: async ({ template, context }) => {
-          createWrites.push({ template, context });
-          return { ok: true, taskId: `promo-new-${createWrites.length}` };
-        },
-        updateTaskById: async (id, fields) => {
-          updateWrites.push({ id, fields });
-          return { ok: true };
-        },
-      }),
-    });
-
-    assert.equal(result.ok, true);
-    assert.deepEqual(updateWrites, [
-      { id: 'promo-1', fields: { liveDate: isoDate(atNoon(0)) } },
-    ]);
-    assert.equal(createWrites.length, 1);
-    assert.equal(createWrites[0].template.subject, '#2 Srixon Promotion Campaign Follow Up');
-    assert.equal(createWrites[0].template.daysOut, 7);
-    assert.equal(createWrites[0].context.contactId, '101');
-    assert.match(String(result.result), /Revived 1 promotion task\(s\) to live today/);
-    assert.match(String(result.result), /created 1 missing promotion task\(s\)/);
-    assert.match(String(result.result), /Left 3 other non-live task\(s\) untouched/);
-    assert.match(String(result.result), /Q3 Reach Out Opportunity/);
-  });
-
-  it('counts completed promotion tasks as covered and leaves live ones alone', async () => {
-    const atNoon = (offset) => {
-      const date = new Date();
-      date.setHours(12, 0, 0, 0);
-      date.setDate(date.getDate() + offset);
-      return date;
-    };
-    const isoDate = (date) => [
-      date.getFullYear(),
-      String(date.getMonth() + 1).padStart(2, '0'),
-      String(date.getDate()).padStart(2, '0'),
-    ].join('-');
+  it('makes every promotion task live today and treats completed ones as covered', async () => {
     const page = shapeLivePage({
       data: {
         ids: { contact: '202', account: '' },
@@ -365,10 +357,10 @@ describe('campaign code flow', () => {
         tasks: {
           open: [
             {
-              id: 'promo-live',
+              id: 'promo-1',
               subject: '#1 Srixon Promotion Campaign Follow Up',
-              dueDate: isoDate(atNoon(10)),
-              liveDate: isoDate(atNoon(0)),
+              dueDate: isoOf(atNoonDay(10)),
+              liveDate: isoOf(atNoonDay(6)),   // pushed into the future — hidden
             },
           ],
           done: [
@@ -379,13 +371,13 @@ describe('campaign code flow', () => {
     });
     const createWrites = [];
     const updateWrites = [];
-    const result = await simulateProgram(PROMOTION_RECOVERY_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: makeExecutor({
         ctx: { contactId: '202', contactName: 'Grace Buyer', employeeId: '7' },
         submitQuickTask: async ({ template, context }) => {
           createWrites.push({ template, context });
-          return { ok: true, taskId: 'unexpected' };
+          return { ok: true, taskId: `q-${createWrites.length}` };
         },
         updateTaskById: async (id, fields) => {
           updateWrites.push({ id, fields });
@@ -393,14 +385,220 @@ describe('campaign code flow', () => {
         },
       }),
     });
-
     assert.equal(result.ok, true);
-    assert.deepEqual(updateWrites, []);
-    assert.deepEqual(createWrites, []);
-    assert.match(String(result.result), /Revived 0 promotion task\(s\)/);
-    assert.match(String(result.result), /left 1 already live/);
-    assert.match(String(result.result), /created 0 missing promotion task\(s\)/);
-    assert.doesNotMatch(String(result.result), /untouched/);
+
+    // Neither promotion subject is recreated: #1 is open (revived), #2 done.
+    assert.ok(
+      !createWrites.some((write) => /Promotion Campaign Follow Up/.test(write.template.subject)),
+      'existing + completed promotion tasks are covered, not recreated',
+    );
+    // The hidden task is revived to live TODAY via one in-place edit.
+    const promoEdit = updateWrites.find((write) => write.id === 'promo-1');
+    assert.deepEqual(promoEdit.fields, { liveDate: isoOf(atNoonDay(0)) });
+    assert.match(String(result.result), /promotion: 1 revived to live today, 0 already live, 0 created/);
+
+    // Quarterly coverage still initiates around the promotion touch.
+    const busy = [dayNumOf(atNoonDay(10))];
+    const expected = [];
+    for (let offset = 0; offset < 4; offset += 1) {
+      const slot = rollingSlotOf(offset);
+      const key = `${slot.year}-Q${slot.quarter}`;
+      const covered = busy.some((day) => {
+        const date = dateOfDayNum(day);
+        return `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}` === key;
+      });
+      if (covered) continue;
+      const mid = gapMidpointOf(offset, busy);
+      busy.push(mid);
+      expected.push({ subject: `Q${slot.quarter} Reach Out Opportunity`, mid });
+    }
+    assert.deepEqual(
+      createWrites.map((write) => [write.template.subject, write.template.daysOut]),
+      expected.map((slot) => [slot.subject, slot.mid - dayNumOf(atNoonDay(0))]),
+    );
+  });
+
+  it('reschedules existing quarterly tasks to the middle of the gap and retires duplicates', async () => {
+    const currentSlot = rollingSlotOf(0);
+    const nextSlot = rollingSlotOf(1);
+    const nextQuarterTouch = new Date(nextSlot.year, (nextSlot.quarter - 1) * 3, 10, 12);
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '101', account: '' },
+        contact: { id: '101', contactId: '101', contactName: 'Ada Buyer' },
+        orders: [],
+        tasks: {
+          open: [
+            {
+              id: 'keeper',
+              subject: `Q${currentSlot.quarter} Reach Out Opportunity`,
+              dueDate: isoOf(atNoonDay(3)),      // the arbitrary legacy date
+              liveDate: isoOf(atNoonDay(-100)),
+            },
+            {
+              id: 'dup',
+              subject: `Q${currentSlot.quarter} Reach Out Opportunity`,
+              dueDate: isoOf(atNoonDay(40)),
+              liveDate: isoOf(atNoonDay(26)),
+            },
+            {
+              id: 'manual',
+              subject: 'Client check-in',
+              dueDate: isoOf(nextQuarterTouch),  // the "task next quarter"
+              liveDate: isoOf(atNoonDay(0)),
+            },
+          ],
+          done: [
+            { id: 'promo-1-done', subject: '#1 Srixon Promotion Campaign Follow Up', dueDate: isoOf(atNoonDay(-45)) },
+            { id: 'promo-2-done', subject: '#2 Srixon Promotion Campaign Follow Up', dueDate: isoOf(atNoonDay(-40)) },
+          ],
+        },
+      },
+    });
+    const createWrites = [];
+    const updateWrites = [];
+    const completeWrites = [];
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: makeExecutor({
+        ctx: { contactId: '101', contactName: 'Ada Buyer', employeeId: '7' },
+        submitQuickTask: async ({ template, context }) => {
+          createWrites.push({ template, context });
+          return { ok: true, taskId: `q-${createWrites.length}` };
+        },
+        updateTaskById: async (id, fields) => {
+          updateWrites.push({ id, fields });
+          return { ok: true };
+        },
+        completeTaskById: async (id) => {
+          completeWrites.push(String(id));
+          return { ok: true };
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+
+    // The duplicate quarterly task for the same slot is retired.
+    assert.deepEqual(completeWrites, ['dup']);
+
+    // Busy touches: the completed promotion tasks and the next-quarter task.
+    // The keeper's own arbitrary date is NOT a touch — it is being re-placed.
+    const busy = [dayNumOf(atNoonDay(-45)), dayNumOf(atNoonDay(-40)), dayNumOf(nextQuarterTouch)];
+    const expectedMid = gapMidpointOf(0, busy);
+    const keeperEdit = updateWrites.find((write) => write.id === 'keeper');
+    const expectedFields = {};
+    if (isoOf(dateOfDayNum(expectedMid)) !== isoOf(atNoonDay(3))) {
+      expectedFields.dueDate = isoOf(dateOfDayNum(expectedMid));
+    }
+    expectedFields.liveDate = isoOf(dateOfDayNum(expectedMid - 14));
+    assert.equal(keeperEdit.fields.dueDate, expectedFields.dueDate);
+    assert.equal(keeperEdit.fields.liveDate, expectedFields.liveDate);
+    assert.match(keeperEdit.fields.description, /middle of the gap/);
+
+    // The next quarter is covered by the manual task; the two quarters after
+    // it are created at their own gap midpoints (each placement becomes a
+    // touch for the next).
+    busy.push(expectedMid);
+    const expectedCreates = [];
+    for (const offset of [2, 3]) {
+      const slot = rollingSlotOf(offset);
+      const mid = gapMidpointOf(offset, busy);
+      busy.push(mid);
+      expectedCreates.push([`Q${slot.quarter} Reach Out Opportunity`, mid - dayNumOf(atNoonDay(0))]);
+    }
+    const quarterlyCreates = createWrites
+      .filter((write) => /^Q[1-4] Reach Out Opportunity$/.test(write.template.subject))
+      .map((write) => [write.template.subject, write.template.daysOut]);
+    assert.deepEqual(quarterlyCreates, expectedCreates);
+
+    assert.match(
+      String(result.result),
+      /quarterly: 2 created, 1 rescheduled, 0 already placed, 1 covered, 1 duplicate\(s\) retired/,
+    );
+    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 0 created/);
+  });
+
+  it('preserves an in-flight anniversary cycle instead of pushing it a year out', async () => {
+    const anniversary = atNoonDay(10);
+    const year = anniversary.getFullYear();
+    const monthName = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ][anniversary.getMonth()];
+    const orderDate = `${year - 1}-${String(anniversary.getMonth() + 1).padStart(2, '0')}-${String(anniversary.getDate()).padStart(2, '0')}`;
+    const first = new Date(anniversary.getTime() - 21 * DAY_MS);   // passed
+    const second = new Date(anniversary.getTime() - 14 * DAY_MS);  // passed
+    const call = new Date(anniversary.getTime() - 7 * DAY_MS);     // upcoming
+    const third = mondayBeforeOf(anniversary);                     // upcoming
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '303', account: '' },
+        contact: { id: '303', contactId: '303', contactName: 'Flow Buyer' },
+        orders: [
+          { number: '9001', summary: 'Acme Pro Widget Set', date: orderDate, status: 'Complete' },
+        ],
+        tasks: {
+          open: [
+            {
+              id: 'inflight-2',
+              subject: `Order Anniversary Follow Up #2 [${year}]`,
+              dueDate: isoOf(second),
+              liveDate: isoOf(new Date(second.getTime() - 14 * DAY_MS)),
+            },
+            {
+              id: 'inflight-3',
+              subject: `Order Anniversary Follow Up #3 [${year}]`,
+              dueDate: isoOf(third),
+              liveDate: isoOf(new Date(third.getTime() - 14 * DAY_MS)),
+            },
+          ],
+          done: [
+            {
+              id: 'inflight-1-done',
+              subject: `Order Anniversary Follow Up #1 [${year}]`,
+              dueDate: isoOf(first),
+            },
+          ],
+        },
+      },
+    });
+    const writes = [];
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: {
+        async run(name, input) {
+          writes.push([name, input]);
+          return { ok: true, taskId: `task-${writes.length}` };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+    assert.equal(result.ok, true);
+
+    // The in-flight cycle stays THIS year: nothing is redated or retired, and
+    // no task ever carries next year's bracket.
+    assert.ok(!writes.some(([name]) => name === 'completeTask'));
+    assert.ok(!writes.some(([name, input]) => name === 'updateTask'
+      && (input.id === 'inflight-2' || input.id === 'inflight-3')));
+    assert.ok(!writes.some(([, input]) => JSON.stringify(input).includes(`[${year + 1}]`)));
+
+    // Only the missing Call slot is created, at its original in-cycle date.
+    const callCreate = writes.find(([name, input]) => name === 'createTask'
+      && input.subject === `Order Anniversary Follow Up Call - [${monthName}]`);
+    assert.ok(callCreate, 'the missing call slot is back-filled');
+    assert.equal(callCreate[1].daysOut, Math.round(dayNumOf(call) - dayNumOf(atNoonDay(0))));
+    assert.equal(callCreate[1].categoryId, 7);
+
+    // The completed #1 fulfills its slot — it is not recreated.
+    assert.ok(!writes.some(([name, input]) => name === 'createTask' && /#1 \[/.test(input.subject)
+      && /Order Anniversary/.test(input.subject)));
+
+    assert.match(
+      String(result.result),
+      /Anniversary: 0 edited, 2 unchanged, 1 created, 1 already completed, 0 past slot\(s\) skipped, 0 retired/,
+    );
+    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 2 created/);
+    assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 1 created, 0 retired/);
   });
 
   it('edits Task List rows through the same executor used by campaigns', async () => {
@@ -501,7 +699,7 @@ describe('campaign code flow', () => {
       },
     });
     const writes = [];
-    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -516,10 +714,15 @@ describe('campaign code flow', () => {
     const quarterly = writes
       .filter(([name, input]) => name === 'createTask' && /^Q[1-4] Reach Out Opportunity$/.test(input.subject))
       .map(([, input]) => input);
+    // The existing dated touch plus the two created promotion tasks cover the
+    // current quarter; the next three quarters each get one reach-out.
     assert.equal(quarterly.length, 3);
     assert.ok(quarterly.every((task) => task.daysOut >= 0));
-    assert.match(String(result.result), /created 3 quarterly reach-out task\(s\)/);
-    assert.match(String(result.result), /created 0 brand task\(s\)/);
+    assert.ok(quarterly.every((task) => task.categoryId === 14));
+    assert.match(String(result.result), /quarterly: 3 created, 0 rescheduled, 0 already placed, 1 covered/);
+    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 2 created/);
+    assert.match(String(result.result), /Anniversary: 0 edited, 0 unchanged, 0 created/);
+    assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 0 created/);
   });
 
   it('hydrates and executes every non-email write against each ordered record', async () => {
@@ -620,13 +823,16 @@ describe('campaign code flow', () => {
     assert.ok(output.results.every((row) => row.status === 'sent'));
   });
 
-  it('builds a contact-scoped prior-year timeline without an account', async () => {
+  /* Shared fixture for the reconciliation tests: Titleist April orders,
+     one Vice December order, four undated Callaway orders, plus a legacy
+     Prior Year task, a stale Titleist tier task, and one unrelated task. */
+  function reconciliationFixturePage() {
     const sourceContact = {
       contactId: '771',
       contactName: 'Avery Buyer',
       contactUrl: 'https://crm.test/Default.aspx?Page=240&customerID=771',
     };
-    const page = campaignPageFromContext({
+    return campaignPageFromContext({
       contact: sourceContact,
       contactId: '771',
       contactName: 'Avery Buyer',
@@ -652,16 +858,54 @@ describe('campaign code flow', () => {
         },
       },
     }, [sourceContact]);
+  }
 
+  /* The fixture's expected desired state, restated from the docs. */
+  function reconciliationFixtureExpectations() {
+    const cycles = [
+      anniversaryCycleFor(3, 15, 'April'),      // Titleist: 4/24 + 4/6 average to April 15
+      anniversaryCycleFor(11, 12, 'December'),  // Vice: December 12
+    ].sort((a, b) => a.firstTime - b.firstTime);
+    const anniversarySubjects = cycles.flatMap((cycle) => [
+      `Order Anniversary Follow Up #1 [${cycle.year}]`,
+      `Order Anniversary Follow Up #2 [${cycle.year}]`,
+      `Order Anniversary Follow Up Call - [${cycle.monthName}]`,
+      `Order Anniversary Follow Up #3 [${cycle.year}]`,
+    ]);
+    const anniversaryDates = cycles.flatMap((cycle) => cycle.dates);
+    const todayN = dayNumOf(atNoonDay(0));
+    // Busy touches during quarterly placement: the eight anniversary dates
+    // (old-1 is edited onto the first one), the two promotion creations, and
+    // the Titleist brand task's 2030 review date.
+    const busy = [
+      ...anniversaryDates.map(dayNumOf),
+      todayN, todayN + 7,
+      dayNumOf(new Date(2030, 11, 17, 12)),
+    ];
+    const coveredKeys = new Set(busy.map((day) => {
+      const date = dateOfDayNum(day);
+      return `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`;
+    }));
+    const quarterly = [];
+    for (let offset = 0; offset < 4; offset += 1) {
+      const slot = rollingSlotOf(offset);
+      if (coveredKeys.has(`${slot.year}-Q${slot.quarter}`)) continue;
+      const mid = gapMidpointOf(offset, busy);
+      if (mid == null) continue;
+      busy.push(mid);
+      quarterly.push({ subject: `Q${slot.quarter} Reach Out Opportunity`, mid });
+    }
+    return { cycles, anniversarySubjects, quarterly, todayN };
+  }
+
+  it('reconciles a contact timeline: edits tasks in place and creates only the rest', async () => {
+    const page = reconciliationFixturePage();
     assert.equal(page.account, undefined);
     assert.equal(page.contact.contactId, '771');
     assert.equal(page.orders.length, 7);
-    assert.deepEqual(
-      page.tasks.open.map((task) => task.id),
-      ['old-1', 'old-brand-1', 'keep-1'],
-    );
+
     const writes = [];
-    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -673,113 +917,191 @@ describe('campaign code flow', () => {
     });
 
     assert.equal(result.ok, true);
-    const actionTrace = result.trace.filter((entry) => entry.kind !== 'function');
     const functionTrace = result.trace.filter((entry) => entry.kind === 'function');
-    // 2 completes + 12 creates, each create followed by its liveDate update.
-    assert.equal(actionTrace.length, 26);
     assert.ok(functionTrace.length > 7, 'helper calls should remain visible to Simulate');
     assert.ok(
       [...new Set(functionTrace.map((entry) => entry.id))]
         .some((id) => functionTrace.filter((entry) => entry.id === id).length > 1),
       'a repeated helper should reuse its stable function block id',
     );
-    assert.deepEqual(writes.map(([name]) => name), [
-      'completeTask', 'completeTask',
-      ...Array.from({ length: 12 }, () => ['createTask', 'updateTask']).flat(),
-    ]);
-    assert.equal(writes[0][1].id, 'old-1');
-    assert.equal(writes[1][1].id, 'old-brand-1');
-    const created = writes
-      .filter(([name]) => name === 'createTask')
-      .map(([, input]) => input);
-    const liveUpdates = writes
-      .filter(([name]) => name === 'updateTask')
-      .map(([, input]) => input);
-    assert.ok(
-      liveUpdates.every((update) => /^\d{4}-\d{2}-\d{2}$/.test(update.fields?.liveDate)),
-      'every created task receives an exact live date',
-    );
 
-    // Anniversary cycles roll to next year once their first task has passed,
-    // so derive each cycle's bracket year (and the chronological creation
-    // order) the same way the campaign schedules them.
-    const now = new Date();
-    now.setHours(12, 0, 0, 0);
-    const cycleFor = (month, day, monthName) => {
-      let year = now.getFullYear();
-      let anniversary = new Date(year, month, day, 12);
-      let first = new Date(anniversary);
-      first.setDate(first.getDate() - 21);
-      if (first.getTime() <= now.getTime()) {
-        year += 1;
-        anniversary = new Date(year, month, day, 12);
-        first = new Date(anniversary);
-        first.setDate(first.getDate() - 21);
-      }
-      return { year, monthName, firstTime: first.getTime() };
-    };
-    const cycles = [
-      cycleFor(3, 15, 'April'),      // Titleist orders: 4/24 + 4/6 average to April 15
-      cycleFor(11, 12, 'December'),  // Vice order: December 12
-    ].sort((a, b) => a.firstTime - b.firstTime);
-    const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+    const { cycles, anniversarySubjects, quarterly } = reconciliationFixtureExpectations();
+
+    // NOTHING is completed-and-remade: no completeTask writes at all.
+    assert.ok(!writes.some(([name]) => name === 'completeTask'), 'reconciliation never retires matched tasks');
+
+    // Write shape: 7 anniversary creates (each with its liveDate update), the
+    // two promotion creates, one create+update per uncovered quarter, two
+    // brand creates with updates, then the two staged in-place edits.
+    assert.deepEqual(writes.map(([name]) => name), [
+      ...Array.from({ length: 7 }, () => ['createTask', 'updateTask']).flat(),
+      'createTask', 'createTask',
+      ...Array.from({ length: quarterly.length }, () => ['createTask', 'updateTask']).flat(),
+      ...Array.from({ length: 2 }, () => ['createTask', 'updateTask']).flat(),
+      'updateTask', 'updateTask',
+    ]);
+
+    const created = writes.filter(([name]) => name === 'createTask').map(([, input]) => input);
     assert.deepEqual(
       created.map((task) => task.subject),
       [
-        ...cycles.flatMap((cycle) => [
-          `Order Anniversary Follow Up #1 [${cycle.year}]`,
-          `Order Anniversary Follow Up #2 [${cycle.year}]`,
-          `Order Anniversary Follow Up Call - [${cycle.monthName}]`,
-          `Order Anniversary Follow Up #3 [${cycle.year}]`,
-        ]),
-        `Q${currentQuarter} Reach Out Opportunity`,
+        // The legacy Prior Year #1 matched the first #1 slot, so only the
+        // remaining seven anniversary tasks are created.
+        ...anniversarySubjects.filter((_, index) => index !== 0),
+        '#1 Srixon Promotion Campaign Follow Up',
+        '#2 Srixon Promotion Campaign Follow Up',
+        ...quarterly.map((slot) => slot.subject),
         'Callaway Customer - Tier 1',
-        'Titleist Customer - Tier 2',
         'Vice Customer - Tier 3',
       ],
     );
     assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut >= 0));
     assert.ok(
-      created.slice(0, 8).every((task) => task.categoryId === 7),
+      created.slice(0, 7).every((task) => task.categoryId === 7),
       'anniversary tasks carry the Order History Special category',
     );
-    assert.equal(created[8].categoryId, 14, 'quarterly reach-outs carry the Workflow Task category');
+
+    // Quarterly reach-outs land at the documented gap midpoints.
+    const quarterlyCreates = created.filter((task) => /^Q[1-4] Reach Out Opportunity$/.test(task.subject));
+    assert.deepEqual(
+      quarterlyCreates.map((task) => task.daysOut),
+      quarterly.map((slot) => slot.mid - dayNumOf(atNoonDay(0))),
+    );
+    assert.ok(quarterlyCreates.every((task) => task.categoryId === 14));
+
     const decemberCall = created.find((task) => task.subject === 'Order Anniversary Follow Up Call - [December]');
     const aprilCall = created.find((task) => task.subject === 'Order Anniversary Follow Up Call - [April]');
     assert.match(decemberCall.body, /Vice Drive Custom Logo/);
+    assert.match(decemberCall.body, /Follow-up timing: 1 week before/);
     assert.match(aprilCall.body, /Titleist Pro V1 Personalized/);
     assert.match(aprilCall.body, /Averaged reorder anniversary: April 15/);
-    const firstCycle = created.slice(0, 4);
-    assert.ok(firstCycle[2].daysOut > firstCycle[1].daysOut);
-    assert.ok(firstCycle[2].daysOut < firstCycle[3].daysOut);
-    assert.match(firstCycle[2].body, /Follow-up timing: 1 week before/);
 
-    const brandTasks = created.slice(9);
-    assert.deepEqual(brandTasks.map((task) => task.daysOut), [
-      brandTasks[0].daysOut,
-      brandTasks[0].daysOut,
-      brandTasks[0].daysOut,
-    ]);
-    assert.match(brandTasks[0].body, /Order count: 4/);
-    assert.match(brandTasks[1].body, /Order count: 2/);
-    assert.match(brandTasks[1].body, /#5063056/);
-    assert.match(brandTasks[1].body, /#5048594/);
-    assert.match(brandTasks[2].body, /Order count: 1/);
-    assert.ok(brandTasks.every((task) => /Review date: 12\/17\/2030/.test(task.body)));
-    const computedBrandDue = new Date();
-    computedBrandDue.setHours(12, 0, 0, 0);
-    computedBrandDue.setDate(computedBrandDue.getDate() + brandTasks[0].daysOut);
+    // The legacy Prior Year task was EDITED into the first #1 slot.
+    const edits = writes.filter(([name]) => name === 'updateTask').map(([, input]) => input);
+    const priorEdit = edits.find((edit) => edit.id === 'old-1');
+    assert.equal(priorEdit.fields.subject, `Order Anniversary Follow Up #1 [${cycles[0].year}]`);
+    assert.equal(priorEdit.fields.dueDate, isoOf(cycles[0].dates[0]));
+    assert.equal(priorEdit.fields.liveDate, isoOf(new Date(cycles[0].dates[0].getTime() - 14 * DAY_MS)));
+    assert.match(priorEdit.fields.description, /Prior-year reorder timeline/);
+
+    // The stale Titleist tier task moved to Tier 2 in place.
+    const brandEdit = edits.find((edit) => edit.id === 'old-brand-1');
+    assert.equal(brandEdit.fields.subject, 'Titleist Customer - Tier 2');
+    assert.equal(brandEdit.fields.dueDate, '2030-12-17');
+    assert.equal(brandEdit.fields.liveDate, '2030-12-03');
+    assert.match(brandEdit.fields.description, /Order count: 2/);
+    assert.match(brandEdit.fields.description, /#5063056/);
+    assert.match(brandEdit.fields.description, /#5048594/);
+
+    // The unrelated task was never written.
+    assert.ok(!edits.some((edit) => edit.id === 'keep-1'));
+
+    const brandCreates = created.filter((task) => / Customer - Tier /.test(task.subject));
+    assert.match(brandCreates[0].body, /Order count: 4/);
+    assert.match(brandCreates[1].body, /Order count: 1/);
+    assert.ok(brandCreates.every((task) => /Review date: 12\/17\/2030/.test(task.body)));
+    const computedBrandDue = atNoonDay(brandCreates[0].daysOut);
     assert.deepEqual(
-      [
-        computedBrandDue.getFullYear(),
-        computedBrandDue.getMonth() + 1,
-        computedBrandDue.getDate(),
-      ],
+      [computedBrandDue.getFullYear(), computedBrandDue.getMonth() + 1, computedBrandDue.getDate()],
       [2030, 12, 17],
     );
-    assert.match(result.result, /created 8 fresh Prior Year task\(s\) across 2 anniversary date\(s\)/);
-    assert.match(result.result, /created 1 quarterly reach-out task\(s\)/);
-    assert.match(result.result, /created 3 brand task\(s\)/);
+
+    assert.match(result.result, /Anniversary: 1 edited, 0 unchanged, 7 created, 0 already completed, 0 past slot\(s\) skipped, 0 retired/);
+    assert.match(result.result, /promotion: 0 revived to live today, 0 already live, 2 created/);
+    assert.match(result.result, new RegExp(`quarterly: ${quarterly.length} created, 0 rescheduled, 0 already placed, ${4 - quarterly.length} covered, 0 duplicate\\(s\\) retired`));
+    assert.match(result.result, /brand: 1 edited, 0 unchanged, 2 created, 0 retired/);
+  });
+
+  it('is idempotent: an immediate re-run performs zero writes', async () => {
+    const page = reconciliationFixturePage();
+    const writes = [];
+    const executorFor = (sink) => ({
+      async run(name, input) {
+        sink.push([name, input]);
+        return { ok: true, taskId: `task-${sink.length}` };
+      },
+      async commitEdits() { return { ok: true }; },
+    });
+    const first = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: executorFor(writes),
+    });
+    assert.equal(first.ok, true);
+    assert.ok(writes.length > 0, 'the first run initiates the flows');
+
+    // Apply the first run's writes to the raw task model the way the CRM
+    // would: creates become open rows (live today unless updated), updates
+    // patch fields, completes move rows to done.
+    const categoryLabel = (id) => (id === 7 ? 'Order History Special' : id === 14 ? 'Workflow Task' : '');
+    const openRows = [
+      { id: 'old-1', subject: 'Prior Year #1 [2023]' },
+      { id: 'old-brand-1', subject: 'Titleist Customer - Tier 3' },
+      { id: 'keep-1', subject: 'Normal follow up' },
+    ];
+    const doneRows = [];
+    const rowById = new Map(openRows.map((row) => [row.id, row]));
+    let createdCount = 0;
+    for (const [name, input] of writes) {
+      createdCount += 1;
+      if (name === 'createTask') {
+        const row = {
+          id: `task-${createdCount}`,
+          subject: input.subject,
+          dueDate: isoOf(atNoonDay(input.daysOut || 0)),
+          liveDate: isoOf(atNoonDay(0)),
+          category: categoryLabel(input.categoryId),
+        };
+        openRows.push(row);
+        rowById.set(row.id, row);
+      } else if (name === 'updateTask') {
+        const row = rowById.get(String(input.id));
+        assert.ok(row, `update targets a known task (${input.id})`);
+        for (const [key, value] of Object.entries(input.fields || {})) {
+          if (key === 'categoryId') row.category = categoryLabel(value);
+          else if (key !== 'description') row[key] = value;
+        }
+      } else if (name === 'completeTask') {
+        const index = openRows.findIndex((row) => row.id === String(input.id));
+        assert.ok(index >= 0, 'completes target open tasks');
+        doneRows.push(openRows[index]);
+        openRows.splice(index, 1);
+      }
+    }
+
+    const sourceContact = {
+      contactId: '771',
+      contactName: 'Avery Buyer',
+      contactUrl: 'https://crm.test/Default.aspx?Page=240&customerID=771',
+    };
+    const convergedPage = campaignPageFromContext({
+      contact: sourceContact,
+      contactId: '771',
+      contactName: 'Avery Buyer',
+      data: {
+        ids: { contact: '771', account: '' },
+        contact: { firstName: 'Avery', lastName: 'Buyer' },
+        orders: [
+          { number: '5063056', summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model', date: '2026-04-24', revenue: 0.01, status: 'Complete' },
+          { number: '5048594', summary: 'Titleist Pro V1 Personalized Golf Balls - 2025 Model', date: '2026-04-06', revenue: 70.94, status: 'Complete' },
+          { number: '4861490', summary: 'Vice Drive Custom Logo Golf Balls', date: '2025-12-12', status: 'Complete' },
+          { number: '4000001', summary: 'Callaway Chrome Soft Custom Golf Balls', date: '', status: 'Complete' },
+          { number: '4000002', summary: 'Callaway Supersoft Custom Golf Balls', date: '', status: 'Complete' },
+          { number: '4000003', summary: 'Callaway Warbird Custom Golf Balls', date: '', status: 'Complete' },
+          { number: '4000004', summary: 'Callaway ERC Soft Custom Golf Balls', date: '', status: 'Complete' },
+        ],
+        tasks: { open: openRows, done: doneRows },
+      },
+    }, [sourceContact]);
+
+    const secondWrites = [];
+    const second = await simulateProgram(RECONCILIATION_CAMPAIGN, convergedPage, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: executorFor(secondWrites),
+    });
+    assert.equal(second.ok, true);
+    assert.deepEqual(secondWrites, [], 'a converged record produces zero writes');
+    assert.match(String(second.result), /Anniversary: 0 edited/);
+    assert.match(String(second.result), /quarterly: 0 created, 0 rescheduled/);
   });
 
   it('keeps the newest source year per month and skips a different campaign within 20 days', async () => {
@@ -832,7 +1154,7 @@ describe('campaign code flow', () => {
       },
     });
     const writes = [];
-    const result = await simulateProgram(PRIOR_YEAR_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -873,7 +1195,7 @@ describe('campaign code flow', () => {
     assert.match(priorTasks[0].body, /#new-month-2/);
     assert.doesNotMatch(priorTasks[0].body, /#old-month/);
     assert.match(result.result, /skipped 1 older same-month source period\(s\)/);
-    assert.match(result.result, /skipped 1 overlapping Prior Year campaign\(s\)/);
+    assert.match(result.result, /skipped 1 overlapping anniversary campaign\(s\)/);
   });
 
   it('does not count function-entry animation events as campaign actions', async () => {
