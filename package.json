@@ -133,6 +133,10 @@
       "file": "tests/unit/actionReviewModel.test.mjs"
     },
     {
+      "name": "crm \u00b7 host DataTables bridge",
+      "file": "tests/unit/customPageHostBridge.test.mjs"
+    },
+    {
       "name": "crm \u00b7 custom-page store extract diffing",
       "file": "tests/unit/customPagesStore.test.mjs"
     },

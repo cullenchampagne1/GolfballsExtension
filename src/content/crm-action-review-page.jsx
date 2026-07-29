@@ -19,8 +19,10 @@ import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import {
+  actionReviewDocumentSignature,
   filterActionReviewTasks,
   isActionReviewDocument,
+  isActionReviewSnapshotSettled,
   paginateActionReviewRows,
   parseActionReviewDocument,
   prepareActionReviewPostback,
@@ -317,42 +319,35 @@ function normalizeReview(review) {
   };
 }
 
-function dataTableRowCount(selector) {
-  try {
-    const jq = window.jQuery;
-    if (!jq?.fn?.dataTable?.isDataTable?.(selector)) return null;
-    return Number(jq(selector).DataTable().rows().count());
-  } catch (error) {
-    return null;
-  }
-}
-
-function liveActionReviewReady() {
-  if (!isActionReviewDocument(document)) return null;
-  const expectedTasks = dataTableRowCount('#TableTasks');
-  const expectedActivity = dataTableRowCount('#ActivityTable');
-  const taskRows = document.querySelectorAll('#TableTasks tr[id^="taskrow_"]').length;
-  const activityRows = document.querySelectorAll('#ActivityTable tbody tr').length;
-  if (expectedTasks != null && taskRows < expectedTasks) return false;
-  if (expectedActivity != null && activityRows < expectedActivity) return false;
-  return true;
-}
-
-function readCompleteLiveReview() {
-  if (!liveActionReviewReady()) return null;
-  return normalizeReview(parseActionReviewDocument(document));
-}
-
 function waitForLiveActionReview(timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
+  let signature = '';
+  let stableSince = startedAt;
+
   return new Promise((resolve, reject) => {
     const poll = () => {
-      const review = readCompleteLiveReview();
-      if (review) {
-        resolve(review);
+      const now = Date.now();
+      const ready = isActionReviewDocument(document);
+      const nextSignature = actionReviewDocumentSignature(document);
+      if (nextSignature !== signature) {
+        signature = nextSignature;
+        stableSince = now;
+      }
+
+      // Native DataTables briefly detach every tbody row while initializing.
+      // Require both a minimum host-settle window and a quiet row-count window
+      // before parsing, including when the legitimate result is zero rows.
+      if (isActionReviewSnapshotSettled({
+        ready,
+        elapsedMs: now - startedAt,
+        stableMs: now - stableSince,
+      })) {
+        resolve(normalizeReview(parseActionReviewDocument(document)));
         return;
       }
-      if (Date.now() < deadline) {
+
+      if (now < deadline) {
         window.setTimeout(poll, 125);
         return;
       }

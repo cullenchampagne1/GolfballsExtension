@@ -175,6 +175,13 @@
     'table.PCHTable', 'table.AHTable', 'table.CHTable', 'table.LHTable', 'table.OHTable',
   ];
   function expandHostTables() {
+    // The native CRM owns jQuery in the MAIN page world, which Chrome keeps
+    // isolated from this content script. Ask the document_start host bridge
+    // to perform the expansion there; DOM events cross the world boundary.
+    try { document.dispatchEvent(new Event('__gbCustomPageExpandHostTables')); } catch (e) {}
+
+    // Direct access still works in the test harness and in browsers that do
+    // not isolate page globals, so retain it as a harmless fallback.
     try {
       var jq = window.jQuery;
       if (!jq || !jq.fn || !jq.fn.dataTable) return;

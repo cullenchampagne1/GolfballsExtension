@@ -87,6 +87,18 @@
         "https://api.golfballs.com/*"
       ],
       "js": [
+        "src/vanilla/custom-page-host-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.golfballs.com/*",
+        "https://api.golfballs.com/*"
+      ],
+      "js": [
         "theme.js",
         "lib/action-language.js",
         "lib/action-runtime.js",

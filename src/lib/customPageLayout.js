@@ -7,6 +7,84 @@ export function opportunityStageTone(stage) {
 }
 
 /**
+ * CRM Search and Task List use the same viewport-filling two-column shell.
+ * Keeping this CSS page-local prevents detail pages from inheriting list-only
+ * height/overflow behavior.
+ */
+export const FULL_HEIGHT_LIST_PAGE_CSS = `
+  .gbcp-content {
+    height: calc(100% - 48px);
+    min-height: 0;
+    padding-bottom: 18px !important;
+    overflow: hidden;
+  }
+  .gbcp-fill-grid {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    align-items: stretch !important;
+  }
+  .gbcp-fill-sidebar {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 2px 2px 0;
+    position: static !important;
+  }
+  .gbcp-fill-main {
+    height: 100%;
+    min-height: 0;
+    padding-top: 0 !important;
+    gap: 6px !important;
+  }
+  .gbcp-fill-toolbar {
+    flex: 0 0 auto;
+    margin: 0 2px !important;
+  }
+  .gbcp-fill-results {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .gbcp-fill-table {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+  @media (max-width: 1060px) {
+    .gbcp-content {
+      height: auto;
+      min-height: calc(100% - 48px);
+      overflow: visible;
+      padding-bottom: 44px !important;
+    }
+    .gbcp-fill-grid {
+      flex: none;
+      height: auto;
+    }
+    .gbcp-fill-sidebar {
+      height: auto;
+      overflow: visible;
+      padding-right: 0;
+    }
+    .gbcp-fill-main {
+      height: auto;
+    }
+    .gbcp-fill-results {
+      min-height: 420px;
+    }
+    .gbcp-fill-table {
+      flex: 0 0 auto;
+      height: min(560px, calc(80vh - 200px));
+      min-height: 240px;
+    }
+  }
+`;
+
+/**
  * Resolve the smart CRM Search bar's visibility from scroll intent. Small
  * trackpad noise is ignored; deliberate downward movement hides the bar and
  * upward movement brings it back. The top of the page scroller always reveals

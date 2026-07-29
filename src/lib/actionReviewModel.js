@@ -183,6 +183,27 @@ export function isActionReviewDocument(doc) {
   );
 }
 
+export function actionReviewDocumentSignature(doc) {
+  if (!isActionReviewDocument(doc)) return 'missing';
+  const activities = doc.querySelectorAll('#ActivityTable tbody tr').length;
+  const emails = parseActionReviewEmails(doc).length;
+  const tasks = doc.querySelectorAll('#TableTasks tr[id^="taskrow_"]').length;
+  const reps = doc.querySelectorAll('#SalesRep option').length;
+  return `a:${activities};e:${emails};t:${tasks};r:${reps}`;
+}
+
+export function isActionReviewSnapshotSettled({
+  ready = false,
+  elapsedMs = 0,
+  stableMs = 0,
+  minimumWaitMs = 750,
+  quietMs = 250,
+} = {}) {
+  return !!ready
+    && Number(elapsedMs) >= Math.max(0, Number(minimumWaitMs) || 0)
+    && Number(stableMs) >= Math.max(0, Number(quietMs) || 0);
+}
+
 export function parseActionReviewDocument(doc) {
   const salesRep = doc?.querySelector?.('#SalesRep');
   const form = doc?.querySelector?.('form');

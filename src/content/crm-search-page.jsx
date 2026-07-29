@@ -14,7 +14,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
-import { nextProgressiveResultCount } from '../lib/customPageLayout.js';
+import { FULL_HEIGHT_LIST_PAGE_CSS, nextProgressiveResultCount } from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
   crmRowToCampaignContact,
@@ -36,11 +36,6 @@ const TYPE_OPTS = [
   { id: 'contact', label: 'Contacts' },
   { id: 'account', label: 'Accounts' },
 ];
-
-// Sticky offset for the Refine sidebar column.
-const SEARCH_RAIL_TOP = 74;
-// Fixed height of the sidebar's "Refine" header row.
-const REFINE_HEADER_H = 24;
 
 /* ── URL <-> search state ─────────────────────────────────────
    The native search puts its term in the URL; we own ?q/?t/?fq going
@@ -283,11 +278,7 @@ function DateFacetSection({ group, queries, selected, onToggle }) {
 function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
   const anySel = Object.values(selected).some((s) => s.size > 0);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: SEARCH_RAIL_TOP }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px', height: REFINE_HEADER_H, boxSizing: 'border-box' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Refine</span>
-        {anySel && <Btn variant="ghost" size="xs" icon={<I.close />} onClick={onClearAll}>Clear</Btn>}
-      </div>
+    <div className="gbcp-fill-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {SOLR_FACETS.map((f) => (
         <FacetSection key={f.field} facet={f} rows={(facets && facets.fields && facets.fields[f.field]) || []}
           selected={selected[f.field]} onToggle={(v) => onToggle(f.field, v)}
@@ -297,6 +288,7 @@ function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
         <DateFacetSection key={g.field} group={g} queries={(facets && facets.queries) || {}}
           selected={selected[g.field]} onToggle={(k) => onToggle(g.field, k)} />
       ))}
+      {anySel && <Btn variant="ghost" size="sm" icon={<I.close />} onClick={onClearAll} full>Clear filters</Btn>}
     </div>
   );
 }
@@ -585,14 +577,15 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
-        <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 10, alignItems: 'flex-start' }}>
+        <style>{FULL_HEIGHT_LIST_PAGE_CSS}</style>
+        <div className="gbcp-search-grid gbcp-fill-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 10 }}>
           {/* ── Facet filter sidebar (Entity Types / Sales Rep / Role / Pod / dates) ── */}
           <FacetSidebar facets={facets} selected={selected} onToggle={toggleFacet} onClearAll={clearFacets} />
 
           {/* ── Search + results column ─────────────────────────── */}
-          <div className="gbcp-stack gbcp-search-body">
+          <div className="gbcp-stack gbcp-search-body gbcp-fill-main">
         {/* ── Search hero — settled, static (no floating/hide behavior) ── */}
-        <div style={{ margin: '0 4px' }}>
+        <div className="gbcp-fill-toolbar">
             <Card style={{
               border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
               background: 'var(--gb-surface-1)',
@@ -649,7 +642,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
 
         {/* ── Results — own bounded scroll box so the search bar + sidebar
               stay put while the table scrolls internally ── */}
-        <Card style={{ marginTop: 14 }}>
+        <Card className="gbcp-fill-results">
           <SectionTitle
             icon={<I.history />}
             title="Results"
@@ -672,8 +665,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
               {/* Internal scroll: the table gets its own bounded height and
                   scrolls here (sticky <thead> pins), so the settled search bar
                   and Refine sidebar never move. */}
-              <div ref={resultsScrollRef} className="gb-scroll" onScroll={handleResultsScroll}
-                style={{ maxHeight: 'min(560px, calc(80vh - 200px))', minHeight: 240, overflow: 'auto' }}>
+              <div ref={resultsScrollRef} className="gb-scroll gbcp-fill-table" onScroll={handleResultsScroll}>
                   <table style={tableStyle}>
                     <thead><tr>
                       <Th align="center">
@@ -727,7 +719,6 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                   {rows.length < numFound ? `Loading more of ${numFound.toLocaleString()}…` : 'Loading more records…'}
                 </div>
               )}
-              <div style={{ height: 12 }} />
               </div>
             </>
           )}

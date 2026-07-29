@@ -23,13 +23,12 @@ import {
 import { completeTaskById, getTaskContactId, updateTaskById } from '../lib/crmTasks.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
+import { FULL_HEIGHT_LIST_PAGE_CSS } from '../lib/customPageLayout.js';
 import {
   Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, ScrollArea, SectionTitle,
   Spinner, Tag, TaskCheckbox, Td, Th, fmtDate, goUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, EditTaskModal, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
-
-const SEARCH_RAIL_TOP = 74;
 
 /* Pull a numeric customer/contact id out of a native contact link. */
 function contactIdFromUrl(url) {
@@ -76,11 +75,7 @@ function TaskFacetSidebar({ tasks, statusFilter, setStatusFilter, prioritySel, c
   const catOpts = useMemo(() => distinctCategories(tasks).map((c) => ({ id: c, label: c })), [tasks]);
   const anySel = prioritySel.size || categorySel.size || dueSel.size || statusFilter !== '1';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: SEARCH_RAIL_TOP }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Refine</span>
-        {anySel ? <Btn variant="ghost" size="xs" icon={<I.close />} onClick={clearAll}>Clear</Btn> : null}
-      </div>
+    <div className="gbcp-fill-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Status is single-select (mirrors the native New/Completed/All toggle). */}
       <Card>
         <div style={{ padding: '10px 12px 4px', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Status</div>
@@ -100,6 +95,7 @@ function TaskFacetSidebar({ tasks, statusFilter, setStatusFilter, prioritySel, c
       <FacetChecks label="Priority" options={PRIORITY_OPTS} selected={prioritySel} onToggle={(v) => toggle('priority', v)} count={counts.priority} />
       <FacetChecks label="Due" options={DUE_BUCKETS} selected={dueSel} onToggle={(v) => toggle('due', v)} count={counts.due} />
       {catOpts.length > 0 && <FacetChecks label="Category" options={catOpts} selected={categorySel} onToggle={(v) => toggle('category', v)} count={counts.category} />}
+      {anySel ? <Btn variant="ghost" size="sm" icon={<I.close />} onClick={clearAll} full>Clear filters</Btn> : null}
     </div>
   );
 }
@@ -414,17 +410,16 @@ function TaskListApp({ store }) {
         currentPage="Task List" ready modalHost={modalHost} hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Task List" /></TopBar>}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 12, alignItems: 'flex-start' }}>
+        <style>{FULL_HEIGHT_LIST_PAGE_CSS}</style>
+        <div className="gbcp-search-grid gbcp-fill-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 10 }}>
           <TaskFacetSidebar
             tasks={tasks} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             prioritySel={prioritySel} categorySel={categorySel} dueSel={dueSel}
             toggle={toggleFacet} clearAll={clearAll} counts={counts}
           />
-          {/* Same column class as CRM search (24px top padding) so both pages'
-              search bars rest at the identical height. */}
-          <div className="gbcp-stack gbcp-search-body" style={{ minWidth: 0 }}>
+          <div className="gbcp-stack gbcp-search-body gbcp-fill-main" style={{ minWidth: 0 }}>
             {/* Settled, static search + action bar (no sticky/floating) */}
-            <div style={{ margin: '0 2px' }}>
+            <div className="gbcp-fill-toolbar">
               <Card style={{
                 border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
                 background: 'var(--gb-surface-1)',
@@ -484,9 +479,7 @@ function TaskListApp({ store }) {
               </Card>
             </div>
 
-            {/* Results — extra top margin so the table sits clear of the
-                search rail at rest (matches CRM search) */}
-            <Card style={{ marginTop: 14 }}>
+            <Card className="gbcp-fill-results">
               <SectionTitle icon={<I.task />} title="Tasks"
                 count={loadState === 'ready' ? `${visible.length}${visible.length !== tasks.length ? ' of ' + tasks.length : ''}` : ''}
                 sub={loadState === 'error' ? 'Could not load tasks' : undefined} />
@@ -503,8 +496,7 @@ function TaskListApp({ store }) {
                   {/* Internal scroll: the table has its own bounded height and
                       scrolls here (sticky <thead> pins), so the settled search
                       bar and Refine sidebar never move. */}
-                  <div ref={tableScrollRef} className="gb-scroll"
-                    style={{ maxHeight: 'min(560px, calc(80vh - 200px))', minHeight: 240, overflow: 'auto' }}>
+                  <div ref={tableScrollRef} className="gb-scroll gbcp-fill-table">
                     <table style={tableStyle}>
                       <thead><tr>
                         {/* Fixed-width checkbox column so header + body line up */}
@@ -533,7 +525,6 @@ function TaskListApp({ store }) {
                   </div>
                 </>
               )}
-              <div style={{ height: 12 }} />
             </Card>
           </div>
         </div>

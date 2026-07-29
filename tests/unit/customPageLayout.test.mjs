@@ -2,12 +2,26 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  FULL_HEIGHT_LIST_PAGE_CSS,
   nextProgressiveResultCount,
   opportunityStageTone,
   searchRailIsFloating,
   searchRailTransitionSeconds,
   smartSearchBarVisible,
 } from '../../src/lib/customPageLayout.js';
+
+describe('custom page layout · full-height list pages', () => {
+  it('fills the content viewport while keeping table scrolling internal', () => {
+    assert.match(FULL_HEIGHT_LIST_PAGE_CSS, /\.gbcp-content\s*\{[^}]*height:\s*calc\(100% - 48px\)/s);
+    assert.match(FULL_HEIGHT_LIST_PAGE_CSS, /\.gbcp-fill-results\s*\{[^}]*flex:\s*1 1 auto/s);
+    assert.match(FULL_HEIGHT_LIST_PAGE_CSS, /\.gbcp-fill-table\s*\{[^}]*overflow:\s*auto/s);
+  });
+
+  it('lets the table shrink when the selection action rail grows', () => {
+    assert.match(FULL_HEIGHT_LIST_PAGE_CSS, /\.gbcp-fill-main\s*\{[^}]*min-height:\s*0/s);
+    assert.match(FULL_HEIGHT_LIST_PAGE_CSS, /\.gbcp-fill-table\s*\{[^}]*min-height:\s*0/s);
+  });
+});
 
 describe('custom page layout · opportunity stage treatment', () => {
   it('gives only the Open stage the active opportunity tone', () => {

@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 import {
+  actionReviewDocumentSignature,
   buildActionReviewPostFields,
   filterActionReviewTasks,
   isActionReviewDocument,
+  isActionReviewSnapshotSettled,
   paginateActionReviewRows,
   parseActionReviewDocument,
   prepareActionReviewPostback,
@@ -154,6 +156,27 @@ describe('Action Review · native document parsing', () => {
   it('rejects a login-shaped document as an Action Review response', () => {
     const login = documentFrom('<form><input name="username"></form>');
     assert.equal(isActionReviewDocument(login), false);
+  });
+
+  it('tracks native table stability so a transient empty tbody is not accepted immediately', () => {
+    const doc = documentFrom();
+
+    assert.equal(actionReviewDocumentSignature(doc), 'a:1;e:1;t:2;r:2');
+    assert.equal(isActionReviewSnapshotSettled({
+      ready: true,
+      elapsedMs: 125,
+      stableMs: 125,
+    }), false);
+    assert.equal(isActionReviewSnapshotSettled({
+      ready: true,
+      elapsedMs: 900,
+      stableMs: 300,
+    }), true);
+    assert.equal(isActionReviewSnapshotSettled({
+      ready: false,
+      elapsedMs: 2_000,
+      stableMs: 2_000,
+    }), false);
   });
 });
 
