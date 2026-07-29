@@ -415,7 +415,7 @@ export const UI_CSS =
   '.gbcp-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--gbcp-gap); }' +
   '.gbcp-aside { display:flex; flex-direction:column; gap:var(--gbcp-gap); position:sticky; top:58px; }' +
   '.gbcp-list-head, .gbcp-activity-row { display:grid; grid-template-columns:92px minmax(0,1fr) 132px 132px; align-items:center; column-gap:12px; }' +
-  '.gbcp-list-head { padding:6px 12px; color:var(--gb-text-muted); background:var(--gb-surface-2); border-bottom:1px solid var(--gb-border-default); font-size:9px; font-weight:600; letter-spacing:.65px; text-transform:uppercase; }' +
+  '.gbcp-list-head { padding:6px 12px; color:var(--gb-text-muted); background:var(--gb-thead-bg, var(--gb-surface-2)); -webkit-backdrop-filter:var(--gb-thead-blur, none); backdrop-filter:var(--gb-thead-blur, none); border-bottom:1px solid var(--gb-border-default); font-size:9px; font-weight:600; letter-spacing:.65px; text-transform:uppercase; }' +
   '.gbcp-contact-meta:first-child { border-left:0 !important; padding-left:0 !important; }' +
   '.gbcp-activity-mobile-meta { display:none; }' +
   '@media (max-width: 1060px) {' +
@@ -1102,9 +1102,12 @@ export const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize:
 export const trStyle = { borderBottom: '1px solid var(--gb-border-subtle)' };
 
 export function Th({ children, align = 'left', style }) {
+  // Typography kept IN SYNC with .gbcp-list-head (the activity-feed header) so
+  // every table header reads identically — in the stock dark theme and under a
+  // skin alike. Both also share the --gb-thead-* seam below.
   return <th className="gb-thead" style={{
-    padding: '7px 12px', textAlign: align,
-    fontSize: 9.5, fontWeight: 600, letterSpacing: .7, textTransform: 'uppercase',
+    padding: '6px 12px', textAlign: align,
+    fontSize: 9, fontWeight: 600, letterSpacing: .65, textTransform: 'uppercase',
     color: 'var(--gb-text-muted)',
     borderBottom: '1px solid var(--gb-border-default)',
     // Sticky header pins while the body scrolls. Skin seam: --gb-thead-*

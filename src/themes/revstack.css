@@ -69,20 +69,20 @@
   --gb-card-blur:   blur(18px) saturate(150%);
   --gb-card-border: 1px solid rgba(255, 255, 255, 0.10);
   --gb-card-shadow: 0 8px 30px -10px rgba(0, 0, 0, 0.60), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --gb-card-radius: 16px;
+  --gb-card-radius: 11px;
 
   /* ── Frosted-glass MODALS ───────────────────────────────────────── */
   --gb-modal-bg:     rgba(16, 20, 27, 0.72);
   --gb-modal-blur:   blur(28px) saturate(160%);
   --gb-modal-border: 1px solid rgba(255, 255, 255, 0.12);
-  --gb-modal-radius: 18px;
+  --gb-modal-radius: 13px;
   --gb-modal-shadow: 0 30px 80px -22px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
   /* ── Softer radii + darker scrim to match the dashboard ─────────── */
-  --gb-r-sm: 8px;
-  --gb-r-md: 12px;
-  --gb-r-lg: 16px;
-  --gb-r-xl: 20px;
+  --gb-r-sm: 6px;
+  --gb-r-md: 9px;
+  --gb-r-lg: 11px;
+  --gb-r-xl: 13px;
   --gb-backdrop: rgba(6, 8, 12, 0.62);
 }
 
