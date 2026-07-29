@@ -142,6 +142,10 @@
       "file": "tests/unit/contactEmailRows.test.mjs"
     },
     {
+      "name": "email \u00b7 template editor clipboard (vars + bullets)",
+      "file": "tests/unit/rteClipboard.test.mjs"
+    },
+    {
       "name": "crm \u00b7 Solr search query-string contract",
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },

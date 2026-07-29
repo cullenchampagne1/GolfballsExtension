@@ -58,14 +58,14 @@ export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurfa
   const summary = on ? surfaceSummary(cfg) : 'Off';
 
   return (
-    <div style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', overflow: 'hidden' }}>
+    <div style={{ border: `1px solid ${on ? 'var(--gb-border-default)' : 'var(--gb-border-subtle)'}`, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', overflow: 'hidden' }}>
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px' }}>
-        <span style={{ width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 13px' }}>
+        <span style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {icon || null}
         </span>
         <button type="button" onClick={() => canExpand && setOpen((o) => !o)}
-          style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: canExpand ? 'pointer' : 'default' }}>
+          style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: canExpand ? 'pointer' : 'default' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, maxWidth: '100%' }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap' }}>{feature.name}</span>
             {on && hasSub ? (

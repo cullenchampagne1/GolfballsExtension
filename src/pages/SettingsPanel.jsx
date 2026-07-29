@@ -1526,11 +1526,11 @@ export function SettingsPanel({ remotePolicy }) {
           rendered in first-seen order so flags.js controls grouping + order. */}
       <section>
         <SectionLabel>Features</SectionLabel>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {[...new Set(regularFeatures.map(f => f.section || 'Other'))].map((sec) => (
             <div key={sec}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 8 }}>{sec}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 10 }}>{sec}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {regularFeatures.filter(f => (f.section || 'Other') === sec).map((f) => (
                   <FeatureRow
                     key={f.key}

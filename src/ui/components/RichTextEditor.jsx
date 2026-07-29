@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Icon } from '../icons.jsx';
 import { ColorButton } from './ColorButton.jsx';
 import { sanitizeHtml } from '../../lib/sanitizeHtml.js';
+import { fragToPlain, plainToHtml } from '../../lib/rteClipboard.js';
 
 /* ──────────────────────────────────────────────────────────────
    RichTextEditor — contenteditable rich-text surface with a
@@ -300,6 +301,7 @@ function stripChips(html) {
   return tmp.innerHTML;
 }
 
+
 /* Plain text / newline body → HTML paragraphs (legacy templates). */
 function normalizeInitial(html) {
   const s = String(html || '');
@@ -432,6 +434,41 @@ export function RichTextEditor({
     emit();
   }
 
+  /* Live-convert a just-typed {{var}} into a chip as soon as the closing }}
+     lands, so a manually typed variable blends into text like the inserted
+     ones — no more "type it, then leave and come back to see the chip". Only
+     the token ending exactly at the caret is converted, and the caret is kept
+     right after the new chip so typing flows on. Returns true if it chipified. */
+  function maybeChipifyAtCaret() {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    if (node.nodeType !== 3 || !ref.current || !ref.current.contains(node)) return false;
+    const caret = range.startOffset;
+    const before = node.textContent.slice(0, caret);
+    const m = before.match(/\{\{\s*([^{}]+?)\s*\}\}$/);   // token closing at the caret
+    const name = m && m[1].trim();
+    if (!name) return false;
+
+    const start = caret - m[0].length;
+    const parent = node.parentNode;
+    const afterNode = document.createTextNode(node.textContent.slice(caret));
+    const beforeNode = document.createTextNode(node.textContent.slice(0, start));
+    const tmp = document.createElement('div');
+    tmp.innerHTML = chipHTML(name, varMetaRef.current);
+    const chip = tmp.firstChild;
+
+    parent.replaceChild(afterNode, node);
+    parent.insertBefore(chip, afterNode);
+    if (start > 0) parent.insertBefore(beforeNode, chip);
+
+    const r = document.createRange();
+    r.setStart(afterNode, 0); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+    return true;
+  }
+
   /* Drag the corner handle of an inline-attachment block to resize it.
      Width is clamped, painted live on the block, and persisted to the
      variable (onAttachmentResize) on release so the sent <img> matches. */
@@ -461,19 +498,52 @@ export function RichTextEditor({
     document.addEventListener('mouseup', up);
   }
 
-  /* Paste — strip Word/Outlook junk, keep basic formatting. */
+  /* Paste — strip Word/Outlook junk, keep basic formatting (incl. bullet
+     lists), and convert any {{var}} in the pasted content into live chips so
+     pasted variables render immediately instead of as raw braces. stripChips
+     first normalizes chips already in the clipboard (e.g. copied from this
+     editor) back to {{var}} before re-rendering, so nothing double-wraps. */
   function onPaste(e) {
     e.preventDefault();
     if (singleLine) {
       const text = e.clipboardData.getData('text/plain').replace(/\s+/g, ' ');
       document.execCommand('insertText', false, text);
+      saveSelection();
+      setEmpty(!ref.current.textContent.trim());
+      emit();
       return;
     }
-    let html = e.clipboardData.getData('text/html');
-    if (html) {
-      document.execCommand('insertHTML', false, sanitizeHtml(html));
-    } else {
-      document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+    const html = e.clipboardData.getData('text/html');
+    const clean = html
+      ? highlightVars(stripChips(sanitizeHtml(html)), varMetaRef.current)
+      : highlightVars(plainToHtml(e.clipboardData.getData('text/plain')), varMetaRef.current);
+    document.execCommand('insertHTML', false, clean);
+    saveSelection();
+    setEmpty(!ref.current.textContent.trim());
+    emit();
+  }
+
+  /* Copy / cut — put the STORED format on the clipboard: chips become their
+     {{var}} placeholder (no chip spans or bolt SVG leaking out) and bullet
+     lists serialize with "- " markers in the plain-text flavor. Fixes pasting
+     variables/bullets into the CRM email or another app coming out "weird".
+     Only handles a real (non-collapsed) selection; otherwise defers to the
+     browser default. */
+  function onCopyCut(e, isCut) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !ref.current?.contains(sel.anchorNode)) return;
+    const holder = document.createElement('div');
+    holder.appendChild(sel.getRangeAt(0).cloneContents());
+    try {
+      e.clipboardData.setData('text/html', sanitizeHtml(stripChips(holder.innerHTML)));
+      e.clipboardData.setData('text/plain', fragToPlain(holder));
+      e.preventDefault();
+    } catch { return; }   // clipboard API blocked — let the default copy run
+    if (isCut) {
+      document.execCommand('delete');
+      saveSelection();
+      setEmpty(!ref.current.textContent.trim());
+      emit();
     }
   }
 
@@ -577,6 +647,9 @@ export function RichTextEditor({
   }
 
   function onInput() {
+    // Convert a just-completed {{var}} into a chip in place before emitting,
+    // so typed variables blend into the text live (not just on remount).
+    if (!singleLine) maybeChipifyAtCaret();
     setEmpty(!ref.current.textContent.trim());
     saveSelection();
     refreshMarks();
@@ -681,6 +754,8 @@ export function RichTextEditor({
           suppressContentEditableWarning
           onInput={onInput}
           onPaste={onPaste}
+          onCopy={(e) => onCopyCut(e, false)}
+          onCut={(e) => onCopyCut(e, true)}
           onKeyDown={onKeyDown}
           onClick={onClickContent}
           onMouseDown={onContentMouseDown}
