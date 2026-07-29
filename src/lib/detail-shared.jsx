@@ -551,7 +551,7 @@ export function ThemeSelector() {
           border: '1px solid ' + (open ? 'var(--gb-border-focus)' : 'var(--gb-border-default)'),
           borderRadius: 'var(--gb-r-md)', cursor: 'pointer', color: 'var(--gb-text-secondary)',
           fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600,
-          transition: 'all var(--gb-anim)', outline: 'none',
+          transition: 'background-color var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)', outline: 'none',
         }}>
         <ThemeSwatch id={cur.id} size={15} />
         <span>{cur.name}</span>

@@ -64,7 +64,7 @@ function TypeTabs({ value, onChange }) {
               color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
               background: on ? 'var(--gb-surface-1)' : 'transparent',
               boxShadow: on ? 'var(--gb-shadow-sm, 0 1px 2px rgba(0,0,0,.14))' : 'none',
-              transition: 'all var(--gb-anim)',
+              transition: 'background-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim)',
             }}>{o.label}</button>
         );
       })}
@@ -413,12 +413,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           {loading ? (
             <Spinner label="Searching…" />
           ) : !searched ? (
-            <div style={{ padding: '54px 0', textAlign: 'center', color: 'var(--gb-text-muted)' }}>
+            <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--gb-text-muted)' }}>
               <I.search size={30} style={{ color: 'var(--gb-text-ghost)' }} />
               <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 10 }}>Start typing to search the CRM</div>
             </div>
           ) : rows.length === 0 ? (
-            <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>
+            <div style={{ padding: '34px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>
               {error ? 'Search is unavailable right now.' : 'No records matched your search.'}
             </div>
           ) : (
