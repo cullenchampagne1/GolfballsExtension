@@ -378,7 +378,7 @@ export function HeroShell({ avatar, actions, minActionsWidth = 200, children }) 
             position: 'relative',
           }}>{avatar}</div>
         )}
-        <div style={{ padding: '15px 18px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <div style={{ padding: '15px 18px 0', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
           {children}
         </div>
         <div className="gbcp-hero-actions" style={{
@@ -401,7 +401,7 @@ export function HeroAvatar({ text, badge }) {
       background: `linear-gradient(135deg, ${AVATAR_COLOR}, color-mix(in srgb, ${AVATAR_COLOR} 60%, black))`,
       color: '#fff',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 24, fontWeight: 700, letterSpacing: -.4,
+      fontSize: 24, fontWeight: 600, letterSpacing: -.35,
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px var(--gb-surface-1), 0 0 0 4px var(--gb-border-subtle)',
       position: 'relative',
     }}>
@@ -416,8 +416,8 @@ export function HeroTitleRow({ title, tags, id }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <h1 style={{
-        margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: -.3,
-        color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)',
+        margin: 0, fontSize: 19, fontWeight: 600, letterSpacing: -.2,
+        color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontFamily: 'var(--gb-font-sans)',
       }}>{title}</h1>
       {tags}
       {id && <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-muted)', marginLeft: 'auto' }}>#{id}</span>}
@@ -428,9 +428,14 @@ export function HeroTitleRow({ title, tags, id }) {
 /* The dashed-top strip of ContactPills under a hero's title/link rows. */
 export function HeroPillStrip({ children }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-      paddingTop: 5, borderTop: '1px solid var(--gb-border-subtle)', marginTop: 1,
+    <div className="gbcp-hero-meta-strip" style={{
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
+      alignItems: 'stretch', gap: 0,
+      minHeight: 48,
+      margin: 'auto -18px 0',
+      padding: '5px 18px 7px',
+      background: 'var(--gb-surface-2)',
+      borderTop: '1px solid var(--gb-border-default)',
     }}>{children}</div>
   );
 }
@@ -476,14 +481,14 @@ export function Hero({ onSendEmail }) {
       {/* Account link */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 9,
-        fontSize: 13, color: 'var(--gb-text-tertiary)', fontWeight: 500, flexWrap: 'wrap',
+        fontSize: 13, color: 'var(--gb-text-tertiary)', fontWeight: 400, flexWrap: 'wrap',
       }}>
         <I.briefcase size={13} style={{ color: 'var(--gb-text-muted)' }} />
         <span>Works at</span>
         <a href={D.ids.account ? accountHref(D.ids.account) : '#'}
           onClick={(e) => { e.preventDefault(); if (D.ids.account) { recordBackTo((fullName(c) || 'Contact') + ' · #' + (D.ids.contact || '')); goUrl(accountHref(D.ids.account)); } }}
           style={{
-            color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none',
+            color: 'var(--gb-brand-label)', fontWeight: 500, textDecoration: 'none',
             display: 'inline-flex', alignItems: 'center', gap: 4,
             cursor: D.ids.account ? 'pointer' : 'default',
           }}>
@@ -518,7 +523,7 @@ export function EKV({ label, value, editing, mono, field, onEdit, copyable }) {
         style={{
           width: '100%', height: 26, padding: '0 8px', boxSizing: 'border-box',
           background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
+          borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-detail-text-primary, var(--gb-text-primary))',
           opacity: (field && onEdit) ? 1 : 0.55,
           fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
         }} />
@@ -560,7 +565,7 @@ export function ProofsPanel() {
 export const inputStyle = {
   width: '100%', height: 30, padding: '0 9px', boxSizing: 'border-box',
   background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)',
-  borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
+  borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-detail-text-primary, var(--gb-text-primary))',
   fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
   colorScheme: 'dark',   // theme the native date/number pickers to the dark UI
 };
@@ -965,7 +970,7 @@ export function ActivityDetailModal({ activityId }) {
         : !a
         ? <div style={{ padding: 18, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
         : <>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{transcript.length ? 'Customer conversation' : (subject || 'Activity')}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))' }}>{transcript.length ? 'Customer conversation' : (subject || 'Activity')}</div>
           {transcript.length ? <ChatTranscript messages={transcript} /> : description && <div style={{ fontSize: 12.5, color: 'var(--gb-text-secondary)', lineHeight: 1.5, padding: '9px 11px', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)', whiteSpace: 'pre-wrap' }}>{description}</div>}
           <div>
             {row('Direction', a.Direction)}
@@ -1000,7 +1005,7 @@ function ChatTranscript({ messages }) {
               <span style={{ fontWeight: 750, color: bot ? 'var(--gb-text-muted)' : visitor ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)' }}>{message.name || (visitor ? 'Visitor' : 'Agent')}</span>
               <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{message.time}</span>
             </div>
-            <div style={{ padding: '8px 11px', borderRadius: visitor ? '4px 12px 12px 12px' : '12px 4px 12px 12px', border: `1px solid ${bot ? 'var(--gb-border-default)' : visitor ? 'var(--gb-success-tint-border)' : 'var(--gb-brand-tint-border)'}`, background: bot ? 'var(--gb-fill-subtle)' : visitor ? 'var(--gb-success-tint-soft)' : 'var(--gb-brand-tint-soft)', color: 'var(--gb-text-primary)', fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</div>
+            <div style={{ padding: '8px 11px', borderRadius: visitor ? '4px 12px 12px 12px' : '12px 4px 12px 12px', border: `1px solid ${bot ? 'var(--gb-border-default)' : visitor ? 'var(--gb-success-tint-border)' : 'var(--gb-brand-tint-border)'}`, background: bot ? 'var(--gb-fill-subtle)' : visitor ? 'var(--gb-success-tint-soft)' : 'var(--gb-brand-tint-soft)', color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</div>
           </div>
         );
       })}
@@ -1119,8 +1124,8 @@ export function OpportunitiesPanel() {
           {D.opportunities.map((o, i) => (
             <tr key={i} style={trStyle}>
               <Td><span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', fontWeight: 600 }}>{o.id}</span></Td>
-              <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 500 }}>{o.subject}</span></Td>
-              <Td align="right"><span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: 'var(--gb-text-primary)' }}>{fmt$(o.estimatedValue)}</span></Td>
+              <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{o.subject}</span></Td>
+              <Td align="right"><span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))' }}>{fmt$(o.estimatedValue)}</span></Td>
               <Td align="right" mono muted>{fmtDate(o.estimatedCloseDate)}</Td>
               <Td align="center">{o.stage ? <Tag tone="info" size="xs">{o.stage}</Tag> : DASH}</Td>
               <Td align="right">
@@ -1345,7 +1350,7 @@ export function OpenTaskRow({ t }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <TaskCheckbox tone="success" done={done} disabled={state !== 'idle'} onClick={complete} title="Complete task" />
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: 'var(--gb-text-primary)', fontWeight: 600, lineHeight: 1.25, textDecoration: done ? 'line-through' : 'none' }}>{t.subject}</div>
+            <div style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 500, lineHeight: 1.3, textDecoration: done ? 'line-through' : 'none' }}>{t.subject}</div>
             {t.id && <div style={{ marginTop: 2, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', fontSize: 9.5 }}>#{t.id}</div>}
           </div>
         </div>
@@ -1357,7 +1362,7 @@ export function OpenTaskRow({ t }) {
         </span>
       </Td>
       <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
-      <Td align="right" mono><span style={{ color: dueColor, fontWeight: 600 }}>{fmtDate(t.dueDate)}</span></Td>
+      <Td align="right" mono><span style={{ color: dueColor, fontWeight: 500 }}>{fmtDate(t.dueDate)}</span></Td>
       <Td align="right">
         <IconBtn ghost size="xs" icon={<I.edit />} title="Edit task" disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)} />
       </Td>
@@ -1413,7 +1418,7 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
                 fontSize: 11, fontWeight: 800, color: 'var(--gb-text-on-brand)',
                 boxShadow: '0 0 0 1px var(--gb-brand-border)', flexShrink: 0,
               }}>GB</div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, whiteSpace: 'nowrap' }}>Golfballs Admin</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', letterSpacing: -.05, whiteSpace: 'nowrap' }}>Golfballs Admin</span>
             </div>
             <IconBtn size="xs" ghost icon={<I.chevr style={{ transform: 'scaleX(-1)' }} />} onClick={() => setCollapsed(true)} title="Collapse sidebar" />
           </>
@@ -1439,10 +1444,10 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
                   cursor: 'pointer', textAlign: 'left',
                   color: g.active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
                   fontFamily: 'var(--gb-font-sans)',
-                  fontSize: 12, fontWeight: g.active ? 700 : 600, letterSpacing: -.05,
+                  fontSize: 12, fontWeight: g.active ? 600 : 500, letterSpacing: -.05,
                   transition: 'all var(--gb-anim)',
                 }}
-                onMouseEnter={(e) => { if (!g.active) e.currentTarget.style.background = 'var(--gb-fill-subtle)'; e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+                onMouseEnter={(e) => { if (!g.active) e.currentTarget.style.background = 'var(--gb-fill-subtle)'; e.currentTarget.style.color = 'var(--gb-detail-text-primary, var(--gb-text-primary))'; }}
                 onMouseLeave={(e) => { if (!g.active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--gb-text-tertiary)'; } }}
               >
                 {React.cloneElement(g.icon, { size: 14 })}
@@ -1482,13 +1487,13 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
                           display: 'block', position: 'relative',
                           padding: '5px 10px 5px 14px',
                           fontSize: 11.5, color: isCurrent ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-                          textDecoration: 'none', fontWeight: isCurrent ? 700 : 500,
+                          textDecoration: 'none', fontWeight: isCurrent ? 600 : 400,
                           borderLeft: '1px solid var(--gb-border-subtle)',
                           background: isCurrent ? 'var(--gb-brand-tint-soft)' : 'transparent',
                           borderRadius: '0 4px 4px 0',
                           transition: 'all var(--gb-anim)',
                         }}
-                        onMouseEnter={(e) => { if (!isCurrent) e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+                        onMouseEnter={(e) => { if (!isCurrent) e.currentTarget.style.color = 'var(--gb-detail-text-primary, var(--gb-text-primary))'; }}
                         onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.color = 'var(--gb-text-muted)'; }}
                       >
                         {isCurrent && (
@@ -1523,7 +1528,7 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
         }}>{repMark}</span>
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repName}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repName}</div>
             <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{territory}</div>
           </div>
         )}
@@ -1566,7 +1571,7 @@ export function Breadcrumb({ items = [], current, id }) {
           <I.chevr size={10} />
         </React.Fragment>
       ))}
-      <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{current}</span>
+      <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{current}</span>
       {id && <span style={{ marginLeft: 6, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-ghost)', fontSize: 10.5 }}>#{id}</span>}
     </div>
   );
@@ -1658,6 +1663,13 @@ export function ActivityRow({ a, last, onDelete }) {
   const chat = meta.key === 'chat' ? chatTranscriptSummary(a.subject || a.description || '') : null;
   const isNote = !!a.localNote;
   const clickable = !!a.id && !isNote;
+  const typeTone = {
+    brand: { fg: 'var(--gb-brand-label)', bg: 'var(--gb-brand-tint-soft)', border: 'var(--gb-brand-tint-border)' },
+    error: { fg: 'var(--gb-error-fg)', bg: 'var(--gb-error-tint-soft)', border: 'var(--gb-error-tint-border)' },
+    warning: { fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-soft)', border: 'var(--gb-warning-tint-border)' },
+    success: { fg: 'var(--gb-success-fg)', bg: 'var(--gb-success-tint-soft)', border: 'var(--gb-success-tint-border)' },
+    info: { fg: 'var(--gb-info-fg)', bg: 'var(--gb-info-tint-soft)', border: 'var(--gb-info-tint-border)' },
+  }[meta.tone];
   return (
     <div
       className={`gbcp-activity-row ${isNote ? 'gb-actrow-note' : 'gb-actrow'}`}
@@ -1671,15 +1683,24 @@ export function ActivityRow({ a, last, onDelete }) {
         background: isNote ? 'var(--gb-warning-tint-soft)' : 'transparent',
         transition: 'background var(--gb-anim)',
       }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, color: `var(--gb-${meta.tone}-fg)`, fontSize: 10.5, fontWeight: 700 }}>
-        <Dot tone={meta.tone} size={5} />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.category || meta.key}</span>
+      <div style={{ minWidth: 0 }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%',
+          padding: '2px 6px', borderRadius: 4,
+          color: typeTone.fg,
+          background: typeTone.bg,
+          border: `1px solid ${typeTone.border}`,
+          fontSize: 9.5, fontWeight: 500, lineHeight: 1.35,
+        }}>
+          <Dot tone={meta.tone} size={4} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.category || meta.key}</span>
+        </span>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 11.5, color: 'var(--gb-text-primary)', fontWeight: 550, lineHeight: 1.35, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <div style={{ fontSize: 11.5, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {chat ? (
             <>
-              <span style={{ fontWeight: 700 }}>Live Chat</span>
+              <span style={{ fontWeight: 500 }}>Live Chat</span>
               <span style={{ color: 'var(--gb-text-muted)' }}> · {chat.count} message{chat.count === 1 ? '' : 's'} · {chat.last.name}: {chat.last.body}</span>
             </>
           ) : (a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>)}
@@ -1691,7 +1712,7 @@ export function ActivityRow({ a, last, onDelete }) {
         </div>
       </div>
       <div className="gbcp-activity-owner" style={{ minWidth: 0, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
-        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{a.employee || DASH}</div>
+        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--gb-text-tertiary)', fontWeight: 400 }}>{a.employee || DASH}</div>
         {a.direction && <div style={{ marginTop: 2, fontSize: 9.5 }}>{a.direction}</div>}
       </div>
       <div className="gbcp-activity-date" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, minWidth: 0 }}>
@@ -1841,7 +1862,7 @@ export function TasksPanel() {
         />
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-faint)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>
               {manage ? 'Manage quick actions' : 'Quick create'}
             </span>
             {qt.list.length > 0 && <IconBtn size="xs" ghost active={manage} icon={<I.edit />} title="Manage buttons" onClick={() => setManage((m) => !m)} />}
@@ -1898,7 +1919,7 @@ export function TasksPanel() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <TaskCheckbox done />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ color: 'var(--gb-text-muted)', textDecoration: 'line-through', fontWeight: 500 }}>{t.subject}</div>
+                      <div style={{ color: 'var(--gb-text-muted)', textDecoration: 'line-through', fontWeight: 400 }}>{t.subject}</div>
                       {t.id && <div style={{ marginTop: 2, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', fontSize: 9.5 }}>#{t.id}</div>}
                     </div>
                   </div>
@@ -1974,8 +1995,8 @@ export function QuickLogCard() {
             {manage && <span onClick={(e) => { e.stopPropagation(); ql.remove(t.id); }} title="Remove"
               style={{ position: 'absolute', top: 5, right: 5, width: 16, height: 16, borderRadius: '50%', background: 'var(--gb-error-tint-medium)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, lineHeight: 1, cursor: 'pointer' }}>×</span>}
             <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}><I.phone size={13} /></span>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.25, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.label}</span>
-            <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 600, color: 'var(--gb-text-muted)', lineHeight: 1.3, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.templateName || ''}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', lineHeight: 1.3, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.label}</span>
+            <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 500, color: 'var(--gb-text-muted)', lineHeight: 1.3, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.templateName || ''}</span>
           </button>
         ))}
         {ql.list.length === 0 && <div style={{ gridColumn: '1 / -1', padding: 14, textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Add a quick-log button with +</div>}

@@ -53,11 +53,11 @@ function Hero() {
       {/* Web address link */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 9,
-        fontSize: 13, color: 'var(--gb-text-tertiary)', fontWeight: 500, flexWrap: 'wrap',
+        fontSize: 13, color: 'var(--gb-text-tertiary)', fontWeight: 400, flexWrap: 'wrap',
       }}>
         <I.ext size={13} style={{ color: 'var(--gb-text-muted)' }} />
         {web
-          ? <a href={a.webAddress} target="_blank" rel="noreferrer" style={{ color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{web}<I.ext size={11} /></a>
+          ? <a href={a.webAddress} target="_blank" rel="noreferrer" style={{ color: 'var(--gb-brand-label)', fontWeight: 500, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{web}<I.ext size={11} /></a>
           : <span style={{ color: 'var(--gb-text-ghost)' }}>No web address</span>}
         {a.createdBy && (<><span style={{ color: 'var(--gb-text-ghost)' }}>·</span><span>Created by {a.createdBy}</span></>)}
       </div>
@@ -98,8 +98,8 @@ function ContactsPanel() {
                 <tr key={i} style={trStyle}>
                   <Td>
                     {c.detailUrl
-                      ? <a href={c.detailUrl} onClick={(e) => { e.preventDefault(); goUrl(c.detailUrl); }} style={{ color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none' }}>{name || DASH}</a>
-                      : <span style={{ fontWeight: 600, color: 'var(--gb-text-secondary)' }}>{name || DASH}</span>}
+                      ? <a href={c.detailUrl} onClick={(e) => { e.preventDefault(); goUrl(c.detailUrl); }} style={{ color: 'var(--gb-brand-label)', fontWeight: 500, textDecoration: 'none' }}>{name || DASH}</a>
+                      : <span style={{ fontWeight: 500, color: 'var(--gb-text-secondary)' }}>{name || DASH}</span>}
                   </Td>
                   <Td muted>{txt(c.email) || DASH}</Td>
                   <Td mono muted>{txt(c.phone) || DASH}</Td>

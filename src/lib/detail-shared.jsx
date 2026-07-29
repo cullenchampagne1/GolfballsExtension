@@ -112,7 +112,7 @@ export function Btn({ variant = 'secondary', size = 'md', icon, iconRight, child
         ...ARMOR,
         background: V.bg, color: V.fg, border: `1px solid ${V.bd}`,
         height: S.h, padding: `0 ${S.px}px`, fontSize: S.fs, gap: S.gap,
-        fontFamily: 'var(--gb-font-sans)', fontWeight: 600, letterSpacing: -.05,
+        fontFamily: 'var(--gb-font-sans)', fontWeight: 500, letterSpacing: -.05,
         borderRadius: 'var(--gb-r-md)',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -174,7 +174,7 @@ export function Tag({ children, tone = 'neutral', size = 'md', icon, style }) {
     <span style={{
       ...ARMOR,
       color: t.fg, background: t.bg, border: `1px solid ${t.bd}`,
-      fontWeight: 700, letterSpacing: .3, textTransform: 'uppercase',
+      fontWeight: 600, letterSpacing: .25, textTransform: 'uppercase',
       fontFamily: 'var(--gb-font-sans)',
       fontSize: S.fs, padding: S.p, borderRadius: 5, gap: S.gap,
       display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', lineHeight: 1.5,
@@ -222,23 +222,22 @@ export function SectionTitle({ icon, title, count, right, sub }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
-      padding: '10px 14px',
-      borderBottom: '1px solid var(--gb-border-subtle)',
+      padding: '9px 12px',
+      background: 'var(--gb-surface-2)',
+      borderBottom: '1px solid var(--gb-border-default)',
     }}>
       {icon && (
         <span style={{
-          width: 22, height: 22, borderRadius: 5,
-          background: 'var(--gb-fill-subtle)',
+          width: 16, height: 20,
           color: 'var(--gb-text-tertiary)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '1px solid var(--gb-border-subtle)',
         }}>{React.cloneElement(icon, { size: 12 })}</span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>{title}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', letterSpacing: -.05 }}>{title}</span>
           {count != null && (
-            <span style={{ fontSize: 11, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', fontWeight: 500 }}>{count}</span>
+            <span style={{ fontSize: 10.5, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', fontWeight: 400 }}>{count}</span>
           )}
         </div>
         {sub && <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{sub}</div>}
@@ -404,13 +403,14 @@ export const UI_CSS =
   '  border-color: var(--gb-border-default) !important;' +
   '  box-shadow: 0 2px 8px rgba(0,0,0,.08);' +
   '}' +
-  '.gbcp-root { --gbcp-gap: 10px; --gbcp-aside: 296px; }' +
+  '.gbcp-root { --gbcp-gap: 10px; --gbcp-aside: 296px; --gb-detail-text-primary:color-mix(in srgb,var(--gb-text-primary) 86%,var(--gb-surface-1)); }' +
   '.gbcp-page-grid { display:grid; grid-template-columns:minmax(0,1fr) var(--gbcp-aside); gap:var(--gbcp-gap); align-items:flex-start; }' +
   '.gbcp-stack { display:flex; flex-direction:column; gap:var(--gbcp-gap); min-width:0; }' +
   '.gbcp-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--gbcp-gap); }' +
   '.gbcp-aside { display:flex; flex-direction:column; gap:var(--gbcp-gap); position:sticky; top:58px; }' +
   '.gbcp-list-head, .gbcp-activity-row { display:grid; grid-template-columns:92px minmax(0,1fr) 132px 132px; align-items:center; column-gap:12px; }' +
-  '.gbcp-list-head { padding:6px 12px; color:var(--gb-text-muted); background:var(--gb-surface-2); border-bottom:1px solid var(--gb-border-default); font-size:9px; font-weight:700; letter-spacing:.65px; text-transform:uppercase; }' +
+  '.gbcp-list-head { padding:6px 12px; color:var(--gb-text-muted); background:var(--gb-surface-2); border-bottom:1px solid var(--gb-border-default); font-size:9px; font-weight:600; letter-spacing:.65px; text-transform:uppercase; }' +
+  '.gbcp-contact-meta:first-child { border-left:0 !important; padding-left:0 !important; }' +
   '.gbcp-activity-mobile-meta { display:none; }' +
   '@media (max-width: 1060px) {' +
   '  .gbcp-page-grid { grid-template-columns:minmax(0,1fr); }' +
@@ -752,7 +752,7 @@ export function InlineSearch() {
         <I.search size={12} />
         <input ref={inputRef} value={q} placeholder="Search customers, accounts…"
           onChange={(e) => onType(e.target.value)} onKeyDown={onKeyDown} onFocus={() => { if (results.length) setOpen(true); }}
-          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5 }} />
+          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5 }} />
         {!q && <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, padding: '1px 5px', borderRadius: 3, background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-tertiary)', border: '1px solid var(--gb-border-subtle)' }}>/</span>}
         <IconBtn size="xs" ghost icon={<I.ext />} title="Open full search" onClick={openModal} />
       </div>
@@ -773,7 +773,7 @@ export function InlineSearch() {
                 style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: 0, cursor: 'pointer', textAlign: 'left', background: i === active ? 'var(--gb-fill-subtle)' : 'transparent', transition: 'background var(--gb-anim)' }}>
                 <span style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-tertiary)' }}>{isAcct ? <I.briefcase size={12} /> : <I.user size={12} />}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
                   <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>
                 </div>
               </button>
@@ -799,19 +799,21 @@ export const AVATAR_COLOR = '#3a5f7d';
 
 export function ContactPill({ icon, label, value, muted }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+    <div className="gbcp-contact-meta" style={{
+      display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)',
+      alignItems: 'center', columnGap: 8, minWidth: 0,
+      padding: '5px 14px',
+      borderLeft: '1px solid var(--gb-border-subtle)',
+    }}>
       <span style={{
-        width: 24, height: 24, borderRadius: 6,
-        background: 'var(--gb-fill-subtle)',
-        border: '1px solid var(--gb-border-subtle)',
         color: 'var(--gb-text-tertiary)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>{React.cloneElement(icon, { size: 12 })}</span>
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', textTransform: 'uppercase', letterSpacing: .7, fontWeight: 700, lineHeight: 1.3 }}>{label}</span>
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>{React.cloneElement(icon, { size: 13 })}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, minWidth: 0 }}>
+        <span style={{ fontSize: 9, color: 'var(--gb-text-muted)', textTransform: 'uppercase', letterSpacing: .65, fontWeight: 500, lineHeight: 1.2 }}>{label}</span>
         <span style={{
-          fontSize: 12, color: muted ? 'var(--gb-text-ghost)' : 'var(--gb-text-secondary)',
-          fontWeight: 500, lineHeight: 1.3,
+          fontSize: 11.5, color: muted ? 'var(--gb-text-ghost)' : 'var(--gb-text-secondary)',
+          fontWeight: 400, lineHeight: 1.35,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{value}</span>
       </div>
@@ -830,21 +832,21 @@ export function StatCardGrid({ cells }) {
           ...(c.tone === 'brand' ? { background: 'var(--gb-brand-tint-soft)', borderColor: 'var(--gb-brand-tint-border)' } : null),
         }}>
           <div style={{
-            fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase',
+            fontSize: 9.5, fontWeight: 600, letterSpacing: .75, textTransform: 'uppercase',
             color: c.tone === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
           }}>{c.label}</div>
           <div style={{
-            fontSize: 18, fontWeight: 700, marginTop: 3,
+            fontSize: 18, fontWeight: 600, marginTop: 3,
             color: c.tone === 'brand' ? 'var(--gb-brand-label)' :
                    c.tone === 'success' ? 'var(--gb-success-fg)' :
                    c.tone === 'error' ? 'var(--gb-error-fg)' :
                    c.tone === 'warning' ? 'var(--gb-warning-fg)' :
-                   'var(--gb-text-primary)',
+                   'var(--gb-detail-text-primary, var(--gb-text-primary))',
             fontFamily: c.mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
             letterSpacing: -.5, lineHeight: 1.15,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{c.value}</div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500 }}>{c.sub}</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 400 }}>{c.sub}</div>
         </Card>
       ))}
     </div>
@@ -924,7 +926,7 @@ export function QuickAddInput({ value, onChange, onSubmit, placeholder = 'Quick 
           style={{
             flex: 1, border: 0, outline: 0, background: 'transparent',
             fontFamily: 'var(--gb-font-sans)', fontSize: 11.5,
-            color: 'var(--gb-text-primary)',
+            color: 'var(--gb-detail-text-primary, var(--gb-text-primary))',
           }} />
       </div>
       {extra}
@@ -959,8 +961,8 @@ export function Tabs({ active, setActive }) {
               background: 'transparent', border: 0,
               borderBottom: '2px solid ' + (isActive ? 'var(--gb-brand-label)' : 'transparent'),
               marginBottom: -1,
-              fontSize: 12, fontWeight: 600, letterSpacing: -.05,
-              color: isActive ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+              fontSize: 12, fontWeight: 500, letterSpacing: -.05,
+              color: isActive ? 'var(--gb-detail-text-primary, var(--gb-text-primary))' : 'var(--gb-text-muted)',
               cursor: 'pointer', fontFamily: 'var(--gb-font-sans)',
               transition: 'all var(--gb-anim)',
             }}
@@ -971,7 +973,7 @@ export function Tabs({ active, setActive }) {
             {t.label}
             {t.count != null && (
               <span style={{
-                fontSize: 10, fontFamily: 'var(--gb-font-mono)', fontWeight: 600,
+                fontSize: 10, fontFamily: 'var(--gb-font-mono)', fontWeight: 500,
                 color: isActive ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
                 background: isActive ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)',
                 padding: '1px 6px', borderRadius: 99,
@@ -1086,7 +1088,7 @@ export const trStyle = { borderBottom: '1px solid var(--gb-border-subtle)' };
 export function Th({ children, align = 'left', style }) {
   return <th style={{
     padding: '7px 12px', textAlign: align,
-    fontSize: 9.5, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase',
+    fontSize: 9.5, fontWeight: 600, letterSpacing: .7, textTransform: 'uppercase',
     color: 'var(--gb-text-muted)',
     borderBottom: '1px solid var(--gb-border-default)',
     // opaque + sticky so the header pins while the panel body scrolls
@@ -1101,7 +1103,7 @@ export function Td({ children, align = 'left', mono, muted, style }) {
     padding: '8px 12px', textAlign: align, verticalAlign: 'middle',
     fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
     fontSize: 11.5, color: muted ? 'var(--gb-text-muted)' : 'var(--gb-text-secondary)',
-    fontWeight: 500, ...style,
+    fontWeight: 400, ...style,
   }}>{children}</td>;
 }
 
@@ -1219,8 +1221,8 @@ export function ProofCard({ p }) {
       </div>
       {/* info strip: a distinct surface (not a blend) with an inset top
           highlight + soft inner shadow for a recessed 3D feel */}
-      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'var(--gb-surface-2)', boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 9%, transparent), inset 0 -12px 22px -14px rgba(0,0,0,.55)' }}>
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name || 'Proof'}</div>
+      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'var(--gb-surface-2)', boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--gb-detail-text-primary, var(--gb-text-primary)) 9%, transparent), inset 0 -12px 22px -14px rgba(0,0,0,.55)' }}>
+        <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name || 'Proof'}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--gb-text-muted)' }}>
           {p.kind && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
           <span style={{ fontFamily: 'var(--gb-font-mono)', marginLeft: 'auto', flexShrink: 0 }}>{fmtDate(p.date)}</span>
@@ -1278,7 +1280,7 @@ export function OrdersPanel() {
                 </Td>
                 <Td align="right" mono muted>{fmtDate(o.date)}</Td>
                 <Td align="right">
-                  <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: 'var(--gb-text-primary)' }}>{fmt$(o.revenue)}</span>
+                  <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))' }}>{fmt$(o.revenue)}</span>
                 </Td>
                 <Td align="center">{o.status ? <Tag tone="success" size="xs">{o.status}</Tag> : DASH}</Td>
               </tr>
@@ -1321,7 +1323,7 @@ export function OrdersPanel() {
                 </Td>
                 <Td align="right" mono>{num(it.quantity) ?? DASH}</Td>
                 <Td align="right">
-                  <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: 'var(--gb-text-primary)' }}>{fmt$(it.revenue)}</span>
+                  <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))' }}>{fmt$(it.revenue)}</span>
                 </Td>
               </tr>
             ))}
@@ -1367,9 +1369,9 @@ export function EmailsPanel({ onCompose }) {
           {D.emails.map((e, i) => (
             <tr key={i} style={trStyle}>
               <Td><DirArrow dir={dirOf(e)} /></Td>
-              <Td><span style={{ fontWeight: 600, color: 'var(--gb-text-secondary)' }}>{e.from}</span></Td>
+              <Td><span style={{ fontWeight: 500, color: 'var(--gb-text-secondary)' }}>{e.from}</span></Td>
               <Td muted>{e.to}</Td>
-              <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 500 }}>{e.subject}</span></Td>
+              <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{e.subject}</span></Td>
               <Td align="right" mono muted>{fmtDateTime(e.date)}</Td>
               <Td align="right" mono muted>{fmtBytes(e.sizeBytes)}</Td>
               <Td align="right">
