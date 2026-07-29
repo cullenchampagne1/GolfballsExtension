@@ -12,15 +12,9 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
-import {
-  nextProgressiveResultCount,
-  searchRailIsFloating,
-  searchRailTransitionSeconds,
-  smartSearchBarVisible,
-} from '../lib/customPageLayout.js';
+import { nextProgressiveResultCount } from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
   crmRowToCampaignContact,
@@ -43,17 +37,10 @@ const TYPE_OPTS = [
   { id: 'account', label: 'Accounts' },
 ];
 
+// Sticky offset for the Refine sidebar column.
 const SEARCH_RAIL_TOP = 74;
-// Drop the search rail to the first Refine filter block (past the fixed-height
-// "Refine" header). ALIGN = extra pinned-top offset; REST_ALIGN = extra flow
-// margin (smaller because .gbcp-search-body already adds 24px padding-top). The
-// Refine header is a fixed 24px (REFINE_HEADER_H) so this alignment stays
-// consistent whether or not the Clear button is showing.
+// Fixed height of the sidebar's "Refine" header row.
 const REFINE_HEADER_H = 24;
-const SEARCH_RAIL_ALIGN = 22;
-const SEARCH_RAIL_REST_ALIGN = 0;
-const SEARCH_EXIT_DELAY_MS = 320;
-const SEARCH_MOTION_SECONDS = 0.48;
 
 /* ── URL <-> search state ─────────────────────────────────────
    The native search puts its term in the URL; we own ?q/?t/?fq going
@@ -400,13 +387,9 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
-  const [focused, setFocused] = useState(false);
-  const [searchBarVisible, setSearchBarVisible] = useState(true);
-  const [searchBarFloating, setSearchBarFloating] = useState(false);
-  const hideSearchTimerRef = useRef(null);
-  const scrollPositionsRef = useRef(new WeakMap());
+  const [focused, setFocused] = useState(false);   // input focus ring only
   const inputRef = useRef(null);
-  const searchRailRef = useRef(null);
+  const resultsScrollRef = useRef(null);   // the table's internal scroll box
   const loadMoreRef = useRef(null);   // progressive-render + load-more sentinel
   const lastSearchRef = useRef({ q: '', t: 'all', qb: null });
   const loadingMoreRef = useRef(false);
@@ -420,11 +403,6 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     setSelectedRows(new Set());
     setRenderCount(24);
     selectionAnchorRef.current = null;
-    if (hideSearchTimerRef.current) {
-      clearTimeout(hideSearchTimerRef.current);
-      hideSearchTimerRef.current = null;
-    }
-    setSearchBarVisible(true);
     setSearched(true);
     lastSearchRef.current = { q, t, qb };
     try {
@@ -535,71 +513,24 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       return next;
     });
   }, [renderedRows]);
-  const handleScrollIntent = useCallback((event) => {
+  /* The results table has its OWN internal scroll box. As it nears the end,
+     reveal more client rows; once every fetched row shows, pull the next
+     server page. */
+  const handleResultsScroll = useCallback((event) => {
     const target = event?.currentTarget;
     if (!target) return;
-    const currentTop = Math.max(0, Number(target.scrollTop) || 0);
-    setSearchBarFloating(searchRailIsFloating({ currentTop }));
-    const previousTop = scrollPositionsRef.current.get(target);
-    scrollPositionsRef.current.set(target, currentTop);
-    if (previousTop == null) return;
-    const scrollingDown = currentTop >= previousTop + 4 && currentTop > 18;
-    // The field is focused on page entry. A deliberate browse gesture hands
-    // focus back to the results so that initial focus cannot pin the smart bar
-    // open forever; minor trackpad noise still leaves an active editor alone.
-    if (scrollingDown && focused) {
-      try { inputRef.current?.blur?.(); } catch (e) {}
-      setFocused(false);
-    }
-    // UI parity with the Task List page: while any rows are selected the bar
-    // (which hosts the selection action rail) must stay pinned open.
-    const shouldShow = selectedRows.size > 0 || smartSearchBarVisible({
-      currentTop,
-      previousTop,
-      visible: searchBarVisible,
-      focused: focused && !scrollingDown,
-    });
-    if (shouldShow) {
-      if (hideSearchTimerRef.current) {
-        clearTimeout(hideSearchTimerRef.current);
-        hideSearchTimerRef.current = null;
-      }
-      if (!searchBarVisible) setSearchBarVisible(true);
-    } else if (searchBarVisible && !hideSearchTimerRef.current) {
-      hideSearchTimerRef.current = setTimeout(() => {
-        hideSearchTimerRef.current = null;
-        setSearchBarVisible(false);
-      }, SEARCH_EXIT_DELAY_MS);
-    }
-
-    const remaining = target.scrollHeight - currentTop - target.clientHeight;
+    const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (remaining < 620) {
-      setRenderCount((current) => nextProgressiveResultCount({
-        total: rows.length,
-        current,
-        nearEnd: true,
-      }));
+      setRenderCount((current) => nextProgressiveResultCount({ total: rows.length, current, nearEnd: true }));
     }
-  }, [focused, rows.length, searchBarVisible, selectedRows]);
-  /* Selecting rows while the bar is hidden pops it back open immediately (and
-     cancels any pending hide) so the selection actions are always reachable. */
-  useEffect(() => {
-    if (selectedRows.size === 0) return;
-    if (hideSearchTimerRef.current) { clearTimeout(hideSearchTimerRef.current); hideSearchTimerRef.current = null; }
-    setSearchBarVisible(true);
-  }, [selectedRows]);
-  useEffect(() => () => {
-    if (hideSearchTimerRef.current) clearTimeout(hideSearchTimerRef.current);
-  }, []);
+  }, [rows.length]);
   /* Progressive render is normally advanced by the scroll handler's nearEnd
      branch — but when the loaded rows fit WITHOUT scrolling, no scroll event
      ever fires and the "Loading more records…" sentinel sat there forever.
-     Observe the sentinel: whenever it's near the viewport (incl. immediately,
-     on short result sets) reveal the next batch until every loaded row shows. */
+     Observe the sentinel WITHIN the results scroll box: whenever it's near the
+     bottom (incl. immediately, on short result sets) reveal the next batch. */
   useEffect(() => {
     const el = loadMoreRef.current;
-    // Sentinel is present while there are more rows to REVEAL (client) or more
-    // to FETCH from the server (rows.length < numFound). Reveal first, then page.
     const moreToReveal = renderCount < rows.length;
     const moreOnServer = rows.length > 0 && rows.length < numFound;
     if (!el || (!moreToReveal && !moreOnServer)) return undefined;
@@ -610,7 +541,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       } else {
         fetchMore();   // all fetched rows shown → pull the next server page
       }
-    }, { root: null, rootMargin: '600px 0px' });
+    }, { root: resultsScrollRef.current || null, rootMargin: '600px 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, [renderCount, rows.length, numFound, fetchMore]);
@@ -651,7 +582,6 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         currentPage="Search"
         ready
         modalHost={modalHost}
-        onContentScroll={handleScrollIntent}
         hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
@@ -661,52 +591,11 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
 
           {/* ── Search + results column ─────────────────────────── */}
           <div className="gbcp-stack gbcp-search-body">
-        {/* ── Search hero ─────────────────────────────────────── */}
-        <div
-          ref={searchRailRef}
-          style={{
-            position: 'sticky',
-            // Offset down so the bar lines up with the first FILTER BLOCK in the
-            // Refine sidebar (past its "Refine" header) in both the resting and
-            // floating/pinned states. The search column already has 24px
-            // padding-top, so the resting margin is smaller than the pinned-top
-            // offset. Tunable via the two constants.
-            top: SEARCH_RAIL_TOP + SEARCH_RAIL_ALIGN,
-            zIndex: 20,
-            margin: `${SEARCH_RAIL_REST_ALIGN}px 4px 0`,
-            borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
-            backdropFilter: searchBarVisible ? 'blur(30px) saturate(165%)' : 'blur(0) saturate(100%)',
-            WebkitBackdropFilter: searchBarVisible ? 'blur(30px) saturate(165%)' : 'blur(0) saturate(100%)',
-            transition: 'border-radius 420ms cubic-bezier(.22, 1, .36, 1), backdrop-filter 480ms cubic-bezier(.22, 1, .36, 1), -webkit-backdrop-filter 480ms cubic-bezier(.22, 1, .36, 1)',
-          }}
-        >
-          <motion.div
-            initial={false}
-            animate={{
-              opacity: searchBarVisible ? 1 : 0,
-              y: searchBarVisible ? 0 : -8,
-              scale: searchBarVisible ? 1 : 0.994,
-            }}
-            transition={{
-              duration: searchRailTransitionSeconds({
-                visible: searchBarVisible,
-                exitDelayMs: SEARCH_EXIT_DELAY_MS,
-                motionSeconds: SEARCH_MOTION_SECONDS,
-              }),
-              ease: [0.22, 1, 0.36, 1],
-            }}
-            style={{
-              pointerEvents: searchBarVisible ? 'auto' : 'none',
-              transformOrigin: '50% 0',
-              willChange: 'transform, opacity',
-            }}
-          >
+        {/* ── Search hero — settled, static (no floating/hide behavior) ── */}
+        <div style={{ margin: '0 4px' }}>
             <Card style={{
-              borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
               border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
-              background: 'color-mix(in srgb, var(--gb-surface-1) 82%, transparent)',
-              boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
-              transition: 'border-radius 420ms cubic-bezier(.22, 1, .36, 1), background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
+              background: 'var(--gb-surface-1)',
             }}>
               <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -728,7 +617,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                   style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 13 }} />
                 {query && <IconBtn size="xs" ghost icon={<I.close />} title="Clear" onClick={() => { setQuery(''); try { inputRef.current.focus(); } catch (e) {} }} />}
               </div>
-              <TypeTabs value={type} onChange={onTypeChange} floating={searchBarFloating} />
+              <TypeTabs value={type} onChange={onTypeChange} />
               <Btn variant="secondary" size="lg" icon={<I.filter />} onClick={() => setQbOpen(true)}>Query Builder</Btn>
               <Btn variant="primary" size="lg" icon={<I.search />} onClick={submit}>Search</Btn>
               </div>
@@ -756,11 +645,10 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 onExport={exportSelection}
               />
             </Card>
-          </motion.div>
         </div>
 
-        {/* ── Results — extra top margin so the table sits clear of the
-              search rail at rest instead of butting against it ── */}
+        {/* ── Results — own bounded scroll box so the search bar + sidebar
+              stay put while the table scrolls internally ── */}
         <Card style={{ marginTop: 14 }}>
           <SectionTitle
             icon={<I.history />}
@@ -781,8 +669,11 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             </div>
           ) : (
             <>
-              <div style={{ position: 'relative' }}>
-                <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+              {/* Internal scroll: the table gets its own bounded height and
+                  scrolls here (sticky <thead> pins), so the settled search bar
+                  and Refine sidebar never move. */}
+              <div ref={resultsScrollRef} className="gb-scroll" onScroll={handleResultsScroll}
+                style={{ maxHeight: 'min(560px, calc(80vh - 200px))', minHeight: 240, overflow: 'auto' }}>
                   <table style={tableStyle}>
                     <thead><tr>
                       <Th align="center">
@@ -815,8 +706,6 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                       ))}
                     </tbody>
                   </table>
-                </div>
-              </div>
               {(renderedRows.length < rows.length || rows.length < numFound) && (
                 <div ref={loadMoreRef} style={{
                   height: 38,
@@ -839,6 +728,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 </div>
               )}
               <div style={{ height: 12 }} />
+              </div>
             </>
           )}
         </Card>

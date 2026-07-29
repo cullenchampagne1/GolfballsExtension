@@ -5,8 +5,9 @@
  * A full-page takeover of the native task list that combines the standalone
  * Task List modal with the page — mirroring the CRM Search page (Page 360):
  * the shared DetailPageFrame shell (nav sidebar + top bar), a left Refine
- * sidebar (Status / Priority / Category / Due filters), a sticky/floating
- * search bar, a selectable results table, and a per-row STATUS column that
+ * sidebar (Status / Priority / Category / Due filters), a settled search bar,
+ * a selectable results table with its own internal scroll, and a per-row
+ * STATUS column that
  * slides in the moment you run an email or quick-task action so you can watch
  * each row's outcome. Actions reuse the same transports as the modal
  * (crmTasks writers, submitQuickTask, EmailRunner) so behavior can't drift.
@@ -187,8 +188,7 @@ function TaskListApp({ store }) {
   const [dueSel, setDueSel] = useState(new Set());
   const [sortChain, setSortChain] = useState([{ key: 'dueDate', dir: 'asc' }]);
   const [selected, setSelected] = useState(new Set());
-  const [focused, setFocused] = useState(false);
-  const [floating, setFloating] = useState(false);
+  const [focused, setFocused] = useState(false);   // input focus ring only
 
   const [statusByRow, setStatusByRow] = useState({});   // taskId → { phase, label, detail }
   const [runActive, setRunActive] = useState(false);
@@ -198,6 +198,7 @@ function TaskListApp({ store }) {
   const contactToTasksRef = useRef(new Map());   // contactId → [taskId] for email callbacks
   const inputRef = useRef(null);
   const loadMoreRef = useRef(null);
+  const tableScrollRef = useRef(null);   // the table's internal scroll box
   const gen = useRef(0);
 
   const loadTasks = useCallback(async () => {
@@ -239,7 +240,7 @@ function TaskListApp({ store }) {
     if (!el || renderCount >= visible.length) return undefined;
     const io = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) setRenderCount((c) => Math.min(c + 60, visible.length));
-    }, { root: null, rootMargin: '700px 0px' });
+    }, { root: tableScrollRef.current || null, rootMargin: '700px 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, [renderCount, visible.length]);
@@ -404,14 +405,13 @@ function TaskListApp({ store }) {
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
-  const onScroll = useCallback((e) => { setFloating((Number(e?.currentTarget?.scrollTop) || 0) > 0); }, []);
   const selCount = selectedTasks.length;
 
   return (
     <DataCtx.Provider value={D}>
     <ModalCtx.Provider value={modalHost}>
       <DetailPageFrame
-        currentPage="Task List" ready modalHost={modalHost} onContentScroll={onScroll} hideScrollbar
+        currentPage="Task List" ready modalHost={modalHost} hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Task List" /></TopBar>}
       >
         <div style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 12, alignItems: 'flex-start' }}>
@@ -423,16 +423,11 @@ function TaskListApp({ store }) {
           {/* Same column class as CRM search (24px top padding) so both pages'
               search bars rest at the identical height. */}
           <div className="gbcp-stack gbcp-search-body" style={{ minWidth: 0 }}>
-            {/* Sticky/floating search + action bar — pinned offset matches CRM search */}
-            <div style={{ position: 'sticky', top: SEARCH_RAIL_TOP + 22, zIndex: 20, margin: '0 2px' }}>
-              {/* Glass/tint styling matched to the CRM search rail so both search
-                  bars read the same (corresponding-modal tint). */}
+            {/* Settled, static search + action bar (no sticky/floating) */}
+            <div style={{ margin: '0 2px' }}>
               <Card style={{
-                borderRadius: floating ? 18 : 'var(--gb-r-md)',
                 border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
-                background: 'color-mix(in srgb, var(--gb-surface-1) 82%, transparent)',
-                boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
-                transition: 'border-radius 380ms cubic-bezier(.22,1,.36,1), background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
+                background: 'var(--gb-surface-1)',
               }}>
                 <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -505,9 +500,11 @@ function TaskListApp({ store }) {
                 <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>No tasks match your filters.</div>
               ) : (
                 <>
-                  {/* PAGE scroll, exactly like the CRM search results — no inner
-                      scroll view; the table extends and the page scrolls. */}
-                  <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                  {/* Internal scroll: the table has its own bounded height and
+                      scrolls here (sticky <thead> pins), so the settled search
+                      bar and Refine sidebar never move. */}
+                  <div ref={tableScrollRef} className="gb-scroll"
+                    style={{ maxHeight: 'min(560px, calc(80vh - 200px))', minHeight: 240, overflow: 'auto' }}>
                     <table style={tableStyle}>
                       <thead><tr>
                         {/* Fixed-width checkbox column so header + body line up */}
@@ -527,13 +524,13 @@ function TaskListApp({ store }) {
                         ))}
                       </tbody>
                     </table>
-                  </div>
                   {renderCount < visible.length && (
                     <div ref={loadMoreRef} style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
                       <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
                       Loading more tasks…
                     </div>
                   )}
+                  </div>
                 </>
               )}
               <div style={{ height: 12 }} />
