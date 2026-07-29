@@ -91,16 +91,23 @@ function RecentHistoryApp({ store }) {
   const [tables, setTables] = useState(null);
 
   useEffect(() => {
-    // The takeover is ON Page=279 — the native tables are already in the host
-    // DOM (expanded by the engine), so parse them directly. Brief retry covers
-    // late DataTables init.
-    let tries = 0;
-    const attempt = () => {
-      const parsed = parseRecentHistory(document, window.location.href);
-      if (parsed.length || tries >= 10) setTables(parsed);
-      else { tries += 1; setTimeout(attempt, 300); }
-    };
-    attempt();
+    // The live host DOM only holds the CURRENT DataTables page (10 rows) —
+    // the page's jQuery isn't reachable from the isolated world to expand
+    // them. The server HTML, however, ships EVERY row (DataTables paginates
+    // client-side after load), so re-fetch the page and parse the raw HTML.
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(window.location.href, { credentials: 'include' });
+        const html = await res.text();
+        if (cancelled) return;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const parsed = parseRecentHistory(doc, window.location.href);
+        if (parsed.length) { setTables(parsed); return; }
+      } catch (e) { /* fall through to live DOM */ }
+      if (!cancelled) setTables(parseRecentHistory(document, window.location.href));
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -110,13 +117,17 @@ function RecentHistoryApp({ store }) {
         currentPage="My Recent History" ready modalHost={modalHost} hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="My Recent History" /></TopBar>}
       >
-        {tables == null ? (
-          <Spinner label="Loading history…" />
-        ) : tables.length === 0 ? (
-          <Card><div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>No history tables found on this page.</div></Card>
-        ) : (
-          tables.map((spec) => <HistoryCard key={spec.key} spec={spec} />)
-        )}
+        {/* Same top padding as the search/task pages so the first card doesn't
+            butt against the top bar. */}
+        <div className="gbcp-stack gbcp-search-body" style={{ minWidth: 0, gap: 14 }}>
+          {tables == null ? (
+            <Spinner label="Loading history…" />
+          ) : tables.length === 0 ? (
+            <Card><div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>No history tables found on this page.</div></Card>
+          ) : (
+            tables.map((spec) => <HistoryCard key={spec.key} spec={spec} />)
+          )}
+        </div>
       </DetailPageFrame>
     </ModalCtx.Provider>
     </DataCtx.Provider>
