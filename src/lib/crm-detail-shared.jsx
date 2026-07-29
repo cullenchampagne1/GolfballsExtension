@@ -16,6 +16,8 @@ import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
+import { setSkin, clearSkin, currentSkin } from './theme/skinEngine.js';
+import { REVSTACK_SKIN } from '../themes/revstack.skin.js';
 import { buildAccountPayload, accountUpdateUrl, checkAccountResponse } from './accountUpdate.js';
 import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
 import { opportunityStageTone } from './customPageLayout.js';
@@ -1605,6 +1607,34 @@ export function BackChip({ href, label, title }) {
   );
 }
 
+/* TEMP dev affordance — a floating pill in the custom-page corner that toggles
+   the RevStack skin on/off so the override engine can be eyeballed without the
+   console. Persists via setSkin (so it also reskins modals/settings/popup) and
+   reflects the live skin state. Remove once a real Settings control ships. */
+function SkinToggle() {
+  const [on, setOn] = useState(() => {
+    try { return !!currentSkin().vars['--gb-app-bg']; } catch { return false; }
+  });
+  const toggle = () => {
+    if (on) { clearSkin(); setOn(false); }
+    else { setSkin(REVSTACK_SKIN); setOn(true); }
+  };
+  return (
+    <button onClick={toggle} title="Temp: toggle the RevStack skin"
+      style={{
+        position: 'fixed', left: 16, bottom: 16, zIndex: 500,
+        display: 'inline-flex', alignItems: 'center', gap: 7, height: 32, padding: '0 13px',
+        borderRadius: 999, cursor: 'pointer', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 700,
+        border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+        background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-2)',
+        color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+        boxShadow: '0 6px 20px -6px rgba(0,0,0,.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      }}>
+      <I.bolt size={13} />{on ? 'RevStack skin: ON' : 'RevStack skin: OFF'}
+    </button>
+  );
+}
+
 /**
  * THE page shell every custom detail page renders through: zoomed root,
  * shared stylesheet, sidebar, scrolling content column, sticky top bar,
@@ -1648,6 +1678,7 @@ export function DetailPageFrame({
         display: 'flex', alignItems: 'stretch',
       }}>
         <style>{UI_CSS}</style>
+        <SkinToggle />
         <Sidebar currentLabel={currentLabel} currentPage={currentPage} collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
         <div
           className="gb-scroll"
