@@ -23,7 +23,7 @@ import { completeTaskById, getTaskContactId } from '../lib/crmTasks.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
-  Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, SectionTitle,
+  Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, ScrollArea, SectionTitle,
   Spinner, Tag, TaskCheckbox, Td, Th, fmtDate, goUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
@@ -397,9 +397,10 @@ function TaskListApp({ store }) {
                 <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>No tasks match your filters.</div>
               ) : (
                 <>
-                  {/* Page scroll (not an inner box) — matches the CRM search
-                      design; rows lazy-render as the page nears the sentinel. */}
-                  <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                  {/* Tall scroll region with a TOP fade mask so rows dissolve as
+                      they scroll up under the floating search bar (the opacity
+                      mask you asked for); onScroll drives the float + lazy load. */}
+                  <ScrollArea topFade onScroll={onScroll} max={99999} style={{ maxHeight: 'calc(76vh - 60px)', overflowX: 'auto' }}>
                     <table style={tableStyle}>
                       <thead><tr>
                         <Th align="center"><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
@@ -417,13 +418,13 @@ function TaskListApp({ store }) {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  {renderCount < visible.length && (
-                    <div ref={loadMoreRef} style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
-                      <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
-                      Loading more tasks…
-                    </div>
-                  )}
+                    {renderCount < visible.length && (
+                      <div ref={loadMoreRef} style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
+                        <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+                        Loading more tasks…
+                      </div>
+                    )}
+                  </ScrollArea>
                 </>
               )}
               <div style={{ height: 12 }} />

@@ -482,16 +482,16 @@ export const UI_CSS =
   '  .gbcp-root *, .gbcp-root *::before, .gbcp-root *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }' +
   '}';
 
-export function ScrollArea({ max = 380, children, style }) {
-  // Bottom-only fade. The TOP fade used to soften the first 9px of the
-  // scroller — but a table's sticky <thead> pins there, so the mask faded the
-  // header's top edge into the card behind it, reading as an out-of-place
-  // glow/shadow (the activity feed avoids this by rendering its header OUTSIDE
-  // the scroll). Keeping only the bottom fade makes every table header crisp
-  // and consistent with the activity feed.
-  const edgeMask = 'linear-gradient(to bottom, #000 0, #000 calc(100% - 9px), transparent 100%)';
+export function ScrollArea({ max = 380, children, style, topFade = false, onScroll }) {
+  // Bottom-only fade by default (a sticky <thead> pinned at the top would read
+  // as a glow under a top fade — the detail-page tables rely on this). Pass
+  // `topFade` for the search/task result lists, where the content should fade
+  // out as it scrolls up under the floating search bar.
+  const edgeMask = topFade
+    ? 'linear-gradient(to bottom, transparent 0, #000 26px, #000 calc(100% - 12px), transparent 100%)'
+    : 'linear-gradient(to bottom, #000 0, #000 calc(100% - 9px), transparent 100%)';
   return (
-    <div className="gb-scroll" style={{
+    <div className="gb-scroll" onScroll={onScroll} style={{
       maxHeight: max, overflowY: 'auto', overflowX: 'hidden',
       WebkitMaskImage: edgeMask, maskImage: edgeMask,
       WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
