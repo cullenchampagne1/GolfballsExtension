@@ -128,7 +128,7 @@ export function Btn({ variant = 'secondary', size = 'md', icon, iconRight, child
   );
 }
 
-export function IconBtn({ icon, size = 'md', danger, ghost, active, style, onClick, title }) {
+export function IconBtn({ icon, size = 'md', danger, ghost, active, disabled, style, onClick, title }) {
   const px = { xs: 22, sm: 26, md: 30, lg: 36 }[size];
   const ic = { xs: 11, sm: 12, md: 14, lg: 16 }[size];
   const pal = danger
@@ -140,13 +140,13 @@ export function IconBtn({ icon, size = 'md', danger, ghost, active, style, onCli
     : { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)', bd: 'var(--gb-border-default)' };
   const cls = danger ? 'gb-ibtn-danger' : active ? '' : ghost ? 'gb-ibtn-ghost' : 'gb-ibtn-default';
   return (
-    <button title={title} onClick={onClick} className={cls}
+    <button title={title} onClick={onClick} className={cls} disabled={disabled}
       style={{
         ...ARMOR,
         width: px, height: px, borderRadius: 'var(--gb-r-sm)',
         background: pal.bg, color: pal.fg, border: `1px solid ${pal.bd}`,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', flexShrink: 0, padding: 0,
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .5 : 1, flexShrink: 0, padding: 0,
         transition: 'background-color var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim), transform var(--gb-anim)', ...style,
       }}>
       {React.cloneElement(icon, { size: ic })}
@@ -409,6 +409,9 @@ export const UI_CSS =
   '.gbcp-stack { display:flex; flex-direction:column; gap:var(--gbcp-gap); min-width:0; }' +
   '.gbcp-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--gbcp-gap); }' +
   '.gbcp-aside { display:flex; flex-direction:column; gap:var(--gbcp-gap); position:sticky; top:58px; }' +
+  '.gbcp-list-head, .gbcp-activity-row { display:grid; grid-template-columns:92px minmax(0,1fr) 132px 132px; align-items:center; column-gap:12px; }' +
+  '.gbcp-list-head { padding:6px 12px; color:var(--gb-text-muted); background:var(--gb-surface-2); border-bottom:1px solid var(--gb-border-default); font-size:9px; font-weight:700; letter-spacing:.65px; text-transform:uppercase; }' +
+  '.gbcp-activity-mobile-meta { display:none; }' +
   '@media (max-width: 1060px) {' +
   '  .gbcp-page-grid { grid-template-columns:minmax(0,1fr); }' +
   '  .gbcp-search-grid { grid-template-columns:minmax(0,1fr) !important; }' +
@@ -416,6 +419,9 @@ export const UI_CSS =
   '  .gbcp-aside { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }' +
   '  .gbcp-hero-grid { grid-template-columns:124px minmax(0,1fr) !important; }' +
   '  .gbcp-hero-actions { grid-column:1 / -1; border-left:0 !important; border-top:1px solid var(--gb-border-subtle); display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }' +
+  '  .gbcp-list-head, .gbcp-activity-row { grid-template-columns:82px minmax(0,1fr) 116px; }' +
+  '  .gbcp-list-head > :nth-child(3), .gbcp-activity-owner { display:none !important; }' +
+  '  .gbcp-activity-mobile-meta { display:flex; }' +
   '}' +
   '@media (max-width: 720px) {' +
   '  .gbcp-pair, .gbcp-aside { grid-template-columns:minmax(0,1fr); }' +
@@ -423,6 +429,9 @@ export const UI_CSS =
   '  .gbcp-hero-grid { grid-template-columns:minmax(0,1fr) !important; }' +
   '  .gbcp-hero-avatar-cell { display:none !important; }' +
   '  .gbcp-hero-actions { grid-template-columns:minmax(0,1fr); }' +
+  '  .gbcp-list-head { display:none; }' +
+  '  .gbcp-activity-row { grid-template-columns:72px minmax(0,1fr); row-gap:3px; }' +
+  '  .gbcp-activity-date { grid-column:2; justify-self:start !important; }' +
   '}' +
   /* Thin themed scrollbar for the capped-height panel scroll areas. */
   '.gb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }' +
@@ -901,7 +910,7 @@ export function LazySection({ children, minHeight = 420 }) {
 /* The bolt quick-add input row (input + Add button). */
 export function QuickAddInput({ value, onChange, onSubmit, placeholder = 'Quick add a task… (Enter to save)', disabled, extra }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6 }}>
       <div style={{
         flex: 1, height: 30, borderRadius: 'var(--gb-r-md)',
         background: 'var(--gb-fill-inverse-medium)',

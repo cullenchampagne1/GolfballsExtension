@@ -1325,6 +1325,15 @@ export function OpenTaskRow({ t }) {
   };
   const done = state === 'done' || state === 'leaving';
   const leaving = state === 'leaving';
+  const priorityTone = priTone(t.priority);
+  const due = toDateInputAny(t.dueDate);
+  const dueTime = due ? new Date(`${due}T12:00:00`).getTime() : NaN;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dueColor = Number.isFinite(dueTime) && dueTime < today.getTime()
+    ? 'var(--gb-error-fg)'
+    : Number.isFinite(dueTime) && dueTime < today.getTime() + (7 * 86400000)
+      ? 'var(--gb-warning-fg)'
+      : 'var(--gb-text-secondary)';
   return (
     <tr style={{
       ...trStyle,
@@ -1333,16 +1342,24 @@ export function OpenTaskRow({ t }) {
       transition: 'opacity .4s ease, transform .4s ease',
     }}>
       <Td>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <TaskCheckbox tone="success" done={done} disabled={state !== 'idle'} onClick={complete} title="Complete task" />
-          <span style={{ color: 'var(--gb-text-primary)', fontWeight: 500, textDecoration: done ? 'line-through' : 'none' }}>{t.subject}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: 'var(--gb-text-primary)', fontWeight: 600, lineHeight: 1.25, textDecoration: done ? 'line-through' : 'none' }}>{t.subject}</div>
+            {t.id && <div style={{ marginTop: 2, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', fontSize: 9.5 }}>#{t.id}</div>}
+          </div>
         </div>
       </Td>
       <Td muted>{t.category}</Td>
-      <Td align="center"><Tag tone={priTone(t.priority)} size="xs">{t.priority || DASH}</Tag></Td>
-      <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{fmtDate(t.dueDate)}</span></Td>
+      <Td>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--gb-text-tertiary)', fontSize: 10.5 }}>
+          <Dot tone={priorityTone} size={5} />{t.priority || DASH}
+        </span>
+      </Td>
+      <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
+      <Td align="right" mono><span style={{ color: dueColor, fontWeight: 600 }}>{fmtDate(t.dueDate)}</span></Td>
       <Td align="right">
-        <Btn variant="ghost" size="xs" icon={<I.edit />} disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)}>Edit</Btn>
+        <IconBtn ghost size="xs" icon={<I.edit />} title="Edit task" disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)} />
       </Td>
     </tr>
   );
@@ -1643,43 +1660,42 @@ export function ActivityRow({ a, last, onDelete }) {
   const clickable = !!a.id && !isNote;
   return (
     <div
-      className={isNote ? 'gb-actrow-note' : 'gb-actrow'}
+      className={`gbcp-activity-row ${isNote ? 'gb-actrow-note' : 'gb-actrow'}`}
       onClick={clickable ? () => openModal(<ActivityDetailModal activityId={a.id} />) : undefined}
       title={clickable ? 'View activity detail' : (isNote ? 'Personal note (local)' : undefined)}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 12,
-        padding: '11px 18px',
+        padding: '7px 12px',
         cursor: clickable ? 'pointer' : 'default',
         borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)',
-        borderLeft: isNote ? '3px solid var(--gb-warning-tint-border)' : '3px solid transparent',
+        borderLeft: isNote ? '2px solid var(--gb-warning-fg)' : '2px solid transparent',
         background: isNote ? 'var(--gb-warning-tint-soft)' : 'transparent',
         transition: 'background var(--gb-anim)',
       }}>
-      <span style={{
-        width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginTop: 1,
-        background: `var(--gb-${meta.tone}-tint-medium)`,
-        border: `1px solid var(--gb-${meta.tone}-tint-border)`,
-        color: `var(--gb-${meta.tone}-fg)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>{React.cloneElement(meta.icon, { size: 13 })}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, color: `var(--gb-${meta.tone}-fg)`, fontSize: 10.5, fontWeight: 700 }}>
+        <Dot tone={meta.tone} size={5} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.category || meta.key}</span>
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: 'var(--gb-text-primary)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <div style={{ fontSize: 11.5, color: 'var(--gb-text-primary)', fontWeight: 550, lineHeight: 1.35, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {chat ? (
             <>
-              <span style={{ display: 'block', fontWeight: 700 }}>Live Chat · {chat.count} message{chat.count === 1 ? '' : 's'}</span>
-              <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.last.name}: {chat.last.body}</span>
+              <span style={{ fontWeight: 700 }}>Live Chat</span>
+              <span style={{ color: 'var(--gb-text-muted)' }}> · {chat.count} message{chat.count === 1 ? '' : 's'} · {chat.last.name}: {chat.last.body}</span>
             </>
           ) : (a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>)}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
-          {a.category && <Tag tone={meta.tone} size="xs">{a.category}</Tag>}
-          {chat && <Tag tone="success" size="xs">Transcript</Tag>}
-          {a.direction && <Tag tone="neutral" size="xs">{a.direction}</Tag>}
-          {a.employee && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 600 }}>{a.employee}</span>}
+        <div className="gbcp-activity-mobile-meta" style={{ alignItems: 'center', gap: 5, marginTop: 3, color: 'var(--gb-text-muted)', fontSize: 9.5 }}>
+          {a.employee && <span>{a.employee}</span>}
+          {a.employee && a.direction && <span>·</span>}
+          {a.direction && <span>{a.direction}</span>}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginTop: 3 }}>
-        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{fmtDateTime(a.date)}</span>
+      <div className="gbcp-activity-owner" style={{ minWidth: 0, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
+        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{a.employee || DASH}</div>
+        {a.direction && <div style={{ marginTop: 2, fontSize: 9.5 }}>{a.direction}</div>}
+      </div>
+      <div className="gbcp-activity-date" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, minWidth: 0 }}>
+        <span style={{ fontSize: 10, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{fmtDateTime(a.date)}</span>
         {isNote && onDelete && (
           <button className="gb-actrow-del" onClick={(e) => { e.stopPropagation(); onDelete(a.noteId); }} title="Delete note"
             style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', color: 'var(--gb-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, lineHeight: 1 }}>×</button>
@@ -1718,6 +1734,9 @@ export function ActivityPanel({ extraRows = [], onAddNote, onDeleteNote }) {
           </div>
         }
       />
+      <div className="gbcp-list-head" aria-hidden="true">
+        <span>Type</span><span>Activity</span><span>Owner</span><span style={{ textAlign: 'right' }}>Date</span>
+      </div>
       <ScrollArea max={460}>
         {/* key by filter → the list fades/slides in on each filter change */}
         <div key={filter} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
@@ -1814,16 +1833,16 @@ export function TasksPanel() {
     finally { setAdding(false); }
   };
   return (
-    <div className="gbcp-pair">
+    <div className="gbcp-stack">
       <Card>
         <SectionTitle
           icon={<I.task />} title="Open Tasks" count={D.openTasks.length}
           right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={openComposer}>New task</Btn>}
         />
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-faint)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>
-              {manage ? 'Manage — click to edit · × to remove' : 'Quick create — one click adds a task'}
+              {manage ? 'Manage quick actions' : 'Quick create'}
             </span>
             {qt.list.length > 0 && <IconBtn size="xs" ghost active={manage} icon={<I.edit />} title="Manage buttons" onClick={() => setManage((m) => !m)} />}
           </div>
@@ -1846,15 +1865,16 @@ export function TasksPanel() {
         <ScrollArea max={320}>
         <table style={tableStyle}>
           <thead><tr>
-            <Th>Subject</Th>
+            <Th>Task</Th>
             <Th>Category</Th>
-            <Th align="center">Pri</Th>
+            <Th>Priority</Th>
+            <Th align="right">Live</Th>
             <Th align="right">Due</Th>
             <Th></Th>
           </tr></thead>
           <tbody>
             {D.openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
-            {D.openTasks.length === 0 && <EmptyRow colSpan={5} label="No open tasks." />}
+            {D.openTasks.length === 0 && <EmptyRow colSpan={6} label="No open tasks." />}
           </tbody>
         </table>
         </ScrollArea>
@@ -1865,9 +1885,11 @@ export function TasksPanel() {
         <ScrollArea max={320}>
         <table style={tableStyle}>
           <thead><tr>
-            <Th>Subject</Th>
+            <Th>Task</Th>
             <Th>Category</Th>
-            <Th align="right">Completed</Th>
+            <Th>Priority</Th>
+            <Th align="right">Live</Th>
+            <Th align="right">Due</Th>
           </tr></thead>
           <tbody>
             {D.doneTasks.map((t, i) => (
@@ -1875,14 +1897,23 @@ export function TasksPanel() {
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <TaskCheckbox done />
-                    <span style={{ color: 'var(--gb-text-muted)', textDecoration: 'line-through', fontWeight: 500 }}>{t.subject}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: 'var(--gb-text-muted)', textDecoration: 'line-through', fontWeight: 500 }}>{t.subject}</div>
+                      {t.id && <div style={{ marginTop: 2, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', fontSize: 9.5 }}>#{t.id}</div>}
+                    </div>
                   </div>
                 </Td>
                 <Td muted>{t.category}</Td>
+                <Td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
+                    <Dot tone={priTone(t.priority)} size={5} />{t.priority || DASH}
+                  </span>
+                </Td>
+                <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
                 <Td align="right" mono muted>{fmtDate(t.dueDate)}</Td>
               </tr>
             ))}
-            {D.doneTasks.length === 0 && <EmptyRow colSpan={3} label="No completed tasks." />}
+            {D.doneTasks.length === 0 && <EmptyRow colSpan={5} label="No completed tasks." />}
           </tbody>
         </table>
         </ScrollArea>

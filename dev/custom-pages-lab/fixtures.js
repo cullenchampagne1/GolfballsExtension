@@ -123,6 +123,7 @@ function doneTasks(count) {
     subject: ['Completed proof review', 'Confirmed shipping address', 'Logged quarterly reach out', 'Closed prior-year follow-up'][index % 4],
     category: ['Artwork', 'Order', 'Call', 'Follow Up'][index % 4],
     priority: 'Med',
+    liveDate: isoDaysAgo(7 + index * 3),
     dueDate: isoDaysAgo(4 + index * 3),
     status: 'Complete',
   }));
