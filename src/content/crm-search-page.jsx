@@ -44,11 +44,14 @@ const TYPE_OPTS = [
 ];
 
 const SEARCH_RAIL_TOP = 74;
-// Drop the search rail to the first Refine filter block (past the "Refine"
-// header). ALIGN = extra pinned-top offset; REST_ALIGN = extra flow margin
-// (smaller because .gbcp-search-body already adds 24px padding-top).
-const SEARCH_RAIL_ALIGN = 34;
-const SEARCH_RAIL_REST_ALIGN = 10;
+// Drop the search rail to the first Refine filter block (past the fixed-height
+// "Refine" header). ALIGN = extra pinned-top offset; REST_ALIGN = extra flow
+// margin (smaller because .gbcp-search-body already adds 24px padding-top). The
+// Refine header is a fixed 24px (REFINE_HEADER_H) so this alignment stays
+// consistent whether or not the Clear button is showing.
+const REFINE_HEADER_H = 24;
+const SEARCH_RAIL_ALIGN = 22;
+const SEARCH_RAIL_REST_ALIGN = 0;
 const SEARCH_EXIT_DELAY_MS = 320;
 const SEARCH_MOTION_SECONDS = 0.48;
 
@@ -294,7 +297,7 @@ function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
   const anySel = Object.values(selected).some((s) => s.size > 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: SEARCH_RAIL_TOP }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px', height: REFINE_HEADER_H, boxSizing: 'border-box' }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Refine</span>
         {anySel && <Btn variant="ghost" size="xs" icon={<I.close />} onClick={onClearAll}>Clear</Btn>}
       </div>
@@ -394,7 +397,10 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
   const searchRailRef = useRef(null);
-  const loadMoreRef = useRef(null);   // progressive-render sentinel
+  const loadMoreRef = useRef(null);   // progressive-render + load-more sentinel
+  const lastSearchRef = useRef({ q: '', t: 'all', qb: null });
+  const loadingMoreRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const gen = useRef(0);   // ignore stale responses
 
   const runSearch = useCallback(async (q, t, qb) => {
@@ -410,6 +416,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     }
     setSearchBarVisible(true);
     setSearched(true);
+    lastSearchRef.current = { q, t, qb };
     try {
       const { docs, numFound, facets: fc } = await searchClient({
         query: q, type: t, solrFq: qb?.solrFq || '',
@@ -431,6 +438,29 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       if (gen.current === g) setLoading(false);
     }
   }, [searchClient]);
+
+  /* Server pagination: the initial search only fetches the first SOLR_ROWS.
+     When the reader reaches the end of the fetched set and the server has more
+     (rows.length < numFound), fetch the next page (start = rows.length) with the
+     SAME query/facets and append. Guards against overlap + a superseding search. */
+  const fetchMore = useCallback(async () => {
+    if (loadingMoreRef.current) return;
+    if (rows.length === 0 || rows.length >= numFound) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const g = gen.current;
+    try {
+      const { q, t, qb } = lastSearchRef.current;
+      const { docs } = await searchClient({
+        query: q, type: t, solrFq: qb?.solrFq || '',
+        filters: facetFilters(selRef.current),
+        start: rows.length, rows: SOLR_ROWS, facet: false,
+      });
+      if (gen.current !== g) return;                 // a new search superseded us
+      setRows((cur) => cur.concat(docs));
+    } catch (e) { /* keep what we have */ }
+    finally { loadingMoreRef.current = false; if (gen.current === g) setLoadingMore(false); }
+  }, [rows.length, numFound, searchClient]);
 
   // Toggle a facet value and re-run (selRef gives runSearch the fresh set).
   const toggleFacet = (field, value) => {
@@ -549,15 +579,22 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
      on short result sets) reveal the next batch until every loaded row shows. */
   useEffect(() => {
     const el = loadMoreRef.current;
-    if (!el || renderCount >= rows.length) return undefined;
+    // Sentinel is present while there are more rows to REVEAL (client) or more
+    // to FETCH from the server (rows.length < numFound). Reveal first, then page.
+    const moreToReveal = renderCount < rows.length;
+    const moreOnServer = rows.length > 0 && rows.length < numFound;
+    if (!el || (!moreToReveal && !moreOnServer)) return undefined;
     const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      if (renderCount < rows.length) {
         setRenderCount((current) => nextProgressiveResultCount({ total: rows.length, current, nearEnd: true }));
+      } else {
+        fetchMore();   // all fetched rows shown → pull the next server page
       }
     }, { root: null, rootMargin: '600px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [renderCount, rows.length]);
+  }, [renderCount, rows.length, numFound, fetchMore]);
   const openCampaign = useCallback(() => {
     const audience = selectedResults
       .map((row) => crmRowToCampaignContact(row, recUrl(row)))
@@ -759,7 +796,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                   </table>
                 </div>
               </div>
-              {renderedRows.length < rows.length && (
+              {(renderedRows.length < rows.length || rows.length < numFound) && (
                 <div ref={loadMoreRef} style={{
                   height: 38,
                   display: 'flex',
@@ -777,7 +814,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                     borderTopColor: 'var(--gb-brand-label)',
                     animation: 'gb-spin .75s linear infinite',
                   }} />
-                  Loading more records…
+                  {rows.length < numFound ? `Loading more of ${numFound.toLocaleString()}…` : 'Loading more records…'}
                 </div>
               )}
               <div style={{ height: 12 }} />

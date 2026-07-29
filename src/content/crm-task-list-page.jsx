@@ -20,11 +20,10 @@ import {
   parseTasksFromHtml, distinctCategories, filterTasks, sortTasks, dueBucket, looksLikeLoginShell,
 } from '../lib/taskListModel.js';
 import { completeTaskById, getTaskContactId } from '../lib/crmTasks.js';
-import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
-  Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, ScrollArea, SectionTitle,
+  Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, SectionTitle,
   Spinner, Tag, TaskCheckbox, Td, Th, fmtDate, goUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
@@ -167,8 +166,10 @@ function TaskListApp({ store }) {
   const [runActive, setRunActive] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
+  const [renderCount, setRenderCount] = useState(50);   // progressive/lazy DOM render
   const contactToTasksRef = useRef(new Map());   // contactId → [taskId] for email callbacks
   const inputRef = useRef(null);
+  const loadMoreRef = useRef(null);
   const gen = useRef(0);
 
   const loadTasks = useCallback(async () => {
@@ -192,6 +193,21 @@ function TaskListApp({ store }) {
     () => sortTasks(filterTasks(tasks, { query, status: statusFilter, priority: prioritySel, category: categorySel, due: dueSel }, today), sortChain),
     [tasks, query, statusFilter, prioritySel, categorySel, dueSel, sortChain, today],
   );
+  // Lazy DOM render — only mount `renderCount` rows and reveal more as the page
+  // scroll nears the sentinel (mirrors the modal's virtualized list so 1000s of
+  // task rows don't all mount at once). Reset the window when the result set
+  // changes.
+  const renderedTasks = useMemo(() => visible.slice(0, renderCount), [visible, renderCount]);
+  useEffect(() => { setRenderCount(50); }, [query, statusFilter, prioritySel, categorySel, dueSel, sortChain, tasks]);
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el || renderCount >= visible.length) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setRenderCount((c) => Math.min(c + 60, visible.length));
+    }, { root: null, rootMargin: '700px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [renderCount, visible.length]);
 
   // Facet counts (computed on the status-filtered set so numbers make sense).
   const counts = useMemo(() => {
@@ -267,29 +283,25 @@ function TaskListApp({ store }) {
     loadTasks();
   };
 
-  // ── Quick task on selected (create a follow-up per task's contact) ─
+  // ── Quick task → open the composer POPUP (push-out days, category, etc.)
+  //    for the selected task's contact, instead of silently creating one. ─
   const quickTaskSelected = async () => {
     const rows = selectedTasks;
-    if (!rows.length) { gbToast('Select tasks first', 'info'); return; }
-    let employeeId = '';
+    if (!rows.length) { gbToast('Select a task first', 'info'); return; }
+    if (typeof window.__gbShowQuickTaskModal !== 'function') { gbToast('Quick task composer not loaded', 'error'); return; }
+    const t = rows[0];
+    if (rows.length > 1) gbToast('Quick task opens for the first selected task’s contact', 'info');
+    const contactId = contactIdFromUrl(t.contactUrl) || await getTaskContactId(t.id);
+    if (!contactId) { gbToast('No contact on that task', 'error'); return; }
+    setRowStatus(t.id, { phase: 'running', label: 'Composing…' });
     try {
-      employeeId = await new Promise((r) => {
-        if (!chrome?.storage?.local?.get) { r(''); return; }
-        chrome.storage.local.get('gbEmployeeId', (o) => r(o?.gbEmployeeId || ''));
+      window.__gbShowQuickTaskModal({
+        contactId,
+        contactName: t.contact,
+        autoCompose: true,   // land straight on the builder with push-out/options
+        onCreated: () => { setRowStatus(t.id, { phase: 'done', label: 'Task added' }); loadTasks(); },
       });
-    } catch {}
-    setRunActive(true);
-    rows.forEach((t) => setRowStatus(t.id, { phase: 'queued' }));
-    for (const t of rows) {
-      setRowStatus(t.id, { phase: 'running', label: 'Adding…' });
-      try {
-        const contactId = contactIdFromUrl(t.contactUrl) || await getTaskContactId(t.id);
-        const res = await submitQuickTask({ template: { subject: `Follow up: ${t.subject}`.slice(0, 120), body: '', daysOut: 3 }, context: { contactId, employeeId } });
-        if (!res?.ok) throw new Error(res?.error || 'Create task failed');
-        setRowStatus(t.id, { phase: 'done', label: 'Task added' });
-      } catch (e) { setRowStatus(t.id, { phase: 'error', label: 'Failed', detail: e?.message }); }
-    }
-    setRunActive(false);
+    } catch (e) { setRowStatus(t.id, { phase: 'error', label: 'Failed', detail: e?.message }); }
   };
 
   const exportCsv = () => {
@@ -377,26 +389,36 @@ function TaskListApp({ store }) {
               ) : visible.length === 0 ? (
                 <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>No tasks match your filters.</div>
               ) : (
-                <ScrollArea max={640}>
-                  <table style={tableStyle}>
-                    <thead><tr>
-                      <Th align="center"><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
-                      <Th align="center">Type</Th>
-                      <SortTh label="Account" k="account" chain={sortChain} onSort={onSort} />
-                      <SortTh label="Contact" k="contact" chain={sortChain} onSort={onSort} />
-                      <SortTh label="Due" k="dueDate" chain={sortChain} onSort={onSort} align="left" />
-                      <SortTh label="Category" k="category" chain={sortChain} onSort={onSort} />
-                      <SortTh label="Priority" k="priority" chain={sortChain} onSort={onSort} />
-                      <SortTh label="Subject" k="subject" chain={sortChain} onSort={onSort} />
-                      {showStatus && <Th>Status</Th>}
-                    </tr></thead>
-                    <tbody>
-                      {visible.map((t) => (
-                        <TaskRow key={t.id} t={t} selected={selected.has(t.id)} onToggle={() => toggleRow(t.id)} showStatus={showStatus} status={statusByRow[t.id]} />
-                      ))}
-                    </tbody>
-                  </table>
-                </ScrollArea>
+                <>
+                  {/* Page scroll (not an inner box) — matches the CRM search
+                      design; rows lazy-render as the page nears the sentinel. */}
+                  <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                    <table style={tableStyle}>
+                      <thead><tr>
+                        <Th align="center"><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
+                        <Th align="center">Type</Th>
+                        <SortTh label="Account" k="account" chain={sortChain} onSort={onSort} />
+                        <SortTh label="Contact" k="contact" chain={sortChain} onSort={onSort} />
+                        <SortTh label="Due" k="dueDate" chain={sortChain} onSort={onSort} align="left" />
+                        <SortTh label="Category" k="category" chain={sortChain} onSort={onSort} />
+                        <SortTh label="Priority" k="priority" chain={sortChain} onSort={onSort} />
+                        <SortTh label="Subject" k="subject" chain={sortChain} onSort={onSort} />
+                        {showStatus && <Th>Status</Th>}
+                      </tr></thead>
+                      <tbody>
+                        {renderedTasks.map((t) => (
+                          <TaskRow key={t.id} t={t} selected={selected.has(t.id)} onToggle={() => toggleRow(t.id)} showStatus={showStatus} status={statusByRow[t.id]} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderCount < visible.length && (
+                    <div ref={loadMoreRef} style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+                      Loading more tasks…
+                    </div>
+                  )}
+                </>
               )}
               <div style={{ height: 12 }} />
             </Card>
