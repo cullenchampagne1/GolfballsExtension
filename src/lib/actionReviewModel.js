@@ -228,6 +228,41 @@ export function buildActionReviewPostFields(formState, {
   };
 }
 
+function ensureActionReviewFormControl(doc, form, name) {
+  const existing = Array.from(form.querySelectorAll('[name]'))
+    .find((control) => control.name === name);
+  if (existing) return existing;
+
+  const input = doc.createElement('input');
+  input.type = 'hidden';
+  input.name = name;
+  form.appendChild(input);
+  return input;
+}
+
+/**
+ * Mutate the live WebForms form exactly as __doPostBack('GetSalesRep', ...)
+ * does. Submitting this existing form preserves the CRM's authenticated page
+ * navigation; fetching the action URL can instead return a login-shaped shell.
+ */
+export function prepareActionReviewPostback(doc, filters = {}) {
+  const form = doc?.querySelector?.('form');
+  if (!form) throw new Error('The native Action Review form is unavailable.');
+
+  const fields = buildActionReviewPostFields(null, filters);
+  [
+    '__EVENTTARGET',
+    '__EVENTARGUMENT',
+    'ctl00$SalesRep',
+    'ctl00$DateOption',
+    'ctl00$DateTime',
+    'ctl00$SecondDateTime',
+  ].forEach((name) => {
+    ensureActionReviewFormControl(doc, form, name).value = fields[name];
+  });
+  return form;
+}
+
 export function filterActionReviewTasks(tasks, { query = '', status = 'all' } = {}) {
   const needle = String(query || '').trim().toLowerCase();
   const statusNeedle = String(status || 'all').trim().toLowerCase();

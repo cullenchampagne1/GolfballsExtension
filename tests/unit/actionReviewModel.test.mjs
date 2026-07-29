@@ -8,6 +8,7 @@ import {
   isActionReviewDocument,
   paginateActionReviewRows,
   parseActionReviewDocument,
+  prepareActionReviewPostback,
   toIsoActionReviewDate,
   toWebFormsActionReviewDate,
 } from '../../src/lib/actionReviewModel.js';
@@ -185,6 +186,29 @@ describe('Action Review · WebForms date and postback contract', () => {
     assert.equal(fields['ctl00$SalesRep'], '2370');
     assert.equal(fields['ctl00$DateTime'], '7/29/2026');
     assert.equal(fields.__VIEWSTATE, 'view-state');
+  });
+
+  it('prepares the authenticated native form instead of depending on a fetch response', () => {
+    const doc = documentFrom();
+    const form = prepareActionReviewPostback(doc, {
+      rep: '1114',
+      dateOption: 'BETWEEN',
+      date1: '2026-07-29',
+      date2: '2026-07-31',
+    });
+
+    assert.equal(form, doc.querySelector('form'));
+    assert.equal(form.querySelector('[name="__EVENTTARGET"]').value, 'GetSalesRep');
+    assert.deepEqual(JSON.parse(form.querySelector('[name="__EVENTARGUMENT"]').value), {
+      SalesRep: '1114',
+      DateOption: 'BETWEEN',
+      DateTime: '7/29/2026',
+      SecondDateTime: '7/31/2026',
+    });
+    assert.equal(doc.querySelector('#SalesRep').value, '1114');
+    assert.equal(doc.querySelector('#DateOption').value, 'BETWEEN');
+    assert.equal(doc.querySelector('#DateTime').value, '7/29/2026');
+    assert.equal(doc.querySelector('#SecondDateTime').value, '7/31/2026');
   });
 });
 

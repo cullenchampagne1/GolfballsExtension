@@ -19,11 +19,11 @@ import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import {
-  buildActionReviewPostFields,
   filterActionReviewTasks,
   isActionReviewDocument,
   paginateActionReviewRows,
   parseActionReviewDocument,
+  prepareActionReviewPostback,
   toIsoActionReviewDate,
 } from '../lib/actionReviewModel.js';
 import { Dropdown } from '../ui/components/Dropdown.jsx';
@@ -317,40 +317,6 @@ function normalizeReview(review) {
   };
 }
 
-function actionReviewUrl(review) {
-  try {
-    const candidate = new URL(review?.formAction || window.location.href, window.location.href);
-    return candidate.origin === window.location.origin ? candidate.href : window.location.href;
-  } catch (error) {
-    return window.location.href;
-  }
-}
-
-async function readActionReviewResponse(response) {
-  if (!response.ok) throw new Error(`Action Review returned HTTP ${response.status}.`);
-  const html = await response.text();
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  if (!isActionReviewDocument(doc)) {
-    throw new Error('The CRM returned a sign-in or incomplete page instead of Action Review.');
-  }
-  return normalizeReview(parseActionReviewDocument(doc));
-}
-
-async function requestActionReview({ type, review, filters }) {
-  const url = actionReviewUrl(review);
-  if (type !== 'filter') {
-    return readActionReviewResponse(await fetch(url, { credentials: 'include' }));
-  }
-
-  const fields = buildActionReviewPostFields(review?.formState, filters);
-  return readActionReviewResponse(await fetch(url, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-    body: new URLSearchParams(fields).toString(),
-  }));
-}
-
 function dataTableRowCount(selector) {
   try {
     const jq = window.jQuery;
@@ -361,14 +327,56 @@ function dataTableRowCount(selector) {
   }
 }
 
-function readCompleteLiveReview() {
+function liveActionReviewReady() {
   if (!isActionReviewDocument(document)) return null;
-  const review = normalizeReview(parseActionReviewDocument(document));
   const expectedTasks = dataTableRowCount('#TableTasks');
   const expectedActivity = dataTableRowCount('#ActivityTable');
-  if (expectedTasks != null && review.tasks.length < expectedTasks) return null;
-  if (expectedActivity != null && review.activities.length < expectedActivity) return null;
-  return review;
+  const taskRows = document.querySelectorAll('#TableTasks tr[id^="taskrow_"]').length;
+  const activityRows = document.querySelectorAll('#ActivityTable tbody tr').length;
+  if (expectedTasks != null && taskRows < expectedTasks) return false;
+  if (expectedActivity != null && activityRows < expectedActivity) return false;
+  return true;
+}
+
+function readCompleteLiveReview() {
+  if (!liveActionReviewReady()) return null;
+  return normalizeReview(parseActionReviewDocument(document));
+}
+
+function waitForLiveActionReview(timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const poll = () => {
+      const review = readCompleteLiveReview();
+      if (review) {
+        resolve(review);
+        return;
+      }
+      if (Date.now() < deadline) {
+        window.setTimeout(poll, 125);
+        return;
+      }
+
+      // A very large DataTable may still be finishing its "show all" draw.
+      // Prefer the usable native rows already present over replacing the
+      // authenticated page with a network error.
+      if (isActionReviewDocument(document)) {
+        resolve(normalizeReview(parseActionReviewDocument(document)));
+        return;
+      }
+      reject(new Error('The native Action Review tables did not become available.'));
+    };
+    poll();
+  });
+}
+
+function submitNativeActionReview(filters) {
+  const form = prepareActionReviewPostback(document, filters);
+  const nativeSubmit = window.HTMLFormElement?.prototype?.submit;
+  if (typeof nativeSubmit !== 'function') {
+    throw new Error('The native Action Review form cannot be submitted.');
+  }
+  nativeSubmit.call(form);
 }
 
 function FilterField({ label, className = '', children }) {
@@ -745,7 +753,7 @@ function TaskSection({
 export function ActionReviewApp({
   store,
   initialReview = null,
-  reviewClient = requestActionReview,
+  reviewClient = null,
   actionsEnabled = true,
 }) {
   const [D] = useDetailData(store);
@@ -778,8 +786,7 @@ export function ActionReviewApp({
     setLoading(true);
     setError('');
     try {
-      const live = !initialReview ? readCompleteLiveReview() : null;
-      const next = live || preparedInitial || await reviewClient({ type: 'load', review: null, filters: null });
+      const next = preparedInitial || await waitForLiveActionReview();
       if (id === requestId.current) acceptReview(next);
     } catch (loadError) {
       if (id === requestId.current) setError(loadError?.message || 'Could not load Action Review.');
@@ -801,11 +808,23 @@ export function ActionReviewApp({
     }
     setBusy(true);
     setError('');
+    const filters = { rep, dateOption, date1, date2 };
+
+    if (!reviewClient) {
+      try {
+        submitNativeActionReview(filters);
+      } catch (filterError) {
+        setError(filterError?.message || 'The native Action Review form could not be submitted.');
+        setBusy(false);
+      }
+      return;
+    }
+
     try {
       acceptReview(await reviewClient({
         type: 'filter',
         review,
-        filters: { rep, dateOption, date1, date2 },
+        filters,
       }));
     } catch (filterError) {
       setError(filterError?.message || 'The CRM could not apply this Action Review scope.');
