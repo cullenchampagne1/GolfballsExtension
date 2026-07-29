@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getAssetURL } from '../lib/assetStore.js';
+import { loadDevSettings } from '../lib/devSettings.js';
+import { PRINT_AREA_SCALE_DEFAULT, printBoxSize, containFractions } from '../lib/mockupPrintBox.js';
 
 /* ───────────────────────────────────────────────────────────────
    GrassMockupComposer — photoreal product mockup of the ball
@@ -49,10 +51,10 @@ const BALL_CENTER_Y = 540;
 // Silhouette radius for the 3.6m distance is 231.1px (focal 1230 × R 0.665
 // / sqrt(D² − R²)). 4px overscan so the warp covers a small feather.
 const BALL_RADIUS_PX = 235;
-// Fraction of ball diameter the logo covers. >1 means the logo source
-// extends past the ball silhouette; the warp clips it to the visible
-// cap. Keep at the value the user has dialed in.
-const LOGO_SIZE = 1.2;
+// Print-area spec, kept in lockstep with GolfballViewer: the live value comes
+// from devSettings ('golfballViewer.printAreaScale') so the 2D mockup obeys the
+// same knob as the 3D viewer; box math lives in lib/mockupPrintBox.js. (The old
+// hardcoded LOGO_SIZE=1.2 rendered 60% of the face — oversized vs the spec.)
 
 // Specular-highlight threshold. The baked ball was pure-white Principled
 // BSDF, so its rendered pixels = (white × diffuse) + specular_white. Above
@@ -104,12 +106,13 @@ export const GrassMockupComposer = React.forwardRef(function GrassMockupComposer
         // The baked mockup PNG is no longer bundled — assetStore downloads it
         // from the backend on first use (cached thereafter) and returns a blob: URL.
         const bakeUrl = await getAssetURL(BAKE_PATH);
-        const [baseImg, logoImg] = await Promise.all([
+        const [baseImg, logoImg, dev] = await Promise.all([
           loadImage(bakeUrl),
           loadImage(decalDataUrl),
+          loadDevSettings(),
         ]);
         if (cancelled) return;
-        compose(canvasRef.current, baseImg, logoImg);
+        compose(canvasRef.current, baseImg, logoImg, printBoxSize(dev['golfballViewer.printAreaScale']));
         setStatus('ready');
       } catch (err) {
         if (cancelled) return;
@@ -395,7 +398,7 @@ function loadImage(src) {
    Single-pass canvas loop — ~170k pixels inside the ball disc, ~10ms
    on modern hardware. Plenty fast for a one-shot compose; could move
    to a WebGL shader later if we add per-frame effects. */
-function compose(canvas, baseImg, logoImg) {
+function compose(canvas, baseImg, logoImg, logoSize = printBoxSize(PRINT_AREA_SCALE_DEFAULT)) {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(baseImg, 0, 0);
   const baseData = ctx.getImageData(0, 0, BAKE_W, BAKE_H);
@@ -414,6 +417,11 @@ function compose(canvas, baseImg, logoImg) {
   const cx = BALL_CENTER_X;
   const cy = BALL_CENTER_Y;
   const R = BALL_RADIUS_PX;
+
+  /* Aspect-fit (contain) the logo inside the square print box so a
+     non-square logo keeps its native proportions instead of stretching
+     to the box — the same behavior as the 3D viewer's decal texture. */
+  const { fw, fh } = containFractions(LW, LH);
   const x0 = Math.max(0, Math.floor(cx - R));
   const x1 = Math.min(BAKE_W, Math.ceil(cx + R));
   const y0 = Math.max(0, Math.floor(cy - R));
@@ -437,8 +445,12 @@ function compose(canvas, baseImg, logoImg) {
       // Camera-axis flat UV — for a flat sticker-style print this is
       // physically correct; a real screen print on a sphere projects
       // along the camera's optical axis with foreshortening at the limb.
-      const u = nx / LOGO_SIZE + 0.5;
-      const v = ny / LOGO_SIZE + 0.5;
+      // s/t are print-box coords in [-0.5, 0.5]; dividing by fw/fh
+      // aspect-fits the logo inside the box (outside → transparent).
+      const s = nx / logoSize;
+      const t = ny / logoSize;
+      const u = s / fw + 0.5;
+      const v = t / fh + 0.5;
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
 
       // Bilinear sample the logo at (u, v).

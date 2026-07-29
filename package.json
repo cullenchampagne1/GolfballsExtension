@@ -173,6 +173,10 @@
       "file": "tests/unit/taskListModel.test.mjs"
     },
     {
+      "name": "modal \u00b7 mockup print-box spec (52.08% + aspect fit)",
+      "file": "tests/unit/mockupPrintBox.test.mjs"
+    },
+    {
       "name": "crm \u00b7 Solr search query-string contract",
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },
