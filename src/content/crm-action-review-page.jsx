@@ -82,9 +82,32 @@ function ActionReviewApp({ store }) {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    // 20k+ rows: parse the live host DOM off the main thread's critical path.
-    const t = setTimeout(() => setTasks(parseReviewTasks(document)), 50);
-    return () => clearTimeout(t);
+    /* The live host DOM is unreliable here: the multi-MB page streams in
+       slowly, and once DataTables initializes it strips all but the current
+       10-row page from the DOM. The SERVER HTML ships every row, so re-fetch
+       the page (same filter state — same URL) and parse that. Falls back to
+       polling the live DOM if the fetch fails. */
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(window.location.href, { credentials: 'include' });
+        const html = await res.text();
+        if (cancelled) return;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const parsed = parseReviewTasks(doc);
+        if (parsed.length) { setTasks(parsed); return; }
+      } catch (e) { /* fall through */ }
+      // Fallback: poll the live DOM while the host page finishes loading.
+      let tries = 0;
+      const attempt = () => {
+        if (cancelled) return;
+        const live = parseReviewTasks(document);
+        if (live.length || tries >= 20) setTasks(live);
+        else { tries += 1; setTimeout(attempt, 500); }
+      };
+      attempt();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
