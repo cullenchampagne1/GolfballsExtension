@@ -389,6 +389,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
   const searchRailRef = useRef(null);
+  const loadMoreRef = useRef(null);   // progressive-render sentinel
   const gen = useRef(0);   // ignore stale responses
 
   const runSearch = useCallback(async (q, t, qb) => {
@@ -536,6 +537,22 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   useEffect(() => () => {
     if (hideSearchTimerRef.current) clearTimeout(hideSearchTimerRef.current);
   }, []);
+  /* Progressive render is normally advanced by the scroll handler's nearEnd
+     branch — but when the loaded rows fit WITHOUT scrolling, no scroll event
+     ever fires and the "Loading more records…" sentinel sat there forever.
+     Observe the sentinel: whenever it's near the viewport (incl. immediately,
+     on short result sets) reveal the next batch until every loaded row shows. */
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el || renderCount >= rows.length) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setRenderCount((current) => nextProgressiveResultCount({ total: rows.length, current, nearEnd: true }));
+      }
+    }, { root: null, rootMargin: '600px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [renderCount, rows.length]);
   const openCampaign = useCallback(() => {
     const audience = selectedResults
       .map((row) => crmRowToCampaignContact(row, recUrl(row)))
@@ -733,7 +750,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 </div>
               </div>
               {renderedRows.length < rows.length && (
-                <div style={{
+                <div ref={loadMoreRef} style={{
                   height: 38,
                   display: 'flex',
                   alignItems: 'center',
