@@ -121,6 +121,7 @@
         "react-dist/content/opportunity-details.js",
         "react-dist/content/crm-search-page.js",
         "react-dist/content/crm-task-list-page.js",
+        "react-dist/content/crm-recent-history-page.js",
         "src/vanilla/custom-pages.js",
         "src/vanilla/main.js"
       ],

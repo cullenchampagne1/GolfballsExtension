@@ -177,6 +177,10 @@
       "file": "tests/unit/mockupPrintBox.test.mjs"
     },
     {
+      "name": "crm \u00b7 recent history table parsing + filter",
+      "file": "tests/unit/recentHistoryModel.test.mjs"
+    },
+    {
       "name": "crm \u00b7 Solr search query-string contract",
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },

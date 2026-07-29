@@ -89,6 +89,9 @@
     task_list: function () {
       return /[?&]Page=349\b/i.test(location.href);
     },
+    my_recent_history: function () {
+      return /[?&]Page=279\b/i.test(location.href);
+    },
   };
 
   // ── enabled-set helpers ──────────────────────────────────────
@@ -146,7 +149,11 @@
      Guarded: we only .draw() a table whose length isn't already -1, so
      re-running this on each extract is a no-op once expanded (and the one
      redraw it does trigger just converges — the next extract sees -1). */
-  var HOST_DATATABLES = ['#TableTasks', '#TableCompletedTasks', '#TableOpportunities', '#ActivityTable'];
+  var HOST_DATATABLES = [
+    '#TableTasks', '#TableCompletedTasks', '#TableOpportunities', '#ActivityTable',
+    // My Recent History (Page=279) — stable class names; ids are DataTables-assigned.
+    'table.PCHTable', 'table.AHTable', 'table.CHTable', 'table.LHTable', 'table.OHTable',
+  ];
   function expandHostTables() {
     try {
       var jq = window.jQuery;

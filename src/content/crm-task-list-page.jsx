@@ -126,7 +126,7 @@ function TaskRow({ t, selected, onToggle, showStatus, status }) {
   const running = RUNNING(status?.phase) && status?.phase !== 'queued';
   return (
     <tr className="gb-actrow" style={{ ...trStyle, ...(running ? { background: 'var(--gb-brand-tint-soft)' } : null) }}>
-      <Td align="center">
+      <Td align="center" style={{ width: 38, padding: '8px 8px' }}>
         <span onClick={stop} style={{ display: 'inline-flex' }}>
           <TaskCheckbox done={selected} onClick={(e) => { e?.stopPropagation?.(); onToggle(e); }} title={selected ? 'Deselect' : 'Select'} />
         </span>
@@ -418,7 +418,8 @@ function TaskListApp({ store }) {
                   <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                     <table style={tableStyle}>
                       <thead><tr>
-                        <Th align="center"><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
+                        {/* Fixed-width checkbox column so header + body line up */}
+                        <Th align="center" style={{ width: 38, padding: '6px 8px' }}><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
                         <SortTh label="Subject" k="subject" chain={sortChain} onSort={onSort} />
                         <SortTh label="Account" k="account" chain={sortChain} onSort={onSort} />
                         <SortTh label="Contact" k="contact" chain={sortChain} onSort={onSort} />

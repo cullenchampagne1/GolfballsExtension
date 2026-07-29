@@ -1175,18 +1175,42 @@ const _toHex = (c) => (typeof c === 'string' && c.startsWith('#')) ? c : _hexOf(
 /* Resolve one imprint chip (from giftImprints.decoImprints) → a decal data URL,
    reusing the same renderers the live editor uses. Returns null when there's
    nothing to draw yet. */
+/* Aspect-fit a (possibly non-square) logo onto a SQUARE transparent canvas.
+   The 3D decal box is square (R*2*printAreaScale each way), so handing it a
+   raw rectangular logo STRETCHES the art to the box — oversized on the short
+   axis and visibly uneven. Containing it in a square first renders the logo
+   at its native proportions, max-fitted inside the legal print area. */
+async function squareContainDataUrl(src) {
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = src;
+  });
+  const w = img.naturalWidth || 1;
+  const h = img.naturalHeight || 1;
+  if (w === h) return src;                       // already square — pass through
+  const side = Math.max(w, h);
+  const c = document.createElement('canvas');
+  c.width = side; c.height = side;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, (side - w) / 2, (side - h) / 2, w, h);
+  return c.toDataURL('image/png');
+}
+
 export async function imprintToDecalUrl(chip) {
   if (!chip) return null;
   try {
     if (chip.kind === 'logo') {
-      const src = chip.image || chip._localImageDataUrl || (chip.logo && (chip.logo.dataUrl || chip.logo.preview)) || null;
+      let src = chip.image || chip._localImageDataUrl || (chip.logo && (chip.logo.dataUrl || chip.logo.preview)) || null;
       if (!src) return null;
       // A remote logo URL (a proposal loaded from a saved cart carries the
       // uploaded art's static.golfballs.com URL) would taint the canvas and
       // break the snapshot — proxy it to a same-origin data URL first. Local
       // data: URLs (the live upload flow) pass straight through.
-      if (/^https?:/i.test(src)) { try { return await proxyImageDataUrl(src); } catch { return null; } }
-      return src;
+      if (/^https?:/i.test(src)) { try { src = await proxyImageDataUrl(src); } catch { return null; } }
+      // Square-fit so the viewer's square decal box can't stretch the art.
+      try { return await squareContainDataUrl(src); } catch { return src; }
     }
     if (chip.kind === 'text') {
       const lines = (chip.lines || []).map((l) => String(l || '').trim()).filter(Boolean);
