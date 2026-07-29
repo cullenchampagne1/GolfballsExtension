@@ -12,7 +12,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { Btn, ContactPill, Card, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, IconBtn, KV, LazySection, OrdersPanel, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, fmtDate, goUrl, isEmpty, readBackTo, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
-import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, OpportunityModal, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, crmUpdateAccount, gbToast, useDetailData, useModal, useModalHost, usePatch } from '../lib/crm-detail-shared.jsx';
+import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, crmUpdateAccount, gbToast, useDetailData, useModal, useModalHost, usePatch } from '../lib/crm-detail-shared.jsx';
 
 /* ════════════════════════════════════════════════════════════
    HERO / PROFILE CARD
@@ -37,7 +37,6 @@ function Hero() {
         }}><I.briefcase size={12} /></div>
       } />}
       actions={<>
-        <Btn variant="primary" icon={<I.target />} full onClick={() => openModal(<OpportunityModal />)}>New Opportunity</Btn>
         <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
         <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
           <Btn variant="ghost" size="sm" icon={<I.note />} onClick={() => openModal(<AddNoteModal />)}>Add note</Btn>
@@ -157,7 +156,7 @@ function AccountInfoCard() {
         sub={`#${D.ids.account || DASH} · ${txt(a.name) || DASH}`}
         right={<EditToggle editing={editing} setEditing={(v) => (v ? startEdit() : setEditing(false))} onSave={onSave} />}
       />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px', padding: '8px 18px 14px' }}>
+      <div key={editing ? 'edit' : 'view'} className="gbcp-edit-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px', padding: '8px 18px 14px' }}>
         <div>
           <EKV label="Account Name" value={txt(a.name)} editing={editing} field="Name" onEdit={set} />
           <KV label="Account ID" mono copyable>{txt(D.ids.account)}</KV>
@@ -227,10 +226,10 @@ export function AccountDetailsApp({ store }) {
             <ContactsPanel />
             <ActivityPanel onAddNote={() => modalHost.openModal(<AddNoteModal />)} />
             <LazySection><EmailsPanel /></LazySection>
-            <LazySection><OpportunitiesPanel /></LazySection>
+            <LazySection><OpportunitiesPanel canCreate={false} /></LazySection>
             <LazySection minHeight={860}><OrdersPanel /></LazySection>
             <LazySection minHeight={300}><ProofsPanel /></LazySection>
-            <LazySection minHeight={700}><TasksPanel /></LazySection>
+            <LazySection minHeight={700}><TasksPanel canCreate={false} /></LazySection>
           </div>
 
           <div className="gbcp-aside">

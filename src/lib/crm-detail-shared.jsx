@@ -467,8 +467,14 @@ export function Hero({ onSendEmail }) {
           if (onSendEmail) onSendEmail();
           else { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }
         }}>Send Email</Btn>
-        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-          <DncButton />
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 6,
+          alignItems: 'center', marginTop: 4, padding: '6px 7px',
+          borderRadius: 'var(--gb-r-md)',
+          background: 'var(--gb-surface-2)',
+          border: '1px solid var(--gb-border-subtle)',
+        }}>
+          <DncButton full />
           <IconBtn size="sm" icon={<I.more />} />
         </div>
       </>}>
@@ -533,16 +539,21 @@ export function EKV({ label, value, editing, mono, field, onEdit, copyable }) {
 
 export function EditToggle({ editing, setEditing, onSave }) {
   const [busy, setBusy] = useState(false);
-  if (!editing) return <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setEditing(true)}>Edit</Btn>;
   const save = async () => {
     if (!onSave) { setEditing(false); return; }
     setBusy(true);
     try { await onSave(); setEditing(false); } catch (e) { /* toast handled in onSave */ } finally { setBusy(false); }
   };
   return (
-    <div style={{ display: 'flex', gap: 6 }}>
-      <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(false)}>Cancel</Btn>
-      <Btn variant="primary" size="sm" icon={<I.check />} disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</Btn>
+    <div key={editing ? 'editing' : 'viewing'} className="gbcp-edit-controls" style={{ display: 'flex', gap: 6 }}>
+      {editing ? (
+        <>
+          <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(false)}>Cancel</Btn>
+          <Btn variant="primary" size="sm" icon={<I.check />} disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</Btn>
+        </>
+      ) : (
+        <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setEditing(true)}>Edit</Btn>
+      )}
     </div>
   );
 }
@@ -1081,7 +1092,7 @@ export function TemplateModal({ kind, initial, onSave, onDelete }) {
   );
 }
 
-export function DncButton() {
+export function DncButton({ full = false }) {
   const D = useD();
   const [busy, setBusy] = useState(false);
   const [removed, setRemoved] = useState(false);
@@ -1094,21 +1105,21 @@ export function DncButton() {
     finally { setBusy(false); }
   };
   return (
-    <Btn variant="secondary" size="sm" icon={<I.ban />} disabled={busy || removed} onClick={onClick}>
+    <Btn variant="secondary" size="sm" icon={<I.ban />} full={full} disabled={busy || removed} onClick={onClick}>
       {removed ? 'Removed from DNC' : busy ? 'Removing…' : 'Remove from DNC'}
     </Btn>
   );
 }
 
-export function OpportunitiesPanel() {
+export function OpportunitiesPanel({ canCreate = true }) {
   const D = useD();
   const { openModal } = useModal();
   return (
     <Card>
       <SectionTitle
         icon={<I.target />} title="Opportunities" count={D.opportunities.length}
-        sub="Pipeline for this contact"
-        right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => openModal(<OpportunityModal />)}>New opportunity</Btn>}
+        sub={canCreate ? 'Pipeline for this contact' : 'Pipeline for this account'}
+        right={canCreate ? <Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => openModal(<OpportunityModal />)}>New opportunity</Btn> : null}
       />
       <ScrollArea max={420}>
       <table style={tableStyle}>
@@ -1155,7 +1166,7 @@ export function AccountInfoCard() {
         sub={`#${D.ids.account || DASH} · ${txt(a.name) || DASH}`}
         right={<EditToggle editing={editing} setEditing={setEditing} />}
       />
-      <div style={{ padding: '8px 18px 14px' }}>
+      <div key={editing ? 'edit' : 'view'} className="gbcp-edit-body" style={{ padding: '8px 18px 14px' }}>
         <EKV label="Account Name" value={txt(a.name)} editing={editing} />
         <KV label="Account ID" mono copyable>{txt(D.ids.account)}</KV>
         <EKV label="Industry" value={txt(a.industry)} editing={editing} />
@@ -1215,7 +1226,7 @@ export function ContactInfoCard() {
         sub={`#${D.ids.contact || DASH}`}
         right={<EditToggle editing={editing} setEditing={setEditing} onSave={save} />}
       />
-      <div style={{ padding: '8px 18px 14px' }}>
+      <div key={editing ? 'edit' : 'view'} className="gbcp-edit-body" style={{ padding: '8px 18px 14px' }}>
         <EKV label="First Name" value={txt(c.firstName)} editing={editing} field="firstName" onEdit={onEdit} />
         <EKV label="Last Name" value={txt(c.lastName)} editing={editing} field="lastName" onEdit={onEdit} />
         <EKV label="Job Title" value={txt(c.jobTitle)} editing={editing} field="jobTitle" onEdit={onEdit} />
@@ -1356,11 +1367,7 @@ export function OpenTaskRow({ t }) {
         </div>
       </Td>
       <Td muted>{t.category}</Td>
-      <Td>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--gb-text-tertiary)', fontSize: 10.5 }}>
-          <Dot tone={priorityTone} size={5} />{t.priority || DASH}
-        </span>
-      </Td>
+      <Td><Tag tone={priorityTone} size="xs">{t.priority || DASH}</Tag></Td>
       <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
       <Td align="right" mono><span style={{ color: dueColor, fontWeight: 500 }}>{fmtDate(t.dueDate)}</span></Td>
       <Td align="right">
@@ -1797,7 +1804,7 @@ export async function taskContext(fallbackContactId, extra = {}) {
   return { ...ctx, ...extra };
 }
 
-export function TasksPanel() {
+export function TasksPanel({ canCreate = true }) {
   const D = useD();
   const patch = usePatch();
   const { openModal } = useModal();
@@ -1858,9 +1865,9 @@ export function TasksPanel() {
       <Card>
         <SectionTitle
           icon={<I.task />} title="Open Tasks" count={D.openTasks.length}
-          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={openComposer}>New task</Btn>}
+          right={canCreate ? <Btn variant="tinted" size="sm" icon={<I.plus />} onClick={openComposer}>New task</Btn> : null}
         />
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-faint)' }}>
+        {canCreate && <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-faint)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>
               {manage ? 'Manage quick actions' : 'Quick create'}
@@ -1879,10 +1886,9 @@ export function TasksPanel() {
               </span>
             ))}
             <IconBtn size="xs" ghost icon={<I.plus />} title="New quick task" onClick={() => openModal(<TemplateModal kind="task" onSave={qt.add} />)} />
-            {qt.list.length === 0 && <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>Add a quick task with +</span>}
           </div>
           <QuickAddInput value={quickTask} onChange={setQuickTask} onSubmit={() => quickCreate(quickTask)} disabled={adding} />
-        </div>
+        </div>}
         <ScrollArea max={320}>
         <table style={tableStyle}>
           <thead><tr>
@@ -1925,11 +1931,7 @@ export function TasksPanel() {
                   </div>
                 </Td>
                 <Td muted>{t.category}</Td>
-                <Td>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
-                    <Dot tone={priTone(t.priority)} size={5} />{t.priority || DASH}
-                  </span>
-                </Td>
+                <Td><Tag tone={priTone(t.priority)} size="xs">{t.priority || DASH}</Tag></Td>
                 <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
                 <Td align="right" mono muted>{fmtDate(t.dueDate)}</Td>
               </tr>

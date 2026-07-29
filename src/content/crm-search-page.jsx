@@ -360,7 +360,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           <FacetSidebar facets={facets} selected={selected} onToggle={toggleFacet} onClearAll={clearFacets} />
 
           {/* ── Search + results column ─────────────────────────── */}
-          <div className="gbcp-stack">
+          <div className="gbcp-stack gbcp-search-body">
         {/* ── Search hero ─────────────────────────────────────── */}
         <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
           <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -406,6 +406,7 @@ export const UI_CSS =
   '.gbcp-root { --gbcp-gap: 10px; --gbcp-aside: 296px; --gb-detail-text-primary:color-mix(in srgb,var(--gb-text-primary) 86%,var(--gb-surface-1)); }' +
   '.gbcp-page-grid { display:grid; grid-template-columns:minmax(0,1fr) var(--gbcp-aside); gap:var(--gbcp-gap); align-items:flex-start; }' +
   '.gbcp-stack { display:flex; flex-direction:column; gap:var(--gbcp-gap); min-width:0; }' +
+  '.gbcp-search-body { padding-top:24px; }' +
   '.gbcp-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--gbcp-gap); }' +
   '.gbcp-aside { display:flex; flex-direction:column; gap:var(--gbcp-gap); position:sticky; top:58px; }' +
   '.gbcp-list-head, .gbcp-activity-row { display:grid; grid-template-columns:92px minmax(0,1fr) 132px 132px; align-items:center; column-gap:12px; }' +
@@ -415,6 +416,7 @@ export const UI_CSS =
   '@media (max-width: 1060px) {' +
   '  .gbcp-page-grid { grid-template-columns:minmax(0,1fr); }' +
   '  .gbcp-search-grid { grid-template-columns:minmax(0,1fr) !important; }' +
+  '  .gbcp-search-body { padding-top:0; }' +
   '  .gbcp-search-grid > :first-child { position:static !important; display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); }' +
   '  .gbcp-aside { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }' +
   '  .gbcp-hero-grid { grid-template-columns:124px minmax(0,1fr) !important; }' +
@@ -447,6 +449,8 @@ export const UI_CSS =
   '.gb-saved { animation: gb-saved-pulse .7s ease-out; }' +
   '@keyframes gb-pop-in { 0% { opacity: 0; transform: translateY(8px) scale(.985); } 100% { opacity: 1; transform: none; } }' +
   '@keyframes gb-pop-out { 0% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(6px) scale(.975); } }' +
+  '@keyframes gb-edit-mode-in { 0% { opacity:.45; transform:translateY(-3px); } 100% { opacity:1; transform:none; } }' +
+  '.gbcp-edit-body, .gbcp-edit-controls { animation:gb-edit-mode-in .2s ease both; }' +
   '@keyframes gb-backdrop-out { 0% { opacity: 1; } 100% { opacity: 0; } }' +
   /* strip the native number-spinner arrows (snooze "weeks", etc.) */
   'input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }' +
@@ -473,8 +477,14 @@ export const UI_CSS =
   '}';
 
 export function ScrollArea({ max = 380, children, style }) {
+  const edgeMask = 'linear-gradient(to bottom, transparent 0, #000 9px, #000 calc(100% - 9px), transparent 100%)';
   return (
-    <div className="gb-scroll" style={{ maxHeight: max, overflowY: 'auto', overflowX: 'hidden', ...style }}>
+    <div className="gb-scroll" style={{
+      maxHeight: max, overflowY: 'auto', overflowX: 'hidden',
+      WebkitMaskImage: edgeMask, maskImage: edgeMask,
+      WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+      ...style,
+    }}>
       {children}
     </div>
   );
