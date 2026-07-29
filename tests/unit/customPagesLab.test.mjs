@@ -1,10 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildActionReviewFixture,
   buildOpportunityFixture,
   buildPageFixture,
   buildProposalFixtures,
   buildSearchFixture,
+  createActionReviewFixtureClient,
   createSearchFixtureClient,
   createFixtureStore,
   resolveLabMode,
@@ -61,6 +63,34 @@ describe('custom pages lab', () => {
     assert.ok(result.docs.length > 0);
     assert.ok(result.facets.fields.salesRep_s.length >= 10);
     assert.ok(Object.keys(result.facets.queries).length >= 8);
+  });
+
+  it('provides a write-disabled Action Review fixture with large-table modes', async () => {
+    const populated = buildActionReviewFixture('populated');
+    const stress = buildActionReviewFixture('stress');
+    const empty = buildActionReviewFixture('empty');
+    const client = createActionReviewFixtureClient(populated);
+    const filtered = await client({
+      type: 'filter',
+      filters: {
+        rep: '1114',
+        dateOption: 'BETWEEN',
+        date1: '2026-07-20',
+        date2: '2026-07-29',
+      },
+    });
+
+    assert.equal(populated.activities.length, 80);
+    assert.equal(populated.emails.length, 40);
+    assert.ok(populated.tasks.length >= 200);
+    assert.ok(stress.tasks.length >= 2_000);
+    assert.deepEqual(empty.tasks, []);
+    assert.deepEqual(filtered.selected, {
+      rep: '1114',
+      dateOption: 'BETWEEN',
+      date1: '2026-07-20',
+      date2: '2026-07-29',
+    });
   });
 
   it('normalizes unknown query values to stable defaults', () => {

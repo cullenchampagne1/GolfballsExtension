@@ -10,6 +10,7 @@ export const LAB_PAGES = Object.freeze([
   { id: 'account', label: 'Account details' },
   { id: 'opportunity', label: 'Opportunity details' },
   { id: 'search', label: 'CRM search' },
+  { id: 'action-review', label: 'Action Review' },
 ]);
 
 export const LAB_MODES = Object.freeze([
@@ -365,6 +366,91 @@ export function createSearchFixtureClient(fixture) {
     const numFound = docs.length;
     docs = docs.slice(start, start + 100);
     return { docs, numFound, facets: start === 0 ? fixture.facets : null };
+  };
+}
+
+function actionReviewDate(daysAgo = 0) {
+  const date = new Date(Date.now() - daysAgo * DAY);
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
+function actionReviewTasks(count) {
+  const subjects = [
+    'Order Anniversary Follow Up Call',
+    'Proposal follow up via phone',
+    'Confirm artwork approval before production',
+    'Send revised tournament pricing',
+    'Prior Year Call — quarterly account review',
+    'Check delivery status and tracking',
+  ];
+  const categories = ['Order History Special', 'Proposal Follow-up', 'Artwork', 'Sales Follow-up', 'Prior Year Call', 'Order'];
+  return Array.from({ length: count }, (_, index) => ({
+    id: String(755_000 + index),
+    subject: subjects[index % subjects.length],
+    category: categories[index % categories.length],
+    status: index % 5 === 0 ? 'Complete' : index % 7 === 0 ? 'Waiting' : 'New',
+    live: actionReviewDate(22 - (index % 22)),
+    due: actionReviewDate(8 - (index % 15)),
+  }));
+}
+
+export function buildActionReviewFixture(mode = 'populated') {
+  const resolved = resolveLabMode(mode);
+  const empty = resolved === 'empty';
+  const stress = resolved === 'stress';
+  const activityRows = empty ? [] : activities(stress ? 180 : 80);
+  const emailRows = empty ? [] : emails(stress ? 120 : 40).map((email, index) => ({
+    ...email,
+    size: email.sizeBytes,
+    href: `Default.aspx?Page=268&MessageID=${40_690_000 + index}`,
+  }));
+  const taskRows = empty ? [] : actionReviewTasks(stress ? 2_400 : 225);
+  const selectedDate = toLabIsoDate(new Date());
+  return {
+    activities: activityRows,
+    emails: emailRows,
+    tasks: taskRows,
+    reps: [
+      { id: '2370', label: 'Cullen Champagne' },
+      { id: '1114', label: 'Alex Sylvester' },
+      { id: '2377', label: 'Aaron Hunter' },
+      { id: '47', label: 'Andy Melancon' },
+      { id: '104', label: 'Taylor Reed' },
+    ],
+    selected: {
+      rep: '2370',
+      dateOption: 'ON',
+      date1: selectedDate,
+      date2: selectedDate,
+    },
+    formState: {
+      __VIEWSTATE: 'lab-view-state',
+      __EVENTVALIDATION: 'lab-event-validation',
+    },
+    formAction: 'Default.aspx?Page=286',
+  };
+}
+
+function toLabIsoDate(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+export function createActionReviewFixtureClient(fixture) {
+  return async ({ type, filters } = {}) => {
+    if (type !== 'filter') return fixture;
+    return {
+      ...fixture,
+      selected: {
+        rep: filters?.rep || fixture.selected.rep,
+        dateOption: filters?.dateOption || fixture.selected.dateOption,
+        date1: filters?.date1 || fixture.selected.date1,
+        date2: filters?.date2 || fixture.selected.date2,
+      },
+    };
   };
 }
 

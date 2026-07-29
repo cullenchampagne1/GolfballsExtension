@@ -5,10 +5,12 @@ import './lab.css';
 import {
   LAB_MODES,
   LAB_PAGES,
+  buildActionReviewFixture,
   buildOpportunityFixture,
   buildPageFixture,
   buildProposalFixtures,
   buildSearchFixture,
+  createActionReviewFixtureClient,
   createSearchFixtureClient,
   createFixtureStore,
   resolveLabMode,
@@ -33,6 +35,7 @@ let ContactDetailsApp;
 let AccountDetailsApp;
 let OpportunityDetailsApp;
 let CrmSearchPageApp;
+let ActionReviewApp;
 
 function updateQuery(page, mode) {
   const url = new URL(window.location.href);
@@ -69,6 +72,8 @@ function Lab() {
 
   const searchFixture = useMemo(() => buildSearchFixture(mode), [mode]);
   const searchClient = useMemo(() => createSearchFixtureClient(searchFixture), [searchFixture]);
+  const actionReviewFixture = useMemo(() => buildActionReviewFixture(mode), [mode]);
+  const actionReviewClient = useMemo(() => createActionReviewFixtureClient(actionReviewFixture), [actionReviewFixture]);
   const pageNode = page === 'account'
     ? <AccountDetailsApp store={store} />
     : page === 'opportunity'
@@ -79,6 +84,13 @@ function Lab() {
         />
       : page === 'search'
         ? <CrmSearchPageApp store={store} initialSearch={searchFixture} searchClient={searchClient} />
+      : page === 'action-review'
+        ? <ActionReviewApp
+            store={store}
+            initialReview={actionReviewFixture}
+            reviewClient={actionReviewClient}
+            actionsEnabled={false}
+          />
       : <ContactDetailsApp store={store} />;
 
   return (
@@ -108,16 +120,18 @@ function Lab() {
 }
 
 async function bootstrap() {
-  const [contactModule, accountModule, opportunityModule, searchModule] = await Promise.all([
+  const [contactModule, accountModule, opportunityModule, searchModule, actionReviewModule] = await Promise.all([
     import('../../src/content/contact-details.jsx'),
     import('../../src/content/account-details.jsx'),
     import('../../src/content/opportunity-details.jsx'),
     import('../../src/content/crm-search-page.jsx'),
+    import('../../src/content/crm-action-review-page.jsx'),
   ]);
   ContactDetailsApp = contactModule.ContactDetailsApp;
   AccountDetailsApp = accountModule.AccountDetailsApp;
   OpportunityDetailsApp = opportunityModule.OpportunityDetailsApp;
   CrmSearchPageApp = searchModule.CrmSearchPageApp;
+  ActionReviewApp = actionReviewModule.ActionReviewApp;
   createRoot(document.getElementById('root')).render(<Lab />);
 }
 

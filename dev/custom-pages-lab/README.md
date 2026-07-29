@@ -1,9 +1,9 @@
 # Custom Pages Lab
 
 This is a local, write-disabled preview for the extension's real Contact,
-Account, Opportunity, and CRM Search custom-page components. It imports those
-components directly and supplies the same data shape as the live custom-pages
-engine.
+Account, Opportunity, CRM Search, and Action Review custom-page components. It
+imports those components directly and supplies the same data shape as the live
+custom-pages engine.
 
 Run:
 
