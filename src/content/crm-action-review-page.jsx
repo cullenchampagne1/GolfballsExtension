@@ -16,12 +16,18 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { dueBucket, DUE_BUCKETS } from '../lib/taskListModel.js';
+import { completeTaskById } from '../lib/crmTasks.js';
+import { Dropdown } from '../ui/components/Dropdown.jsx';
+import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
   Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, SectionTitle,
   Spinner, Tag, Td, Th, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
-import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
+import { Breadcrumb, DetailPageFrame, EditTaskModal, ModalCtx, TopBar, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
+
+/* M/D/YYYY for the WebForms postback (native date-picker format). */
+const fmtMDY = (d) => (d instanceof Date && !Number.isNaN(d.getTime()) ? `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}` : '');
 
 const BATCH = 60;
 
@@ -134,8 +140,8 @@ function ActionReviewApp({ store }) {
   const [reps, setReps] = useState([]);
   const [rep, setRep] = useState('');
   const [dateOption, setDateOption] = useState('ON');
-  const [date1, setDate1] = useState('');
-  const [date2, setDate2] = useState('');
+  const [date1, setDate1] = useState(null);   // Date | null (custom DatePicker)
+  const [date2, setDate2] = useState(null);
   const [serverBusy, setServerBusy] = useState(false);
   const formStateRef = useRef({});
   const sentinelRef = useRef(null);
@@ -211,13 +217,29 @@ function ActionReviewApp({ store }) {
 
   const toggle = (setter) => (v) => setter((cur) => { const n = new Set(cur); n.has(v) ? n.delete(v) : n.add(v); return n; });
 
+  // Per-row actions (same treatment as the Task List page): Edit opens the
+  // shared task modal; Complete writes then drops the row after a brief ✓.
+  const [rowStatus, setRowStatusMap] = useState({});
+  const editTask = (t) => modalHost.openModal(<EditTaskModal taskId={t.id} />);
+  const completeOne = async (t) => {
+    setRowStatusMap((m) => ({ ...m, [t.id]: 'running' }));
+    try {
+      await completeTaskById(t.id);
+      setRowStatusMap((m) => ({ ...m, [t.id]: 'done' }));
+      setTimeout(() => {
+        setTasks((cur) => (cur || []).filter((x) => x.id !== t.id));
+        setRowStatusMap((m) => { const n = { ...m }; delete n[t.id]; return n; });
+      }, 650);
+    } catch (e) { setRowStatusMap((m) => ({ ...m, [t.id]: 'error' })); }
+  };
+
   // Apply the server-side Sales Rep / date filter via the native postback.
   const applyServerFilter = async () => {
     if (serverBusy) return;
     setServerBusy(true);
     setTasks(null);
     try {
-      const doc = await postFilter(formStateRef.current, { rep, dateOption, date1, date2 });
+      const doc = await postFilter(formStateRef.current, { rep, dateOption, date1: fmtMDY(date1), date2: fmtMDY(date2) });
       formStateRef.current = collectFormState(doc);   // fresh viewstate for the next POST
       setTasks(parseReviewTasks(doc));
       setCount(BATCH);
@@ -233,23 +255,21 @@ function ActionReviewApp({ store }) {
         currentPage="Action Review" ready modalHost={modalHost} hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Action Review" /></TopBar>}
       >
-        <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 12, alignItems: 'flex-start', paddingTop: 24 }}>
+        <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 12, alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: 74 }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '0 2px' }}>Refine</span>
-            {/* Server-side filters — replay the native GetSalesRep postback. */}
-            <Card>
+            {/* Server-side filters — replay the native GetSalesRep postback,
+                rendered with the extension's own Dropdown + DatePicker. */}
+            <Card style={{ overflow: 'visible' }}>
               <div style={{ padding: '10px 12px 4px', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Sales Rep</div>
               <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <select value={rep} onChange={(e) => setRep(e.target.value)} style={SELECT_STYLE}>
-                  {reps.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
+                <Dropdown value={rep} options={reps} onChange={setRep} size="sm" searchable placeholder="Select rep…" />
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)', marginTop: 2 }}>Due date</div>
-                <select value={dateOption} onChange={(e) => setDateOption(e.target.value)} style={SELECT_STYLE}>
-                  {['ON', 'BETWEEN', 'BEFORE', 'AFTER'].map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <input type="text" value={date1} onChange={(e) => setDate1(e.target.value)} placeholder="M/D/YYYY" style={SELECT_STYLE} />
+                <Dropdown value={dateOption} onChange={setDateOption} size="sm"
+                  options={[{ id: 'ON', label: 'On' }, { id: 'BETWEEN', label: 'Between' }, { id: 'BEFORE', label: 'Before' }, { id: 'AFTER', label: 'After' }]} />
+                <DatePicker value={date1} onChange={setDate1} includeTime={false} placeholder="Pick a date" />
                 {dateOption === 'BETWEEN' && (
-                  <input type="text" value={date2} onChange={(e) => setDate2(e.target.value)} placeholder="and M/D/YYYY" style={SELECT_STYLE} />
+                  <DatePicker value={date2} onChange={setDate2} includeTime={false} placeholder="and…" />
                 )}
                 <Btn variant="primary" size="sm" icon={<I.search />} onClick={applyServerFilter} disabled={serverBusy || !reps.length}>
                   {serverBusy ? 'Loading…' : 'Apply'}
@@ -260,10 +280,14 @@ function ActionReviewApp({ store }) {
             <FacetList label="Due" options={DUE_BUCKETS.map((b) => ({ ...b }))} selected={dueSel} onToggle={toggle(setDueSel)} />
             <FacetList label="Category" options={facets.category} selected={catSel} onToggle={toggle(setCatSel)} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+          {/* Same column class as the task-list/search pages (24px top padding)
+              so the search bar rests at the identical height on all three. */}
+          <div className="gbcp-stack gbcp-search-body" style={{ minWidth: 0 }}>
+            <div style={{ position: 'sticky', top: 96, zIndex: 20, margin: '0 2px' }}>
             <Card style={{
               border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
               background: 'color-mix(in srgb, var(--gb-surface-1) 82%, transparent)',
+              boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
             }}>
               <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
@@ -280,7 +304,8 @@ function ActionReviewApp({ store }) {
                 </div>
               </div>
             </Card>
-            <Card style={{ marginTop: 2 }}>
+            </div>
+            <Card style={{ marginTop: 14 }}>
               <SectionTitle icon={<I.task />} title="Actions"
                 count={tasks ? `${visible.length}${visible.length !== tasks.length ? ' of ' + tasks.length : ''}` : ''} />
               {tasks == null ? <Spinner label="Parsing tasks…" /> : (
@@ -290,6 +315,7 @@ function ActionReviewApp({ store }) {
                       <thead><tr>
                         <Th>Subject</Th><Th>Category</Th><Th align="center">Status</Th>
                         <Th align="right">Live</Th><Th align="right">Due</Th>
+                        <Th align="center">Actions</Th>
                       </tr></thead>
                       <tbody>
                         {visible.slice(0, count).map((t) => {
@@ -302,10 +328,24 @@ function ActionReviewApp({ store }) {
                               <Td align="center">{t.status ? <Tag tone={statusTone(t.status)} size="sm">{t.status}</Tag> : DASH}</Td>
                               <Td align="right" mono muted>{txt(t.live) || DASH}</Td>
                               <Td align="right" mono muted>{txt(t.due) || DASH}</Td>
+                              <Td align="center" style={{ width: 84, whiteSpace: 'nowrap' }}>
+                                {rowStatus[t.id] === 'running' ? (
+                                  <span style={{ width: 13, height: 13, display: 'inline-block', borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+                                ) : rowStatus[t.id] === 'done' ? (
+                                  <span style={{ color: 'var(--gb-success)', display: 'inline-flex' }}><I.check size={14} sw={3} /></span>
+                                ) : rowStatus[t.id] === 'error' ? (
+                                  <span style={{ color: 'var(--gb-error)', display: 'inline-flex' }} title="Failed"><I.close size={13} sw={2.6} /></span>
+                                ) : (
+                                  <span style={{ display: 'inline-flex', gap: 4 }}>
+                                    <IconBtn size="xs" ghost icon={<I.edit />} title="Edit task" onClick={() => editTask(t)} />
+                                    <IconBtn size="xs" ghost icon={<I.check />} title="Complete task" onClick={() => completeOne(t)} />
+                                  </span>
+                                )}
+                              </Td>
                             </tr>
                           );
                         })}
-                        {visible.length === 0 && <tr><Td colSpan={5} align="center" muted style={{ padding: 24 }}>No actions match.</Td></tr>}
+                        {visible.length === 0 && <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>No actions match.</td></tr>}
                       </tbody>
                     </table>
                   </div>
