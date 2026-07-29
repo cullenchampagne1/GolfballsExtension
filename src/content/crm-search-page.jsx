@@ -643,6 +643,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         ready
         modalHost={modalHost}
         onContentScroll={handleScrollIntent}
+        hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
         <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 10, alignItems: 'flex-start' }}>
@@ -749,8 +750,9 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           </motion.div>
         </div>
 
-        {/* ── Results ─────────────────────────────────────────── */}
-        <Card>
+        {/* ── Results — extra top margin so the table sits clear of the
+              search rail at rest instead of butting against it ── */}
+        <Card style={{ marginTop: 14 }}>
           <SectionTitle
             icon={<I.history />}
             title="Results"

@@ -325,7 +325,7 @@ function TaskListApp({ store }) {
     <DataCtx.Provider value={D}>
     <ModalCtx.Provider value={modalHost}>
       <DetailPageFrame
-        currentPage="Task List" ready modalHost={modalHost} onContentScroll={onScroll}
+        currentPage="Task List" ready modalHost={modalHost} onContentScroll={onScroll} hideScrollbar
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Task List" /></TopBar>}
       >
         <div style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 12, alignItems: 'flex-start' }}>
@@ -334,9 +334,11 @@ function TaskListApp({ store }) {
             prioritySel={prioritySel} categorySel={categorySel} dueSel={dueSel}
             toggle={toggleFacet} clearAll={clearAll} counts={counts}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-            {/* Sticky/floating search + action bar */}
-            <div style={{ position: 'sticky', top: SEARCH_RAIL_TOP, zIndex: 20, margin: '0 2px' }}>
+          {/* Same column class as CRM search (24px top padding) so both pages'
+              search bars rest at the identical height. */}
+          <div className="gbcp-stack gbcp-search-body" style={{ minWidth: 0 }}>
+            {/* Sticky/floating search + action bar — pinned offset matches CRM search */}
+            <div style={{ position: 'sticky', top: SEARCH_RAIL_TOP + 22, zIndex: 20, margin: '0 2px' }}>
               {/* Glass/tint styling matched to the CRM search rail so both search
                   bars read the same (corresponding-modal tint). */}
               <Card style={{
@@ -363,27 +365,41 @@ function TaskListApp({ store }) {
                     </div>
                     <Btn variant="secondary" size="lg" icon={<I.refresh />} onClick={loadTasks}>Refresh</Btn>
                   </div>
-                  {/* Selection action rail — slides in when rows are checked */}
-                  <div style={{ display: 'grid', gridTemplateRows: selCount > 0 ? '1fr' : '0fr', transition: 'grid-template-rows .24s cubic-bezier(.4,0,.2,1)' }}>
-                    <div style={{ overflow: 'hidden', minHeight: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 2 }}>
-                        <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
-                          <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</strong>
-                        </span>
-                        <div style={{ flex: 1 }} />
-                        <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={openEmail} disabled={runActive}>Email selected</Btn>
-                        <Btn size="sm" variant="ghost" icon={<I.plus />} onClick={quickTaskSelected} disabled={runActive}>Quick task</Btn>
-                        <Btn size="sm" variant="ghost" icon={<I.check />} onClick={completeSelected} disabled={runActive}>Complete</Btn>
-                        <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportCsv}>Export CSV</Btn>
-                      </div>
+                </div>
+                {/* Selection action rail — IDENTICAL treatment to the CRM search
+                    page's rail: full-width tinted strip that slides open. */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateRows: selCount > 0 ? '1fr' : '0fr',
+                  opacity: selCount > 0 ? 1 : 0,
+                  transition: 'grid-template-rows .24s cubic-bezier(.4,0,.2,1), opacity .16s ease',
+                }}>
+                  <div style={{ minHeight: 0, overflow: 'hidden' }}>
+                    <div style={{
+                      minHeight: 42,
+                      padding: '7px 14px',
+                      borderTop: '1px solid var(--gb-border-subtle)',
+                      background: 'color-mix(in srgb, var(--gb-brand-tint-soft) 72%, transparent)',
+                      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
+                        <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</strong>
+                        {' '}of {visible.length} task{visible.length === 1 ? '' : 's'}
+                      </span>
+                      <div style={{ flex: 1 }} />
+                      <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={openEmail} disabled={runActive}>Email selected</Btn>
+                      <Btn size="sm" variant="ghost" icon={<I.plus />} onClick={quickTaskSelected} disabled={runActive}>Quick task</Btn>
+                      <Btn size="sm" variant="ghost" icon={<I.check />} onClick={completeSelected} disabled={runActive}>Complete</Btn>
+                      <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportCsv}>Export CSV</Btn>
                     </div>
                   </div>
                 </div>
               </Card>
             </div>
 
-            {/* Results */}
-            <Card>
+            {/* Results — extra top margin so the table sits clear of the
+                search rail at rest (matches CRM search) */}
+            <Card style={{ marginTop: 14 }}>
               <SectionTitle icon={<I.task />} title="Tasks"
                 count={loadState === 'ready' ? `${visible.length}${visible.length !== tasks.length ? ' of ' + tasks.length : ''}` : ''}
                 sub={loadState === 'error' ? 'Could not load tasks' : undefined} />
@@ -397,10 +413,9 @@ function TaskListApp({ store }) {
                 <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>No tasks match your filters.</div>
               ) : (
                 <>
-                  {/* Tall scroll region with a TOP fade mask so rows dissolve as
-                      they scroll up under the floating search bar (the opacity
-                      mask you asked for); onScroll drives the float + lazy load. */}
-                  <ScrollArea topFade onScroll={onScroll} max={99999} style={{ maxHeight: 'calc(76vh - 60px)', overflowX: 'auto' }}>
+                  {/* PAGE scroll, exactly like the CRM search results — no inner
+                      scroll view; the table extends and the page scrolls. */}
+                  <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                     <table style={tableStyle}>
                       <thead><tr>
                         <Th align="center"><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
@@ -418,13 +433,13 @@ function TaskListApp({ store }) {
                         ))}
                       </tbody>
                     </table>
-                    {renderCount < visible.length && (
-                      <div ref={loadMoreRef} style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
-                        <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
-                        Loading more tasks…
-                      </div>
-                    )}
-                  </ScrollArea>
+                  </div>
+                  {renderCount < visible.length && (
+                    <div ref={loadMoreRef} style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10.5 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+                      Loading more tasks…
+                    </div>
+                  )}
                 </>
               )}
               <div style={{ height: 12 }} />

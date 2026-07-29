@@ -1635,6 +1635,9 @@ export function DetailPageFrame({
   ready = true,
   modalHost,
   onContentScroll,
+  // Hide the page scroller's scrollbar (scrolling still works) — the
+  // search/task list pages use this for a cleaner full-page canvas.
+  hideScrollbar = false,
   children,
 }) {
   const [sideCollapsed, setSideCollapsed] = useState(false);
@@ -1664,7 +1667,7 @@ export function DetailPageFrame({
         <style>{UI_CSS}</style>
         <Sidebar currentLabel={currentLabel} currentPage={currentPage} collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
         <div
-          className="gb-scroll"
+          className={hideScrollbar ? 'gb-scroll gbcp-no-scrollbar' : 'gb-scroll'}
           onScroll={onContentScroll}
           style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}
         >

@@ -409,6 +409,9 @@ export const UI_CSS =
   '  box-shadow: 0 2px 8px rgba(0,0,0,.08);' +
   '}' +
   '.gbcp-root { --gbcp-gap: 10px; --gbcp-aside: 296px; --gb-detail-text-primary:color-mix(in srgb,var(--gb-text-primary) 86%,var(--gb-surface-1)); }' +
+  /* Hidden-but-working scrollbar for the search/task page canvases. */
+  '.gbcp-no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }' +
+  '.gbcp-no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }' +
   '.gbcp-page-grid { display:grid; grid-template-columns:minmax(0,1fr) var(--gbcp-aside); gap:var(--gbcp-gap); align-items:flex-start; }' +
   '.gbcp-stack { display:flex; flex-direction:column; gap:var(--gbcp-gap); min-width:0; }' +
   '.gbcp-search-body { padding-top:24px; }' +
