@@ -132,9 +132,11 @@ function doneTasks(count) {
 function opportunities(count) {
   const subjects = ['2026 Employee Appreciation Gifts', 'Fall Charity Scramble', 'Executive Welcome Kits', 'Regional Tournament Restock'];
   const stages = ['Open', 'Qualified', 'Proposed', 'Won'];
+  const owners = ['Cullen Champagne', 'Taylor Reed', 'Jordan Park', 'Account Owner'];
   return Array.from({ length: count }, (_, index) => ({
     id: String(38012 + index),
     subject: subjects[index % subjects.length],
+    owner: owners[index % owners.length],
     estimatedValue: 2_500 + index * 1_375,
     estimatedCloseDate: isoDaysAgo(-20 - index * 13),
     stage: stages[index % stages.length],

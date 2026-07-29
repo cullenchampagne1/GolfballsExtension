@@ -736,6 +736,11 @@ const FIELDS = {
         extract: { cell: 4, attr: 'innerText' },
         transform: 'trim',
       },
+      owner: {
+        type: 'string', label: 'Opportunity owner',
+        extract: { cell: 5, attr: 'innerText' },
+        transform: 'trim',
+      },
     },
   },
 

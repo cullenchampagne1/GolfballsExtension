@@ -26,6 +26,7 @@ describe('custom pages lab', () => {
       assert.ok(fixture.tasks.open.every((task) => task.id && task.liveDate && task.dueDate));
       assert.ok(fixture.tasks.done.every((task) => task.id && task.liveDate && task.dueDate));
       assert.ok(fixture.opportunities.length >= 4);
+      assert.ok(fixture.opportunities.every((opportunity) => opportunity.owner));
       assert.ok(fixture.proofs.length >= 3);
       assert.ok(fixture.lookups.length >= 3);
     }

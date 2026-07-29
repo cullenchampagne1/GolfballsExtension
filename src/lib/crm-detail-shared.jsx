@@ -425,17 +425,20 @@ export function HeroTitleRow({ title, tags, id }) {
   );
 }
 
-/* The dashed-top strip of ContactPills under a hero's title/link rows. */
-export function HeroPillStrip({ children }) {
+/* The metadata strip under a hero's title/link rows. Contact pages use the
+   inset treatment; account pages retain the edge-attached third row. */
+export function HeroPillStrip({ children, inset = false }) {
   return (
     <div className="gbcp-hero-meta-strip" style={{
       display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
       alignItems: 'stretch', gap: 0,
       minHeight: 48,
-      margin: 'auto -18px 0',
-      padding: '5px 18px 7px',
+      margin: inset ? 'auto 0 12px' : 'auto -18px 0',
+      padding: inset ? '7px 8px' : '5px 18px 7px',
       background: 'var(--gb-surface-2)',
+      border: inset ? '1px solid var(--gb-border-default)' : 0,
       borderTop: '1px solid var(--gb-border-default)',
+      borderRadius: inset ? 'var(--gb-r-md)' : 0,
     }}>{children}</div>
   );
 }
@@ -467,14 +470,8 @@ export function Hero({ onSendEmail }) {
           if (onSendEmail) onSendEmail();
           else { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }
         }}>Send Email</Btn>
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 6,
-          alignItems: 'center', marginTop: 4, padding: '6px 7px',
-          borderRadius: 'var(--gb-r-md)',
-          background: 'var(--gb-surface-2)',
-          border: '1px solid var(--gb-border-subtle)',
-        }}>
-          <DncButton full />
+        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+          <DncButton />
           <IconBtn size="sm" icon={<I.more />} />
         </div>
       </>}>
@@ -504,7 +501,7 @@ export function Hero({ onSendEmail }) {
         {c.jobTitle && (<><span style={{ color: 'var(--gb-text-ghost)' }}>·</span><span>{c.jobTitle}</span></>)}
       </div>
 
-      <HeroPillStrip>
+      <HeroPillStrip inset>
         <ContactPill icon={<I.mail />}  label="Email" value={txt(c.email) || DASH} muted={isEmpty(c.email)} />
         <ContactPill icon={<I.phone />} label="Phone" value={txt(c.phone) || DASH} muted={isEmpty(c.phone)} />
         <ContactPill icon={<I.pin />}   label="Location" value={loc || DASH} muted={!loc} />
@@ -754,8 +751,9 @@ export function OpportunityModal({ opportunityId }) {
       const { payload, resp } = await crmSaveOpportunity(D.ids.contact, o);
       const id = payload.opportunityId || resp.opportunityId || `new-${nextTaskTempId()}`;
       const stageLabel = (OPP_STAGES.find((s) => s.value === payload.OpportunityStageId) || {}).label || '';
+      const ownerLabel = (empOpts.find((option) => String(option.value) === String(payload.empAssignedId)) || {}).label || 'Account Owner';
       patch((Dd) => {
-        const row = { id: String(id), subject: payload.Subject, stage: stageLabel, estimatedValue: Number(payload.EstimatedValue) || 0, estimatedCloseDate: payload.EstimatedClosedDate };
+        const row = { id: String(id), subject: payload.Subject, owner: ownerLabel, stage: stageLabel, estimatedValue: Number(payload.EstimatedValue) || 0, estimatedCloseDate: payload.EstimatedClosedDate };
         const list = Dd.opportunities || [];
         const exists = list.some((x) => String(x.id) === String(id));
         return { ...Dd, opportunities: exists ? list.map((x) => String(x.id) === String(id) ? { ...x, ...row } : x) : [row, ...list] };
@@ -1126,6 +1124,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
         <thead><tr>
           <Th>ID</Th>
           <Th>Subject</Th>
+          <Th>Owner</Th>
           <Th align="right">Est. Value</Th>
           <Th align="right">Est. Close</Th>
           <Th align="center">Stage</Th>
@@ -1136,6 +1135,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
             <tr key={i} style={trStyle}>
               <Td><span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', fontWeight: 600 }}>{o.id}</span></Td>
               <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{o.subject}</span></Td>
+              <Td muted>{txt(o.owner) || DASH}</Td>
               <Td align="right"><span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))' }}>{fmt$(o.estimatedValue)}</span></Td>
               <Td align="right" mono muted>{fmtDate(o.estimatedCloseDate)}</Td>
               <Td align="center">{o.stage ? <Tag tone="info" size="xs">{o.stage}</Tag> : DASH}</Td>
@@ -1147,7 +1147,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
               </Td>
             </tr>
           ))}
-          {D.opportunities.length === 0 && <EmptyRow colSpan={6} label="No opportunities." />}
+          {D.opportunities.length === 0 && <EmptyRow colSpan={7} label="No opportunities." />}
         </tbody>
       </table>
       </ScrollArea>
