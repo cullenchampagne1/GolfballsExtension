@@ -19,7 +19,7 @@ import {
   TASKS_ENDPOINT, STATUS_OPTS, PRIORITY_OPTS, DUE_BUCKETS,
   parseTasksFromHtml, parseTasksFromDoc, distinctCategories, filterTasks, sortTasks, dueBucket, looksLikeLoginShell,
 } from '../lib/taskListModel.js';
-import { completeTaskById, getTaskContactId } from '../lib/crmTasks.js';
+import { completeTaskById, getTaskContactId, updateTaskById } from '../lib/crmTasks.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
@@ -141,6 +141,9 @@ function TaskRow({ t, index, selected, onToggle, status, today, onEdit, onComple
     ...(emph?.tint ? { background: emph.tint } : null),
     ...(running ? { background: 'var(--gb-brand-tint-soft)' } : null),
     ...(emph?.accent ? { boxShadow: `inset 3px 0 0 ${emph.accent}` } : null),
+    // Selection wins (same treatment as the CRM search rows).
+    ...(selected ? { background: 'var(--gb-brand-tint-soft)', boxShadow: 'inset 3px 0 0 var(--gb-brand-label)' } : null),
+    transition: 'background-color var(--gb-anim), box-shadow var(--gb-anim)',
   };
   return (
     <tr className="gb-actrow" style={rowStyle}>
@@ -341,6 +344,32 @@ function TaskListApp({ store }) {
   const completeSelected = () => completeTasks(selectedTasks.map((t) => t.id));
   const completeOne = (t) => completeTasks([t.id]);
 
+  // ── Push due dates (quick actions, same presets as the modal popover).
+  //    365 = exactly one calendar year (same month/day next year). ──
+  const pushSelected = async (days) => {
+    const rows = selectedTasks;
+    if (!rows.length) { gbToast('Select tasks first', 'info'); return; }
+    const target = new Date();
+    if (Number(days) === 365) target.setFullYear(target.getFullYear() + 1);
+    else target.setDate(target.getDate() + Number(days));
+    const label = `${target.getMonth() + 1}/${target.getDate()}/${target.getFullYear()}`;
+    setRunActive(true);
+    rows.forEach((t) => setRowStatus(t.id, { phase: 'queued' }));
+    for (const t of rows) {              // sequential — CRM rate-limits Update.ajax
+      setRowStatus(t.id, { phase: 'running', label: 'Pushing…' });
+      try {
+        await updateTaskById(t.id, { dueDate: target });
+        setTasks((cur) => cur.map((x) => x.id === t.id ? { ...x, due: label, dueDate: new Date(target) } : x));
+        setRowStatus(t.id, { phase: 'done', label: `Due ${label}` });
+      } catch (e) { setRowStatus(t.id, { phase: 'error', label: 'Failed', detail: e?.message }); }
+    }
+    setRunActive(false);
+    // Let the ✓ linger, then bring the Edit/Complete buttons back (keep errors).
+    setTimeout(() => setStatusByRow((m) => {
+      const n = {}; for (const [id, st] of Object.entries(m)) if (st?.phase === 'error') n[id] = st; return n;
+    }), 2200);
+  };
+
   // ── Quick task → open the composer POPUP (push-out days, category, etc.)
   //    for the selected task's contact, instead of silently creating one. ─
   const quickTaskSelected = async () => {
@@ -443,6 +472,12 @@ function TaskListApp({ store }) {
                         <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</strong>
                         {' '}of {visible.length} task{visible.length === 1 ? '' : 's'}
                       </span>
+                      {/* Push-date quick actions — same presets as the modal
+                          popover (+1yr = exactly one calendar year). */}
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Push</span>
+                      {[['+3d', 3], ['+1w', 7], ['+2w', 14], ['+1mo', 30], ['+1yr', 365]].map(([lb, d]) => (
+                        <Btn key={lb} size="xs" variant="ghost" onClick={() => pushSelected(d)} disabled={runActive}>{lb}</Btn>
+                      ))}
                       <div style={{ flex: 1 }} />
                       <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={openEmail} disabled={runActive}>Email selected</Btn>
                       <Btn size="sm" variant="ghost" icon={<I.plus />} onClick={quickTaskSelected} disabled={runActive}>Quick task</Btn>

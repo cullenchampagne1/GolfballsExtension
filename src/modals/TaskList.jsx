@@ -263,7 +263,11 @@ async function apiReopenTask(id) {
 }
 async function apiPushTaskDate(id, daysOut) {
   const t = await fetchTaskRaw(id);
-  const d = new Date(); d.setDate(d.getDate() + daysOut);
+  const d = new Date();
+  // 365 is the "+1yr" preset — push EXACTLY one calendar year (same
+  // month/day next year), not 365 days, so leap years don't drift it.
+  if (Number(daysOut) === 365) d.setFullYear(d.getFullYear() + 1);
+  else d.setDate(d.getDate() + daysOut);
   await updateTaskWith(t, { DueDate: fmtMDY(d) });
   return fmtMDY(d);
 }

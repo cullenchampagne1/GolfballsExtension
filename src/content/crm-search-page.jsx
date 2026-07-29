@@ -551,7 +551,9 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       try { inputRef.current?.blur?.(); } catch (e) {}
       setFocused(false);
     }
-    const shouldShow = smartSearchBarVisible({
+    // UI parity with the Task List page: while any rows are selected the bar
+    // (which hosts the selection action rail) must stay pinned open.
+    const shouldShow = selectedRows.size > 0 || smartSearchBarVisible({
       currentTop,
       previousTop,
       visible: searchBarVisible,
@@ -578,7 +580,14 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         nearEnd: true,
       }));
     }
-  }, [focused, rows.length, searchBarVisible]);
+  }, [focused, rows.length, searchBarVisible, selectedRows]);
+  /* Selecting rows while the bar is hidden pops it back open immediately (and
+     cancels any pending hide) so the selection actions are always reachable. */
+  useEffect(() => {
+    if (selectedRows.size === 0) return;
+    if (hideSearchTimerRef.current) { clearTimeout(hideSearchTimerRef.current); hideSearchTimerRef.current = null; }
+    setSearchBarVisible(true);
+  }, [selectedRows]);
   useEffect(() => () => {
     if (hideSearchTimerRef.current) clearTimeout(hideSearchTimerRef.current);
   }, []);

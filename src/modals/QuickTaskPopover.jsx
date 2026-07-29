@@ -117,11 +117,11 @@ function RunPanel({ run, onClose, onRetry }) {
 ─────────────────────────────────────────────────────────────── */
 
 const PUSH_PRESETS = [
-  { label: '+1d',  days: 1  },
-  { label: '+3d',  days: 3  },
-  { label: '+1w',  days: 7  },
-  { label: '+2w',  days: 14 },
-  { label: '+1mo', days: 30 },
+  { label: '+3d',  days: 3   },
+  { label: '+1w',  days: 7   },
+  { label: '+2w',  days: 14  },
+  { label: '+1mo', days: 30  },
+  { label: '+1yr', days: 365 },
 ];
 
 /* Quick due-date choices for the inline custom-task form (design). */
