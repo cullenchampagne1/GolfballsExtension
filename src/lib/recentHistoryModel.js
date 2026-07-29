@@ -21,10 +21,15 @@ export function parseHistoryTable(table, baseHref) {
     .map((th) => (th.textContent || '').trim());
   const abs = (href) => { try { return href ? new URL(href, baseHref || 'https://api.golfballs.com/golfballs/adminnew/').href : ''; } catch { return ''; } };
   const rows = Array.from(table.querySelectorAll('tbody tr')).map((tr) => ({
-    cells: Array.from(tr.children).map((td) => ({
-      text: (td.textContent || '').replace(/\s+/g, ' ').trim(),
-      href: abs(td.querySelector?.('a')?.getAttribute('href') || ''),
-    })),
+    cells: Array.from(tr.children).map((td) => {
+      let text = (td.textContent || '').replace(/\s+/g, ' ').trim();
+      const href = abs(td.querySelector?.('a')?.getAttribute('href') || '');
+      // The native phone-history table mislabels its contact link "View
+      // Order" even though it opens the CONTACT page (Page=240). Correct
+      // the label to match where the link actually goes.
+      if (/^view order$/i.test(text) && /Page=240/i.test(href)) text = 'View Contact';
+      return { text, href };
+    }),
   })).filter((r) => r.cells.some((c) => c.text));
   return { headers, rows };
 }

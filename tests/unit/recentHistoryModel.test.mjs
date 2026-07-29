@@ -31,6 +31,18 @@ describe('parseRecentHistory', () => {
   });
 });
 
+describe('mislabel correction', () => {
+  it('relabels the phone-history "View Order" link that opens a CONTACT', () => {
+    const doc = new JSDOM(`
+      <table class="PCHTable"><thead><tr><th>Contact Name</th></tr></thead>
+        <tbody><tr><td><a href="/default.aspx?Page=240&customerID=77">View Order </a></td></tr></tbody></table>
+    `).window.document;
+    const [t] = parseRecentHistory(doc, 'https://api.golfballs.com/golfballs/adminnew/');
+    assert.equal(t.rows[0].cells[0].text, 'View Contact');
+    assert.match(t.rows[0].cells[0].href, /customerID=77/);
+  });
+});
+
 describe('filterHistoryRows', () => {
   const rows = parseRecentHistory(DOC)[0].rows;
   it('substring-filters across all cells, case-insensitive', () => {

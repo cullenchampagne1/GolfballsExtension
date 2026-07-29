@@ -24,6 +24,13 @@ if (!taskRows.length) {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/* CRM task categories are numeric wire ids (taskCategoryID). Labels are what
+   the UI shows; the ids are what Update/Create accept. */
+const ANNIVERSARY_CATEGORY_ID = 7;                       // "Order History Special"
+const ANNIVERSARY_CATEGORY_LABEL = "Order History Special";
+const QUARTERLY_CATEGORY_ID = 14;                        // "Workflow Task"
+const QUARTERLY_SUBJECT_RE = /^Q[1-4] Reach Out Opportunity$/i;
+
 function calendarDate(value) {
   if (!value) return null;
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -84,6 +91,12 @@ function anniversarySubject(subject, followUpYear) {
 function reconcileExistingTask(task) {
   if (!task?.id) return { liveDate: false, renamed: false };
 
+  // Quarterly reach-out tasks this action created on a previous run are
+  // OFF-LIMITS: never edit (or re-create/delete) an existing one.
+  if (QUARTERLY_SUBJECT_RE.test(String(task.subject || ""))) {
+    return { liveDate: false, renamed: false };
+  }
+
   let liveDateChanged = false;
   let renamed = false;
   const dueDate = calendarDate(task.dueDate || task.due);
@@ -100,8 +113,14 @@ function reconcileExistingTask(task) {
     task.subject = nextSubject;
     renamed = true;
   }
+  // Anniversary tasks (just renamed OR renamed on an earlier run) also get
+  // the Order History Special category — sent as the CRM's numeric wire id.
+  if (/\bOrder Anniversary Follow Up\b/i.test(nextSubject)
+      && String(task.category || "").trim() !== ANNIVERSARY_CATEGORY_LABEL) {
+    task.categoryId = ANNIVERSARY_CATEGORY_ID;
+  }
 
-  // The task proxy automatically groups both assignments into one
+  // The task proxy automatically groups the assignments into one
   // confirmation-gated updateTask write at the end of the program.
   return { liveDate: liveDateChanged, renamed };
 }
@@ -164,7 +183,18 @@ for (const task of taskRows) {
   const key = contactKey(task);
   const dueDate = calendarDate(task?.dueDate || task?.due);
   const plan = key ? contactPlans.get(key) : null;
-  if (plan && dueDate) plan.occupied.add(quarterKey(dueDate));
+  if (!plan) continue;
+  if (dueDate) plan.occupied.add(quarterKey(dueDate));
+  // Belt-and-braces dedupe: an EXISTING "QN Reach Out Opportunity" on this
+  // contact claims its quarter even when its due date was cleared/moved, so
+  // re-running the action can never create a second copy of the same slot.
+  const m = String(task?.subject || "").match(QUARTERLY_SUBJECT_RE);
+  if (m) {
+    const qn = Number(String(task.subject).charAt(1));
+    for (const slot of targetQuarters) {
+      if (slot.quarter === qn) plan.occupied.add(slot.key);
+    }
+  }
 }
 
 let createdCount = 0;
@@ -196,6 +226,7 @@ for (const plan of contactPlans.values()) {
         `Coverage period: Q${slot.quarter} ${slot.year}.`,
         "Created from the Task List because no dated task covered this quarter."
       ].filter(Boolean).join("\n"),
+      categoryId: QUARTERLY_CATEGORY_ID,   // "Workflow Task"
       priority: "med",
       daysOut: Math.max(
         0,
