@@ -483,7 +483,13 @@ export const UI_CSS =
   '}';
 
 export function ScrollArea({ max = 380, children, style }) {
-  const edgeMask = 'linear-gradient(to bottom, transparent 0, #000 9px, #000 calc(100% - 9px), transparent 100%)';
+  // Bottom-only fade. The TOP fade used to soften the first 9px of the
+  // scroller — but a table's sticky <thead> pins there, so the mask faded the
+  // header's top edge into the card behind it, reading as an out-of-place
+  // glow/shadow (the activity feed avoids this by rendering its header OUTSIDE
+  // the scroll). Keeping only the bottom fade makes every table header crisp
+  // and consistent with the activity feed.
+  const edgeMask = 'linear-gradient(to bottom, #000 0, #000 calc(100% - 9px), transparent 100%)';
   return (
     <div className="gb-scroll" style={{
       maxHeight: max, overflowY: 'auto', overflowX: 'hidden',
