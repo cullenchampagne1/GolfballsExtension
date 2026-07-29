@@ -10,6 +10,7 @@ import {
   TASK_CATEGORY_OPTIONS,
   getTaskCategoryLabel,
   getTaskCategoryTone,
+  isOpportunityTaskCategory,
 } from '../../src/lib/taskCategories.js';
 
 describe('getTaskCategoryLabel', () => {
@@ -51,5 +52,19 @@ describe('TASK_CATEGORY_OPTIONS', () => {
     const ids = TASK_CATEGORY_OPTIONS.map((o) => o.id);
     assert.equal(new Set(ids).size, ids.length);
     assert.ok(TASK_CATEGORY_OPTIONS.every((o) => typeof o.id === 'string' && typeof o.label === 'string'));
+  });
+});
+
+describe('isOpportunityTaskCategory', () => {
+  it('recognizes both the CRM wire id and extracted opportunity labels', () => {
+    assert.equal(isOpportunityTaskCategory(17), true);
+    assert.equal(isOpportunityTaskCategory('High Priority Opportunity'), true);
+    assert.equal(isOpportunityTaskCategory('opportunities'), true);
+  });
+
+  it('does not highlight unrelated open-task categories', () => {
+    assert.equal(isOpportunityTaskCategory('High Priority'), false);
+    assert.equal(isOpportunityTaskCategory('Proposal Follow-up'), false);
+    assert.equal(isOpportunityTaskCategory(null), false);
   });
 });

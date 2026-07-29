@@ -18,7 +18,7 @@ import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
 import { buildAccountPayload, accountUpdateUrl, checkAccountResponse } from './accountUpdate.js';
 import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
-import { TASK_CATEGORY_OPTIONS } from './taskCategories.js';
+import { TASK_CATEGORY_OPTIONS, isOpportunityTaskCategory } from './taskCategories.js';
 import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
 import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
 import { submitCallLog } from './submitCallLog.js';
@@ -433,7 +433,7 @@ export function HeroPillStrip({ children, inset = false }) {
       display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
       alignItems: 'stretch', gap: 0,
       minHeight: 48,
-      margin: inset ? 'auto 0 12px' : 'auto -18px 0',
+      margin: inset ? 'auto 0' : 'auto -18px 0',
       padding: inset ? '7px 8px' : '5px 18px 7px',
       background: 'var(--gb-surface-2)',
       border: inset ? '1px solid var(--gb-border-default)' : 0,
@@ -1342,6 +1342,7 @@ export function OpenTaskRow({ t }) {
   const done = state === 'done' || state === 'leaving';
   const leaving = state === 'leaving';
   const priorityTone = priTone(t.priority);
+  const opportunityCategory = isOpportunityTaskCategory(t.category);
   const due = toDateInputAny(t.dueDate);
   const dueTime = due ? new Date(`${due}T12:00:00`).getTime() : NaN;
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1367,7 +1368,11 @@ export function OpenTaskRow({ t }) {
         </div>
       </Td>
       <Td muted>{txt(t.owner) || DASH}</Td>
-      <Td muted>{t.category}</Td>
+      <Td muted={!opportunityCategory}>
+        {opportunityCategory
+          ? <Tag tone="success" size="xs" icon={<I.target />}>{t.category}</Tag>
+          : (t.category || DASH)}
+      </Td>
       <Td><Tag tone={priorityTone} size="xs">{t.priority || DASH}</Tag></Td>
       <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
       <Td align="right" mono><span style={{ color: dueColor }}>{fmtDate(t.dueDate)}</span></Td>

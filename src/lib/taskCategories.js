@@ -62,3 +62,11 @@ export function getTaskCategoryLabel(id) {
 export function getTaskCategoryTone(id) {
   return TASK_CATEGORY_TONES[String(id ?? '')] || 'neutral';
 }
+
+/** True for the CRM's opportunity task category whether the caller has the
+ *  wire id or the extracted display label. Detail tables only carry labels,
+ *  while composers usually carry id 17. */
+export function isOpportunityTaskCategory(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === '17' || /\bopportunit(?:y|ies)\b/.test(normalized);
+}
