@@ -27,3 +27,26 @@ export function smartSearchBarVisible({
   if (current >= previous + intentDelta && current > topReveal) return false;
   return !!visible;
 }
+
+/**
+ * Grow a page-backed result list in predictable DOM-sized batches. The full
+ * Solr page can stay cached in memory while React mounts only what the user is
+ * close to seeing.
+ */
+export function nextProgressiveResultCount({
+  total,
+  current,
+  nearEnd,
+  initial = 24,
+  batch = 20,
+} = {}) {
+  const safeTotal = Math.max(0, Math.floor(Number(total) || 0));
+  const safeInitial = Math.max(1, Math.floor(Number(initial) || 24));
+  const safeBatch = Math.max(1, Math.floor(Number(batch) || 20));
+  const safeCurrent = Math.min(
+    safeTotal,
+    Math.max(0, Math.floor(Number(current) || Math.min(safeInitial, safeTotal))),
+  );
+  if (!nearEnd || safeCurrent >= safeTotal) return safeCurrent;
+  return Math.min(safeTotal, safeCurrent + safeBatch);
+}

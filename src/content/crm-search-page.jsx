@@ -12,10 +12,10 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
-import { smartSearchBarVisible } from '../lib/customPageLayout.js';
+import { nextProgressiveResultCount, smartSearchBarVisible } from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
   crmRowToCampaignContact,
@@ -64,13 +64,13 @@ function writeUrlSearch(q, type, solrFq) {
 /* Segmented type switcher (All / Contacts / Accounts). */
 function TypeTabs({ value, onChange }) {
   return (
-    <div style={{ display: 'inline-flex', padding: 3, gap: 2, height: 36, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', flexShrink: 0, boxSizing: 'border-box' }}>
+    <div style={{ display: 'inline-flex', padding: 3, gap: 2, height: 36, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)', flexShrink: 0, boxSizing: 'border-box' }}>
       {TYPE_OPTS.map((o) => {
         const on = value === o.id;
         return (
           <button key={o.id} onClick={() => onChange(o.id)}
             style={{
-              height: '100%', padding: '0 13px', border: 0, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer',
+              height: '100%', padding: '0 13px', border: 0, borderRadius: 'var(--gb-r-pill)', cursor: 'pointer',
               fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: on ? 700 : 600,
               color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
               background: on ? 'var(--gb-surface-1)' : 'transparent',
@@ -114,21 +114,22 @@ function SelectionBox({ checked, onChange, title }) {
 
 function SelectionActionRail({ count, total, onCampaign, onEmail, onExport }) {
   return (
-    <AnimatePresence initial={false}>
-      {count > 0 && (
-        <motion.div
-          key="crm-search-selection-actions"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-          style={{ overflow: 'hidden' }}
-        >
+    <div style={{
+      display: 'grid',
+      gridTemplateRows: count > 0 ? '1fr' : '0fr',
+      opacity: count > 0 ? 1 : 0,
+      transition: 'grid-template-rows .24s cubic-bezier(.4,0,.2,1), opacity .16s ease',
+    }}>
+      <div style={{ minHeight: 0, overflow: 'hidden' }}>
+        <div style={{
+          transform: count > 0 ? 'translateY(0)' : 'translateY(-8px)',
+          transition: 'transform .24s cubic-bezier(.4,0,.2,1)',
+        }}>
           <div style={{
             minHeight: 42,
-            padding: '7px 12px',
+            padding: '7px 14px',
             borderTop: '1px solid var(--gb-border-subtle)',
-            background: 'var(--gb-brand-tint-soft)',
+            background: 'color-mix(in srgb, var(--gb-brand-tint-soft) 72%, transparent)',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
@@ -143,9 +144,9 @@ function SelectionActionRail({ count, total, onCampaign, onEmail, onExport }) {
             <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail}>Email selected</Btn>
             <Btn size="sm" variant="ghost" icon={<I.download />} onClick={onExport}>Export CSV</Btn>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -348,6 +349,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const selRef = useRef(selected);
   selRef.current = selected;
   const [rows, setRows] = useState(() => (initialSearch?.docs || []).slice(0, SOLR_ROWS));
+  const [renderCount, setRenderCount] = useState(() => Math.min(24, initialSearch?.docs?.length || 0));
   const [selectedRows, setSelectedRows] = useState(() => new Set());
   const selectionAnchorRef = useRef(null);
   const [numFound, setNumFound] = useState(initialSearch?.numFound || 0);
@@ -359,6 +361,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   const [focused, setFocused] = useState(false);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
+  const hideSearchTimerRef = useRef(null);
   const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
   const gen = useRef(0);   // ignore stale responses
@@ -368,7 +371,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     setLoading(true);
     setError(false);
     setSelectedRows(new Set());
+    setRenderCount(24);
     selectionAnchorRef.current = null;
+    if (hideSearchTimerRef.current) {
+      clearTimeout(hideSearchTimerRef.current);
+      hideSearchTimerRef.current = null;
+    }
     setSearchBarVisible(true);
     setSearched(true);
     try {
@@ -428,7 +436,8 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const applyQb = (filter) => { setQbFilter(filter); setQbOpen(false); writeUrlSearch(query.trim(), type, filter?.solrFq || ''); runSearch(query.trim(), type, filter); };
   const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null); };
   const selectedResults = useMemo(() => selectedCrmRows(rows, selectedRows), [rows, selectedRows]);
-  const allRowsSelected = rows.length > 0 && rows.every((row) => selectedRows.has(row.id));
+  const renderedRows = useMemo(() => rows.slice(0, renderCount), [rows, renderCount]);
+  const allRowsSelected = renderedRows.length > 0 && renderedRows.every((row) => selectedRows.has(row.id));
   const toggleResult = useCallback((id, index, shiftKey = false) => {
     setSelectedRows((current) => {
       const result = toggleCrmSelection(
@@ -445,12 +454,16 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   }, [rows]);
   const toggleAllResults = useCallback(() => {
     setSelectedRows((current) => {
-      const allSelected = rows.length > 0 && rows.every((row) => current.has(row.id));
+      const allSelected = renderedRows.length > 0 && renderedRows.every((row) => current.has(row.id));
       selectionAnchorRef.current = null;
-      if (allSelected) return new Set();
-      return new Set(rows.map((row) => row.id).filter(Boolean));
+      const next = new Set(current);
+      for (const row of renderedRows) {
+        if (allSelected) next.delete(row.id);
+        else if (row.id != null) next.add(row.id);
+      }
+      return next;
     });
-  }, [rows]);
+  }, [renderedRows]);
   const handleScrollIntent = useCallback((event) => {
     const target = event?.currentTarget;
     if (!target) return;
@@ -466,13 +479,37 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       try { inputRef.current?.blur?.(); } catch (e) {}
       setFocused(false);
     }
-    setSearchBarVisible((visible) => smartSearchBarVisible({
+    const shouldShow = smartSearchBarVisible({
       currentTop,
       previousTop,
-      visible,
+      visible: searchBarVisible,
       focused: focused && !scrollingDown,
-    }));
-  }, [focused]);
+    });
+    if (shouldShow) {
+      if (hideSearchTimerRef.current) {
+        clearTimeout(hideSearchTimerRef.current);
+        hideSearchTimerRef.current = null;
+      }
+      if (!searchBarVisible) setSearchBarVisible(true);
+    } else if (searchBarVisible && !hideSearchTimerRef.current) {
+      hideSearchTimerRef.current = setTimeout(() => {
+        hideSearchTimerRef.current = null;
+        setSearchBarVisible(false);
+      }, 170);
+    }
+
+    const remaining = target.scrollHeight - currentTop - target.clientHeight;
+    if (remaining < 620) {
+      setRenderCount((current) => nextProgressiveResultCount({
+        total: rows.length,
+        current,
+        nearEnd: true,
+      }));
+    }
+  }, [focused, rows.length, searchBarVisible]);
+  useEffect(() => () => {
+    if (hideSearchTimerRef.current) clearTimeout(hideSearchTimerRef.current);
+  }, []);
   const openCampaign = useCallback(() => {
     const audience = selectedResults
       .map((row) => crmRowToCampaignContact(row, recUrl(row)))
@@ -525,17 +562,28 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           initial={false}
           animate={{
             opacity: searchBarVisible ? 1 : 0,
-            y: searchBarVisible ? 0 : '-120%',
+            y: searchBarVisible ? 0 : -14,
+            scale: searchBarVisible ? 1 : 0.985,
           }}
-          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: searchBarVisible ? 0.24 : 0.18, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: 'sticky',
             top: 58,
             zIndex: 9,
             pointerEvents: searchBarVisible ? 'auto' : 'none',
+            margin: '0 4px',
+            transformOrigin: '50% 0',
+            willChange: 'transform, opacity',
           }}
         >
-          <Card style={{ boxShadow: '0 8px 24px color-mix(in srgb, var(--gb-surface-deep) 48%, transparent)' }}>
+          <Card style={{
+            borderRadius: 18,
+            border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
+            background: 'color-mix(in srgb, var(--gb-surface-1) 90%, transparent)',
+            backdropFilter: 'blur(18px) saturate(145%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(145%)',
+            boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
+          }}>
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {/* Search input — height matched to the buttons (36) */}
@@ -543,7 +591,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 flex: 1, minWidth: 260, display: 'flex', alignItems: 'center', gap: 9, height: 36, padding: '0 11px',
                 background: 'var(--gb-fill-inverse-medium)',
                 border: '1px solid ' + (focused ? 'var(--gb-border-focus)' : 'var(--gb-border-default)'),
-                borderRadius: 'var(--gb-r-md)',
+                borderRadius: 12,
                 boxShadow: focused ? '0 0 0 3px color-mix(in srgb, var(--gb-brand-label) 18%, transparent)' : 'none',
                 transition: 'box-shadow var(--gb-anim), border-color var(--gb-anim)',
               }}>
@@ -629,7 +677,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                     <Th align="right">Next Task</Th>
                   </tr></thead>
                   <tbody>
-                    {rows.map((r, i) => (
+                    {renderedRows.map((r, i) => (
                       <ResultRow
                         key={(r.id || '') + i}
                         r={r}
@@ -641,6 +689,27 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                   </tbody>
                 </table>
               </div>
+              {renderedRows.length < rows.length && (
+                <div style={{
+                  height: 38,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  color: 'var(--gb-text-muted)',
+                  fontSize: 10.5,
+                }}>
+                  <span style={{
+                    width: 13,
+                    height: 13,
+                    borderRadius: '50%',
+                    border: '2px solid var(--gb-border-default)',
+                    borderTopColor: 'var(--gb-brand-label)',
+                    animation: 'gb-spin .75s linear infinite',
+                  }} />
+                  Loading more records…
+                </div>
+              )}
               <div style={{ height: 12 }} />
             </>
           )}
