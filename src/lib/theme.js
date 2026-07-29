@@ -1,6 +1,8 @@
 import themeCss from '../ui/theme.css?inline';
 import { startForceImportantBorderRadius } from './forceImportantBorderRadius.js';
 import { ensureScales } from './scales.js';
+import { ensureSkin, registerNamedSkin } from './theme/skinEngine.js';
+import { REVSTACK_SKIN } from '../themes/revstack.skin.js';
 
 /* ───────────────────────────────────────────────────────────────
    theme.js — the design-system theme runtime.
@@ -160,6 +162,11 @@ export function ensureTheme() {
   startForceImportantBorderRadius();
   ensureScales();
   loadTheme().then(applyTheme);
+  // Boot the CSS override / skin engine on the same chokepoint every surface
+  // already calls, so a saved skin (or the temp __gbLoadSkin path) applies to
+  // custom pages, modals, popup, and settings alike.
+  registerNamedSkin('revstack', REVSTACK_SKIN);
+  ensureSkin();
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes[STORAGE_KEY]) {

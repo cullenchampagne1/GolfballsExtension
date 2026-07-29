@@ -1,0 +1,89 @@
+/* ═══════════════════════════════════════════════════════════════
+   revstack.css — the RevStack dashboard design as a drop-in skin for
+   the golfballs extension. Aurora gradient background + frosted-glass
+   blocks and modals.
+
+   This is the readable, editable "design file". It is the CSS mirror of
+   src/themes/revstack.skin.js (the JS the engine actually applies). Two
+   ways to use it:
+
+     • Live/temp test (no rebuild): open the CRM (or the extension
+       settings) and run in the console —
+         __gbLoadSkin('revstack')      // apply + persist everywhere
+         __gbClearSkin()               // back to the stock theme
+       (These globals are installed by the skin engine on every surface.)
+
+     • As raw CSS: __gbApplySkin({ css: <contents of this file> }) also
+       works, but the token form in the .js is preferred because CSS
+       custom properties inherit across the custom-page Shadow DOM.
+
+   The look is entirely token-driven: the shared primitives (Card,
+   ModalShell, the custom-page frame) read these --gb-* tokens, so setting
+   them on <html> reskins custom pages, modals, popup, and settings at
+   once. Edit the values here to taste, then mirror into revstack.skin.js.
+═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── App background: layered aurora over near-black ─────────────── */
+  --gb-app-bg:
+    radial-gradient(1100px 760px at 12% -12%, rgba(143, 206, 46, 0.16), transparent 58%),
+    radial-gradient(980px 720px at 104% -4%, rgba(78, 120, 210, 0.16), transparent 55%),
+    radial-gradient(900px 900px at 50% 120%, rgba(120, 90, 200, 0.10), transparent 60%),
+    linear-gradient(165deg, #0c1017 0%, #0a0d13 42%, #08090d 100%);
+
+  /* ── Surfaces → translucent so the gradient reads through ───────── */
+  --gb-surface-deep:   transparent;
+  --gb-surface-canvas: rgba(255, 255, 255, 0.02);
+  --gb-surface-1:      rgba(255, 255, 255, 0.045);
+  --gb-surface-2:      rgba(255, 255, 255, 0.075);
+  --gb-surface-3:      rgba(255, 255, 255, 0.11);
+  --gb-surface-modal:  rgba(17, 21, 28, 0.66);
+
+  /* ── Borders → soft light hairlines ─────────────────────────────── */
+  --gb-border-subtle:  rgba(255, 255, 255, 0.06);
+  --gb-border-default: rgba(255, 255, 255, 0.11);
+  --gb-border-strong:  rgba(255, 255, 255, 0.18);
+
+  /* ── Text → legible on dark glass (force a dark base) ───────────── */
+  --gb-text-primary:   #f3f6f8;
+  --gb-text-secondary: #ccd3db;
+  --gb-text-tertiary:  #9aa2ad;
+  --gb-text-muted:     #6f7783;
+  --gb-text-ghost:     #4a515b;
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  /* ── Frosted-glass BLOCKS (Card) ────────────────────────────────── */
+  --gb-card-bg:     rgba(255, 255, 255, 0.05);
+  --gb-card-blur:   blur(18px) saturate(150%);
+  --gb-card-border: 1px solid rgba(255, 255, 255, 0.10);
+  --gb-card-shadow: 0 8px 30px -10px rgba(0, 0, 0, 0.60), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --gb-card-radius: 16px;
+
+  /* ── Frosted-glass MODALS ───────────────────────────────────────── */
+  --gb-modal-bg:     rgba(16, 20, 27, 0.72);
+  --gb-modal-blur:   blur(28px) saturate(160%);
+  --gb-modal-border: 1px solid rgba(255, 255, 255, 0.12);
+  --gb-modal-radius: 18px;
+  --gb-modal-shadow: 0 30px 80px -22px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  /* ── Softer radii + darker scrim to match the dashboard ─────────── */
+  --gb-r-sm: 8px;
+  --gb-r-md: 12px;
+  --gb-r-lg: 16px;
+  --gb-r-xl: 20px;
+  --gb-backdrop: rgba(6, 8, 12, 0.62);
+}
+
+/* The class-level seam. The primitives carry stable class names —
+   .gb-app (page/settings background hosts), .gb-card (every block),
+   .gb-modal (every modal shell) — so a future skin can target structure
+   directly here. The RevStack look needs none of this (it is all tokens
+   above), but this is where BetterDiscord-style rules would go, e.g.:
+
+     .gb-card  { border-radius: 20px !important; }
+     .gb-modal { box-shadow: 0 40px 120px rgba(0,0,0,.8) !important; }
+
+   Note: the primitives set their skinnable properties INLINE via the
+   tokens above, so plain class rules need !important to win. Prefer the
+   tokens; reach for !important only for properties with no token. */

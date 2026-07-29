@@ -636,11 +636,14 @@ export const PRIORITY_OPTS = [{ value: '1', label: 'High' }, { value: '2', label
 export function ModalShell({ title, icon, subtitle, children, footer, width = 460 }) {
   const { closeModal, closing } = useModal();
   return (
-    <div onMouseDown={(e) => e.stopPropagation()}
+    <div onMouseDown={(e) => e.stopPropagation()} className="gb-modal"
       style={{
         width, maxWidth: '92%', display: 'flex', flexDirection: 'column',
-        background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-modal, 0 24px 64px rgba(0,0,0,.5))',
+        // Skin seam: --gb-modal-* (shared with FloatingPanel) reskin the shell.
+        background: 'var(--gb-modal-bg, var(--gb-surface-1))',
+        backdropFilter: 'var(--gb-modal-blur, none)', WebkitBackdropFilter: 'var(--gb-modal-blur, none)',
+        border: 'var(--gb-modal-border, 1px solid var(--gb-border-default))',
+        borderRadius: 'var(--gb-modal-radius, var(--gb-r-lg))', boxShadow: 'var(--gb-modal-shadow, var(--gb-shadow-modal, 0 24px 64px rgba(0,0,0,.5)))',
         // scale the modal to match the page (the takeover renders at PAGE_ZOOM;
         // the overlay is a 1x sibling, so without this the modal looks tiny).
         // overflow visible so a MiniSelect popover floats IN FRONT of the modal
@@ -1630,14 +1633,16 @@ export function DetailPageFrame({
           [data-gb-scale] selector still applies the host-CSS reset
           (box-sizing / line-height / font). height:100% + own scroll so it
           fills the fixed root the engine mounts. */}
-      <div data-gb-scale="custom-page" className="gbcp-root" style={{
+      <div data-gb-scale="custom-page" className="gbcp-root gb-app" style={{
         ...ARMOR,
         zoom: PAGE_ZOOM,                 // fixed scale — not slider-driven
         // No PAGE scroll — the sidebar and content column each scroll
         // themselves. This also kills the page-scrollbar appear/disappear
         // that was flickering a scrollbar onto the quick-actions menu.
         height: '100%', overflow: 'hidden',
-        background: 'var(--gb-surface-deep)',
+        // Skin seam: --gb-app-bg lets a theme paint a gradient behind the whole
+        // custom page (default keeps the stock deep surface).
+        background: 'var(--gb-app-bg, var(--gb-surface-deep))',
         color: 'var(--gb-text-secondary)',
         fontFamily: 'var(--gb-font-sans)',
         display: 'flex', alignItems: 'stretch',

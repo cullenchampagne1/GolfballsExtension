@@ -87,7 +87,7 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, cardClassName
   const embedded = !!useContext(FloatingPanelEmbedContext)?.container;
   return (
     <motion.div
-      className={['gb-modal-card', cardClassName].filter(Boolean).join(' ')}
+      className={['gb-modal-card', 'gb-modal', cardClassName].filter(Boolean).join(' ')}
       data-gb-scale="modals"
       data-gb-kbd-scope=""
       initial={{ opacity: 0, scale: 0.95 }}
@@ -105,10 +105,14 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, cardClassName
         width: cssWidth,
         maxHeight: cssMaxHeight,
         ...(cssHeight ? { height: cssHeight } : null),
-        background: 'var(--gb-surface-canvas)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-lg)',
-        boxShadow: 'var(--gb-shadow-modal)',
+        // Skin seam: --gb-modal-* reskin every modal shell (glass bg/blur/
+        // border/radius) with defaults preserving the stock look.
+        background: 'var(--gb-modal-bg, var(--gb-surface-canvas))',
+        backdropFilter: 'var(--gb-modal-blur, none)',
+        WebkitBackdropFilter: 'var(--gb-modal-blur, none)',
+        border: 'var(--gb-modal-border, 1px solid var(--gb-border-default))',
+        borderRadius: 'var(--gb-modal-radius, var(--gb-r-lg))',
+        boxShadow: 'var(--gb-modal-shadow, var(--gb-shadow-modal))',
         overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
         fontFamily: 'var(--gb-font-sans)',

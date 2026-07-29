@@ -202,14 +202,19 @@ export function Dot({ tone = 'brand', size = 6, glow }) {
 
 export function Card({ children, style, pad = 0, hover, onClick, className }) {
   return (
-    <div onClick={onClick} className={(hover ? 'gb-card-hover ' : '') + (className || '')}
+    <div onClick={onClick} className={'gb-card ' + (hover ? 'gb-card-hover ' : '') + (className || '')}
       style={{
         ...ARMOR,
         // reset boundary: re-establish inherited basics for descendants
         fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)',
-        background: 'var(--gb-surface-1)',
-        border: '1px solid var(--gb-border-subtle)',
-        borderRadius: 'var(--gb-r-md)',
+        // Skin seam: --gb-card-* let a theme reskin every block (glass bg, blur,
+        // border, shadow, radius) with defaults that preserve the stock look.
+        background: 'var(--gb-card-bg, var(--gb-surface-1))',
+        backdropFilter: 'var(--gb-card-blur, none)',
+        WebkitBackdropFilter: 'var(--gb-card-blur, none)',
+        border: 'var(--gb-card-border, 1px solid var(--gb-border-subtle))',
+        borderRadius: 'var(--gb-card-radius, var(--gb-r-md))',
+        boxShadow: 'var(--gb-card-shadow, none)',
         padding: pad, overflow: 'hidden',
         transition: 'background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim), transform var(--gb-anim)',
         ...(onClick ? { cursor: 'pointer' } : null),

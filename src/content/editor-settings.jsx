@@ -24,8 +24,10 @@ function EditorSettings() {
        with the variant — otherwise switching to light/cream leaves dark text
        on the editor's still-dark legacy chrome. */
     <div
+      className="gb-app"
       style={{
-        background: 'var(--gb-surface-canvas)',
+        // Skin seam: --gb-app-bg paints the themed gradient behind settings.
+        background: 'var(--gb-app-bg, var(--gb-surface-canvas))',
         color: 'var(--gb-text-secondary)',
         fontFamily: 'var(--gb-font-sans)',
         minHeight: '100%',
@@ -65,7 +67,7 @@ function mount() {
   host.__gbSettingsMounted = true;
   // The host is the legacy editor's view container (old token theme). Paint it
   // with the design-system canvas so the panel never sits on un-themed chrome.
-  host.style.background = 'var(--gb-surface-canvas)';
+  host.style.background = 'var(--gb-app-bg, var(--gb-surface-canvas))';
   ensureTheme();
   createRoot(host).render(<EditorSettings />);
 }

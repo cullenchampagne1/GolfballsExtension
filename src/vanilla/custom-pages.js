@@ -265,7 +265,8 @@
     // CRM Search, toasts etc. still surface ON TOP of the takeover.
     rootEl.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:100000',
-      'overflow:hidden', 'background:var(--gb-surface-deep,#0a0b0c)',
+      // Skin seam: --gb-app-bg paints a themed gradient behind the takeover.
+      'overflow:hidden', 'background:var(--gb-app-bg,var(--gb-surface-deep,#0a0b0c))',
     ].join(';');
     // Mount on <html>, not <body>, so the store's body-observer never
     // sees our own React mutations.
@@ -284,6 +285,10 @@
       mount.style.height = '100%';
       shadow.appendChild(mount);
       mountTarget = mount;
+      // Let the skin engine inject its raw-css override layer into this shadow
+      // root (skin vars already inherit from <html>). Best-effort: the global
+      // is installed by ensureSkin() in the page's content script at load.
+      try { if (window.__gbRegisterSkinRoot) window.__gbRegisterSkinRoot(shadow); } catch (e) { /* skin engine not present */ }
     } catch (e) { /* attachShadow unsupported → render directly (no isolation) */ }
 
     // Lock host scroll via an INLINE style we own — independent of the
