@@ -38,6 +38,11 @@ const TYPE_OPTS = [
   { id: 'account', label: 'Accounts' },
 ];
 
+// Keep the header crisp while the record rows taper into the result surface.
+// The top transition is intentionally deeper than the bottom so rows receding
+// beneath the floating search rail feel softer than rows entering below.
+const RESULT_ROWS_MASK = 'linear-gradient(to bottom, transparent 0, rgba(0,0,0,.32) 9px, #000 34px, #000 calc(100% - 11px), transparent 100%)';
+
 /* ── URL <-> search state ─────────────────────────────────────
    The native search puts its term in the URL; we own ?q/?t/?fq going
    forward but also read a few common native param names on first load. */
@@ -568,7 +573,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           transition={{ duration: searchBarVisible ? 0.24 : 0.18, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: 'sticky',
-            top: 58,
+            top: 64,
             zIndex: 9,
             pointerEvents: searchBarVisible ? 'auto' : 'none',
             margin: '0 4px',
@@ -676,7 +681,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                     <Th align="right">Orders</Th>
                     <Th align="right">Next Task</Th>
                   </tr></thead>
-                  <tbody>
+                  <tbody style={{
+                    WebkitMaskImage: RESULT_ROWS_MASK,
+                    maskImage: RESULT_ROWS_MASK,
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskRepeat: 'no-repeat',
+                  }}>
                     {renderedRows.map((r, i) => (
                       <ResultRow
                         key={(r.id || '') + i}
