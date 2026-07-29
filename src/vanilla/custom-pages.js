@@ -84,6 +84,11 @@
       if (!e) return false;
       return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.SEARCH : 'search');
     },
+    // The task list has no page-engine schema; detect it straight off the URL
+    // (Page=349). The engine still expands #TableTasks (in HOST_DATATABLES).
+    task_list: function () {
+      return /[?&]Page=349\b/i.test(location.href);
+    },
   };
 
   // ── enabled-set helpers ──────────────────────────────────────

@@ -36,6 +36,7 @@
     { id: 'account_details', re: /[?&]Page=271\b/i },
     { id: 'opportunity_details', re: /[?&]Page=280\b/i },
     { id: 'search', re: /[?&]Page=360\b/i },
+    { id: 'task_list', re: /[?&]Page=349\b/i },
   ];
 
   function enabledSet() {

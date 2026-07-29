@@ -169,6 +169,10 @@
       "file": "tests/unit/skinEngine.test.mjs"
     },
     {
+      "name": "crm \u00b7 task list page model (parse/filter/sort/due)",
+      "file": "tests/unit/taskListModel.test.mjs"
+    },
+    {
       "name": "crm \u00b7 Solr search query-string contract",
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },

@@ -120,6 +120,7 @@
         "react-dist/content/account-details.js",
         "react-dist/content/opportunity-details.js",
         "react-dist/content/crm-search-page.js",
+        "react-dist/content/crm-task-list-page.js",
         "src/vanilla/custom-pages.js",
         "src/vanilla/main.js"
       ],
