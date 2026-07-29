@@ -7,12 +7,14 @@
 // The Task List provider supplies every loaded row under
 // page.entryPoint.data.tasks, independent of the modal's current filters.
 // Any dated task counts as scheduled contact for its contact + quarter.
-// Every loaded dated task is reconciled so its live date is exactly two
-// weeks before its due date. Legacy "Prior Year #N [year]" subjects are renamed
-// to "Order Anniversary Follow Up #N [followUpYear]" — the number is kept and
-// the year is refreshed to the task's due-date year. Missing rolling quarters
-// receive one task, and those new tasks receive the same two-week live-date
-// offset.
+// Only tasks this flow OWNS are ever edited: legacy "Prior Year #N [year]"
+// subjects are renamed to "Order Anniversary Follow Up #N [followUpYear]" —
+// the number is kept and the year is refreshed to the task's due-date year —
+// and those anniversary tasks get a live date exactly two weeks before their
+// due date. Every other task (promotion follow-ups, manual follow-ups, brand
+// tiers) counts toward quarter coverage but keeps its subject, live date, and
+// category untouched. Missing rolling quarters receive one task, and those
+// new tasks receive the same two-week live-date offset.
 
 const data = page.entryPoint?.data;
 const taskRows = Array.isArray(data?.tasks) ? data.tasks : [];
@@ -30,6 +32,10 @@ const ANNIVERSARY_CATEGORY_ID = 7;                       // "Order History Speci
 const ANNIVERSARY_CATEGORY_LABEL = "Order History Special";
 const QUARTERLY_CATEGORY_ID = 14;                        // "Workflow Task"
 const QUARTERLY_SUBJECT_RE = /^Q[1-4] Reach Out Opportunity$/i;
+/* The only existing tasks this action is allowed to edit: the legacy
+   "Prior Year …" subjects and their renamed "Order Anniversary Follow Up"
+   successors. Anything else on the list is someone else's task. */
+const ANNIVERSARY_SUBJECT_RE = /\bPrior\s+Year\b|\bOrder\s+Anniversary\s+Follow\s+Up\b/i;
 
 function calendarDate(value) {
   if (!value) return null;
@@ -94,6 +100,15 @@ function reconcileExistingTask(task) {
   // Quarterly reach-out tasks this action created on a previous run are
   // OFF-LIMITS: never edit (or re-create/delete) an existing one.
   if (QUARTERLY_SUBJECT_RE.test(String(task.subject || ""))) {
+    return { liveDate: false, renamed: false };
+  }
+
+  // Every other task that isn't a Prior Year / Order Anniversary subject —
+  // promotion follow-ups, manual follow-ups, brand tiers — is OFF-LIMITS
+  // too. Rewriting a promotion task's live date to due − 14 pushed tasks
+  // due more than two weeks out past "live", which hid them from the Task
+  // List pull entirely. They still count as quarter coverage below.
+  if (!ANNIVERSARY_SUBJECT_RE.test(String(task.subject || ""))) {
     return { liveDate: false, renamed: false };
   }
 

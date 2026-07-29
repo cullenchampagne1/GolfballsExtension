@@ -314,14 +314,40 @@ contact profile. Create a Custom Action with:
 While Task List is open, the action appears in the shelf. Its provider exposes
 every loaded task under `page.entryPoint.data.tasks` and unique contact routing
 under `page.entryPoint.data.contacts`, independent of the modal's visible
-filter. The action groups tasks by contact, treats any dated task as quarter
-coverage, sets every loaded dated task's live date to fourteen days before its
-due date, and renames `Prior Year #N` subjects to
-`Order Anniversary Follow Up #N`. It creates each missing task in the rolling
+filter. The action groups tasks by contact and treats any dated task as
+quarter coverage, but it only ever EDITS tasks it owns: `Prior Year #N`
+subjects are renamed to `Order Anniversary Follow Up #N` and those anniversary
+tasks get a live date fourteen days before their due date. Every other task —
+promotion follow-ups, manual follow-ups, brand tiers — keeps its subject,
+live date, and category untouched. It creates each missing task in the rolling
 four-quarter window and immediately gives the new task the same two-week
 live-date offset through the ordinary confirmation-gated executor.
+
+Do not widen the reconcile scope to every dated task: a task list's rows
+include tasks other flows own, and setting live date to due − 14 on a task due
+more than two weeks out pushes it past "live", which removes it from the Task
+List pull entirely (the CRM only renders already-live tasks there).
 
 Contacts with no contact ID are skipped because the CRM cannot attach a task
 to them. A contact with no Task List row cannot be discovered from this surface;
 run the per-record campaign once to seed those contacts before using the faster
 Task List reconciliation action.
+
+## Promotion task recovery campaign
+
+The paste-ready campaign at
+[`docs/examples/promotion-task-recovery-campaign.js`](examples/promotion-task-recovery-campaign.js)
+repairs promotion tasks whose live dates were pushed into the future and
+back-fills any that are missing. Run it against the same contact/account
+audience the promotion campaign targeted. Because each record hydrates from
+its own contact/account page, `page.tasks.open` still includes non-live tasks
+that the Task List pull cannot show.
+
+Per record it revives open promotion tasks (matched by the configurable
+`PROMO_SUBJECT_RE`) whose live date is in the future by setting live date to
+today, creates any subject from `PROMO_TASKS` that is neither open nor
+completed, refuses to edit Q1–Q4 reach-out / Prior Year / Order Anniversary /
+brand tier tasks, and lists every other still-not-live task in its result line
+so hidden tasks stay visible from the run log. Edit the config block's
+subjects and cadence to the active promotion before running, dry-run one
+record, then run live.

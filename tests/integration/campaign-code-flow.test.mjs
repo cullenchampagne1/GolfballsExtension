@@ -26,6 +26,10 @@ const QUARTERLY_REACH_OUT_ACTION = readFileSync(
   new URL('../../docs/examples/quarterly-reach-out-task-list-action.js', import.meta.url),
   'utf8',
 );
+const PROMOTION_RECOVERY_CAMPAIGN = readFileSync(
+  new URL('../../docs/examples/promotion-task-recovery-campaign.js', import.meta.url),
+  'utf8',
+);
 async function fakeSandbox(body, ctx, vars = {}, _doc) {
   const fn = new AsyncFunction('ctx', 'vars', 'h', `"use strict";\n${body}`);
   return fn(ctx || {}, vars || {}, {});
@@ -201,7 +205,11 @@ describe('campaign code flow', () => {
 
     assert.equal(result.ok, true);
     assert.equal(createWrites.length, 6);
-    assert.equal(updateWrites.length, 8);
+    assert.equal(updateWrites.length, 7);
+    assert.ok(
+      !updateWrites.some((write) => write.id === 'g-later'),
+      'tasks the action does not own (promotions, manual follow-ups) keep their live dates',
+    );
     assert.deepEqual(
       [...new Set(createWrites.map((write) => write.context.contactId))].sort(),
       ['101', '202'],
@@ -241,7 +249,10 @@ describe('campaign code flow', () => {
             String(date.getDate()).padStart(2, '0'),
           ].join('-');
         })(),
-        subject: 'Order Anniversary Follow Up #1 [2025]',
+        // The bracket year refreshes to the due-date year (the follow-up
+        // cycle), and renamed tasks get the Order History Special category.
+        subject: `Order Anniversary Follow Up #1 [${slots[0].year}]`,
+        categoryId: 7,
       },
     );
     assert.ok(
@@ -250,9 +261,146 @@ describe('campaign code flow', () => {
         .every((write) => /^\d{4}-\d{2}-\d{2}$/.test(write.fields.liveDate)),
       'every newly-created quarterly task receives an exact live date',
     );
-    assert.match(String(result.result), /Updated 2 existing live date\(s\)/);
+    assert.match(String(result.result), /Updated 1 existing live date\(s\)/);
     assert.match(String(result.result), /renamed 1 anniversary task\(s\)/);
     assert.match(String(result.result), /Created 6 quarterly reach-out task\(s\)/);
+  });
+
+  it('revives hidden promotion tasks and creates missing ones without touching other flows', async () => {
+    const atNoon = (offset) => {
+      const date = new Date();
+      date.setHours(12, 0, 0, 0);
+      date.setDate(date.getDate() + offset);
+      return date;
+    };
+    const isoDate = (date) => [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '101', account: '' },
+        contact: { id: '101', contactId: '101', contactName: 'Ada Buyer' },
+        orders: [],
+        tasks: {
+          open: [
+            {
+              id: 'promo-1',
+              subject: '#1 Srixon Promotion Campaign Follow Up',
+              dueDate: isoDate(atNoon(20)),
+              liveDate: isoDate(atNoon(6)),
+            },
+            {
+              id: 'quarter',
+              subject: 'Q3 Reach Out Opportunity',
+              dueDate: isoDate(atNoon(30)),
+              liveDate: isoDate(atNoon(16)),
+            },
+            {
+              id: 'anniv',
+              subject: 'Order Anniversary Follow Up #1 [2026]',
+              dueDate: isoDate(atNoon(40)),
+              liveDate: isoDate(atNoon(26)),
+            },
+            {
+              id: 'manual',
+              subject: 'Client proof follow-up',
+              dueDate: isoDate(atNoon(25)),
+              liveDate: isoDate(atNoon(11)),
+            },
+          ],
+          done: [],
+        },
+      },
+    });
+    const createWrites = [];
+    const updateWrites = [];
+    const result = await simulateProgram(PROMOTION_RECOVERY_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: makeExecutor({
+        ctx: { contactId: '101', contactName: 'Ada Buyer', employeeId: '7' },
+        submitQuickTask: async ({ template, context }) => {
+          createWrites.push({ template, context });
+          return { ok: true, taskId: `promo-new-${createWrites.length}` };
+        },
+        updateTaskById: async (id, fields) => {
+          updateWrites.push({ id, fields });
+          return { ok: true };
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(updateWrites, [
+      { id: 'promo-1', fields: { liveDate: isoDate(atNoon(0)) } },
+    ]);
+    assert.equal(createWrites.length, 1);
+    assert.equal(createWrites[0].template.subject, '#2 Srixon Promotion Campaign Follow Up');
+    assert.equal(createWrites[0].template.daysOut, 7);
+    assert.equal(createWrites[0].context.contactId, '101');
+    assert.match(String(result.result), /Revived 1 promotion task\(s\) to live today/);
+    assert.match(String(result.result), /created 1 missing promotion task\(s\)/);
+    assert.match(String(result.result), /Left 3 other non-live task\(s\) untouched/);
+    assert.match(String(result.result), /Q3 Reach Out Opportunity/);
+  });
+
+  it('counts completed promotion tasks as covered and leaves live ones alone', async () => {
+    const atNoon = (offset) => {
+      const date = new Date();
+      date.setHours(12, 0, 0, 0);
+      date.setDate(date.getDate() + offset);
+      return date;
+    };
+    const isoDate = (date) => [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '202', account: '' },
+        contact: { id: '202', contactId: '202', contactName: 'Grace Buyer' },
+        orders: [],
+        tasks: {
+          open: [
+            {
+              id: 'promo-live',
+              subject: '#1 Srixon Promotion Campaign Follow Up',
+              dueDate: isoDate(atNoon(10)),
+              liveDate: isoDate(atNoon(0)),
+            },
+          ],
+          done: [
+            { id: 'promo-done', subject: '#2 Srixon Promotion Campaign Follow Up' },
+          ],
+        },
+      },
+    });
+    const createWrites = [];
+    const updateWrites = [];
+    const result = await simulateProgram(PROMOTION_RECOVERY_CAMPAIGN, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: makeExecutor({
+        ctx: { contactId: '202', contactName: 'Grace Buyer', employeeId: '7' },
+        submitQuickTask: async ({ template, context }) => {
+          createWrites.push({ template, context });
+          return { ok: true, taskId: 'unexpected' };
+        },
+        updateTaskById: async (id, fields) => {
+          updateWrites.push({ id, fields });
+          return { ok: true };
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(updateWrites, []);
+    assert.deepEqual(createWrites, []);
+    assert.match(String(result.result), /Revived 0 promotion task\(s\)/);
+    assert.match(String(result.result), /left 1 already live/);
+    assert.match(String(result.result), /created 0 missing promotion task\(s\)/);
+    assert.doesNotMatch(String(result.result), /untouched/);
   });
 
   it('edits Task List rows through the same executor used by campaigns', async () => {
@@ -527,7 +675,8 @@ describe('campaign code flow', () => {
     assert.equal(result.ok, true);
     const actionTrace = result.trace.filter((entry) => entry.kind !== 'function');
     const functionTrace = result.trace.filter((entry) => entry.kind === 'function');
-    assert.equal(actionTrace.length, 14);
+    // 2 completes + 12 creates, each create followed by its liveDate update.
+    assert.equal(actionTrace.length, 26);
     assert.ok(functionTrace.length > 7, 'helper calls should remain visible to Simulate');
     assert.ok(
       [...new Set(functionTrace.map((entry) => entry.id))]
@@ -536,37 +685,74 @@ describe('campaign code flow', () => {
     );
     assert.deepEqual(writes.map(([name]) => name), [
       'completeTask', 'completeTask',
-      'createTask', 'createTask', 'createTask', 'createTask',
-      'createTask', 'createTask', 'createTask', 'createTask',
-      'createTask', 'createTask', 'createTask', 'createTask',
+      ...Array.from({ length: 12 }, () => ['createTask', 'updateTask']).flat(),
     ]);
     assert.equal(writes[0][1].id, 'old-1');
     assert.equal(writes[1][1].id, 'old-brand-1');
-    const created = writes.slice(2).map(([, input]) => input);
+    const created = writes
+      .filter(([name]) => name === 'createTask')
+      .map(([, input]) => input);
+    const liveUpdates = writes
+      .filter(([name]) => name === 'updateTask')
+      .map(([, input]) => input);
+    assert.ok(
+      liveUpdates.every((update) => /^\d{4}-\d{2}-\d{2}$/.test(update.fields?.liveDate)),
+      'every created task receives an exact live date',
+    );
+
+    // Anniversary cycles roll to next year once their first task has passed,
+    // so derive each cycle's bracket year (and the chronological creation
+    // order) the same way the campaign schedules them.
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    const cycleFor = (month, day, monthName) => {
+      let year = now.getFullYear();
+      let anniversary = new Date(year, month, day, 12);
+      let first = new Date(anniversary);
+      first.setDate(first.getDate() - 21);
+      if (first.getTime() <= now.getTime()) {
+        year += 1;
+        anniversary = new Date(year, month, day, 12);
+        first = new Date(anniversary);
+        first.setDate(first.getDate() - 21);
+      }
+      return { year, monthName, firstTime: first.getTime() };
+    };
+    const cycles = [
+      cycleFor(3, 15, 'April'),      // Titleist orders: 4/24 + 4/6 average to April 15
+      cycleFor(11, 12, 'December'),  // Vice order: December 12
+    ].sort((a, b) => a.firstTime - b.firstTime);
+    const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
     assert.deepEqual(
       created.map((task) => task.subject),
       [
-        'Prior Year #1 [2025]',
-        'Prior Year #2 [2025]',
-        'Prior Year Call - [December]',
-        'Prior Year #3 [2025]',
-        'Prior Year #1 [2026]',
-        'Prior Year #2 [2026]',
-        'Prior Year Call - [April]',
-        'Prior Year #3 [2026]',
-        'Q3 Reach Out Opportunity',
+        ...cycles.flatMap((cycle) => [
+          `Order Anniversary Follow Up #1 [${cycle.year}]`,
+          `Order Anniversary Follow Up #2 [${cycle.year}]`,
+          `Order Anniversary Follow Up Call - [${cycle.monthName}]`,
+          `Order Anniversary Follow Up #3 [${cycle.year}]`,
+        ]),
+        `Q${currentQuarter} Reach Out Opportunity`,
         'Callaway Customer - Tier 1',
         'Titleist Customer - Tier 2',
         'Vice Customer - Tier 3',
       ],
     );
     assert.ok(created.every((task) => Number.isInteger(task.daysOut) && task.daysOut >= 0));
-    assert.match(created[0].body, /Vice Drive Custom Logo/);
-    assert.match(created[4].body, /Titleist Pro V1 Personalized/);
-    assert.match(created[4].body, /Averaged reorder anniversary: April 15/);
-    assert.ok(created[2].daysOut > created[1].daysOut);
-    assert.ok(created[2].daysOut < created[3].daysOut);
-    assert.match(created[2].body, /Follow-up timing: 1 week before/);
+    assert.ok(
+      created.slice(0, 8).every((task) => task.categoryId === 7),
+      'anniversary tasks carry the Order History Special category',
+    );
+    assert.equal(created[8].categoryId, 14, 'quarterly reach-outs carry the Workflow Task category');
+    const decemberCall = created.find((task) => task.subject === 'Order Anniversary Follow Up Call - [December]');
+    const aprilCall = created.find((task) => task.subject === 'Order Anniversary Follow Up Call - [April]');
+    assert.match(decemberCall.body, /Vice Drive Custom Logo/);
+    assert.match(aprilCall.body, /Titleist Pro V1 Personalized/);
+    assert.match(aprilCall.body, /Averaged reorder anniversary: April 15/);
+    const firstCycle = created.slice(0, 4);
+    assert.ok(firstCycle[2].daysOut > firstCycle[1].daysOut);
+    assert.ok(firstCycle[2].daysOut < firstCycle[3].daysOut);
+    assert.match(firstCycle[2].body, /Follow-up timing: 1 week before/);
 
     const brandTasks = created.slice(9);
     assert.deepEqual(brandTasks.map((task) => task.daysOut), [
@@ -659,23 +845,26 @@ describe('campaign code flow', () => {
 
     assert.equal(result.ok, true);
     const priorTasks = writes
-      .filter(([name, input]) => name === 'createTask' && /^Prior Year/.test(input.subject))
+      .filter(([name, input]) => name === 'createTask' && /^Order Anniversary Follow Up/.test(input.subject))
       .map(([, input]) => input);
     assert.equal(priorTasks.length, 4);
     assert.equal(
-      priorTasks.filter((task) => task.subject === `Prior Year Call - [${monthNames[retainedMonth]}]`).length,
+      priorTasks.filter((task) => task.subject === `Order Anniversary Follow Up Call - [${monthNames[retainedMonth]}]`).length,
       1,
     );
     assert.ok(
       priorTasks.every((task) => !task.subject.includes(`[${monthNames[competingMonth]}]`)),
       'the lower-ranked adjacent campaign should not create any tasks',
     );
+    // The bracket year is the follow-up cycle year: the next occurrence of the
+    // retained month (three months ahead of "now", so next year when wrapped).
+    const cycleYear = retainedMonth >= now.getMonth() ? now.getFullYear() : now.getFullYear() + 1;
     assert.deepEqual(
-      priorTasks.filter((task) => /^Prior Year #/.test(task.subject)).map((task) => task.subject),
+      priorTasks.filter((task) => /^Order Anniversary Follow Up #/.test(task.subject)).map((task) => task.subject),
       [
-        `Prior Year #1 [${recentYear}]`,
-        `Prior Year #2 [${recentYear}]`,
-        `Prior Year #3 [${recentYear}]`,
+        `Order Anniversary Follow Up #1 [${cycleYear}]`,
+        `Order Anniversary Follow Up #2 [${cycleYear}]`,
+        `Order Anniversary Follow Up #3 [${cycleYear}]`,
       ],
     );
     assert.match(priorTasks[0].body, new RegExp(`Source period: ${monthNames[retainedMonth]} ${recentYear}`));
