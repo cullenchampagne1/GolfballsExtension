@@ -320,6 +320,9 @@ function ResultRow({ r, i, selected, onToggle }) {
   const isAcct = String(r.id || '').startsWith('account') || (r.recordType_s || '').toLowerCase() === 'account';
   const name = r.contactName_t || r.accountName_t || r.id;
   const email = (Array.isArray(r.emails_tps) && r.emails_tps[0]) || r.email_tp || '';
+  // Real account URL so the Account cell is ctrl/cmd-clickable to a new tab.
+  let acctUrl = '';
+  try { acctUrl = r.accountID_s ? new URL(`Default.aspx?Page=271&accountID=${r.accountID_s}`, location.href).href : ''; } catch { acctUrl = ''; }
   const go = (event) => {
     if (event?.shiftKey) {
       event.preventDefault();
@@ -328,6 +331,9 @@ function ResultRow({ r, i, selected, onToggle }) {
     }
     if (url) goUrl(url);
   };
+  // Shift-click a link → range-select (don't navigate); normal/ctrl-click → let
+  // the anchor's href navigate (ctrl opens a new tab); stop row-level double-nav.
+  const linkClick = (e) => { if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); onToggle?.(e); } else { e.stopPropagation(); } };
   return (
     <tr className="gb-actrow" onClick={go} title={url ? 'Open record · Shift-click to select a range' : 'Shift-click to select a range'}
       style={{
@@ -348,10 +354,14 @@ function ResultRow({ r, i, selected, onToggle }) {
           <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `var(--gb-${typeTone(r.recordType_s)}-tint-medium)`, border: `1px solid var(--gb-${typeTone(r.recordType_s)}-tint-border)`, color: `var(--gb-${typeTone(r.recordType_s)}-fg)` }}>
             {isAcct ? <I.briefcase size={12} /> : <I.user size={12} />}
           </span>
-          <span style={{ fontWeight: 600, color: 'var(--gb-text-primary)' }}>{name}</span>
+          {url
+            ? <a href={url} onClick={linkClick} style={{ fontWeight: 600, color: 'var(--gb-brand-label)', textDecoration: 'none' }}>{name}</a>
+            : <span style={{ fontWeight: 600, color: 'var(--gb-text-primary)' }}>{name}</span>}
         </div>
       </Td>
-      <Td muted>{r.accountName_t || DASH}</Td>
+      <Td muted>{acctUrl && r.accountName_t
+        ? <a href={acctUrl} onClick={linkClick} style={{ color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none' }}>{r.accountName_t}</a>
+        : (r.accountName_t || DASH)}</Td>
       <Td mono muted>{r.accountID_s || DASH}</Td>
       <Td mono muted>{customerIdOf(r) || DASH}</Td>
       <Td muted>{r.salesRep_s && r.salesRep_s !== 'None' ? r.salesRep_s : DASH}</Td>

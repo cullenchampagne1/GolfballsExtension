@@ -44,11 +44,12 @@ export function dueBucket(dueDate, today) {
   return 'later';
 }
 
-/** Parse Page=349 HTML → task rows. Same cells the legacy modal read. */
-export function parseTasksFromHtml(html) {
-  if (typeof DOMParser === 'undefined') return [];
-  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+/** Parse task rows straight off a live Document (the takeover is ON Page=349,
+ *  so #TableTasks is already in the host DOM and expanded by the engine — far
+ *  faster than re-fetching + DOM-parsing the multi-MB page). */
+export function parseTasksFromDoc(doc) {
   const tasks = [];
+  if (!doc || typeof doc.querySelectorAll !== 'function') return tasks;
   doc.querySelectorAll('tr[id^="taskrow_"]').forEach((row) => {
     if (row.id.includes('taskrow2_')) return;     // hidden nested rows
     const id = row.id.replace('taskrow_', '');
@@ -83,6 +84,12 @@ export function parseTasksFromHtml(html) {
     });
   });
   return tasks;
+}
+
+/** Parse Page=349 HTML string → task rows (used for a re-fetch fallback). */
+export function parseTasksFromHtml(html) {
+  if (typeof DOMParser === 'undefined') return [];
+  return parseTasksFromDoc(new DOMParser().parseFromString(html || '', 'text/html'));
 }
 
 /** Distinct non-empty category names, sorted — drives the Category facet. */

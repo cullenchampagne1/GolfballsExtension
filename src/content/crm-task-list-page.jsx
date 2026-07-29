@@ -17,7 +17,7 @@ import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import {
   TASKS_ENDPOINT, STATUS_OPTS, PRIORITY_OPTS, DUE_BUCKETS,
-  parseTasksFromHtml, distinctCategories, filterTasks, sortTasks, dueBucket, looksLikeLoginShell,
+  parseTasksFromHtml, parseTasksFromDoc, distinctCategories, filterTasks, sortTasks, dueBucket, looksLikeLoginShell,
 } from '../lib/taskListModel.js';
 import { completeTaskById, getTaskContactId } from '../lib/crmTasks.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
@@ -103,45 +103,41 @@ function TaskFacetSidebar({ tasks, statusFilter, setStatusFilter, prioritySel, c
   );
 }
 
-/* A per-row status pill for the sliding Status column. */
-const STATUS_TONE = {
-  queued: { tone: 'neutral', label: 'Queued' },
-  sending: { tone: 'info', label: 'Sending…' },
-  running: { tone: 'info', label: 'Running…' },
-  sent: { tone: 'success', label: 'Sent' },
-  done: { tone: 'success', label: 'Done' },
-  skipped: { tone: 'warning', label: 'Skipped' },
-  error: { tone: 'error', label: 'Failed' },
-};
-function StatusPill({ st }) {
+/* Compact per-row status indicator: spinner while running, a green check when
+   done, a red × on failure — no laggy per-cell fade. The "moving highlight"
+   is the running row's tinted background (see TaskRow), which naturally travels
+   down the list as the sequential run advances. */
+const RUNNING = (p) => p === 'sending' || p === 'running' || p === 'queued';
+function StatusIndicator({ st }) {
   if (!st) return null;
-  const meta = STATUS_TONE[st.phase] || { tone: 'neutral', label: st.phase };
-  const spin = st.phase === 'sending' || st.phase === 'running';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, animation: 'gb-fade-slide var(--gb-anim) both' }} title={st.detail || meta.label}>
-      {spin && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />}
-      <Tag tone={meta.tone} size="sm">{st.label || meta.label}</Tag>
-    </span>
-  );
+  const p = st.phase;
+  if (RUNNING(p)) {
+    return <span title={st.label || 'Working…'} style={{ width: 14, height: 14, display: 'inline-block', borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: p === 'queued' ? 'none' : 'gb-spin .7s linear infinite', opacity: p === 'queued' ? 0.4 : 1, verticalAlign: 'middle' }} />;
+  }
+  if (p === 'done' || p === 'sent') return <span title={st.label || 'Done'} style={{ color: 'var(--gb-success)', display: 'inline-flex', verticalAlign: 'middle' }}><I.check size={15} sw={3} /></span>;
+  if (p === 'error') return <span title={st.detail || 'Failed'} style={{ color: 'var(--gb-error)', display: 'inline-flex', verticalAlign: 'middle' }}><I.close size={14} sw={2.6} /></span>;
+  if (p === 'skipped') return <span title={st.label || 'Skipped'} style={{ color: 'var(--gb-warning)', fontWeight: 700 }}>–</span>;
+  return null;
 }
 
+const LINK_STYLE = { color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none' };
 function TaskRow({ t, selected, onToggle, showStatus, status }) {
-  const open = () => { if (t.contactUrl) goUrl(t.contactUrl); };
+  const stop = (e) => e.stopPropagation();
+  const running = RUNNING(status?.phase) && status?.phase !== 'queued';
   return (
-    <tr className="gb-actrow" style={{ ...trStyle, cursor: t.contactUrl ? 'pointer' : 'default' }} onClick={open}
-      title={t.contactUrl ? 'Open contact · click checkbox to select' : ''}>
-      <Td align="center" style={{ cursor: 'default' }}>
-        <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+    <tr className="gb-actrow" style={{ ...trStyle, ...(running ? { background: 'var(--gb-brand-tint-soft)' } : null) }}>
+      <Td align="center">
+        <span onClick={stop} style={{ display: 'inline-flex' }}>
           <TaskCheckbox done={selected} onClick={(e) => { e?.stopPropagation?.(); onToggle(e); }} title={selected ? 'Deselect' : 'Select'} />
         </span>
       </Td>
-      <Td>{txt(t.account) || DASH}</Td>
-      <Td>{txt(t.contact) || DASH}</Td>
+      <Td>{txt(t.subject) || DASH}</Td>
+      <Td>{t.accountUrl ? <a href={t.accountUrl} onClick={stop} style={LINK_STYLE}>{txt(t.account) || DASH}</a> : (txt(t.account) || DASH)}</Td>
+      <Td>{t.contactUrl ? <a href={t.contactUrl} onClick={stop} style={LINK_STYLE}>{txt(t.contact) || DASH}</a> : (txt(t.contact) || DASH)}</Td>
       <Td muted>{txt(t.due) || DASH}</Td>
       <Td muted>{txt(t.category) || DASH}</Td>
       <Td><Tag tone={priTone(t.priority)} size="sm">{t.priorityLabel || 'Med'}</Tag></Td>
-      <Td>{txt(t.subject) || DASH}</Td>
-      {showStatus && <Td style={{ minWidth: 96 }}><StatusPill st={status} /></Td>}
+      {showStatus && <Td align="center" style={{ minWidth: 44 }}><StatusIndicator st={status} /></Td>}
     </tr>
   );
 }
@@ -174,14 +170,21 @@ function TaskListApp({ store }) {
 
   const loadTasks = useCallback(async () => {
     const g = ++gen.current;
+    // Fast path: the takeover IS on Page=349, so #TableTasks is already in the
+    // host DOM (expanded by the engine). Parse it directly — instant, no multi-MB
+    // re-fetch — so the shell + sidebar render immediately.
+    const live = parseTasksFromDoc(document);
+    if (live.length) { setTasks(live); setLoadState('ready'); return; }
+    // Fallback (host table not present/ready): re-fetch and parse.
     setLoadState('loading');
     try {
       const res = await fetch(TASKS_ENDPOINT, { credentials: 'include' });
       const html = await res.text();
       if (g !== gen.current) return;
       if (looksLikeLoginShell(html)) { setLoadState('error'); return; }
-      setTasks(parseTasksFromHtml(html));
-      setLoadState('ready');
+      const parsed = parseTasksFromHtml(html);
+      setTasks(parsed);
+      setLoadState(parsed.length ? 'ready' : 'ready');
     } catch (e) {
       if (g === gen.current) setLoadState('error');
     }
@@ -334,10 +337,14 @@ function TaskListApp({ store }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
             {/* Sticky/floating search + action bar */}
             <div style={{ position: 'sticky', top: SEARCH_RAIL_TOP, zIndex: 20, margin: '0 2px' }}>
+              {/* Glass/tint styling matched to the CRM search rail so both search
+                  bars read the same (corresponding-modal tint). */}
               <Card style={{
-                borderRadius: floating ? 16 : 'var(--gb-r-md)',
-                boxShadow: floating ? '0 14px 40px rgba(0,0,0,.22), 0 2px 10px rgba(0,0,0,.12)' : 'none',
-                transition: 'border-radius 380ms cubic-bezier(.22,1,.36,1), box-shadow var(--gb-anim)',
+                borderRadius: floating ? 18 : 'var(--gb-r-md)',
+                border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
+                background: 'color-mix(in srgb, var(--gb-surface-1) 82%, transparent)',
+                boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
+                transition: 'border-radius 380ms cubic-bezier(.22,1,.36,1), background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
               }}>
                 <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -396,14 +403,13 @@ function TaskListApp({ store }) {
                     <table style={tableStyle}>
                       <thead><tr>
                         <Th align="center"><TaskCheckbox done={allVisibleSelected} onClick={toggleAll} title={allVisibleSelected ? 'Deselect all' : 'Select all'} /></Th>
-                        <Th align="center">Type</Th>
+                        <SortTh label="Subject" k="subject" chain={sortChain} onSort={onSort} />
                         <SortTh label="Account" k="account" chain={sortChain} onSort={onSort} />
                         <SortTh label="Contact" k="contact" chain={sortChain} onSort={onSort} />
                         <SortTh label="Due" k="dueDate" chain={sortChain} onSort={onSort} align="left" />
                         <SortTh label="Category" k="category" chain={sortChain} onSort={onSort} />
                         <SortTh label="Priority" k="priority" chain={sortChain} onSort={onSort} />
-                        <SortTh label="Subject" k="subject" chain={sortChain} onSort={onSort} />
-                        {showStatus && <Th>Status</Th>}
+                        {showStatus && <Th align="center">Status</Th>}
                       </tr></thead>
                       <tbody>
                         {renderedTasks.map((t) => (
