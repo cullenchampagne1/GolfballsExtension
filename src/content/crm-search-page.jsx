@@ -38,10 +38,14 @@ const TYPE_OPTS = [
   { id: 'account', label: 'Accounts' },
 ];
 
-// Keep the table header fully opaque, then taper the records into the result
-// surface. This belongs on a normal block container: Chromium can drop all
-// table-row-group paint when a mask is attached directly to <tbody>.
-const RESULT_TABLE_MASK = 'linear-gradient(to bottom, #000 0, #000 28px, rgba(0,0,0,.08) 29px, rgba(0,0,0,.38) 40px, #000 64px, #000 calc(100% - 10px), transparent 100%)';
+const SEARCH_RAIL_TOP = 74;
+
+// The results use the page scroller rather than an inner table scroller. These
+// sticky fades therefore stay at the visible viewport edges while the rows
+// move beneath them. The top fade is deliberately longer and stronger because
+// it also prevents table copy from competing with the floating search glass.
+const RESULT_TOP_FADE = 'linear-gradient(to bottom, var(--gb-surface-1) 0, color-mix(in srgb, var(--gb-surface-1) 92%, transparent) 24%, color-mix(in srgb, var(--gb-surface-1) 58%, transparent) 62%, transparent 100%)';
+const RESULT_BOTTOM_FADE = 'linear-gradient(to bottom, transparent 0, color-mix(in srgb, var(--gb-surface-1) 72%, transparent) 52%, var(--gb-surface-1) 100%)';
 
 /* ── URL <-> search state ─────────────────────────────────────
    The native search puts its term in the URL; we own ?q/?t/?fq going
@@ -67,20 +71,34 @@ function writeUrlSearch(q, type, solrFq) {
 }
 
 /* Segmented type switcher (All / Contacts / Accounts). */
-function TypeTabs({ value, onChange }) {
+function TypeTabs({ value, onChange, floating = false }) {
+  const shellRadius = floating ? 18 : 'var(--gb-r-md)';
+  const optionRadius = floating ? 14 : 'var(--gb-r-sm)';
+  const radiusTransition = 'border-radius 420ms cubic-bezier(.22, 1, .36, 1)';
   return (
-    <div style={{ display: 'inline-flex', padding: 3, gap: 2, height: 36, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)', flexShrink: 0, boxSizing: 'border-box' }}>
+    <div style={{
+      display: 'inline-flex',
+      padding: 3,
+      gap: 2,
+      height: 36,
+      background: 'var(--gb-fill-subtle)',
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: shellRadius,
+      flexShrink: 0,
+      boxSizing: 'border-box',
+      transition: radiusTransition,
+    }}>
       {TYPE_OPTS.map((o) => {
         const on = value === o.id;
         return (
           <button key={o.id} onClick={() => onChange(o.id)}
             style={{
-              height: '100%', padding: '0 13px', border: 0, borderRadius: 'var(--gb-r-pill)', cursor: 'pointer',
+              height: '100%', padding: '0 13px', border: 0, borderRadius: optionRadius, cursor: 'pointer',
               fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: on ? 700 : 600,
               color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
               background: on ? 'var(--gb-surface-1)' : 'transparent',
               boxShadow: on ? 'var(--gb-shadow-sm, 0 1px 2px rgba(0,0,0,.14))' : 'none',
-              transition: 'background-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim)',
+              transition: `${radiusTransition}, background-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim)`,
             }}>{o.label}</button>
         );
       })}
@@ -270,7 +288,7 @@ function DateFacetSection({ group, queries, selected, onToggle }) {
 function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
   const anySel = Object.values(selected).some((s) => s.size > 0);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: 64 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: SEARCH_RAIL_TOP }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Refine</span>
         {anySel && <Btn variant="ghost" size="xs" icon={<I.close />} onClick={onClearAll}>Clear</Btn>}
@@ -367,9 +385,11 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [focused, setFocused] = useState(false);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
   const [searchBarFloating, setSearchBarFloating] = useState(false);
+  const [searchBarHeight, setSearchBarHeight] = useState(0);
   const hideSearchTimerRef = useRef(null);
   const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
+  const searchRailRef = useRef(null);
   const gen = useRef(0);   // ignore stale responses
 
   const runSearch = useCallback(async (q, t, qb) => {
@@ -502,7 +522,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       hideSearchTimerRef.current = setTimeout(() => {
         hideSearchTimerRef.current = null;
         setSearchBarVisible(false);
-      }, 170);
+      }, 320);
     }
 
     const remaining = target.scrollHeight - currentTop - target.clientHeight;
@@ -516,6 +536,19 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   }, [focused, rows.length, searchBarVisible]);
   useEffect(() => () => {
     if (hideSearchTimerRef.current) clearTimeout(hideSearchTimerRef.current);
+  }, []);
+  useEffect(() => {
+    const node = searchRailRef.current;
+    if (!node) return undefined;
+    const measure = () => {
+      const next = Math.max(0, Math.round(node.getBoundingClientRect().height));
+      setSearchBarHeight((current) => current === next ? current : next);
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
   const openCampaign = useCallback(() => {
     const audience = selectedResults
@@ -547,6 +580,9 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
     gbToast(`Exported ${selectedResults.length} record${selectedResults.length === 1 ? '' : 's'}`, 'success');
   }, [selectedResults]);
+  const resultFadeTop = searchBarVisible && searchBarHeight
+    ? SEARCH_RAIL_TOP + searchBarHeight - 1
+    : 48;
 
   return (
     <DataCtx.Provider value={D}>
@@ -565,35 +601,45 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           {/* ── Search + results column ─────────────────────────── */}
           <div className="gbcp-stack gbcp-search-body">
         {/* ── Search hero ─────────────────────────────────────── */}
-        <motion.div
-          initial={false}
-          animate={{
-            opacity: searchBarVisible ? 1 : 0,
-            y: searchBarVisible ? 0 : -14,
-            scale: searchBarVisible ? 1 : 0.985,
-          }}
-          transition={{ duration: searchBarVisible ? 0.24 : 0.18, ease: [0.22, 1, 0.36, 1] }}
+        <div
+          ref={searchRailRef}
           style={{
             position: 'sticky',
-            top: 64,
-            zIndex: 9,
-            pointerEvents: searchBarVisible ? 'auto' : 'none',
+            top: SEARCH_RAIL_TOP,
+            zIndex: 20,
             margin: '0 4px',
-            transformOrigin: '50% 0',
-            willChange: 'transform, opacity',
+            borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
+            backdropFilter: searchBarVisible ? 'blur(30px) saturate(165%)' : 'blur(0) saturate(100%)',
+            WebkitBackdropFilter: searchBarVisible ? 'blur(30px) saturate(165%)' : 'blur(0) saturate(100%)',
+            transition: 'border-radius 420ms cubic-bezier(.22, 1, .36, 1), backdrop-filter 480ms cubic-bezier(.22, 1, .36, 1), -webkit-backdrop-filter 480ms cubic-bezier(.22, 1, .36, 1)',
           }}
         >
-          <Card style={{
-            borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
-            border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
-            background: 'color-mix(in srgb, var(--gb-surface-1) 90%, transparent)',
-            backdropFilter: 'blur(18px) saturate(145%)',
-            WebkitBackdropFilter: 'blur(18px) saturate(145%)',
-            boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
-            transition: 'border-radius 420ms cubic-bezier(.22, 1, .36, 1), background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
-          }}>
-            <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <motion.div
+            initial={false}
+            animate={{
+              opacity: searchBarVisible ? 1 : 0,
+              y: searchBarVisible ? 0 : -8,
+              scale: searchBarVisible ? 1 : 0.994,
+            }}
+            transition={{
+              duration: searchBarVisible ? 0.32 : 0.48,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            style={{
+              pointerEvents: searchBarVisible ? 'auto' : 'none',
+              transformOrigin: '50% 0',
+              willChange: 'transform, opacity',
+            }}
+          >
+            <Card style={{
+              borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
+              border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
+              background: 'color-mix(in srgb, var(--gb-surface-1) 82%, transparent)',
+              boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
+              transition: 'border-radius 420ms cubic-bezier(.22, 1, .36, 1), background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
+            }}>
+              <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {/* Search input — height matched to the buttons (36) */}
               <div style={{
                 flex: 1, minWidth: 260, display: 'flex', alignItems: 'center', gap: 9, height: 36, padding: '0 11px',
@@ -612,10 +658,10 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                   style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 13 }} />
                 {query && <IconBtn size="xs" ghost icon={<I.close />} title="Clear" onClick={() => { setQuery(''); try { inputRef.current.focus(); } catch (e) {} }} />}
               </div>
-              <TypeTabs value={type} onChange={onTypeChange} />
+              <TypeTabs value={type} onChange={onTypeChange} floating={searchBarFloating} />
               <Btn variant="secondary" size="lg" icon={<I.filter />} onClick={() => setQbOpen(true)}>Query Builder</Btn>
               <Btn variant="primary" size="lg" icon={<I.search />} onClick={submit}>Search</Btn>
-            </div>
+              </div>
 
             {/* Active QB filter chip */}
             {qbFilter && (
@@ -628,19 +674,20 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setQbOpen(true)}>Edit</Btn>
               </div>
             )}
-            </div>
-            <SelectionActionRail
-              count={selectedResults.length}
-              total={rows.length}
-              onCampaign={openCampaign}
-              onEmail={(event) => {
-                setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
-                setEmailRunnerOpen(true);
-              }}
-              onExport={exportSelection}
-            />
-          </Card>
-        </motion.div>
+              </div>
+              <SelectionActionRail
+                count={selectedResults.length}
+                total={rows.length}
+                onCampaign={openCampaign}
+                onEmail={(event) => {
+                  setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
+                  setEmailRunnerOpen(true);
+                }}
+                onExport={exportSelection}
+              />
+            </Card>
+          </motion.div>
+        </div>
 
         {/* ── Results ─────────────────────────────────────────── */}
         <Card>
@@ -663,46 +710,60 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             </div>
           ) : (
             <>
-              <div style={{
-                overflowX: 'auto',
-                overflowY: 'visible',
-                WebkitMaskImage: RESULT_TABLE_MASK,
-                maskImage: RESULT_TABLE_MASK,
-                WebkitMaskRepeat: 'no-repeat',
-                maskRepeat: 'no-repeat',
-              }}>
-                <table style={tableStyle}>
-                  <thead><tr>
-                    <Th align="center">
-                      <SelectionBox
-                        checked={allRowsSelected}
-                        onChange={toggleAllResults}
-                        title={allRowsSelected ? 'Deselect loaded records' : 'Select loaded records'}
-                      />
-                    </Th>
-                    <Th align="center">Type</Th>
-                    <Th>Contact</Th>
-                    <Th>Account</Th>
-                    <Th>Account ID</Th>
-                    <Th>Customer ID</Th>
-                    <Th>Sales Rep</Th>
-                    <Th>Email</Th>
-                    <Th align="right">Last Order</Th>
-                    <Th align="right">Orders</Th>
-                    <Th align="right">Next Task</Th>
-                  </tr></thead>
-                  <tbody>
-                    {renderedRows.map((r, i) => (
-                      <ResultRow
-                        key={(r.id || '') + i}
-                        r={r}
-                        i={i}
-                        selected={selectedRows.has(r.id)}
-                        onToggle={(event) => toggleResult(r.id, i, !!event?.shiftKey)}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ position: 'relative' }}>
+                <div aria-hidden="true" style={{
+                  position: 'sticky',
+                  top: resultFadeTop,
+                  zIndex: 10,
+                  height: 58,
+                  marginBottom: -58,
+                  pointerEvents: 'none',
+                  background: RESULT_TOP_FADE,
+                  transition: 'top 480ms cubic-bezier(.22, 1, .36, 1)',
+                }} />
+                <div aria-hidden="true" style={{
+                  position: 'sticky',
+                  top: 'calc(100vh - 28px)',
+                  zIndex: 10,
+                  height: 28,
+                  marginBottom: -28,
+                  pointerEvents: 'none',
+                  background: RESULT_BOTTOM_FADE,
+                }} />
+                <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                  <table style={tableStyle}>
+                    <thead><tr>
+                      <Th align="center">
+                        <SelectionBox
+                          checked={allRowsSelected}
+                          onChange={toggleAllResults}
+                          title={allRowsSelected ? 'Deselect loaded records' : 'Select loaded records'}
+                        />
+                      </Th>
+                      <Th align="center">Type</Th>
+                      <Th>Contact</Th>
+                      <Th>Account</Th>
+                      <Th>Account ID</Th>
+                      <Th>Customer ID</Th>
+                      <Th>Sales Rep</Th>
+                      <Th>Email</Th>
+                      <Th align="right">Last Order</Th>
+                      <Th align="right">Orders</Th>
+                      <Th align="right">Next Task</Th>
+                    </tr></thead>
+                    <tbody>
+                      {renderedRows.map((r, i) => (
+                        <ResultRow
+                          key={(r.id || '') + i}
+                          r={r}
+                          i={i}
+                          selected={selectedRows.has(r.id)}
+                          onToggle={(event) => toggleResult(r.id, i, !!event?.shiftKey)}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               {renderedRows.length < rows.length && (
                 <div style={{
