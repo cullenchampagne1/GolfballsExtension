@@ -18,7 +18,7 @@ import { ensureTheme } from '../lib/theme.js';
 import { dueBucket, DUE_BUCKETS } from '../lib/taskListModel.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
-  Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, SectionTitle,
+  Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, SectionTitle,
   Spinner, Tag, Td, Th, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
@@ -44,6 +44,58 @@ function parseReviewTasks(doc) {
   });
   return out;
 }
+
+/* ── Server-side filter (Sales Rep + date), reverse-engineered from the
+   native page: the Submit button runs GetSalesRepData() →
+   __doPostBack('GetSalesRep', JSON.stringify({SalesRep, DateOption,
+   DateTime, SecondDateTime})) — a classic WebForms POST back to
+   Default.aspx?Page=286 carrying __VIEWSTATE/__EVENTVALIDATION. We replay
+   that POST with fetch and parse the returned HTML. ── */
+function collectFormState(doc) {
+  const state = {};
+  doc.querySelectorAll('form input[name], form select[name]').forEach((el) => {
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'button' || type === 'submit' || type === 'image') return;
+    if ((type === 'checkbox' || type === 'radio') && !el.checked) return;
+    state[el.name] = el.value ?? '';
+  });
+  return state;
+}
+function parseRepOptions(doc) {
+  const out = [];
+  doc.querySelectorAll('#SalesRep option').forEach((o) => {
+    const v = o.getAttribute('value') || '';
+    const label = (o.textContent || '').trim();
+    if (label) out.push({ id: v, label });
+  });
+  return out;
+}
+async function postFilter(formState, { rep, dateOption, date1, date2 }) {
+  const fields = { ...formState };
+  fields.__EVENTTARGET = 'GetSalesRep';
+  fields.__EVENTARGUMENT = JSON.stringify({
+    SalesRep: rep, DateOption: dateOption, DateTime: date1 || '', SecondDateTime: date2 || '',
+  });
+  fields['ctl00$SalesRep'] = rep;
+  fields['ctl00$DateOption'] = dateOption;
+  fields['ctl00$DateTime'] = date1 || '';
+  fields['ctl00$SecondDateTime'] = date2 || '';
+  const body = new URLSearchParams(fields).toString();
+  const res = await fetch(window.location.href, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const html = await res.text();
+  return new DOMParser().parseFromString(html, 'text/html');
+}
+
+const SELECT_STYLE = {
+  width: '100%', height: 30, padding: '0 8px', boxSizing: 'border-box',
+  border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)',
+  background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)',
+  fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
+};
 
 function FacetList({ label, options, selected, onToggle }) {
   return (
@@ -78,6 +130,14 @@ function ActionReviewApp({ store }) {
   const [dueSel, setDueSel] = useState(new Set());
   const [count, setCount] = useState(BATCH);
   const [focused, setFocused] = useState(false);
+  // Server-side filters (native GetSalesRep postback)
+  const [reps, setReps] = useState([]);
+  const [rep, setRep] = useState('');
+  const [dateOption, setDateOption] = useState('ON');
+  const [date1, setDate1] = useState('');
+  const [date2, setDate2] = useState('');
+  const [serverBusy, setServerBusy] = useState(false);
+  const formStateRef = useRef({});
   const sentinelRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -95,6 +155,12 @@ function ActionReviewApp({ store }) {
         if (cancelled) return;
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const parsed = parseReviewTasks(doc);
+        // Stash the WebForms state (viewstate etc.) + rep options for the
+        // server-side filter POST, regardless of row count.
+        formStateRef.current = collectFormState(doc);
+        setReps(parseRepOptions(doc));
+        const sel = doc.querySelector('#SalesRep');
+        if (sel && sel.value) setRep(sel.value);
         if (parsed.length) { setTasks(parsed); return; }
       } catch (e) { /* fall through */ }
       // Fallback: poll the live DOM while the host page finishes loading.
@@ -145,6 +211,21 @@ function ActionReviewApp({ store }) {
 
   const toggle = (setter) => (v) => setter((cur) => { const n = new Set(cur); n.has(v) ? n.delete(v) : n.add(v); return n; });
 
+  // Apply the server-side Sales Rep / date filter via the native postback.
+  const applyServerFilter = async () => {
+    if (serverBusy) return;
+    setServerBusy(true);
+    setTasks(null);
+    try {
+      const doc = await postFilter(formStateRef.current, { rep, dateOption, date1, date2 });
+      formStateRef.current = collectFormState(doc);   // fresh viewstate for the next POST
+      setTasks(parseReviewTasks(doc));
+      setCount(BATCH);
+    } catch (e) {
+      setTasks([]);
+    } finally { setServerBusy(false); }
+  };
+
   return (
     <DataCtx.Provider value={D}>
     <ModalCtx.Provider value={modalHost}>
@@ -155,6 +236,26 @@ function ActionReviewApp({ store }) {
         <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 12, alignItems: 'flex-start', paddingTop: 24 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, position: 'sticky', top: 74 }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '0 2px' }}>Refine</span>
+            {/* Server-side filters — replay the native GetSalesRep postback. */}
+            <Card>
+              <div style={{ padding: '10px 12px 4px', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Sales Rep</div>
+              <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <select value={rep} onChange={(e) => setRep(e.target.value)} style={SELECT_STYLE}>
+                  {reps.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)', marginTop: 2 }}>Due date</div>
+                <select value={dateOption} onChange={(e) => setDateOption(e.target.value)} style={SELECT_STYLE}>
+                  {['ON', 'BETWEEN', 'BEFORE', 'AFTER'].map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <input type="text" value={date1} onChange={(e) => setDate1(e.target.value)} placeholder="M/D/YYYY" style={SELECT_STYLE} />
+                {dateOption === 'BETWEEN' && (
+                  <input type="text" value={date2} onChange={(e) => setDate2(e.target.value)} placeholder="and M/D/YYYY" style={SELECT_STYLE} />
+                )}
+                <Btn variant="primary" size="sm" icon={<I.search />} onClick={applyServerFilter} disabled={serverBusy || !reps.length}>
+                  {serverBusy ? 'Loading…' : 'Apply'}
+                </Btn>
+              </div>
+            </Card>
             <FacetList label="Status" options={facets.status} selected={statusSel} onToggle={toggle(setStatusSel)} />
             <FacetList label="Due" options={DUE_BUCKETS.map((b) => ({ ...b }))} selected={dueSel} onToggle={toggle(setDueSel)} />
             <FacetList label="Category" options={facets.category} selected={catSel} onToggle={toggle(setCatSel)} />
