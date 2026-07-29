@@ -385,11 +385,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [focused, setFocused] = useState(false);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
   const [searchBarFloating, setSearchBarFloating] = useState(false);
-  const [searchBarHeight, setSearchBarHeight] = useState(0);
+  const [resultMaskBounds, setResultMaskBounds] = useState(null);
   const hideSearchTimerRef = useRef(null);
   const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
   const searchRailRef = useRef(null);
+  const resultsWindowRef = useRef(null);
   const gen = useRef(0);   // ignore stale responses
 
   const runSearch = useCallback(async (q, t, qb) => {
@@ -538,18 +539,67 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     if (hideSearchTimerRef.current) clearTimeout(hideSearchTimerRef.current);
   }, []);
   useEffect(() => {
-    const node = searchRailRef.current;
-    if (!node) return undefined;
+    const tableWindow = resultsWindowRef.current;
+    const searchRail = searchRailRef.current;
+    const scrollWindow = tableWindow?.closest?.('.gb-scroll');
+    if (!tableWindow || !searchRail || !scrollWindow || !rows.length) {
+      setResultMaskBounds(null);
+      return undefined;
+    }
+
+    let frame = null;
     const measure = () => {
-      const next = Math.max(0, Math.round(node.getBoundingClientRect().height));
-      setSearchBarHeight((current) => current === next ? current : next);
+      frame = null;
+      const tableRect = tableWindow.getBoundingClientRect();
+      const scrollRect = scrollWindow.getBoundingClientRect();
+      const railRect = searchRail.getBoundingClientRect();
+      const topEdge = searchBarVisible
+        ? Math.max(tableRect.top, railRect.bottom - 1)
+        : Math.max(tableRect.top, scrollRect.top + 48);
+      const bottomEdge = Math.min(tableRect.bottom, scrollRect.bottom);
+      const leftEdge = Math.max(tableRect.left, scrollRect.left);
+      const rightEdge = Math.min(tableRect.right, scrollRect.right);
+      const next = {
+        left: Math.round(leftEdge),
+        top: Math.round(topEdge),
+        width: Math.max(0, Math.round(rightEdge - leftEdge)),
+        height: Math.max(0, Math.round(bottomEdge - topEdge)),
+      };
+      if (next.width < 24 || next.height < 36) {
+        setResultMaskBounds(null);
+        return;
+      }
+      setResultMaskBounds((current) => (
+        current
+        && current.left === next.left
+        && current.top === next.top
+        && current.width === next.width
+        && current.height === next.height
+          ? current
+          : next
+      ));
     };
+    const scheduleMeasure = () => {
+      if (frame == null) frame = requestAnimationFrame(measure);
+    };
+
     measure();
-    if (typeof ResizeObserver !== 'function') return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    scrollWindow.addEventListener('scroll', scheduleMeasure, { passive: true });
+    window.addEventListener('resize', scheduleMeasure, { passive: true });
+    let observer = null;
+    if (typeof ResizeObserver === 'function') {
+      observer = new ResizeObserver(scheduleMeasure);
+      observer.observe(tableWindow);
+      observer.observe(searchRail);
+      observer.observe(scrollWindow);
+    }
+    return () => {
+      if (frame != null) cancelAnimationFrame(frame);
+      scrollWindow.removeEventListener('scroll', scheduleMeasure);
+      window.removeEventListener('resize', scheduleMeasure);
+      observer?.disconnect();
+    };
+  }, [renderCount, rows.length, searchBarVisible]);
   const openCampaign = useCallback(() => {
     const audience = selectedResults
       .map((row) => crmRowToCampaignContact(row, recUrl(row)))
@@ -580,10 +630,6 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
     gbToast(`Exported ${selectedResults.length} record${selectedResults.length === 1 ? '' : 's'}`, 'success');
   }, [selectedResults]);
-  const resultFadeTop = searchBarVisible && searchBarHeight
-    ? SEARCH_RAIL_TOP + searchBarHeight - 1
-    : 48;
-
   return (
     <DataCtx.Provider value={D}>
     <ModalCtx.Provider value={modalHost}>
@@ -710,26 +756,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             </div>
           ) : (
             <>
-              <div style={{ position: 'relative' }}>
-                <div aria-hidden="true" style={{
-                  position: 'sticky',
-                  top: resultFadeTop,
-                  zIndex: 10,
-                  height: 58,
-                  marginBottom: -58,
-                  pointerEvents: 'none',
-                  background: RESULT_TOP_FADE,
-                  transition: 'top 480ms cubic-bezier(.22, 1, .36, 1)',
-                }} />
-                <div aria-hidden="true" style={{
-                  position: 'sticky',
-                  top: 'calc(100vh - 28px)',
-                  zIndex: 10,
-                  height: 28,
-                  marginBottom: -28,
-                  pointerEvents: 'none',
-                  background: RESULT_BOTTOM_FADE,
-                }} />
+              <div ref={resultsWindowRef} style={{ position: 'relative' }}>
                 <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                   <table style={tableStyle}>
                     <thead><tr>
@@ -790,6 +817,31 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             </>
           )}
         </Card>
+        {resultMaskBounds && (
+          <div aria-hidden="true" style={{
+            position: 'fixed',
+            left: resultMaskBounds.left,
+            top: resultMaskBounds.top,
+            width: resultMaskBounds.width,
+            height: resultMaskBounds.height,
+            zIndex: 15,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}>
+            <div style={{
+              position: 'absolute',
+              inset: '0 0 auto',
+              height: 58,
+              background: RESULT_TOP_FADE,
+            }} />
+            <div style={{
+              position: 'absolute',
+              inset: 'auto 0 0',
+              height: 32,
+              background: RESULT_BOTTOM_FADE,
+            }} />
+          </div>
+        )}
           </div>
         </div>
       </DetailPageFrame>
