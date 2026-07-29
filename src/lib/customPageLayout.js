@@ -14,3 +14,11 @@ export function crmSearchResultsMax(viewportHeight, pageZoom = 1) {
     : 1;
   return Math.max(340, Math.round(height / zoom) - 274);
 }
+
+/**
+ * Opportunity stages share the normal informational treatment except for an
+ * actively Open opportunity, which needs to stand out in dense CRM tables.
+ */
+export function opportunityStageTone(stage) {
+  return String(stage ?? '').trim().toLowerCase() === 'open' ? 'success' : 'info';
+}

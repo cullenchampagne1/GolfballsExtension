@@ -141,6 +141,10 @@
       "file": "tests/unit/customPageLayout.test.mjs"
     },
     {
+      "name": "crm \u00b7 search selection action handoff",
+      "file": "tests/unit/crmSearchSelection.test.mjs"
+    },
+    {
       "name": "crm \u00b7 contact CustomData merge preserves server keys",
       "file": "tests/unit/contactCustomData.test.mjs"
     },

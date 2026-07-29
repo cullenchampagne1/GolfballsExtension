@@ -111,7 +111,7 @@ function openTasks(count) {
     id: `TASK-${7000 + index}`,
     subject: subjects[index % subjects.length],
     owner: owners[index % owners.length],
-    category: ['High Priority Opportunity', 'Artwork', 'Call', 'Sales'][index % 4],
+    category: ['Follow Up', 'Artwork', 'Call', 'Sales'][index % 4],
     priority: ['High', 'Med', 'Low'][index % 3],
     dueDate: isoDaysAgo(-3 - index * 2),
     liveDate: isoDaysAgo(4 - index),

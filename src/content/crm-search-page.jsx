@@ -12,13 +12,19 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
 import { crmSearchResultsMax } from '../lib/customPageLayout.js';
+import {
+  buildCrmSelectionCsv, crmRowToCampaignContact, crmRowToEmailContact, selectedCrmRows,
+} from '../lib/crmSearchSelection.js';
+import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
+import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
   ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, PAGE_ZOOM, ScrollArea, SectionTitle, Spinner,
-  Tag, Td, Th, DASH as _DASH, EmptyRow, fmt$, fmtDate, goUrl, num, recUrl, tableStyle, trStyle, txt,
+  Tag, TaskCheckbox, Td, Th, DASH as _DASH, EmptyRow, fmt$, fmtDate, goUrl, num, recUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
 
@@ -85,6 +91,21 @@ function typeTone(t) {
 function customerIdOf(r) {
   const m = String(r.id || '').match(/(\d+)/);
   return m ? m[1] : '';
+}
+
+function SelectionBox({ checked, onChange, title }) {
+  return (
+    <span data-checkbox style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+      <TaskCheckbox
+        done={checked}
+        onClick={(event) => {
+          event?.stopPropagation?.();
+          onChange?.(event);
+        }}
+        title={title}
+      />
+    </span>
+  );
 }
 
 const fmtCount = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k' : String(n));
@@ -221,7 +242,7 @@ function FacetSidebar({ facets, selected, onToggle, onClearAll }) {
 }
 
 /* One result row — staggered fade-in, click-through to the record. */
-function ResultRow({ r, i }) {
+function ResultRow({ r, i, selected, onToggle }) {
   const url = recUrl(r);
   const isAcct = String(r.id || '').startsWith('account') || (r.recordType_s || '').toLowerCase() === 'account';
   const name = r.contactName_t || r.accountName_t || r.id;
@@ -229,7 +250,18 @@ function ResultRow({ r, i }) {
   const go = () => { if (url) goUrl(url); };
   return (
     <tr className="gb-actrow" onClick={go} title={url ? 'Open record' : undefined}
-      style={{ ...trStyle, cursor: url ? 'pointer' : 'default', animation: 'gb-fade-slide var(--gb-anim) both', animationDelay: Math.min(i, 16) * 18 + 'ms' }}>
+      style={{
+        ...trStyle,
+        cursor: url ? 'pointer' : 'default',
+        background: selected ? 'var(--gb-brand-tint-soft)' : trStyle.background,
+        boxShadow: selected ? 'inset 3px 0 0 var(--gb-brand-label)' : 'none',
+        transition: 'background-color var(--gb-anim), box-shadow var(--gb-anim)',
+        animation: 'gb-fade-slide var(--gb-anim) both',
+        animationDelay: Math.min(i, 16) * 18 + 'ms',
+      }}>
+      <Td align="center">
+        <SelectionBox checked={selected} onChange={onToggle} title={selected ? 'Deselect record' : 'Select record'} />
+      </Td>
       <Td align="center">{r.recordType_s ? <Tag tone={typeTone(r.recordType_s)} size="xs">{r.recordType_s}</Tag> : DASH}</Td>
       <Td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -268,12 +300,15 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const selRef = useRef(selected);
   selRef.current = selected;
   const [rows, setRows] = useState(initialSearch?.docs || []);
+  const [selectedRows, setSelectedRows] = useState(() => new Set());
   const [numFound, setNumFound] = useState(initialSearch?.numFound || 0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const [searched, setSearched] = useState(!!initialSearch);
   const [qbOpen, setQbOpen] = useState(false);
+  const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   const [focused, setFocused] = useState(false);
   // Results list fills the leftover vertical space. The takeover renders at
   // PAGE_ZOOM, so a height in this coordinate space shows scaled — divide
@@ -290,7 +325,11 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
 
   const runSearch = useCallback(async (q, t, qb, start = 0) => {
     const g = ++gen.current;
-    if (start === 0) { setLoading(true); setError(false); } else setLoadingMore(true);
+    if (start === 0) {
+      setLoading(true);
+      setError(false);
+      setSelectedRows(new Set());
+    } else setLoadingMore(true);
     setSearched(true);
     try {
       const { docs, numFound, facets: fc } = await searchClient({
@@ -346,6 +385,52 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const applyQb = (filter) => { setQbFilter(filter); setQbOpen(false); writeUrlSearch(query.trim(), type, filter?.solrFq || ''); runSearch(query.trim(), type, filter, 0); };
   const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null, 0); };
   const canLoadMore = rows.length < numFound && !loading && !loadingMore;
+  const selectedResults = useMemo(() => selectedCrmRows(rows, selectedRows), [rows, selectedRows]);
+  const allRowsSelected = rows.length > 0 && rows.every((row) => selectedRows.has(row.id));
+  const toggleResult = useCallback((id) => {
+    setSelectedRows((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const toggleAllResults = useCallback(() => {
+    setSelectedRows((current) => {
+      const allSelected = rows.length > 0 && rows.every((row) => current.has(row.id));
+      if (allSelected) return new Set();
+      return new Set(rows.map((row) => row.id).filter(Boolean));
+    });
+  }, [rows]);
+  const openCampaign = useCallback(() => {
+    const audience = selectedResults
+      .map((row) => crmRowToCampaignContact(row, recUrl(row)))
+      .filter((contact) => contact.contactUrl || contact.email);
+    if (!audience.length) {
+      gbToast('Select contacts or accounts first', 'info');
+      return;
+    }
+    if (typeof window.__gbOpenCampaignManager === 'function') {
+      window.__gbOpenCampaignManager(audience);
+    } else {
+      gbToast('Campaign manager is unavailable here', 'error');
+    }
+  }, [selectedResults]);
+  const exportSelection = useCallback(() => {
+    if (!selectedResults.length) {
+      gbToast('Select records first', 'info');
+      return;
+    }
+    const blob = new Blob([buildCrmSelectionCsv(selectedResults)], { type: 'text/csv;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = blobUrl;
+    anchor.download = `crm-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+    gbToast(`Exported ${selectedResults.length} record${selectedResults.length === 1 ? '' : 's'}`, 'success');
+  }, [selectedResults]);
 
   return (
     <DataCtx.Provider value={D}>
@@ -411,6 +496,46 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             count={searched ? (loading ? '…' : `${rows.length}${numFound > rows.length ? ' of ' + numFound : ''}`) : ''}
             sub={searched ? undefined : 'Type a query above and press Enter'}
           />
+          <AnimatePresence initial={false}>
+            {selectedResults.length > 0 && (
+              <motion.div
+                key="crm-search-selection-bar"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div style={{
+                  minHeight: 42,
+                  padding: '7px 12px',
+                  borderBottom: '1px solid var(--gb-border-subtle)',
+                  background: 'var(--gb-brand-tint-soft)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
+                    <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selectedResults.length} selected</strong>
+                    {' '}of {rows.length} loaded result{rows.length === 1 ? '' : 's'}
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <Btn size="sm" variant="ghost" icon={<I.target />} onClick={openCampaign}>Run campaign</Btn>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    icon={<I.mail />}
+                    onClick={(event) => {
+                      setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
+                      setEmailRunnerOpen(true);
+                    }}
+                  >Email selected</Btn>
+                  <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportSelection}>Export CSV</Btn>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {loading ? (
             <Spinner label="Searching…" />
           ) : !searched ? (
@@ -427,6 +552,13 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
               <ScrollArea max={listMax}>
                 <table style={tableStyle}>
                   <thead><tr>
+                    <Th align="center">
+                      <SelectionBox
+                        checked={allRowsSelected}
+                        onChange={toggleAllResults}
+                        title={allRowsSelected ? 'Deselect loaded records' : 'Select loaded records'}
+                      />
+                    </Th>
                     <Th align="center">Type</Th>
                     <Th>Contact</Th>
                     <Th>Account</Th>
@@ -439,7 +571,15 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                     <Th align="right">Next Task</Th>
                   </tr></thead>
                   <tbody>
-                    {rows.map((r, i) => <ResultRow key={(r.id || '') + i} r={r} i={i} />)}
+                    {rows.map((r, i) => (
+                      <ResultRow
+                        key={(r.id || '') + i}
+                        r={r}
+                        i={i}
+                        selected={selectedRows.has(r.id)}
+                        onToggle={() => toggleResult(r.id)}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </ScrollArea>
@@ -471,6 +611,14 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           onApply={applyQb}
         />
       )}
+      <EmailRunner
+        open={emailRunnerOpen}
+        cursor={emailRunnerCursor}
+        contacts={selectedResults
+          .map((row) => crmRowToEmailContact(row, recUrl(row)))
+          .filter((contact) => contact.contactUrl || contact.email)}
+        onClose={() => setEmailRunnerOpen(false)}
+      />
     </ModalCtx.Provider>
     </DataCtx.Provider>
   );
@@ -486,7 +634,11 @@ if (!window.__gbCrmSearchPageRegistered) {
   window.__gbCustomPages.search = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<DetailErrorBoundary label="CRM Search page"><CrmSearchPageApp store={ctx.store} /></DetailErrorBoundary>);
+      root.render(
+        <ToastHost installGlobal={false}>
+          <DetailErrorBoundary label="CRM Search page"><CrmSearchPageApp store={ctx.store} /></DetailErrorBoundary>
+        </ToastHost>,
+      );
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };

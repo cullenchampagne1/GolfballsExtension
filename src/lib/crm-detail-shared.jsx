@@ -18,7 +18,8 @@ import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
 import { buildAccountPayload, accountUpdateUrl, checkAccountResponse } from './accountUpdate.js';
 import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
-import { TASK_CATEGORY_OPTIONS, isOpportunityTaskCategory } from './taskCategories.js';
+import { opportunityStageTone } from './customPageLayout.js';
+import { TASK_CATEGORY_OPTIONS } from './taskCategories.js';
 import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
 import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
 import { submitCallLog } from './submitCallLog.js';
@@ -1138,7 +1139,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
               <Td muted>{txt(o.owner) || DASH}</Td>
               <Td align="right"><span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 600, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))' }}>{fmt$(o.estimatedValue)}</span></Td>
               <Td align="right" mono muted>{fmtDate(o.estimatedCloseDate)}</Td>
-              <Td align="center">{o.stage ? <Tag tone="info" size="xs">{o.stage}</Tag> : DASH}</Td>
+              <Td align="center">{o.stage ? <Tag tone={opportunityStageTone(o.stage)} size="xs">{o.stage}</Tag> : DASH}</Td>
               <Td align="right">
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                   <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { if (o.id) goUrl(oppHref(o.id)); }}>Open</Btn>
@@ -1342,7 +1343,6 @@ export function OpenTaskRow({ t }) {
   const done = state === 'done' || state === 'leaving';
   const leaving = state === 'leaving';
   const priorityTone = priTone(t.priority);
-  const opportunityCategory = isOpportunityTaskCategory(t.category);
   const due = toDateInputAny(t.dueDate);
   const dueTime = due ? new Date(`${due}T12:00:00`).getTime() : NaN;
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1368,11 +1368,7 @@ export function OpenTaskRow({ t }) {
         </div>
       </Td>
       <Td muted>{txt(t.owner) || DASH}</Td>
-      <Td muted={!opportunityCategory}>
-        {opportunityCategory
-          ? <Tag tone="success" size="xs" icon={<I.target />}>{t.category}</Tag>
-          : (t.category || DASH)}
-      </Td>
+      <Td muted>{t.category || DASH}</Td>
       <Td><Tag tone={priorityTone} size="xs">{t.priority || DASH}</Tag></Td>
       <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
       <Td align="right" mono><span style={{ color: dueColor }}>{fmtDate(t.dueDate)}</span></Td>
