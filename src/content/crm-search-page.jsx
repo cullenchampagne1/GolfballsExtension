@@ -597,7 +597,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
               scale: searchBarVisible ? 1 : 0.994,
             }}
             transition={{
-              duration: searchBarVisible ? 0.32 : 0.48,
+              duration: 0.48,
               ease: [0.22, 1, 0.36, 1],
             }}
             style={{
