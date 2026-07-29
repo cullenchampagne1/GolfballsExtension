@@ -1366,10 +1366,11 @@ export function OpenTaskRow({ t }) {
           </div>
         </div>
       </Td>
+      <Td muted>{txt(t.owner) || DASH}</Td>
       <Td muted>{t.category}</Td>
       <Td><Tag tone={priorityTone} size="xs">{t.priority || DASH}</Tag></Td>
       <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
-      <Td align="right" mono><span style={{ color: dueColor, fontWeight: 500 }}>{fmtDate(t.dueDate)}</span></Td>
+      <Td align="right" mono><span style={{ color: dueColor }}>{fmtDate(t.dueDate)}</span></Td>
       <Td align="right">
         <IconBtn ghost size="xs" icon={<I.edit />} title="Edit task" disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)} />
       </Td>
@@ -1893,6 +1894,7 @@ export function TasksPanel({ canCreate = true }) {
         <table style={tableStyle}>
           <thead><tr>
             <Th>Task</Th>
+            <Th>Owner</Th>
             <Th>Category</Th>
             <Th>Priority</Th>
             <Th align="right">Live</Th>
@@ -1901,7 +1903,7 @@ export function TasksPanel({ canCreate = true }) {
           </tr></thead>
           <tbody>
             {D.openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
-            {D.openTasks.length === 0 && <EmptyRow colSpan={6} label="No open tasks." />}
+            {D.openTasks.length === 0 && <EmptyRow colSpan={7} label="No open tasks." />}
           </tbody>
         </table>
         </ScrollArea>
@@ -1913,6 +1915,7 @@ export function TasksPanel({ canCreate = true }) {
         <table style={tableStyle}>
           <thead><tr>
             <Th>Task</Th>
+            <Th>Owner</Th>
             <Th>Category</Th>
             <Th>Priority</Th>
             <Th align="right">Live</Th>
@@ -1930,13 +1933,14 @@ export function TasksPanel({ canCreate = true }) {
                     </div>
                   </div>
                 </Td>
+                <Td muted>{txt(t.owner) || DASH}</Td>
                 <Td muted>{t.category}</Td>
                 <Td><Tag tone={priTone(t.priority)} size="xs">{t.priority || DASH}</Tag></Td>
                 <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
                 <Td align="right" mono muted>{fmtDate(t.dueDate)}</Td>
               </tr>
             ))}
-            {D.doneTasks.length === 0 && <EmptyRow colSpan={5} label="No completed tasks." />}
+            {D.doneTasks.length === 0 && <EmptyRow colSpan={6} label="No completed tasks." />}
           </tbody>
         </table>
         </ScrollArea>

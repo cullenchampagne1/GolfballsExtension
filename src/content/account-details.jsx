@@ -11,8 +11,8 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
-import { Btn, ContactPill, Card, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, IconBtn, KV, LazySection, OrdersPanel, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, fmtDate, goUrl, isEmpty, readBackTo, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
-import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, ContactInfoCard, DetailPageFrame, EKV, EditToggle, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, OpportunitiesPanel, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, crmUpdateAccount, gbToast, useDetailData, useModal, useModalHost, usePatch } from '../lib/crm-detail-shared.jsx';
+import { Btn, ContactPill, Card, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, KV, LazySection, OrdersPanel, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, fmtDate, goUrl, isEmpty, readBackTo, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
+import { ActivityPanel, AddNoteModal, AltLookupsCard, BackChip, Breadcrumb, DetailPageFrame, FormField, HeroAvatar, HeroPillStrip, HeroShell, HeroTitleRow, MailerCard, ModalCtx, ModalShell, OpportunitiesPanel, PatchCtx, ProofsPanel, QuickLogCard, TArea, TInput, TasksPanel, TopBar, crmUpdateAccount, gbToast, useDetailData, useModal, useModalHost, usePatch } from '../lib/crm-detail-shared.jsx';
 
 /* ════════════════════════════════════════════════════════════
    HERO / PROFILE CARD
@@ -37,11 +37,9 @@ function Hero() {
         }}><I.briefcase size={12} /></div>
       } />}
       actions={<>
+        <Btn variant="primary" icon={<I.edit />} full onClick={() => openModal(<AccountEditModal />)}>Edit Account</Btn>
         <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
-        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-          <Btn variant="ghost" size="sm" icon={<I.note />} onClick={() => openModal(<AddNoteModal />)}>Add note</Btn>
-          <IconBtn size="sm" icon={<I.more />} />
-        </div>
+        <Btn variant="secondary" icon={<I.note />} full onClick={() => openModal(<AddNoteModal />)}>Add Note</Btn>
       </>}>
       <HeroTitleRow title={txt(a.name) || 'Account'} id={D.ids.account} tags={<>
         {territory && <Tag tone="brand" size="md" icon={<I.briefcase />}>{territory}{a.salesRep ? ' · ' + a.salesRep : ''}</Tag>}
@@ -68,6 +66,67 @@ function Hero() {
         <ContactPill icon={<I.shield />} label="Tax Exempt" value={a.taxExempt ? 'Yes' : 'No'} />
       </HeroPillStrip>
     </HeroShell>
+  );
+}
+
+function AccountEditModal() {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const a = useD().account;
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState({
+    Name: a.name || '',
+    AccountWebAddress: a.webAddress || '',
+    MainAddress: a.mainAddress || '',
+    MainCity: a.city || '',
+    MainState: a.state || '',
+    MainPostal: a.postal || '',
+    LinkedInURL: a.linkedInUrl || '',
+    Context: a.contextNotes || '',
+  });
+  const set = (key) => (e) => setF((current) => ({ ...current, [key]: e.target.value }));
+  const save = async () => {
+    if (busy || !f.Name.trim()) return;
+    setBusy(true);
+    try {
+      await crmUpdateAccount(f);
+      patch((D) => ({
+        ...D,
+        account: {
+          ...D.account,
+          name: f.Name,
+          webAddress: f.AccountWebAddress,
+          mainAddress: f.MainAddress,
+          city: f.MainCity,
+          state: f.MainState,
+          postal: f.MainPostal,
+          linkedInUrl: f.LinkedInURL,
+          contextNotes: f.Context,
+        },
+      }));
+      gbToast('Account updated', 'success');
+      closeModal();
+    } catch (e) {
+      gbToast(e?.message || 'Could not update account', 'error');
+      setBusy(false);
+    }
+  };
+  return (
+    <ModalShell title="Edit Account" icon={<I.briefcase />} width={580} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || !f.Name.trim()}>{busy ? 'Saving…' : 'Save'}</Btn>
+    </>}>
+      <FormField label="Account name"><TInput autoFocus value={f.Name} onChange={set('Name')} /></FormField>
+      <FormField label="Web address"><TInput value={f.AccountWebAddress} onChange={set('AccountWebAddress')} placeholder="https://…" /></FormField>
+      <FormField label="Main address"><TInput value={f.MainAddress} onChange={set('MainAddress')} /></FormField>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 90px 110px', gap: 12 }}>
+        <FormField label="City"><TInput value={f.MainCity} onChange={set('MainCity')} /></FormField>
+        <FormField label="State"><TInput value={f.MainState} onChange={set('MainState')} maxLength={30} /></FormField>
+        <FormField label="Postal code"><TInput value={f.MainPostal} onChange={set('MainPostal')} /></FormField>
+      </div>
+      <FormField label="LinkedIn URL"><TInput value={f.LinkedInURL} onChange={set('LinkedInURL')} placeholder="https://linkedin.com/company/…" /></FormField>
+      <FormField label="Context"><TArea value={f.Context} onChange={set('Context')} rows={4} placeholder="Internal account context…" /></FormField>
+    </ModalShell>
   );
 }
 
@@ -115,70 +174,37 @@ function ContactsPanel() {
   );
 }
 
-/* — Account Info — full-width, two columns of shared EKV/KV rows. There is
-   no account Update transport yet, so EditToggle only flips the row styling. */
+/* — Account Info — read-only summary; editing lives in the hero modal. */
 function AccountInfoCard() {
   const D = useD();
-  const patch = usePatch();
   const a = D.account;
-  const [editing, setEditing] = useState(false);
-  /* Edits keyed by the CRM's DTO field names (crmUpdateAccount reads
-     every un-edited field back off the live host form, so we only carry
-     the ones the user actually changed). */
-  const [edits, setEdits] = useState({});
-  const set = (field, value) => setEdits((e) => ({ ...e, [field]: value }));
-  const startEdit = () => { setEdits({}); setEditing(true); };
-
-  const onSave = async () => {
-    if (!Object.keys(edits).length) return;   // nothing changed
-    try {
-      await crmUpdateAccount(edits);
-      gbToast('Account updated', 'success');
-      /* Reflect the saved text into the schema so the card shows the new
-         values without a reload; the DTO keys map onto D.account fields. */
-      const map = { Name: 'name', AccountWebAddress: 'webAddress', MainCity: 'city', MainState: 'state', Context: 'contextNotes', LinkedInURL: 'linkedInUrl' };
-      const patched = Object.fromEntries(Object.entries(edits).map(([k, v]) => [map[k] || k, v]));
-      patch((Dd) => ({ ...Dd, account: { ...Dd.account, ...patched } }));
-    } catch (e) {
-      gbToast(e?.message || 'Could not update account', 'error');
-      throw e;   // keep the editor open so the fix isn't lost
-    }
-  };
-
-  /* Select-backed CRM fields (Industry / Territory / User Type / Tax
-     Exempt) can't be safely edited as free text — they post option
-     values, not the display labels we render — so they stay read-only
-     during edit and crmUpdateAccount preserves their current host value. */
   return (
     <Card>
       <SectionTitle
         icon={<I.briefcase />} title="Account Information"
         sub={`#${D.ids.account || DASH} · ${txt(a.name) || DASH}`}
-        right={<EditToggle editing={editing} setEditing={(v) => (v ? startEdit() : setEditing(false))} onSave={onSave} />}
       />
-      <div key={editing ? 'edit' : 'view'} className="gbcp-edit-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px', padding: '8px 18px 14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px', padding: '8px 18px 14px' }}>
         <div>
-          <EKV label="Account Name" value={txt(a.name)} editing={editing} field="Name" onEdit={set} />
+          <KV label="Account Name">{txt(a.name)}</KV>
           <KV label="Account ID" mono copyable>{txt(D.ids.account)}</KV>
-          <EKV label="Industry" value={txt(a.industry)} editing={editing} />
-          <EKV label="Web Address" value={txt(a.webAddress)} editing={editing} field="AccountWebAddress" onEdit={set} />
-          <EKV label="City" value={txt(a.city)} editing={editing} field="MainCity" onEdit={set} />
-          <EKV label="State" value={txt(a.state)} editing={editing} field="MainState" onEdit={set} />
-          <EKV label="Context" value={txt(a.contextNotes)} editing={editing} field="Context" onEdit={set} />
+          <KV label="Industry">{txt(a.industry)}</KV>
+          <KV label="Web Address">{txt(a.webAddress)}</KV>
+          <KV label="Main Address">{txt(a.mainAddress)}</KV>
+          <KV label="City">{txt(a.city)}</KV>
+          <KV label="State">{txt(a.state)}</KV>
+          <KV label="Postal Code" mono>{txt(a.postal)}</KV>
+          <KV label="Context">{txt(a.contextNotes)}</KV>
         </div>
         <div>
-          {editing
-            ? <EKV label="Territory" value={txt(a.territoryName)} editing />
-            : (
-              <KV label="Territory">
-                {a.territoryName ? <Tag tone="brand" size="sm">{a.territoryName}</Tag> : DASH}
-                {a.salesRep && <span style={{ marginLeft: 6, color: 'var(--gb-text-tertiary)' }}>{a.salesRep}</span>}
-              </KV>
-            )}
-          <EKV label="User Type" value={txt(a.userType)} editing={editing} />
-          <EKV label="Tax Exempt" value={a.taxExempt ? 'Yes' : 'No'} editing={editing} />
-          <EKV label="Credit Approved" value={fmtDate(a.creditApproved) === DASH ? '' : fmtDate(a.creditApproved)} editing={editing} />
-          <EKV label="LinkedIn URL" value={txt(a.linkedInUrl)} editing={editing} field="LinkedInURL" onEdit={set} />
+          <KV label="Territory">
+            {a.territoryName ? <Tag tone="brand" size="sm">{a.territoryName}</Tag> : DASH}
+            {a.salesRep && <span style={{ marginLeft: 6, color: 'var(--gb-text-tertiary)' }}>{a.salesRep}</span>}
+          </KV>
+          <KV label="User Type">{txt(a.userType)}</KV>
+          <KV label="Tax Exempt">{a.taxExempt ? 'Yes' : 'No'}</KV>
+          <KV label="Credit Approved">{fmtDate(a.creditApproved) === DASH ? null : fmtDate(a.creditApproved)}</KV>
+          <KV label="LinkedIn URL">{txt(a.linkedInUrl)}</KV>
           <KV label="Created By">{txt(a.createdBy)}</KV>
           <KV label="Created On" mono>{fmtDate(a.createdDate) === DASH ? null : fmtDate(a.createdDate)}</KV>
         </div>

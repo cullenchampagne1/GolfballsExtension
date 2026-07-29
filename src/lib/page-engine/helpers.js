@@ -152,6 +152,49 @@ export function keyedField(doc, rowKey, prefix, attr) {
   return readAttr(el, attr || 'innerText');
 }
 
+/**
+ * Resolve the displayed owner for a native CRM task row.
+ *
+ * CRM page variants do not agree on one field id, so prefer the known
+ * suffixed ids and then fall back to the table column whose heading says
+ * Owner or Assigned To. This keeps contact/account task schemas identical.
+ */
+export function taskOwner(doc, rowKey) {
+  if (!doc || !rowKey) return null;
+  const prefixes = [
+    'owner', 'taskowner', 'taskOwner', 'assignedto', 'assignedTo',
+    'assigned', 'employee', 'employeeName',
+  ];
+  for (const prefix of prefixes) {
+    const el = doc.getElementById(`${prefix}_${rowKey}`);
+    const value = readAttr(el, el?.tagName === 'SELECT' ? 'selectedText' : 'visibleText');
+    if (value) return value;
+  }
+
+  const row = doc.getElementById(`taskrow_${rowKey}`);
+  if (!row) return null;
+  const table = row.closest?.('table');
+  const headings = table ? Array.from(table.querySelectorAll('thead th')) : [];
+  const ownerIndex = headings.findIndex((heading) => /\b(owner|assigned(?:\s+to)?)\b/i.test(readText(heading) || ''));
+  if (ownerIndex >= 0) {
+    const value = readVisibleText(row.children?.[ownerIndex]);
+    if (value) return value;
+  }
+
+  for (const cell of Array.from(row.children || [])) {
+    const label = [
+      cell.getAttribute?.('data-title'),
+      cell.getAttribute?.('aria-label'),
+      cell.getAttribute?.('data-label'),
+    ].filter(Boolean).join(' ');
+    if (/\b(owner|assigned(?:\s+to)?)\b/i.test(label)) {
+      const value = readVisibleText(cell);
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
 /** Pull the orderID query-string parameter from an anchor inside a
  *  cell — useful for the orders table where the displayed number is
  *  the same as the URL param but with no leading zeros, and we want
@@ -765,6 +808,7 @@ export const FN_REGISTRY = {
   proofLogoUrl,
   activityId,
   keyedField,
+  taskOwner,
   accountContactRows,
   firstAccountContactField,
   accountOrderRows,

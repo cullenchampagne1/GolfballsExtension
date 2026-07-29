@@ -436,11 +436,12 @@ export const UI_CSS =
   '  .gbcp-activity-date { grid-column:2; justify-self:start !important; }' +
   '}' +
   /* Thin themed scrollbar for the capped-height panel scroll areas. */
-  '.gb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }' +
-  '.gb-scroll::-webkit-scrollbar-track { background: transparent; }' +
-  '.gb-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }' +
-  '.gb-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); background-clip: padding-box; }' +
-  '.gb-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }' +
+  '.gb-scroll::-webkit-scrollbar, .gbcp-root *::-webkit-scrollbar { width:7px; height:7px; }' +
+  '.gb-scroll::-webkit-scrollbar-track, .gbcp-root *::-webkit-scrollbar-track { background:transparent; }' +
+  '.gb-scroll::-webkit-scrollbar-thumb, .gbcp-root *::-webkit-scrollbar-thumb { background:var(--gb-border-default); border-radius:99px; border:1px solid transparent; background-clip:padding-box; }' +
+  '.gb-scroll::-webkit-scrollbar-thumb:hover, .gbcp-root *::-webkit-scrollbar-thumb:hover { background:var(--gb-border-strong); background-clip:padding-box; }' +
+  '.gbcp-root * { scrollbar-width:thin; scrollbar-color:var(--gb-border-default) transparent; }' +
+  '.gb-scroll { scrollbar-width:thin; scrollbar-color:var(--gb-border-default) transparent; scrollbar-gutter:stable; overscroll-behavior:contain; }' +
   /* Confirmation pulse after an optimistic save — a brief brand ring/glow. */
   '@keyframes gb-saved-pulse {' +
   '  0% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong), inset 0 0 0 1px var(--gb-brand-tint-border); }' +

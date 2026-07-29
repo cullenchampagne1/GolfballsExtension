@@ -106,9 +106,11 @@ function openTasks(count) {
     'Review tax-exempt certificate renewal',
     'Follow up on proposal expiration',
   ];
+  const owners = ['Cullen Champagne', 'Taylor Reed', 'Jordan Park'];
   return Array.from({ length: count }, (_, index) => ({
     id: `TASK-${7000 + index}`,
     subject: subjects[index % subjects.length],
+    owner: owners[index % owners.length],
     category: ['Follow Up', 'Artwork', 'Call', 'Sales'][index % 4],
     priority: ['High', 'Med', 'Low'][index % 3],
     dueDate: isoDaysAgo(-3 - index * 2),
@@ -118,9 +120,11 @@ function openTasks(count) {
 }
 
 function doneTasks(count) {
+  const owners = ['Cullen Champagne', 'Taylor Reed', 'Jordan Park'];
   return Array.from({ length: count }, (_, index) => ({
     id: `DONE-${6100 + index}`,
     subject: ['Completed proof review', 'Confirmed shipping address', 'Logged quarterly reach out', 'Closed prior-year follow-up'][index % 4],
+    owner: owners[index % owners.length],
     category: ['Artwork', 'Order', 'Call', 'Follow Up'][index % 4],
     priority: 'Med',
     liveDate: isoDaysAgo(7 + index * 3),
@@ -202,8 +206,10 @@ function baseFixture(mode) {
       name: 'Northstar Athletics & Community Foundation',
       industry: 'Sports & Recreation',
       webAddress: 'https://northstarathletics.example',
+      mainAddress: '225 W Wacker Drive, Suite 1800',
       city: 'Chicago',
       state: 'IL',
+      postal: '60606',
       territoryName: 'Midwest Enterprise',
       salesRep: 'Cullen Champagne',
       taxExempt: true,

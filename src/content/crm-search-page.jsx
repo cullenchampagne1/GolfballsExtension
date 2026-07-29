@@ -14,6 +14,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
+import { crmSearchResultsMax } from '../lib/customPageLayout.js';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import {
   ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, PAGE_ZOOM, ScrollArea, SectionTitle, Spinner,
@@ -158,7 +159,7 @@ function FacetSection({ facet, rows, selected, onToggle, defaultOpen }) {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Filter ${facet.label.toLowerCase()}…`}
               style={{ width: '100%', height: 26, padding: '0 8px', marginBottom: 6, boxSizing: 'border-box', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11, outline: 'none' }} />
           )}
-          <ScrollArea max={230}>
+          <ScrollArea max={230} style={{ paddingRight: 4 }}>
             {visible.length ? visible.slice(0, 300).map((r) => (
               <FacetRow key={r.value} label={label(r)} count={r.count}
                 checked={selected.has(String(r.value))} onClick={() => onToggle(String(r.value))} />
@@ -279,7 +280,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   // the real viewport by the zoom, minus the top bar + hero + card chrome.
   const [listMax, setListMax] = useState(560);
   useEffect(() => {
-    const calc = () => setListMax(Math.max(340, Math.round((window.innerHeight || 900) / PAGE_ZOOM) - 250));
+    const calc = () => setListMax(crmSearchResultsMax(window.innerHeight, PAGE_ZOOM));
     calc();
     window.addEventListener('resize', calc);
     return () => window.removeEventListener('resize', calc);

@@ -640,6 +640,11 @@ const FIELDS = {
             extract: { keyedFn: 'keyedField', args: ['subject'] },
             transform: 'trim',
           },
+          owner: {
+            type: 'string', label: 'Owner',
+            extract: { keyedFn: 'taskOwner' },
+            transform: 'trim',
+          },
           category: {
             type: 'string', label: 'Category',
             extract: { keyedFn: 'keyedField', args: ['category'] },
@@ -682,6 +687,11 @@ const FIELDS = {
           subject: {
             type: 'string', label: 'Subject',
             extract: { keyedFn: 'keyedField', args: ['subject'] },
+            transform: 'trim',
+          },
+          owner: {
+            type: 'string', label: 'Owner',
+            extract: { keyedFn: 'taskOwner' },
             transform: 'trim',
           },
           category: {

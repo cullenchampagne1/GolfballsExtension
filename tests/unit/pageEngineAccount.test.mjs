@@ -9,6 +9,7 @@ import {
   firstAccountContactField,
   accountOrderRows,
   accountOrdersSummary,
+  taskOwner,
 } from '../../src/lib/page-engine/helpers.js';
 
 function accountDocument(href = '/Default.aspx?Page=240&customerID=771') {
@@ -113,5 +114,22 @@ describe('account page · orders (6-column, extra Contact column)', () => {
     const doc = new JSDOM('<!doctype html><div>no orders here</div>').window.document;
     assert.equal(accountOrdersSummary(doc, 'count'), null);
     assert.equal(accountOrderRows(doc).length, 0);
+  });
+});
+
+describe('shared detail pages · task owner extraction', () => {
+  it('prefers a suffixed owner field and falls back to the labeled table column', () => {
+    const keyed = new JSDOM(`
+      <table><tbody><tr id="taskrow_42"><td id="employee_42">Cullen Champagne</td></tr></tbody></table>
+    `).window.document;
+    assert.equal(taskOwner(keyed, '42'), 'Cullen Champagne');
+
+    const labeled = new JSDOM(`
+      <table>
+        <thead><tr><th>Task</th><th>Assigned To</th><th>Due</th></tr></thead>
+        <tbody><tr id="taskrow_43"><td>Follow up</td><td>Taylor Reed</td><td>8/12/2026</td></tr></tbody>
+      </table>
+    `).window.document;
+    assert.equal(taskOwner(labeled, '43'), 'Taylor Reed');
   });
 });
