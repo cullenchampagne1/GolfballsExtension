@@ -1271,6 +1271,11 @@ export function ProofCard({ p }) {
 
 export function OrdersPanel() {
   const D = useD();
+  // Default sort: most recent orders first (by order date).
+  const orders = [...(D.orders || [])].sort((a, b) => {
+    const ta = Date.parse(a?.date); const tb = Date.parse(b?.date);
+    return (Number.isNaN(tb) ? -Infinity : tb) - (Number.isNaN(ta) ? -Infinity : ta);
+  });
   return (
     <div className="gbcp-stack">
       <Card>
@@ -1291,7 +1296,7 @@ export function OrdersPanel() {
             </tr>
           </thead>
           <tbody>
-            {D.orders.map((o, i) => (
+            {orders.map((o, i) => (
               <tr key={i} style={trStyle}>
                 <Td>
                   {o.href ? (

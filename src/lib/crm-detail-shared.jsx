@@ -1116,6 +1116,11 @@ export function DncButton({ full = false }) {
 export function OpportunitiesPanel({ canCreate = true }) {
   const D = useD();
   const { openModal } = useModal();
+  // Default sort: active pipeline first — open/proposed stages at the top,
+  // everything else (won/lost/closed) below, keeping original order within.
+  const opps = [...(D.opportunities || [])].sort(
+    (a, b) => (/open|propos/i.test(String(a?.stage || '')) ? 0 : 1) - (/open|propos/i.test(String(b?.stage || '')) ? 0 : 1),
+  );
   return (
     <Card>
       <SectionTitle
@@ -1135,7 +1140,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
           <Th align="right">Actions</Th>
         </tr></thead>
         <tbody>
-          {D.opportunities.map((o, i) => (
+          {opps.map((o, i) => (
             <tr key={i} style={trStyle}>
               <Td><span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', fontWeight: 600 }}>{o.id}</span></Td>
               <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{o.subject}</span></Td>
@@ -1836,6 +1841,11 @@ export function TasksPanel({ canCreate = true }) {
   const D = useD();
   const patch = usePatch();
   const { openModal } = useModal();
+  // Default sort: soonest due date first; undated tasks sink to the bottom.
+  const openTasks = [...(D.openTasks || [])].sort((a, b) => {
+    const ta = Date.parse(a?.dueDate || a?.due); const tb = Date.parse(b?.dueDate || b?.due);
+    return (Number.isNaN(ta) ? Infinity : ta) - (Number.isNaN(tb) ? Infinity : tb);
+  });
   const qt = useTemplates(QT_KEY);
   const [manage, setManage] = useState(false);
   const editTask = (t) => openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />);
@@ -1929,8 +1939,8 @@ export function TasksPanel({ canCreate = true }) {
             <Th></Th>
           </tr></thead>
           <tbody>
-            {D.openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
-            {D.openTasks.length === 0 && <EmptyRow colSpan={7} label="No open tasks." />}
+            {openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
+            {openTasks.length === 0 && <EmptyRow colSpan={7} label="No open tasks." />}
           </tbody>
         </table>
         </ScrollArea>
