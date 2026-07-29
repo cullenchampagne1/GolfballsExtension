@@ -122,6 +122,7 @@
         "react-dist/content/crm-search-page.js",
         "react-dist/content/crm-task-list-page.js",
         "react-dist/content/crm-recent-history-page.js",
+        "react-dist/content/crm-action-review-page.js",
         "src/vanilla/custom-pages.js",
         "src/vanilla/main.js"
       ],

@@ -92,6 +92,9 @@
     my_recent_history: function () {
       return /[?&]Page=279\b/i.test(location.href);
     },
+    action_review: function () {
+      return /[?&]Page=286\b/i.test(location.href);
+    },
   };
 
   // ── enabled-set helpers ──────────────────────────────────────

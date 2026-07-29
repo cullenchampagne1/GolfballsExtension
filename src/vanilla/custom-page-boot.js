@@ -38,6 +38,7 @@
     { id: 'search', re: /[?&]Page=360\b/i },
     { id: 'task_list', re: /[?&]Page=349\b/i },
     { id: 'my_recent_history', re: /[?&]Page=279\b/i },
+    { id: 'action_review', re: /[?&]Page=286\b/i },
   ];
 
   function enabledSet() {

@@ -8,6 +8,16 @@
 //   1 order → Tier 3 · 2–3 orders → Tier 2 · 4+ orders → Tier 1.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/* CRM task categories are numeric wire ids (taskCategoryID). */
+const ANNIVERSARY_CATEGORY_ID = 7;    // "Order History Special"
+const QUARTERLY_CATEGORY_ID = 14;     // "Workflow Task"
+const QUARTERLY_SUBJECT_RE = /^Q[1-4] Reach Out Opportunity$/i;
+/* Live date = two weeks before due, same rule as the task-list action. */
+function liveDateFor(due) {
+  const d = new Date(due);
+  d.setDate(d.getDate() - 14);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 const BRAND_TASK_YEAR = 2030;
 const BRAND_TASK_MONTH = 11; // December (zero-based)
 const BRAND_TASK_DAY = 17;
@@ -179,8 +189,11 @@ const brandPlans = [...brandGroups.values()]
 // untouched. A prior tier for a detected brand is replaced even if its order
 // count moved that customer into another tier.
 const openTasks = page.tasks?.open || [];
+// Reset both the legacy "Prior Year …" naming AND the current
+// "Order Anniversary Follow Up …" naming — this campaign owns both.
+// Quarterly reach-outs are NOT in this set: never edited or deleted.
 const oldPriorYearTasks = anniversaries.length
-  ? openTasks.filter((task) => /prior[\s_-]*year/i.test(String(task.subject || "")))
+  ? openTasks.filter((task) => /prior[\s_-]*year|order anniversary follow up/i.test(String(task.subject || "")))
   : [];
 const oldBrandTasks = openTasks.filter((task) => {
   const subject = String(task.subject || "").trim().toLowerCase();
@@ -297,16 +310,22 @@ for (const campaign of scheduledCampaigns) {
       sourceOrders
     ].join("\n").slice(0, 4000);
 
-    await actions.createTask({
+    // Created directly under the CURRENT naming + category (no rename pass
+    // needed): year bracket = the follow-up cycle year the task fires in.
+    const created = await actions.createTask({
       subject: task.kind === "call"
-        ? `Prior Year Call - [${MONTHS[anniversary.month]}]`
-        : `Prior Year #${task.number} [${anniversary.sourceYear}]`,
+        ? `Order Anniversary Follow Up Call - [${MONTHS[anniversary.month]}]`
+        : `Order Anniversary Follow Up #${task.number} [${anniversaryDate.getFullYear()}]`,
       body,
+      categoryId: ANNIVERSARY_CATEGORY_ID,
       priority: "med",
       daysOut: Math.max(0, Math.round(
         calendarDayNumber(task.date) - calendarDayNumber(today)
       ))
     });
+    if (created?.taskId) {
+      await actions.updateTask({ id: created.taskId, fields: { liveDate: liveDateFor(task.date) } });
+    }
     createdCount += 1;
   }
 }
@@ -317,17 +336,50 @@ for (const campaign of scheduledCampaigns) {
 // not count toward the new schedule.
 const resetTasks = new Set([...oldPriorYearTasks, ...oldBrandTasks]);
 const occupiedQuarterKeys = new Set();
+// Every date the contact is ALREADY being touched — surviving open tasks,
+// completed history, and the anniversary tasks planned above. Drives both
+// quarter coverage and the spread placement below.
+const busyDayNums = [];
 for (const task of [
   ...openTasks.filter((candidate) => !resetTasks.has(candidate)),
   ...(page.tasks?.done || [])
 ]) {
   const dueDate = calendarDate(task?.dueDate || task?.due || task?.date);
-  if (dueDate) occupiedQuarterKeys.add(quarterKey(dueDate));
+  if (dueDate) { occupiedQuarterKeys.add(quarterKey(dueDate)); busyDayNums.push(calendarDayNumber(dueDate)); }
+  // An existing quarterly reach-out claims its quarter even if undated —
+  // and is NEVER edited, deleted, or re-created by this campaign.
+  const m = String(task?.subject || "").match(QUARTERLY_SUBJECT_RE);
+  if (m) {
+    const qn = Number(String(task.subject).charAt(1));
+    for (const t of [0, 1, 2, 3].map((o) => rollingQuarter(o, today))) {
+      if (t.quarter === qn) occupiedQuarterKeys.add(t.key);
+    }
+  }
 }
 for (const campaign of scheduledCampaigns) {
   for (const task of campaign.tasks) {
     occupiedQuarterKeys.add(quarterKey(task.date));
+    busyDayNums.push(calendarDayNumber(task.date));
   }
+}
+
+/* Pick the quarter day FURTHEST from every other scheduled touch (never a
+   constant date): weekly candidate steps across the quarter (clamped to
+   today for the current one); maximize the min distance to any busy date,
+   earlier day wins ties. Falls back to mid-quarter when nothing is busy. */
+function spreadDateForQuarter(slot) {
+  const qStart = new Date(slot.year, (slot.quarter - 1) * 3, 1, 12);
+  const qEnd = new Date(slot.year, (slot.quarter - 1) * 3 + 3, 0, 12);
+  const startNum = Math.max(calendarDayNumber(qStart), calendarDayNumber(today));
+  const endNum = calendarDayNumber(qEnd);
+  if (startNum > endNum) return null;
+  if (!busyDayNums.length) return new Date((startNum + Math.floor((endNum - startNum) / 2)) * DAY_MS);
+  let best = null;
+  for (let d = startNum; d <= endNum; d += 7) {
+    const minDist = Math.min(...busyDayNums.map((b) => Math.abs(d - b)));
+    if (!best || minDist > best.minDist) best = { day: d, minDist };
+  }
+  return new Date(best.day * DAY_MS);
 }
 
 let quarterlyCreatedCount = 0;
@@ -338,21 +390,27 @@ for (const slot of targetQuarters) {
     quarterlyCoveredCount += 1;
     continue;
   }
+  const dueDate = spreadDateForQuarter(slot) || slot.dueDate;
 
-  await actions.createTask({
+  const createdQ = await actions.createTask({
     subject: `Q${slot.quarter} Reach Out Opportunity`,
     body: [
       `Quarterly reach-out coverage for ${recordName}.`,
       `Coverage period: Q${slot.quarter} ${slot.year}.`,
-      "Created because no existing or newly planned task covered this quarter."
+      "Scheduled away from the contact's other touches.",
     ].join("\n"),
+    categoryId: QUARTERLY_CATEGORY_ID,
     priority: "med",
     daysOut: Math.max(
       0,
-      Math.round(calendarDayNumber(slot.dueDate) - calendarDayNumber(today))
+      Math.round(calendarDayNumber(dueDate) - calendarDayNumber(today))
     )
   });
+  if (createdQ?.taskId) {
+    await actions.updateTask({ id: createdQ.taskId, fields: { liveDate: liveDateFor(dueDate) } });
+  }
   occupiedQuarterKeys.add(slot.key);
+  busyDayNums.push(calendarDayNumber(dueDate));
   quarterlyCreatedCount += 1;
 }
 
@@ -388,12 +446,15 @@ for (const plan of brandPlans) {
     sourceOrders
   ].join("\n").slice(0, 4000);
 
-  await actions.createTask({
+  const createdBrand = await actions.createTask({
     subject: `${plan.brand} Customer - Tier ${plan.tier}`,
     body,
     priority: "med",
     daysOut: brandDaysOut
   });
+  if (createdBrand?.taskId) {
+    await actions.updateTask({ id: createdBrand.taskId, fields: { liveDate: liveDateFor(brandTaskDate) } });
+  }
   brandCreatedCount += 1;
 }
 
