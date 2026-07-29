@@ -1,22 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { crmSearchResultsMax, opportunityStageTone } from '../../src/lib/customPageLayout.js';
-
-describe('custom page layout · CRM Search result height', () => {
-  it('reserves the desktop search-column top offset in the viewport budget', () => {
-    assert.equal(crmSearchResultsMax(900, 1), 626);
-  });
-
-  it('converts the viewport into the custom-page zoom coordinate system', () => {
-    assert.equal(crmSearchResultsMax(900, 0.8), 851);
-  });
-
-  it('keeps a usable minimum on short or malformed viewports', () => {
-    assert.equal(crmSearchResultsMax(420, 1), 340);
-    assert.equal(crmSearchResultsMax('bad', 1), 626);
-  });
-});
+import {
+  opportunityStageTone,
+  smartSearchBarVisible,
+} from '../../src/lib/customPageLayout.js';
 
 describe('custom page layout · opportunity stage treatment', () => {
   it('gives only the Open stage the active opportunity tone', () => {
@@ -25,5 +13,18 @@ describe('custom page layout · opportunity stage treatment', () => {
     assert.equal(opportunityStageTone('Qualified'), 'info');
     assert.equal(opportunityStageTone('Won'), 'info');
     assert.equal(opportunityStageTone(null), 'info');
+  });
+});
+
+describe('custom page layout · smart CRM Search bar', () => {
+  it('hides on deliberate downward scroll and returns on upward intent', () => {
+    assert.equal(smartSearchBarVisible({ currentTop: 90, previousTop: 70, visible: true }), false);
+    assert.equal(smartSearchBarVisible({ currentTop: 70, previousTop: 90, visible: false }), true);
+  });
+
+  it('stays visible at the top, while focused, and through trackpad noise', () => {
+    assert.equal(smartSearchBarVisible({ currentTop: 8, previousTop: 40, visible: false }), true);
+    assert.equal(smartSearchBarVisible({ currentTop: 100, previousTop: 80, visible: true, focused: true }), true);
+    assert.equal(smartSearchBarVisible({ currentTop: 102, previousTop: 100, visible: false }), false);
   });
 });

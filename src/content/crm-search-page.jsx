@@ -15,15 +15,19 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
-import { crmSearchResultsMax } from '../lib/customPageLayout.js';
+import { smartSearchBarVisible } from '../lib/customPageLayout.js';
 import {
-  buildCrmSelectionCsv, crmRowToCampaignContact, crmRowToEmailContact, selectedCrmRows,
+  buildCrmSelectionCsv,
+  crmRowToCampaignContact,
+  crmRowToEmailContact,
+  selectedCrmRows,
+  toggleCrmSelection,
 } from '../lib/crmSearchSelection.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import {
-  ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, PAGE_ZOOM, ScrollArea, SectionTitle, Spinner,
+  ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, ScrollArea, SectionTitle, Spinner,
   Tag, TaskCheckbox, Td, Th, DASH as _DASH, EmptyRow, fmt$, fmtDate, goUrl, num, recUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
@@ -105,6 +109,43 @@ function SelectionBox({ checked, onChange, title }) {
         title={title}
       />
     </span>
+  );
+}
+
+function SelectionActionRail({ count, total, onCampaign, onEmail, onExport }) {
+  return (
+    <AnimatePresence initial={false}>
+      {count > 0 && (
+        <motion.div
+          key="crm-search-selection-actions"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div style={{
+            minHeight: 42,
+            padding: '7px 12px',
+            borderTop: '1px solid var(--gb-border-subtle)',
+            background: 'var(--gb-brand-tint-soft)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
+              <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{count} selected</strong>
+              {' '}of {total} result{total === 1 ? '' : 's'}
+            </span>
+            <div style={{ flex: 1 }} />
+            <Btn size="sm" variant="ghost" icon={<I.target />} onClick={onCampaign}>Run campaign</Btn>
+            <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail}>Email selected</Btn>
+            <Btn size="sm" variant="ghost" icon={<I.download />} onClick={onExport}>Export CSV</Btn>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -247,9 +288,16 @@ function ResultRow({ r, i, selected, onToggle }) {
   const isAcct = String(r.id || '').startsWith('account') || (r.recordType_s || '').toLowerCase() === 'account';
   const name = r.contactName_t || r.accountName_t || r.id;
   const email = (Array.isArray(r.emails_tps) && r.emails_tps[0]) || r.email_tp || '';
-  const go = () => { if (url) goUrl(url); };
+  const go = (event) => {
+    if (event?.shiftKey) {
+      event.preventDefault();
+      onToggle?.(event);
+      return;
+    }
+    if (url) goUrl(url);
+  };
   return (
-    <tr className="gb-actrow" onClick={go} title={url ? 'Open record' : undefined}
+    <tr className="gb-actrow" onClick={go} title={url ? 'Open record · Shift-click to select a range' : 'Shift-click to select a range'}
       style={{
         ...trStyle,
         cursor: url ? 'pointer' : 'default',
@@ -299,54 +347,49 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [facets, setFacets] = useState(initialSearch?.facets || null);
   const selRef = useRef(selected);
   selRef.current = selected;
-  const [rows, setRows] = useState(initialSearch?.docs || []);
+  const [rows, setRows] = useState(() => (initialSearch?.docs || []).slice(0, SOLR_ROWS));
   const [selectedRows, setSelectedRows] = useState(() => new Set());
+  const selectionAnchorRef = useRef(null);
   const [numFound, setNumFound] = useState(initialSearch?.numFound || 0);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const [searched, setSearched] = useState(!!initialSearch);
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   const [focused, setFocused] = useState(false);
-  // Results list fills the leftover vertical space. The takeover renders at
-  // PAGE_ZOOM, so a height in this coordinate space shows scaled — divide
-  // the real viewport by the zoom, minus the top bar + hero + card chrome.
-  const [listMax, setListMax] = useState(560);
-  useEffect(() => {
-    const calc = () => setListMax(crmSearchResultsMax(window.innerHeight, PAGE_ZOOM));
-    calc();
-    window.addEventListener('resize', calc);
-    return () => window.removeEventListener('resize', calc);
-  }, []);
+  const [searchBarVisible, setSearchBarVisible] = useState(true);
+  const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
   const gen = useRef(0);   // ignore stale responses
 
-  const runSearch = useCallback(async (q, t, qb, start = 0) => {
+  const runSearch = useCallback(async (q, t, qb) => {
     const g = ++gen.current;
-    if (start === 0) {
-      setLoading(true);
-      setError(false);
-      setSelectedRows(new Set());
-    } else setLoadingMore(true);
+    setLoading(true);
+    setError(false);
+    setSelectedRows(new Set());
+    selectionAnchorRef.current = null;
+    setSearchBarVisible(true);
     setSearched(true);
     try {
       const { docs, numFound, facets: fc } = await searchClient({
         query: q, type: t, solrFq: qb?.solrFq || '',
-        filters: facetFilters(selRef.current), start,
-        facet: start === 0,   // only need facet counts on the first page
+        filters: facetFilters(selRef.current),
+        start: 0,
+        rows: SOLR_ROWS,
+        facet: true,
       });
       if (gen.current !== g) return;
-      setRows((prev) => (start === 0 ? docs : prev.concat(docs)));
+      setRows(docs.slice(0, SOLR_ROWS));
       setNumFound(numFound);
       if (fc) setFacets(fc);
     } catch (e) {
       if (gen.current !== g) return;
-      setError(true); if (start === 0) setRows([]);
+      setError(true);
+      setRows([]);
       gbToast('CRM search is unavailable right now', 'error');
     } finally {
-      if (gen.current === g) { setLoading(false); setLoadingMore(false); }
+      if (gen.current === g) setLoading(false);
     }
   }, [searchClient]);
 
@@ -358,12 +401,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       selRef.current = next;
       return next;
     });
-    setTimeout(() => runSearch(query.trim(), type, qbFilter, 0), 0);
+    setTimeout(() => runSearch(query.trim(), type, qbFilter), 0);
   };
   const clearFacets = () => {
     const cleared = emptySel();
     setSelected(cleared); selRef.current = cleared;
-    setTimeout(() => runSearch(query.trim(), type, qbFilter, 0), 0);
+    setTimeout(() => runSearch(query.trim(), type, qbFilter), 0);
   };
   const facetCount = Object.values(selected).reduce((n, s) => n + s.size, 0);
 
@@ -372,35 +415,64 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   // any term/filter the URL carried. Then focus the field.
   useEffect(() => {
     if (initialSearch) return undefined;
-    runSearch(url0.q, url0.type, url0.fq ? { solrFq: url0.fq } : null, 0);
+    runSearch(url0.q, url0.type, url0.fq ? { solrFq: url0.fq } : null);
     setTimeout(() => { try { inputRef.current && inputRef.current.focus(); } catch (e) {} }, 60);
     return undefined;
   }, []);   // eslint-disable-line
 
   const submit = () => {
     writeUrlSearch(query.trim(), type, qbFilter?.solrFq || '');
-    runSearch(query.trim(), type, qbFilter, 0);
+    runSearch(query.trim(), type, qbFilter);
   };
-  const onTypeChange = (t) => { setType(t); writeUrlSearch(query.trim(), t, qbFilter?.solrFq || ''); if (searched) runSearch(query.trim(), t, qbFilter, 0); };
-  const applyQb = (filter) => { setQbFilter(filter); setQbOpen(false); writeUrlSearch(query.trim(), type, filter?.solrFq || ''); runSearch(query.trim(), type, filter, 0); };
-  const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null, 0); };
-  const canLoadMore = rows.length < numFound && !loading && !loadingMore;
+  const onTypeChange = (t) => { setType(t); writeUrlSearch(query.trim(), t, qbFilter?.solrFq || ''); if (searched) runSearch(query.trim(), t, qbFilter); };
+  const applyQb = (filter) => { setQbFilter(filter); setQbOpen(false); writeUrlSearch(query.trim(), type, filter?.solrFq || ''); runSearch(query.trim(), type, filter); };
+  const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null); };
   const selectedResults = useMemo(() => selectedCrmRows(rows, selectedRows), [rows, selectedRows]);
   const allRowsSelected = rows.length > 0 && rows.every((row) => selectedRows.has(row.id));
-  const toggleResult = useCallback((id) => {
+  const toggleResult = useCallback((id, index, shiftKey = false) => {
     setSelectedRows((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+      const result = toggleCrmSelection(
+        rows,
+        current,
+        id,
+        index,
+        selectionAnchorRef.current,
+        shiftKey,
+      );
+      selectionAnchorRef.current = result.anchorIndex;
+      return result.selectedIds;
     });
-  }, []);
+  }, [rows]);
   const toggleAllResults = useCallback(() => {
     setSelectedRows((current) => {
       const allSelected = rows.length > 0 && rows.every((row) => current.has(row.id));
+      selectionAnchorRef.current = null;
       if (allSelected) return new Set();
       return new Set(rows.map((row) => row.id).filter(Boolean));
     });
   }, [rows]);
+  const handleScrollIntent = useCallback((event) => {
+    const target = event?.currentTarget;
+    if (!target) return;
+    const currentTop = Math.max(0, Number(target.scrollTop) || 0);
+    const previousTop = scrollPositionsRef.current.get(target);
+    scrollPositionsRef.current.set(target, currentTop);
+    if (previousTop == null) return;
+    const scrollingDown = currentTop >= previousTop + 4 && currentTop > 18;
+    // The field is focused on page entry. A deliberate browse gesture hands
+    // focus back to the results so that initial focus cannot pin the smart bar
+    // open forever; minor trackpad noise still leaves an active editor alone.
+    if (scrollingDown && focused) {
+      try { inputRef.current?.blur?.(); } catch (e) {}
+      setFocused(false);
+    }
+    setSearchBarVisible((visible) => smartSearchBarVisible({
+      currentTop,
+      previousTop,
+      visible,
+      focused: focused && !scrollingDown,
+    }));
+  }, [focused]);
   const openCampaign = useCallback(() => {
     const audience = selectedResults
       .map((row) => crmRowToCampaignContact(row, recUrl(row)))
@@ -439,6 +511,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         currentPage="Search"
         ready
         modalHost={modalHost}
+        onContentScroll={handleScrollIntent}
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
         <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 10, alignItems: 'flex-start' }}>
@@ -448,8 +521,22 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           {/* ── Search + results column ─────────────────────────── */}
           <div className="gbcp-stack gbcp-search-body">
         {/* ── Search hero ─────────────────────────────────────── */}
-        <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
-          <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <motion.div
+          initial={false}
+          animate={{
+            opacity: searchBarVisible ? 1 : 0,
+            y: searchBarVisible ? 0 : '-120%',
+          }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          style={{
+            position: 'sticky',
+            top: 58,
+            zIndex: 9,
+            pointerEvents: searchBarVisible ? 'auto' : 'none',
+          }}
+        >
+          <Card style={{ boxShadow: '0 8px 24px color-mix(in srgb, var(--gb-surface-deep) 48%, transparent)' }}>
+            <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {/* Search input — height matched to the buttons (36) */}
               <div style={{
@@ -485,8 +572,19 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setQbOpen(true)}>Edit</Btn>
               </div>
             )}
-          </div>
-        </Card>
+            </div>
+            <SelectionActionRail
+              count={selectedResults.length}
+              total={rows.length}
+              onCampaign={openCampaign}
+              onEmail={(event) => {
+                setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
+                setEmailRunnerOpen(true);
+              }}
+              onExport={exportSelection}
+            />
+          </Card>
+        </motion.div>
 
         {/* ── Results ─────────────────────────────────────────── */}
         <Card>
@@ -496,46 +594,6 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             count={searched ? (loading ? '…' : `${rows.length}${numFound > rows.length ? ' of ' + numFound : ''}`) : ''}
             sub={searched ? undefined : 'Type a query above and press Enter'}
           />
-          <AnimatePresence initial={false}>
-            {selectedResults.length > 0 && (
-              <motion.div
-                key="crm-search-selection-bar"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                style={{ overflow: 'hidden' }}
-              >
-                <div style={{
-                  minHeight: 42,
-                  padding: '7px 12px',
-                  borderBottom: '1px solid var(--gb-border-subtle)',
-                  background: 'var(--gb-brand-tint-soft)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}>
-                  <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
-                    <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selectedResults.length} selected</strong>
-                    {' '}of {rows.length} loaded result{rows.length === 1 ? '' : 's'}
-                  </span>
-                  <div style={{ flex: 1 }} />
-                  <Btn size="sm" variant="ghost" icon={<I.target />} onClick={openCampaign}>Run campaign</Btn>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    icon={<I.mail />}
-                    onClick={(event) => {
-                      setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
-                      setEmailRunnerOpen(true);
-                    }}
-                  >Email selected</Btn>
-                  <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportSelection}>Export CSV</Btn>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
           {loading ? (
             <Spinner label="Searching…" />
           ) : !searched ? (
@@ -549,7 +607,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             </div>
           ) : (
             <>
-              <ScrollArea max={listMax}>
+              <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                 <table style={tableStyle}>
                   <thead><tr>
                     <Th align="center">
@@ -577,23 +635,13 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                         r={r}
                         i={i}
                         selected={selectedRows.has(r.id)}
-                        onToggle={() => toggleResult(r.id)}
+                        onToggle={(event) => toggleResult(r.id, i, !!event?.shiftKey)}
                       />
                     ))}
                   </tbody>
                 </table>
-              </ScrollArea>
-              {canLoadMore && (
-                <div style={{ padding: 12, display: 'flex', justifyContent: 'center', borderTop: '1px solid var(--gb-border-subtle)' }}>
-                  <Btn variant="secondary" size="sm" iconRight={<I.chevd />} onClick={() => runSearch(query.trim(), type, qbFilter, rows.length)}>
-                    Load more ({numFound - rows.length} more)
-                  </Btn>
-                </div>
-              )}
-              {loadingMore && <div style={{ padding: 12 }}><Spinner size={20} pad="4px 0" label="" /></div>}
-              {/* Bottom breathing room when the list ends flush (no load-more
-                  footer to provide it) so the last row isn't glued to the card. */}
-              {!canLoadMore && !loadingMore && <div style={{ height: 12 }} />}
+              </div>
+              <div style={{ height: 12 }} />
             </>
           )}
         </Card>

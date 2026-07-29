@@ -6,6 +6,7 @@ import {
   crmRowToCampaignContact,
   crmRowToEmailContact,
   selectedCrmRows,
+  toggleCrmSelection,
 } from '../../src/lib/crmSearchSelection.js';
 
 const rows = [
@@ -30,6 +31,34 @@ describe('CRM Search selection · row filtering and action handoff', () => {
   it('keeps selected records in displayed result order', () => {
     assert.deepEqual(selectedCrmRows(rows, new Set(['account_17', 'contact_42'])), rows);
     assert.deepEqual(selectedCrmRows(rows, new Set(['account_17'])), [rows[1]]);
+  });
+
+  it('toggles one record normally and adds an anchored range with Shift-click', () => {
+    const extendedRows = [
+      ...rows,
+      { id: 'contact_99', contactName_t: 'Grace Hopper' },
+      { id: 'contact_100', contactName_t: 'Katherine Johnson' },
+    ];
+    const first = toggleCrmSelection(extendedRows, new Set(), 'account_17', 1, null, false);
+    assert.deepEqual([...first.selectedIds], ['account_17']);
+    assert.equal(first.anchorIndex, 1);
+
+    const range = toggleCrmSelection(
+      extendedRows,
+      first.selectedIds,
+      'contact_100',
+      3,
+      first.anchorIndex,
+      true,
+    );
+    assert.deepEqual([...range.selectedIds], ['account_17', 'contact_99', 'contact_100']);
+    assert.equal(range.anchorIndex, 3);
+  });
+
+  it('keeps normal toggle behavior when Shift has no prior anchor', () => {
+    const result = toggleCrmSelection(rows, new Set(), 'contact_42', 0, null, true);
+    assert.deepEqual([...result.selectedIds], ['contact_42']);
+    assert.equal(result.anchorIndex, 0);
   });
 
   it('builds the Email Runner recipient contract from a contact row', () => {

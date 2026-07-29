@@ -1,24 +1,29 @@
 /**
- * Height available to the CRM Search result scroller.
- *
- * The full-page takeover is rendered in PAGE_ZOOM coordinates. The fixed
- * chrome includes the top bar, content padding, search card, gaps, results
- * header, and the 24px desktop alignment offset above the search column.
- */
-export function crmSearchResultsMax(viewportHeight, pageZoom = 1) {
-  const height = Number.isFinite(Number(viewportHeight)) && Number(viewportHeight) > 0
-    ? Number(viewportHeight)
-    : 900;
-  const zoom = Number.isFinite(Number(pageZoom)) && Number(pageZoom) > 0
-    ? Number(pageZoom)
-    : 1;
-  return Math.max(340, Math.round(height / zoom) - 274);
-}
-
-/**
  * Opportunity stages share the normal informational treatment except for an
  * actively Open opportunity, which needs to stand out in dense CRM tables.
  */
 export function opportunityStageTone(stage) {
   return String(stage ?? '').trim().toLowerCase() === 'open' ? 'success' : 'info';
+}
+
+/**
+ * Resolve the smart CRM Search bar's visibility from scroll intent. Small
+ * trackpad noise is ignored; deliberate downward movement hides the bar and
+ * upward movement brings it back. The top of the page scroller always reveals
+ * it, and a focused search field may never disappear underneath the user.
+ */
+export function smartSearchBarVisible({
+  currentTop,
+  previousTop,
+  visible = true,
+  focused = false,
+  topReveal = 18,
+  intentDelta = 4,
+} = {}) {
+  const current = Math.max(0, Number(currentTop) || 0);
+  const previous = Math.max(0, Number(previousTop) || 0);
+  if (focused || current <= topReveal) return true;
+  if (current <= previous - intentDelta) return true;
+  if (current >= previous + intentDelta && current > topReveal) return false;
+  return !!visible;
 }

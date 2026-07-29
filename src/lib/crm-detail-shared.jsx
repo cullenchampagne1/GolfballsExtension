@@ -1611,7 +1611,15 @@ export function BackChip({ href, label, title }) {
  *   <DetailPageFrame currentLabel="…" topBar={<TopBar>…</TopBar>}
  *     ready={D.ready} modalHost={modalHost}>{sections}</DetailPageFrame>
  */
-export function DetailPageFrame({ currentLabel, currentPage, topBar, ready = true, modalHost, children }) {
+export function DetailPageFrame({
+  currentLabel,
+  currentPage,
+  topBar,
+  ready = true,
+  modalHost,
+  onContentScroll,
+  children,
+}) {
   const [sideCollapsed, setSideCollapsed] = useState(false);
   return (
     <>
@@ -1636,7 +1644,11 @@ export function DetailPageFrame({ currentLabel, currentPage, topBar, ready = tru
       }}>
         <style>{UI_CSS}</style>
         <Sidebar currentLabel={currentLabel} currentPage={currentPage} collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
-        <div className="gb-scroll" style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
+        <div
+          className="gb-scroll"
+          onScroll={onContentScroll}
+          style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}
+        >
           {topBar}
           {!ready && <Spinner />}
           <div className="gbcp-content" style={{

@@ -5,6 +5,34 @@ export function selectedCrmRows(rows, selectedIds) {
   return (Array.isArray(rows) ? rows : []).filter((row) => ids.has(row?.id));
 }
 
+/**
+ * Apply the CRM modal's selection rules without coupling them to React:
+ * a normal click toggles one row, while Shift-click adds the inclusive range
+ * between the prior anchor and the current row.
+ */
+export function toggleCrmSelection(rows, selectedIds, id, index, anchorIndex, shiftKey = false) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const next = new Set(selectedIds instanceof Set ? selectedIds : selectedIds || []);
+  const validIndex = Number.isInteger(index) && index >= 0 && index < safeRows.length;
+  const validAnchor = Number.isInteger(anchorIndex) && anchorIndex >= 0 && anchorIndex < safeRows.length;
+
+  if (shiftKey && validIndex && validAnchor) {
+    const [start, end] = index < anchorIndex ? [index, anchorIndex] : [anchorIndex, index];
+    for (let cursor = start; cursor <= end; cursor += 1) {
+      if (safeRows[cursor]?.id != null) next.add(safeRows[cursor].id);
+    }
+  } else if (next.has(id)) {
+    next.delete(id);
+  } else if (id != null) {
+    next.add(id);
+  }
+
+  return {
+    selectedIds: next,
+    anchorIndex: validIndex ? index : anchorIndex,
+  };
+}
+
 export function crmRowEmail(row) {
   return row?.emails_tps?.[0] || row?.email_tp || '';
 }
