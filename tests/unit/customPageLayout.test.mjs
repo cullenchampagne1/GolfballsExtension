@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   nextProgressiveResultCount,
   opportunityStageTone,
+  searchRailIsFloating,
   smartSearchBarVisible,
 } from '../../src/lib/customPageLayout.js';
 
@@ -27,6 +28,13 @@ describe('custom page layout · smart CRM Search bar', () => {
     assert.equal(smartSearchBarVisible({ currentTop: 8, previousTop: 40, visible: false }), true);
     assert.equal(smartSearchBarVisible({ currentTop: 100, previousTop: 80, visible: true, focused: true }), true);
     assert.equal(smartSearchBarVisible({ currentTop: 102, previousTop: 100, visible: false }), false);
+  });
+
+  it('uses the settled shape at the page top and the floating shape after movement', () => {
+    assert.equal(searchRailIsFloating({ currentTop: 0 }), false);
+    assert.equal(searchRailIsFloating({ currentTop: 4 }), false);
+    assert.equal(searchRailIsFloating({ currentTop: 5 }), true);
+    assert.equal(searchRailIsFloating({ currentTop: -12 }), false);
   });
 });
 

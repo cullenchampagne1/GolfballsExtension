@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
-import { nextProgressiveResultCount, smartSearchBarVisible } from '../lib/customPageLayout.js';
+import { nextProgressiveResultCount, searchRailIsFloating, smartSearchBarVisible } from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
   crmRowToCampaignContact,
@@ -38,10 +38,10 @@ const TYPE_OPTS = [
   { id: 'account', label: 'Accounts' },
 ];
 
-// Keep the header crisp while the record rows taper into the result surface.
-// The top transition is intentionally deeper than the bottom so rows receding
-// beneath the floating search rail feel softer than rows entering below.
-const RESULT_ROWS_MASK = 'linear-gradient(to bottom, transparent 0, rgba(0,0,0,.32) 9px, #000 34px, #000 calc(100% - 11px), transparent 100%)';
+// Keep the table header fully opaque, then taper the records into the result
+// surface. This belongs on a normal block container: Chromium can drop all
+// table-row-group paint when a mask is attached directly to <tbody>.
+const RESULT_TABLE_MASK = 'linear-gradient(to bottom, #000 0, #000 28px, rgba(0,0,0,.08) 29px, rgba(0,0,0,.38) 40px, #000 64px, #000 calc(100% - 10px), transparent 100%)';
 
 /* ── URL <-> search state ─────────────────────────────────────
    The native search puts its term in the URL; we own ?q/?t/?fq going
@@ -366,6 +366,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   const [focused, setFocused] = useState(false);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
+  const [searchBarFloating, setSearchBarFloating] = useState(false);
   const hideSearchTimerRef = useRef(null);
   const scrollPositionsRef = useRef(new WeakMap());
   const inputRef = useRef(null);
@@ -473,6 +474,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     const target = event?.currentTarget;
     if (!target) return;
     const currentTop = Math.max(0, Number(target.scrollTop) || 0);
+    setSearchBarFloating(searchRailIsFloating({ currentTop }));
     const previousTop = scrollPositionsRef.current.get(target);
     scrollPositionsRef.current.set(target, currentTop);
     if (previousTop == null) return;
@@ -582,12 +584,13 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           }}
         >
           <Card style={{
-            borderRadius: 18,
+            borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
             border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)',
             background: 'color-mix(in srgb, var(--gb-surface-1) 90%, transparent)',
             backdropFilter: 'blur(18px) saturate(145%)',
             WebkitBackdropFilter: 'blur(18px) saturate(145%)',
             boxShadow: '0 18px 48px rgba(0,0,0,.24), 0 3px 12px rgba(0,0,0,.14), inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 7%, transparent)',
+            transition: 'border-radius 420ms cubic-bezier(.22, 1, .36, 1), background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
           }}>
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -660,7 +663,14 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
             </div>
           ) : (
             <>
-              <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+              <div style={{
+                overflowX: 'auto',
+                overflowY: 'visible',
+                WebkitMaskImage: RESULT_TABLE_MASK,
+                maskImage: RESULT_TABLE_MASK,
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+              }}>
                 <table style={tableStyle}>
                   <thead><tr>
                     <Th align="center">
@@ -681,12 +691,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                     <Th align="right">Orders</Th>
                     <Th align="right">Next Task</Th>
                   </tr></thead>
-                  <tbody style={{
-                    WebkitMaskImage: RESULT_ROWS_MASK,
-                    maskImage: RESULT_ROWS_MASK,
-                    WebkitMaskRepeat: 'no-repeat',
-                    maskRepeat: 'no-repeat',
-                  }}>
+                  <tbody>
                     {renderedRows.map((r, i) => (
                       <ResultRow
                         key={(r.id || '') + i}

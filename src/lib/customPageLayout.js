@@ -29,6 +29,20 @@ export function smartSearchBarVisible({
 }
 
 /**
+ * The CRM Search rail is visually part of the page at rest, then becomes a
+ * floating surface once the page has moved. A small threshold avoids toggling
+ * the shape because of sub-pixel trackpad/bounce noise at the top.
+ */
+export function searchRailIsFloating({
+  currentTop,
+  settleThreshold = 4,
+} = {}) {
+  const current = Math.max(0, Number(currentTop) || 0);
+  const threshold = Math.max(0, Number(settleThreshold) || 0);
+  return current > threshold;
+}
+
+/**
  * Grow a page-backed result list in predictable DOM-sized batches. The full
  * Solr page can stay cached in memory while React mounts only what the user is
  * close to seeing.
