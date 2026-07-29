@@ -44,6 +44,11 @@ const TYPE_OPTS = [
 ];
 
 const SEARCH_RAIL_TOP = 74;
+// Drop the search rail to the first Refine filter block (past the "Refine"
+// header). ALIGN = extra pinned-top offset; REST_ALIGN = extra flow margin
+// (smaller because .gbcp-search-body already adds 24px padding-top).
+const SEARCH_RAIL_ALIGN = 34;
+const SEARCH_RAIL_REST_ALIGN = 10;
 const SEARCH_EXIT_DELAY_MS = 320;
 const SEARCH_MOTION_SECONDS = 0.48;
 
@@ -604,9 +609,14 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
           ref={searchRailRef}
           style={{
             position: 'sticky',
-            top: SEARCH_RAIL_TOP,
+            // Offset down so the bar lines up with the first FILTER BLOCK in the
+            // Refine sidebar (past its "Refine" header) in both the resting and
+            // floating/pinned states. The search column already has 24px
+            // padding-top, so the resting margin is smaller than the pinned-top
+            // offset. Tunable via the two constants.
+            top: SEARCH_RAIL_TOP + SEARCH_RAIL_ALIGN,
             zIndex: 20,
-            margin: '0 4px',
+            margin: `${SEARCH_RAIL_REST_ALIGN}px 4px 0`,
             borderRadius: searchBarFloating ? 18 : 'var(--gb-r-md)',
             backdropFilter: searchBarVisible ? 'blur(30px) saturate(165%)' : 'blur(0) saturate(100%)',
             WebkitBackdropFilter: searchBarVisible ? 'blur(30px) saturate(165%)' : 'blur(0) saturate(100%)',
