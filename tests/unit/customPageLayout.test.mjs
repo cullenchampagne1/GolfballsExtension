@@ -5,6 +5,7 @@ import {
   nextProgressiveResultCount,
   opportunityStageTone,
   searchRailIsFloating,
+  searchRailTransitionSeconds,
   smartSearchBarVisible,
 } from '../../src/lib/customPageLayout.js';
 
@@ -35,6 +36,16 @@ describe('custom page layout · smart CRM Search bar', () => {
     assert.equal(searchRailIsFloating({ currentTop: 4 }), false);
     assert.equal(searchRailIsFloating({ currentTop: 5 }), true);
     assert.equal(searchRailIsFloating({ currentTop: -12 }), false);
+  });
+
+  it('matches entrance time to the complete delayed exit time', () => {
+    assert.equal(searchRailTransitionSeconds({ visible: true }), 0.8);
+    assert.equal(searchRailTransitionSeconds({ visible: false }), 0.48);
+    assert.equal(searchRailTransitionSeconds({
+      visible: true,
+      exitDelayMs: 200,
+      motionSeconds: 0.4,
+    }), 0.6000000000000001);
   });
 });
 

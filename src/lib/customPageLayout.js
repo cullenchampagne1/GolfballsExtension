@@ -43,6 +43,21 @@ export function searchRailIsFloating({
 }
 
 /**
+ * Match the perceived entrance time to an exit made of an intent delay plus
+ * its motion. Entrance starts immediately and spans that combined interval;
+ * exit keeps its separate delay and uses only the motion interval here.
+ */
+export function searchRailTransitionSeconds({
+  visible,
+  exitDelayMs = 320,
+  motionSeconds = 0.48,
+} = {}) {
+  const motion = Math.max(0, Number(motionSeconds) || 0);
+  const delay = Math.max(0, Number(exitDelayMs) || 0) / 1000;
+  return visible ? motion + delay : motion;
+}
+
+/**
  * Grow a page-backed result list in predictable DOM-sized batches. The full
  * Solr page can stay cached in memory while React mounts only what the user is
  * close to seeing.

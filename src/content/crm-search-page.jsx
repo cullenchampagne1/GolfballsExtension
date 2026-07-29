@@ -15,7 +15,12 @@ import { createRoot } from 'react-dom/client';
 import { motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
-import { nextProgressiveResultCount, searchRailIsFloating, smartSearchBarVisible } from '../lib/customPageLayout.js';
+import {
+  nextProgressiveResultCount,
+  searchRailIsFloating,
+  searchRailTransitionSeconds,
+  smartSearchBarVisible,
+} from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
   crmRowToCampaignContact,
@@ -41,7 +46,6 @@ const TYPE_OPTS = [
 const SEARCH_RAIL_TOP = 74;
 const SEARCH_EXIT_DELAY_MS = 320;
 const SEARCH_MOTION_SECONDS = 0.48;
-const SEARCH_ENTRANCE_SECONDS = SEARCH_MOTION_SECONDS + (SEARCH_EXIT_DELAY_MS / 1000);
 
 /* ── URL <-> search state ─────────────────────────────────────
    The native search puts its term in the URL; we own ?q/?t/?fq going
@@ -600,7 +604,11 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
               scale: searchBarVisible ? 1 : 0.994,
             }}
             transition={{
-              duration: searchBarVisible ? SEARCH_ENTRANCE_SECONDS : SEARCH_MOTION_SECONDS,
+              duration: searchRailTransitionSeconds({
+                visible: searchBarVisible,
+                exitDelayMs: SEARCH_EXIT_DELAY_MS,
+                motionSeconds: SEARCH_MOTION_SECONDS,
+              }),
               ease: [0.22, 1, 0.36, 1],
             }}
             style={{
