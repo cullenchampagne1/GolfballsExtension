@@ -140,7 +140,7 @@ function ActionReviewApp({ store }) {
   const [reps, setReps] = useState([]);
   const [rep, setRep] = useState('');
   const [dateOption, setDateOption] = useState('ON');
-  const [date1, setDate1] = useState(null);   // Date | null (custom DatePicker)
+  const [date1, setDate1] = useState(() => new Date());   // defaults to TODAY
   const [date2, setDate2] = useState(null);
   const [serverBusy, setServerBusy] = useState(false);
   const formStateRef = useRef({});
