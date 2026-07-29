@@ -109,14 +109,31 @@
     return out;
   }
 
+  /* Dev override: a host-origin localStorage force-list that merges into the
+     enabled set. Lets the extension bridge (which can only reach the page
+     world) enable takeovers for live debugging without touching settings:
+       localStorage.setItem('__gbCustomPagesForce', '["action_review"]')
+     Remove the key to fall back to the real Settings toggles. */
+  function forcedEnabled() {
+    try {
+      var raw = window.localStorage.getItem('__gbCustomPagesForce');
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
   function readEnabled() {
     return new Promise(function (resolve) {
+      var forced = forcedEnabled();
       try {
-        if (typeof chrome === 'undefined' || !chrome.storage) { resolve([]); return; }
+        if (typeof chrome === 'undefined' || !chrome.storage) { resolve(forced); return; }
         chrome.storage.local.get(STORAGE_KEY, function (d) {
-          resolve(flatten(d && d[STORAGE_KEY]));
+          var enabled = flatten(d && d[STORAGE_KEY]);
+          forced.forEach(function (id) { if (enabled.indexOf(id) === -1) enabled.push(id); });
+          resolve(enabled);
         });
-      } catch (e) { resolve([]); }
+      } catch (e) { resolve(forced); }
     });
   }
 
