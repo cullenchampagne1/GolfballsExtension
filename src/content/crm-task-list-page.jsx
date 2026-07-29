@@ -26,7 +26,7 @@ import {
   Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, ScrollArea, SectionTitle,
   Spinner, Tag, TaskCheckbox, Td, Th, fmtDate, goUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
-import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
+import { Breadcrumb, DetailPageFrame, EditTaskModal, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
 
 const SEARCH_RAIL_TOP = 74;
 
@@ -121,14 +121,32 @@ function StatusIndicator({ st }) {
 }
 
 const LINK_STYLE = { color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none' };
-function TaskRow({ t, selected, onToggle, showStatus, status }) {
+
+/* Row emphasis: overdue (red) > due-today (amber) > high-priority (red).
+   Returns { accent, tint } tokens or null. */
+function rowEmphasis(t, today) {
+  const bucket = dueBucket(t.dueDate, today);
+  if (bucket === 'overdue') return { accent: 'var(--gb-error)', tint: 'color-mix(in srgb, var(--gb-error) 8%, transparent)' };
+  if (bucket === 'today') return { accent: 'var(--gb-warning)', tint: 'color-mix(in srgb, var(--gb-warning) 9%, transparent)' };
+  if (t.priority === 1) return { accent: 'var(--gb-error)', tint: null };
+  return null;
+}
+
+function TaskRow({ t, index, selected, onToggle, status, today, onEdit, onCompleteOne, runActive }) {
   const stop = (e) => e.stopPropagation();
   const running = RUNNING(status?.phase) && status?.phase !== 'queued';
+  const emph = rowEmphasis(t, today);
+  const rowStyle = {
+    ...trStyle,
+    ...(emph?.tint ? { background: emph.tint } : null),
+    ...(running ? { background: 'var(--gb-brand-tint-soft)' } : null),
+    ...(emph?.accent ? { boxShadow: `inset 3px 0 0 ${emph.accent}` } : null),
+  };
   return (
-    <tr className="gb-actrow" style={{ ...trStyle, ...(running ? { background: 'var(--gb-brand-tint-soft)' } : null) }}>
+    <tr className="gb-actrow" style={rowStyle}>
       <Td align="center" style={{ width: 38, padding: '8px 8px' }}>
         <span onClick={stop} style={{ display: 'inline-flex' }}>
-          <TaskCheckbox done={selected} onClick={(e) => { e?.stopPropagation?.(); onToggle(e); }} title={selected ? 'Deselect' : 'Select'} />
+          <TaskCheckbox done={selected} onClick={(e) => { e?.stopPropagation?.(); onToggle(index, !!e?.shiftKey); }} title={selected ? 'Deselect' : 'Select (shift-click for a range)'} />
         </span>
       </Td>
       <Td>{txt(t.subject) || DASH}</Td>
@@ -137,7 +155,18 @@ function TaskRow({ t, selected, onToggle, showStatus, status }) {
       <Td muted>{txt(t.due) || DASH}</Td>
       <Td muted>{txt(t.category) || DASH}</Td>
       <Td><Tag tone={priTone(t.priority)} size="sm">{t.priorityLabel || 'Med'}</Tag></Td>
-      {showStatus && <Td align="center" style={{ minWidth: 44 }}><StatusIndicator st={status} /></Td>}
+      {/* Actions column — Edit + Complete buttons, swapping to the live status
+          indicator whenever an action is running/finished for this row. */}
+      <Td align="center" style={{ width: 92, whiteSpace: 'nowrap' }}>
+        {status ? (
+          <StatusIndicator st={status} />
+        ) : (
+          <span style={{ display: 'inline-flex', gap: 4, justifyContent: 'center' }}>
+            <IconBtn size="xs" ghost icon={<I.edit />} title="Edit task" disabled={runActive} onClick={() => onEdit(t)} />
+            <IconBtn size="xs" ghost icon={<I.check />} title="Complete task" disabled={runActive} onClick={() => onCompleteOne(t)} />
+          </span>
+        )}
+      </Td>
     </tr>
   );
 }
@@ -237,7 +266,21 @@ function TaskListApp({ store }) {
     return [{ key, dir: 'asc' }];
   });
 
-  const toggleRow = (id) => setSelected((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Selection with shift-click range (against the rendered order). anchor is
+  // the last plainly-clicked row index.
+  const anchorRef = useRef(null);
+  const toggleRow = (index, shiftKey) => setSelected((cur) => {
+    const n = new Set(cur);
+    if (shiftKey && anchorRef.current != null) {
+      const [a, b] = index < anchorRef.current ? [index, anchorRef.current] : [anchorRef.current, index];
+      for (let i = a; i <= b; i++) { const r = renderedTasks[i]; if (r) n.add(r.id); }
+    } else {
+      const id = renderedTasks[index]?.id;
+      if (id) { n.has(id) ? n.delete(id) : n.add(id); }
+      anchorRef.current = index;
+    }
+    return n;
+  });
   const allVisibleSelected = visible.length > 0 && visible.every((t) => selected.has(t.id));
   const toggleAll = () => setSelected((cur) => {
     const n = new Set(cur);
@@ -248,7 +291,17 @@ function TaskListApp({ store }) {
 
   const selectedTasks = useMemo(() => visible.filter((t) => selected.has(t.id)), [visible, selected]);
   const setRowStatus = (id, patch) => setStatusByRow((m) => ({ ...m, [id]: { ...(m[id] || {}), ...patch } }));
-  const showStatus = runActive || Object.keys(statusByRow).length > 0;
+  // Drop rows from the list (completed tasks — the host DOM is stale so we never
+  // reload it) after a short beat so the ✓ is visible, matching the modal.
+  const dropTasks = (ids) => {
+    const set = new Set(ids);
+    setSelected((cur) => { const n = new Set(cur); ids.forEach((id) => n.delete(id)); return n; });
+    setTimeout(() => {
+      setTasks((cur) => cur.filter((t) => !set.has(t.id)));
+      setStatusByRow((m) => { const n = { ...m }; ids.forEach((id) => delete n[id]); return n; });
+    }, 650);
+  };
+  const editTask = (t) => modalHost.openModal(<EditTaskModal taskId={t.id} />);
 
   // ── Email selected ────────────────────────────────────────────
   const emailContacts = useMemo(() => {
@@ -271,20 +324,22 @@ function TaskListApp({ store }) {
   };
   const emailRowsFor = (cid) => contactToTasksRef.current.get(cid) || [];
 
-  // ── Complete selected ─────────────────────────────────────────
-  const completeSelected = async () => {
-    const ids = selectedTasks.map((t) => t.id);
+  // ── Complete (selected, or one row) — remove from the list on success ──
+  const completeTasks = async (ids) => {
     if (!ids.length) { gbToast('Select tasks first', 'info'); return; }
     setRunActive(true);
     ids.forEach((id) => setRowStatus(id, { phase: 'queued' }));
+    const done = [];
     for (const id of ids) {              // sequential — CRM rate-limits Update.ajax
       setRowStatus(id, { phase: 'running', label: 'Completing…' });
-      try { await completeTaskById(id); setRowStatus(id, { phase: 'done', label: 'Completed' }); }
+      try { await completeTaskById(id); setRowStatus(id, { phase: 'done', label: 'Completed' }); done.push(id); }
       catch (e) { setRowStatus(id, { phase: 'error', label: 'Failed', detail: e?.message }); }
     }
     setRunActive(false);
-    loadTasks();
+    if (done.length) dropTasks(done);    // behave like the modal — completed rows leave the list
   };
+  const completeSelected = () => completeTasks(selectedTasks.map((t) => t.id));
+  const completeOne = (t) => completeTasks([t.id]);
 
   // ── Quick task → open the composer POPUP (push-out days, category, etc.)
   //    for the selected task's contact, instead of silently creating one. ─
@@ -302,7 +357,9 @@ function TaskListApp({ store }) {
         contactId,
         contactName: t.contact,
         autoCompose: true,   // land straight on the builder with push-out/options
-        onCreated: () => { setRowStatus(t.id, { phase: 'done', label: 'Task added' }); loadTasks(); },
+        // Don't reload from the (stale) host DOM — it would undo completed-row
+        // removals. Just clear the row's composing status.
+        onCreated: () => { setStatusByRow((m) => { const n = { ...m }; delete n[t.id]; return n; }); },
       });
     } catch (e) { setRowStatus(t.id, { phase: 'error', label: 'Failed', detail: e?.message }); }
   };
@@ -426,11 +483,12 @@ function TaskListApp({ store }) {
                         <SortTh label="Due" k="dueDate" chain={sortChain} onSort={onSort} align="left" />
                         <SortTh label="Category" k="category" chain={sortChain} onSort={onSort} />
                         <SortTh label="Priority" k="priority" chain={sortChain} onSort={onSort} />
-                        {showStatus && <Th align="center">Status</Th>}
+                        <Th align="center">Actions</Th>
                       </tr></thead>
                       <tbody>
-                        {renderedTasks.map((t) => (
-                          <TaskRow key={t.id} t={t} selected={selected.has(t.id)} onToggle={() => toggleRow(t.id)} showStatus={showStatus} status={statusByRow[t.id]} />
+                        {renderedTasks.map((t, i) => (
+                          <TaskRow key={t.id} t={t} index={i} selected={selected.has(t.id)} onToggle={toggleRow}
+                            status={statusByRow[t.id]} today={today} onEdit={editTask} onCompleteOne={completeOne} runActive={runActive} />
                         ))}
                       </tbody>
                     </table>
@@ -464,7 +522,16 @@ function TaskListApp({ store }) {
           emailRowsFor(cid).forEach((tid) => { n[tid] = { phase, label, detail: outcome?.error || outcome?.reason }; });
           return n;
         })}
-        onRunStateChange={setRunActive}
+        onRunStateChange={(active) => {
+          setRunActive(active);
+          // When the email run ends, let the ✓/skip outcomes linger briefly,
+          // then clear them so the Edit/Complete buttons return (errors stay).
+          if (!active) setTimeout(() => setStatusByRow((m) => {
+            const n = {};
+            for (const [id, st] of Object.entries(m)) if (st?.phase === 'error') n[id] = st;
+            return n;
+          }), 2600);
+        }}
       />
     </ModalCtx.Provider>
     </DataCtx.Provider>
