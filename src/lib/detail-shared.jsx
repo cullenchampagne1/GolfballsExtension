@@ -1102,13 +1102,18 @@ export const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize:
 export const trStyle = { borderBottom: '1px solid var(--gb-border-subtle)' };
 
 export function Th({ children, align = 'left', style }) {
-  return <th style={{
+  return <th className="gb-thead" style={{
     padding: '7px 12px', textAlign: align,
     fontSize: 9.5, fontWeight: 600, letterSpacing: .7, textTransform: 'uppercase',
     color: 'var(--gb-text-muted)',
     borderBottom: '1px solid var(--gb-border-default)',
-    // opaque + sticky so the header pins while the panel body scrolls
-    background: 'var(--gb-surface-2)',
+    // Sticky header pins while the body scrolls. Skin seam: --gb-thead-*
+    // give it a frosted, still-substantial fill so rows don't bleed through
+    // (the default surface stays opaque; a glass skin makes it translucent,
+    // so the skin supplies a stronger frosted bg + blur here).
+    background: 'var(--gb-thead-bg, var(--gb-surface-2))',
+    backdropFilter: 'var(--gb-thead-blur, none)',
+    WebkitBackdropFilter: 'var(--gb-thead-blur, none)',
     position: 'sticky', top: 0, zIndex: 3,
     whiteSpace: 'nowrap', ...style,
   }}>{children}</th>;

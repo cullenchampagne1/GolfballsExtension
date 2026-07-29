@@ -24,18 +24,23 @@
 ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── App background: restrained multi-hue aurora over deep slate
-        (green dialed back; blue/indigo carry the tint) ─────────────── */
+  /* ── App background: aurora tinted by the THEME PRIMARY. Accents derive
+        from --gb-brand-label via color-mix so the whole background tracks
+        your primary color; only the deep base is a fixed near-black. ─── */
   --gb-app-bg:
-    radial-gradient(1200px 820px at 8% -14%, rgba(96, 150, 90, 0.10), transparent 56%),
-    radial-gradient(1050px 760px at 106% -6%, rgba(72, 108, 196, 0.16), transparent 56%),
-    radial-gradient(1100px 1000px at 60% 118%, rgba(108, 86, 180, 0.12), transparent 60%),
-    linear-gradient(168deg, #0d1119 0%, #0b0e15 44%, #090b10 100%);
+    radial-gradient(1200px 820px at 6% -16%, color-mix(in srgb, var(--gb-brand-label) 20%, transparent), transparent 58%),
+    radial-gradient(1050px 780px at 108% -8%, color-mix(in srgb, var(--gb-brand-label) 13%, transparent), transparent 56%),
+    radial-gradient(1150px 1000px at 62% 120%, color-mix(in srgb, var(--gb-brand-label) 9%, transparent), transparent 60%),
+    linear-gradient(168deg, #0c0f16 0%, #0a0d13 46%, #090a0f 100%);
 
   /* ── Frosted page CHROME (custom-page header bar + sidebar) ──────── */
   --gb-chrome-bg:     rgba(13, 16, 23, 0.58);
   --gb-chrome-blur:   blur(22px) saturate(150%);
   --gb-chrome-border: 1px solid rgba(255, 255, 255, 0.08);
+
+  /* ── Sticky TABLE header rows (frosted, still substantial) ──────── */
+  --gb-thead-bg:   rgba(17, 21, 28, 0.74);
+  --gb-thead-blur: blur(14px) saturate(150%);
 
   /* ── Surfaces → translucent so the gradient reads through ───────── */
   --gb-surface-deep:   transparent;
