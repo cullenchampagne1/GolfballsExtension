@@ -1395,12 +1395,15 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
     : repName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
   return (
-    <aside style={{
+    <aside className="gb-sidebar gb-chrome" style={{
       ...ARMOR,
       fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-tertiary)',
       width: collapsed ? 56 : 232, flexShrink: 0,
-      background: 'var(--gb-surface-canvas)',
-      borderRight: '1px solid var(--gb-border-subtle)',
+      // Skin seam: --gb-chrome-* frost the sidebar to match the header.
+      background: 'var(--gb-chrome-bg, var(--gb-surface-canvas))',
+      backdropFilter: 'var(--gb-chrome-blur, none)',
+      WebkitBackdropFilter: 'var(--gb-chrome-blur, none)',
+      borderRight: '1px solid var(--gb-chrome-border, var(--gb-border-subtle))',
       // Fill the flex row's height (the viewport) — NOT 100vh, which the
       // page zoom would inflate past the screen. The nav scrolls inside.
       height: '100%', alignSelf: 'stretch',
@@ -1560,10 +1563,16 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
    Breadcrumb); search + theme picker are always pinned right. */
 export function TopBar({ children }) {
   return (
-    <div style={{
+    <div className="gb-topbar gb-chrome" style={{
       height: 48, flexShrink: 0,
-      background: 'var(--gb-surface-canvas)',
-      borderBottom: '1px solid var(--gb-border-subtle)',
+      // Skin seam: --gb-chrome-* frost the page chrome (header + sidebar). The
+      // header floats over the app background, so it needs a stronger frosted
+      // fill than the faint page surface — hence its own token, defaulting to
+      // the stock surface + no blur.
+      background: 'var(--gb-chrome-bg, var(--gb-surface-canvas))',
+      backdropFilter: 'var(--gb-chrome-blur, none)',
+      WebkitBackdropFilter: 'var(--gb-chrome-blur, none)',
+      borderBottom: '1px solid var(--gb-chrome-border, var(--gb-border-subtle))',
       display: 'flex', alignItems: 'center',
       padding: '0 18px', gap: 14, position: 'sticky', top: 0, zIndex: 10,
     }}>

@@ -19,12 +19,20 @@
 ─────────────────────────────────────────────────────────────── */
 
 export const REVSTACK_VARS = {
-  /* ── App background: layered aurora over near-black ───────────── */
+  /* ── App background: restrained multi-hue aurora over deep slate.
+        Green is dialed back so it reads as a premium dashboard, not a
+        green wash; blue/indigo carry most of the tint. ────────────── */
   '--gb-app-bg':
-    'radial-gradient(1100px 760px at 12% -12%, rgba(143,206,46,0.16), transparent 58%),'
-    + 'radial-gradient(980px 720px at 104% -4%, rgba(78,120,210,0.16), transparent 55%),'
-    + 'radial-gradient(900px 900px at 50% 120%, rgba(120,90,200,0.10), transparent 60%),'
-    + 'linear-gradient(165deg, #0c1017 0%, #0a0d13 42%, #08090d 100%)',
+    'radial-gradient(1200px 820px at 8% -14%, rgba(96,150,90,0.10), transparent 56%),'
+    + 'radial-gradient(1050px 760px at 106% -6%, rgba(72,108,196,0.16), transparent 56%),'
+    + 'radial-gradient(1100px 1000px at 60% 118%, rgba(108,86,180,0.12), transparent 60%),'
+    + 'linear-gradient(168deg, #0d1119 0%, #0b0e15 44%, #090b10 100%)',
+
+  /* ── Frosted page CHROME (header bar + sidebar) — darker + blurred
+        so it separates from the gradient and text stays readable. ─── */
+  '--gb-chrome-bg':     'rgba(13,16,23,0.58)',
+  '--gb-chrome-blur':   'blur(22px) saturate(150%)',
+  '--gb-chrome-border': '1px solid rgba(255,255,255,0.08)',
 
   /* ── Surfaces → translucent so the gradient reads through ─────── */
   '--gb-surface-deep':   'transparent',
