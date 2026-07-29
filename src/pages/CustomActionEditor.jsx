@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Btn, Field, Input, Segmented, EditorHeader, I } from '../ui/index.js';
 import { IconPicker } from '../ui/components/IconPicker.jsx';
+import { CustomLinkField } from '../ui/components/CustomLinkField.jsx';
 import { CodeVarEditor } from '../ui/components/CodeVarEditor.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { simulateProgram } from '../lib/codeEngine/simulate.js';
@@ -58,6 +59,7 @@ export function CustomActionEditor({ action }) {
   const [entryPointsText, setEntryPointsText] = useState(
     normalizeEntryPoints(action.entryPoints).join(', '),
   );
+  const [customUrl, setCustomUrl] = useState(action.customUrl || '');
   const [simBusy, setSimBusy] = useState(false);
   const [isNew, setIsNew] = useState(action.__isNew === true);
   // Shelf page scope isn't edited here (the Settings table owns it) but must
@@ -71,6 +73,7 @@ export function CustomActionEditor({ action }) {
     enabled: record.enabled !== false,
     source: record.source || '',
     pages: record.pages || [],
+    customUrl: record.customUrl || '',
     entryPoints: normalizeEntryPoints(record.entryPoints),
   });
   const [savedSnapshot, setSavedSnapshot] = useState(() => snapshot(action));
@@ -82,6 +85,7 @@ export function CustomActionEditor({ action }) {
     enabled,
     source,
     pages: pagesRef.current,
+    customUrl,
     entryPoints: normalizeEntryPoints(entryPointsText),
   });
   const dirty = isNew || draftSnapshot !== savedSnapshot;
@@ -118,6 +122,7 @@ export function CustomActionEditor({ action }) {
     enabled,
     source,
     pages: pagesRef.current,
+    customUrl,
     entryPoints: normalizeEntryPoints(entryPointsText),
     updatedAt: Date.now(),
   });
@@ -180,6 +185,13 @@ export function CustomActionEditor({ action }) {
       {/* Meta — page type */}
       <div style={{ marginBottom: 10 }}>
         <Field label="Runs on"><Segmented value={pageType} onChange={changePageType} options={PT_OPTIONS} /></Field>
+      </div>
+      {/* Custom link matcher — also show this action on any page whose URL
+          contains the given text (OR'd with the page type above). */}
+      <div style={{ marginBottom: 10 }}>
+        <Field label="Custom link" hint="Optional. Also show on any page whose URL contains this text.">
+          <CustomLinkField value={customUrl} onChange={setCustomUrl} />
+        </Field>
       </div>
       <div style={{ marginBottom: 10 }}>
         <Field

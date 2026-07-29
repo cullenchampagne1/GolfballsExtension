@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { FEATURE_REGISTRY, featureByKey, shelfFeatures, popupFeatures, shelfActionDefs } from '../../src/lib/features/featureRegistry.js';
-import { normalizeFeatureConfig, featureShowsOnPage, featureShowsInPopup, pageApplies, surfaceSummary, togglePage } from '../../src/lib/features/featureConfig.js';
+import { normalizeFeatureConfig, featureShowsOnPage, featureShowsInPopup, pageApplies, urlMatches, surfaceSummary, togglePage } from '../../src/lib/features/featureConfig.js';
 
 describe('featureRegistry · surfaces', () => {
   it('a dual-surface feature has popup + a page-scoped shelf', () => {
@@ -89,11 +89,11 @@ describe('featureRegistry · surfaces', () => {
 describe('featureConfig · defaults + queries', () => {
   it('defaults from the registry, clamps to supported surfaces', () => {
     const cfg = normalizeFeatureConfig({});
-    assert.deepEqual(cfg.crmSearchEnabled, { showInPopup: true, showInShelf: true, pages: ['*'] });
+    assert.deepEqual(cfg.crmSearchEnabled, { showInPopup: true, showInShelf: true, pages: ['*'], customUrl: '' });
     // margin calc: cross-implemented, default pages from the registry
-    assert.deepEqual(cfg.marginCalcEnabled, { showInPopup: true, showInShelf: true, pages: ['order'] });
-    // inline feature: both surfaces forced off, no pages
-    assert.deepEqual(cfg.emailPreviewEnabled, { showInPopup: false, showInShelf: false, pages: [] });
+    assert.deepEqual(cfg.marginCalcEnabled, { showInPopup: true, showInShelf: true, pages: ['order'], customUrl: '' });
+    // inline feature: both surfaces forced off, no pages, no custom link
+    assert.deepEqual(cfg.emailPreviewEnabled, { showInPopup: false, showInShelf: false, pages: [], customUrl: '' });
     assert.equal(Object.keys(cfg).length, FEATURE_REGISTRY.length);
   });
 
@@ -111,18 +111,51 @@ describe('featureConfig · defaults + queries', () => {
     assert.equal(pageApplies([], 'order'), false);
   });
 
-  it('resolves per-page shelf + popup visibility', () => {
+  it('resolves per-page shelf visibility (page chips gate the shelf only)', () => {
     const cfg = normalizeFeatureConfig({ callLogEnabled: { showInShelf: true, showInPopup: true, pages: ['contact'] }, crmSearchEnabled: { showInShelf: true, showInPopup: true, pages: ['*'] } });
     assert.equal(featureShowsOnPage(cfg.callLogEnabled, 'contact'), true);
     assert.equal(featureShowsOnPage(cfg.callLogEnabled, 'order'), false);
-    assert.equal(featureShowsInPopup(cfg.callLogEnabled, 'order'), false);
-    assert.equal(featureShowsInPopup(cfg.crmSearchEnabled, 'order'), true); // '*'
     assert.equal(featureShowsOnPage(cfg.emailPreviewEnabled, 'contact'), false); // no shelf
+  });
+
+  it('popup is GLOBAL — enabled popup shows on every page, ignoring page chips', () => {
+    // Regression: the popup used to be gated by the shelf's page chips, so a
+    // contact-scoped feature vanished from the popup on an order page.
+    const cfg = normalizeFeatureConfig({ callLogEnabled: { showInShelf: true, showInPopup: true, pages: ['contact'] } });
+    assert.equal(featureShowsInPopup(cfg.callLogEnabled), true);      // even though pages=['contact']
+    const off = normalizeFeatureConfig({ callLogEnabled: { showInPopup: false } });
+    assert.equal(featureShowsInPopup(off.callLogEnabled), false);
   });
 
   it('summarizes surfaces for the collapsed row', () => {
     assert.match(surfaceSummary(normalizeFeatureConfig({}).crmSearchEnabled), /Popup · Shelf · all pages/);
     assert.match(surfaceSummary(normalizeFeatureConfig({ callLogEnabled: { showInPopup: false, showInShelf: true, pages: ['contact', 'account'] } }).callLogEnabled), /Shelf · 2 pages/);
+  });
+});
+
+describe('featureConfig · custom-link matcher', () => {
+  it('normalizes and trims a custom link on shelf-capable features', () => {
+    const cfg = normalizeFeatureConfig({ callLogEnabled: { showInShelf: true, customUrl: '  Page=271  ' } });
+    assert.equal(cfg.callLogEnabled.customUrl, 'Page=271');
+  });
+
+  it('urlMatches is a case-sensitive substring test; empty never matches', () => {
+    assert.equal(urlMatches('Page=271', 'https://crm/Default.aspx?Page=271&x=1'), true);
+    assert.equal(urlMatches('Page=999', 'https://crm/Default.aspx?Page=271'), false);
+    assert.equal(urlMatches('', 'https://crm/anything'), false);
+  });
+
+  it('shows a shelf action when the URL contains the custom link even off its pages', () => {
+    const cfg = normalizeFeatureConfig({ callLogEnabled: { showInShelf: true, pages: ['contact'], customUrl: '/Admin/Order' } });
+    // Not a contact page, but the URL contains the custom link → shows.
+    assert.equal(featureShowsOnPage(cfg.callLogEnabled, 'order', 'https://crm/golfballs/crm/Admin/Order/View'), true);
+    // Neither the page nor the URL matches → hidden.
+    assert.equal(featureShowsOnPage(cfg.callLogEnabled, 'order', 'https://crm/somewhere/else'), false);
+  });
+
+  it('reflects the custom link in the collapsed summary', () => {
+    const cfg = normalizeFeatureConfig({ callLogEnabled: { showInShelf: true, pages: ['contact'], customUrl: 'Page=271' } });
+    assert.match(surfaceSummary(cfg.callLogEnabled), /\+ link/);
   });
 });
 

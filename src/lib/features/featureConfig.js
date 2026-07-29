@@ -27,6 +27,10 @@ export function normalizeFeatureConfig(saved = {}) {
       showInPopup: canPopup ? (s.showInPopup !== false) : false,
       showInShelf: canShelf ? (s.showInShelf !== false) : false,
       pages: canShelf ? (Array.isArray(s.pages) && s.pages.length ? s.pages.slice() : (f.surfaces.shelf.pages || ['*']).slice()) : [],
+      // Extra shelf matcher: a URL substring. When set, the shelf action also
+      // appears on any page whose URL contains it (OR'd with `pages`). Shelf
+      // only — the popup is global.
+      customUrl: canShelf ? (typeof s.customUrl === 'string' ? s.customUrl.trim() : '') : '',
     };
   }
   return out;
@@ -61,16 +65,28 @@ export function pageApplies(pages, pageType) {
   return list.includes('*') || list.includes(pageType);
 }
 
-/** Should this feature's shelf action appear on `pageType`? */
-export function featureShowsOnPage(cfg, pageType) {
-  if (!cfg || !cfg.showInShelf) return false;
-  return pageApplies(cfg.pages, pageType);
+/** Does the active page URL contain the configured custom-link substring?
+ *  Empty custom link never matches. Pure. */
+export function urlMatches(customUrl, url) {
+  const needle = String(customUrl || '').trim();
+  if (!needle) return false;
+  return String(url || '').includes(needle);
 }
 
-/** Should this feature's popup launcher appear given the active page? */
-export function featureShowsInPopup(cfg, pageType) {
-  if (!cfg || !cfg.showInPopup) return false;
-  return pageApplies(cfg.pages, pageType);
+/** Should this feature's shelf action appear on `pageType` / `url`? The page
+ *  chips and the custom-link matcher are OR'd — either one showing it is
+ *  enough. `url` is optional (defaults to the live location). */
+export function featureShowsOnPage(cfg, pageType, url) {
+  if (!cfg || !cfg.showInShelf) return false;
+  const href = url != null ? url : (typeof location !== 'undefined' ? location.href : '');
+  return pageApplies(cfg.pages, pageType) || urlMatches(cfg.customUrl, href);
+}
+
+/** Should this feature's popup launcher appear? The popup is GLOBAL — if it's
+ *  enabled it shows on every page. It is NOT gated by the shelf's page chips
+ *  or custom link (those control only the action shelf). */
+export function featureShowsInPopup(cfg) {
+  return !!(cfg && cfg.showInPopup);
 }
 
 /** A short status label for the collapsed row ("Popup · Shelf · 2 pages"). */
@@ -80,7 +96,9 @@ export function surfaceSummary(cfg) {
   if (cfg.showInPopup) parts.push('Popup');
   if (cfg.showInShelf) {
     const pages = cfg.pages || [];
-    parts.push(pages.includes('*') ? 'Shelf · all pages' : `Shelf · ${pages.length} page${pages.length === 1 ? '' : 's'}`);
+    let shelf = pages.includes('*') ? 'Shelf · all pages' : `Shelf · ${pages.length} page${pages.length === 1 ? '' : 's'}`;
+    if (cfg.customUrl) shelf += ' + link';
+    parts.push(shelf);
   }
   return parts.join(' · ') || 'Off on all surfaces';
 }

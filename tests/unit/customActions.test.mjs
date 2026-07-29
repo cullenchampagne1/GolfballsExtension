@@ -37,18 +37,20 @@ describe('customActions · normalize', () => {
     assert.deepEqual(normalizeCustomAction({ pageType: 'custom' }).pages, ['*']);
   });
 
-  it('preserves a saved page scope + surface flags', () => {
+  it('preserves a saved page scope + surface flags + custom link', () => {
     const a = normalizeCustomAction({
       pageType: 'order',
       pages: ['order', 'account'],
       entryPoints: ['.gb-task-list-modal', 'modal:task-list'],
       showInPopup: true,
       enabled: false,
+      customUrl: '  /Admin/Order  ',
     });
     assert.deepEqual(a.pages, ['order', 'account']);
     assert.deepEqual(a.entryPoints, ['.gb-task-list-modal', 'modal:task-list']);
     assert.equal(a.showInPopup, true);
     assert.equal(a.enabled, false);
+    assert.equal(a.customUrl, '/Admin/Order');   // trimmed
   });
 
   it('seeds a blank action with a starter script for its type', () => {

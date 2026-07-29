@@ -8,6 +8,9 @@
     "prebuild": "npm run help-content",
     "build": "node --max-old-space-size=8192 build.js",
     "watch": "node --max-old-space-size=8192 build.js --watch",
+    "custom-pages:lab": "vite --config dev/custom-pages-lab/vite.config.js",
+    "custom-pages:lab:build": "vite build --config dev/custom-pages-lab/vite.config.js",
+    "custom-pages:lab:preview": "vite preview --config dev/custom-pages-lab/vite.config.js",
     "audit": "node scripts/audit-source.mjs",
     "help-content": "node scripts/build-help-content.mjs",
     "remote-config": "node scripts/build-remote-settings-config.mjs",
@@ -130,6 +133,10 @@
       "file": "tests/unit/customPagesStore.test.mjs"
     },
     {
+      "name": "ui \u00b7 custom pages lab fixtures and store",
+      "file": "tests/unit/customPagesLab.test.mjs"
+    },
+    {
       "name": "crm \u00b7 contact CustomData merge preserves server keys",
       "file": "tests/unit/contactCustomData.test.mjs"
     },
@@ -144,6 +151,10 @@
     {
       "name": "email \u00b7 template editor clipboard (vars + bullets)",
       "file": "tests/unit/rteClipboard.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 shelf orders custom actions after built-ins",
+      "file": "tests/unit/shelfOrdering.test.mjs"
     },
     {
       "name": "crm \u00b7 Solr search query-string contract",

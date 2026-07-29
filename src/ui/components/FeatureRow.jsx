@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Switch } from './Switch.jsx';
 import { I } from '../icons.jsx';
+import { CustomLinkField } from './CustomLinkField.jsx';
 import { surfaceSummary, SHELF_PAGES } from '../../lib/features/featureConfig.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ function PageChips({ pages, onToggle }) {
   );
 }
 
-export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurface, onTogglePage }) {
+export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurface, onTogglePage, onSetCustomUrl }) {
   const [open, setOpen] = useState(false);
   const surfaces = feature.surfaces || {};
   const hasSub = !!(surfaces.popup || surfaces.shelf);
@@ -98,6 +99,11 @@ export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurfa
                 <div style={{ marginTop: 4 }}>
                   <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--gb-text-muted)', marginBottom: 6 }}>Pages</div>
                   <PageChips pages={cfg.pages} onToggle={onTogglePage} />
+                  {onSetCustomUrl ? (
+                    <div style={{ marginTop: 6 }}>
+                      <CustomLinkField value={cfg.customUrl} onChange={onSetCustomUrl} />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

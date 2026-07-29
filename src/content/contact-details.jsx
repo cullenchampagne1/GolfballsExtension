@@ -93,7 +93,7 @@ function ContactEmailModal() {
 /* ════════════════════════════════════════════════════════════
    ROOT
 ════════════════════════════════════════════════════════════ */
-function App({ store }) {
+export function ContactDetailsApp({ store }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
   const name = fullName(D.contact) || 'Contact';
@@ -121,19 +121,19 @@ function App({ store }) {
         <Hero onSendEmail={openCompose} />
 
         {/* Account Info + Contact Info side-by-side, always visible */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="gbcp-pair">
           <AccountInfoCard />
           <ContactInfoCard />
         </div>
 
         <StatsStrip />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'flex-start' }}>
+        <div className="gbcp-page-grid">
           {/* No tabs — every section stacked on one screen, each capped to a
               custom-scroll area. Below-the-fold panels defer paint via
               LazySection; ActivityPanel stays unwrapped so its filter
               popover can overflow the card. */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          <div className="gbcp-stack">
             <ActivityPanel onAddNote={() => modalHost.openModal(<AddNoteModal />)} />
             <LazySection><EmailsPanel onCompose={openCompose} /></LazySection>
             <LazySection><OpportunitiesPanel /></LazySection>
@@ -143,7 +143,7 @@ function App({ store }) {
             <LazySection minHeight={160}><CasesPanel /></LazySection>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 64 }}>
+          <div className="gbcp-aside">
             <QuickLogCard />
             <AltLookupsCard />
             <MailerCard />
@@ -167,7 +167,7 @@ if (!window.__gbContactDetailsRegistered) {
   window.__gbCustomPages.contact_details = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<DetailErrorBoundary label="Contact page"><App store={ctx.store} /></DetailErrorBoundary>);
+      root.render(<DetailErrorBoundary label="Contact page"><ContactDetailsApp store={ctx.store} /></DetailErrorBoundary>);
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };

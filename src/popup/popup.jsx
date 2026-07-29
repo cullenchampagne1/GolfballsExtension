@@ -930,7 +930,10 @@ function MainView({
      the content script to run the feature: a safe no-arg global for
      standalone tools, or the registered shelf action for page-contextual
      ones (find-phone, copy-ids, …). */
-  const popupShows = (key) => flags[key] !== false && featureShowsInPopup(featureCfg[key], pageType);
+  // The popup is global: a feature shows in the popup whenever it's enabled and
+  // its popup surface is on — independent of the page (the shelf owns page/link
+  // scoping, not the popup).
+  const popupShows = (key) => flags[key] !== false && featureShowsInPopup(featureCfg[key]);
   const launchFeature = async (f) => {
     if (!tab) return;
     const shelf = f.surfaces?.shelf;

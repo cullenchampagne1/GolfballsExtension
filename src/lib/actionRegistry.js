@@ -176,7 +176,7 @@ export const actionRegistry = _resolveShared();
 
    Modal match wins over page match so an action eligible for both
    doesn't double-list. */
-function getContextualActions() {
+export function getContextualActions() {
   const all = actionRegistry.getActions();
   const page = actionRegistry.getPage();
   const topModal = actionRegistry.getTopModal();
@@ -197,9 +197,20 @@ function getContextualActions() {
     else if (matchesPage)  pageSmart.push(a);
     else                   pageActions.push(a);
   }
+  /* Within every section, order by `weight` (default 0) so built-in feature
+     actions come before user-authored custom actions (weight 100) — custom
+     actions never take slots 1/2 ahead of the real features. Stable: equal
+     weights keep registration order. */
+  const byWeight = (list) => list
+    .map((a, i) => [a, i])
+    .sort(([a, ia], [b, ib]) => ((a.weight || 0) - (b.weight || 0)) || (ia - ib))
+    .map(([a]) => a);
+  const oModalSmart = byWeight(modalSmart);
+  const oPageSmart = byWeight(pageSmart);
+  const oPageActions = byWeight(pageActions);
   // Legacy `smart` field = union, for any consumer not yet migrated.
-  const smart = [...modalSmart, ...pageSmart];
-  return { modalSmart, pageSmart, smart, page: pageActions, danger };
+  const smart = [...oModalSmart, ...oPageSmart];
+  return { modalSmart: oModalSmart, pageSmart: oPageSmart, smart, page: oPageActions, danger };
 }
 
 /* ── React hook ─────────────────────────────────────────────────

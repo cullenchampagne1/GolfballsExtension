@@ -1447,6 +1447,7 @@ export function SettingsPanel({ remotePolicy }) {
   };
   const setFeatureSurface = (key, surface, value) => updateFeatureCfg(key, { [surface]: value });
   const toggleFeaturePage = (key, page) => updateFeatureCfg(key, { pages: togglePage(featureCfg[key]?.pages, page) });
+  const setFeatureCustomUrl = (key, url) => updateFeatureCfg(key, { customUrl: url });
   /* The Custom Actions table manages user-authored, label-less actions only —
      every built-in feature is controlled by its own row above (with a pages
      picker), so built-ins must NOT appear here. Placing an action on a page
@@ -1541,6 +1542,7 @@ export function SettingsPanel({ remotePolicy }) {
                     onToggleEnabled={() => toggleFlag(f.key)}
                     onSetSurface={(surface, value) => setFeatureSurface(f.key, surface, value)}
                     onTogglePage={(page) => toggleFeaturePage(f.key, page)}
+                    onSetCustomUrl={(url) => setFeatureCustomUrl(f.key, url)}
                   />
                 ))}
               </div>

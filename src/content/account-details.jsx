@@ -191,7 +191,7 @@ function AccountInfoCard() {
 /* ════════════════════════════════════════════════════════════
    ROOT
 ════════════════════════════════════════════════════════════ */
-function App({ store }) {
+export function AccountDetailsApp({ store }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
   const name = txt(D.account.name) || 'Account';
@@ -219,11 +219,11 @@ function App({ store }) {
 
         <StatsStrip />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'flex-start' }}>
+        <div className="gbcp-page-grid">
           {/* One stacked screen, each section a capped custom-scroll area.
               Below-the-fold panels defer paint via LazySection; ActivityPanel
               stays unwrapped so its filter popover can overflow the card. */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          <div className="gbcp-stack">
             <ContactsPanel />
             <ActivityPanel onAddNote={() => modalHost.openModal(<AddNoteModal />)} />
             <LazySection><EmailsPanel /></LazySection>
@@ -233,7 +233,7 @@ function App({ store }) {
             <LazySection minHeight={700}><TasksPanel /></LazySection>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 64 }}>
+          <div className="gbcp-aside">
             <QuickLogCard />
             <AltLookupsCard />
             <MailerCard />
@@ -257,7 +257,7 @@ if (!window.__gbAccountDetailsRegistered) {
   window.__gbCustomPages.account_details = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<DetailErrorBoundary label="Account page"><App store={ctx.store} /></DetailErrorBoundary>);
+      root.render(<DetailErrorBoundary label="Account page"><AccountDetailsApp store={ctx.store} /></DetailErrorBoundary>);
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };

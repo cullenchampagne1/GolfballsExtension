@@ -169,16 +169,17 @@ function OppInfoCard() {
 
 /* Proposals + inline email generation (your modal, inlined): select proposals
    full-width, then the breakdown + generated email full-width below. */
-function ProposalsSection() {
+function ProposalsSection({ initialProposals = null }) {
   const { opp } = useOpp();
   const D = useD();
-  const [proposals, setProposals] = useState(() => extractProposals(document));
+  const [proposals, setProposals] = useState(() => initialProposals || extractProposals(document));
   useEffect(() => {
+    if (initialProposals) return undefined;
     if (proposals.length) return undefined;   // retry briefly if rows render late
     let n = 0;
     const t = setInterval(() => { const p = extractProposals(document); if (p.length) { setProposals(p); clearInterval(t); } else if (++n > 8) clearInterval(t); }, 500);
     return () => clearInterval(t);
-  }, []);
+  }, [initialProposals]);
   const [selected, setSelected] = useState([]);
   const [source, setSource] = useState(null);
   const [building, setBuilding] = useState(false);
@@ -278,19 +279,20 @@ function ProposalsSection() {
   );
 }
 
-function App({ store }) {
+export function OpportunityDetailsApp({ store, initialOpportunity = null, initialProposals = null }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
   // Opportunity scalars come from Opportunity/Get (more reliable than scraping);
   // tasks/emails/contact come from the shared schema (D).
-  const [opp, setOpp] = useState(null);
+  const [opp, setOpp] = useState(initialOpportunity);
   useEffect(() => {
+    if (initialOpportunity) return undefined;
     const id = oppIdFromUrl();
     if (!id) return undefined;
     let live = true;
     crmGetOpportunity(id).then((g) => { if (live) setOpp(adaptOpp(g, id)); }).catch(() => {});
     return () => { live = false; };
-  }, []);
+  }, [initialOpportunity]);
 
   const contactId = D.ids.contact;
   const contactName = fullName(D.contact);
@@ -321,7 +323,7 @@ function App({ store }) {
             <OppHeader />
             <OppStatsStrip />
             <OppInfoCard />
-            <ProposalsSection />
+            <ProposalsSection initialProposals={initialProposals} />
             <LazySection minHeight={700}><TasksPanel /></LazySection>
             <LazySection><EmailsPanel /></LazySection>
           </>
@@ -344,7 +346,7 @@ if (!window.__gbOpportunityDetailsRegistered) {
   window.__gbCustomPages.opportunity_details = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<DetailErrorBoundary label="Opportunity page"><App store={ctx.store} /></DetailErrorBoundary>);
+      root.render(<DetailErrorBoundary label="Opportunity page"><OpportunityDetailsApp store={ctx.store} /></DetailErrorBoundary>);
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };

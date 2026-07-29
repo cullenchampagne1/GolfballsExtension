@@ -16,7 +16,7 @@ import { ensureTheme } from '../lib/theme.js';
 import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import {
-  ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, ScrollArea, SectionTitle, Spinner,
+  ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, PAGE_ZOOM, ScrollArea, SectionTitle, Spinner,
   Tag, Td, Th, DASH as _DASH, EmptyRow, fmt$, fmtDate, goUrl, num, recUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
@@ -250,34 +250,36 @@ function ResultRow({ r, i }) {
   );
 }
 
-function App({ store }) {
+export function CrmSearchPageApp({ store, initialSearch = null, searchClient = crmSolrQuery }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
 
-  const url0 = useMemo(() => readUrlSearch(), []);
+  const url0 = useMemo(() => initialSearch
+    ? { q: initialSearch.query || '', type: initialSearch.type || 'all', fq: '' }
+    : readUrlSearch(), [initialSearch]);
   const [query, setQuery] = useState(url0.q);
   const [type, setType] = useState(url0.type);
   const [qbFilter, setQbFilter] = useState(url0.fq ? { label: 'Saved filter', solrFq: url0.fq, conditions: [], state: null } : null);
   // Facet selections (Sets per field) + the facet counts from the last search.
   const emptySel = () => ({ recordType_s: new Set(), salesRep_s: new Set(), role_s: new Set(), podID_i: new Set(), lastOrderDate_dt: new Set(), nextTaskDate_dt: new Set() });
   const [selected, setSelected] = useState(emptySel);
-  const [facets, setFacets] = useState(null);
+  const [facets, setFacets] = useState(initialSearch?.facets || null);
   const selRef = useRef(selected);
   selRef.current = selected;
-  const [rows, setRows] = useState([]);
-  const [numFound, setNumFound] = useState(0);
+  const [rows, setRows] = useState(initialSearch?.docs || []);
+  const [numFound, setNumFound] = useState(initialSearch?.numFound || 0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(!!initialSearch);
   const [qbOpen, setQbOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   // Results list fills the leftover vertical space. The takeover renders at
-  // PAGE_ZOOM (1.375), so a height in this coordinate space shows scaled — divide
+  // PAGE_ZOOM, so a height in this coordinate space shows scaled — divide
   // the real viewport by the zoom, minus the top bar + hero + card chrome.
   const [listMax, setListMax] = useState(560);
   useEffect(() => {
-    const calc = () => setListMax(Math.max(340, Math.round((window.innerHeight || 900) / 1.375) - 250));
+    const calc = () => setListMax(Math.max(340, Math.round((window.innerHeight || 900) / PAGE_ZOOM) - 250));
     calc();
     window.addEventListener('resize', calc);
     return () => window.removeEventListener('resize', calc);
@@ -290,7 +292,7 @@ function App({ store }) {
     if (start === 0) { setLoading(true); setError(false); } else setLoadingMore(true);
     setSearched(true);
     try {
-      const { docs, numFound, facets: fc } = await crmSolrQuery({
+      const { docs, numFound, facets: fc } = await searchClient({
         query: q, type: t, solrFq: qb?.solrFq || '',
         filters: facetFilters(selRef.current), start,
         facet: start === 0,   // only need facet counts on the first page
@@ -306,7 +308,7 @@ function App({ store }) {
     } finally {
       if (gen.current === g) { setLoading(false); setLoadingMore(false); }
     }
-  }, []);
+  }, [searchClient]);
 
   // Toggle a facet value and re-run (selRef gives runSearch the fresh set).
   const toggleFacet = (field, value) => {
@@ -329,8 +331,10 @@ function App({ store }) {
   // list (match-all → most-recent records) like the native page, seeded with
   // any term/filter the URL carried. Then focus the field.
   useEffect(() => {
+    if (initialSearch) return undefined;
     runSearch(url0.q, url0.type, url0.fq ? { solrFq: url0.fq } : null, 0);
     setTimeout(() => { try { inputRef.current && inputRef.current.focus(); } catch (e) {} }, 60);
+    return undefined;
   }, []);   // eslint-disable-line
 
   const submit = () => {
@@ -351,15 +355,15 @@ function App({ store }) {
         modalHost={modalHost}
         topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Search" /></TopBar>}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '238px minmax(0, 1fr)', gap: 14, alignItems: 'flex-start' }}>
+        <div className="gbcp-search-grid" style={{ display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 10, alignItems: 'flex-start' }}>
           {/* ── Facet filter sidebar (Entity Types / Sales Rep / Role / Pod / dates) ── */}
           <FacetSidebar facets={facets} selected={selected} onToggle={toggleFacet} onClearAll={clearFacets} />
 
           {/* ── Search + results column ─────────────────────────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          <div className="gbcp-stack">
         {/* ── Search hero ─────────────────────────────────────── */}
         <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {/* Search input — height matched to the buttons (36) */}
               <div style={{
@@ -481,7 +485,7 @@ if (!window.__gbCrmSearchPageRegistered) {
   window.__gbCustomPages.search = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<DetailErrorBoundary label="CRM Search page"><App store={ctx.store} /></DetailErrorBoundary>);
+      root.render(<DetailErrorBoundary label="CRM Search page"><CrmSearchPageApp store={ctx.store} /></DetailErrorBoundary>);
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };

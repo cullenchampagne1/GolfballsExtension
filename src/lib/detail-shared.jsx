@@ -147,7 +147,7 @@ export function IconBtn({ icon, size = 'md', danger, ghost, active, style, onCli
         background: pal.bg, color: pal.fg, border: `1px solid ${pal.bd}`,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0, padding: 0,
-        transition: 'all var(--gb-anim)', ...style,
+        transition: 'background-color var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim), transform var(--gb-anim)', ...style,
       }}>
       {React.cloneElement(icon, { size: ic })}
     </button>
@@ -209,9 +209,9 @@ export function Card({ children, style, pad = 0, hover, onClick, className }) {
         fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)',
         background: 'var(--gb-surface-1)',
         border: '1px solid var(--gb-border-subtle)',
-        borderRadius: 'var(--gb-r-lg)',
+        borderRadius: 'var(--gb-r-md)',
         padding: pad, overflow: 'hidden',
-        transition: 'all var(--gb-anim)',
+        transition: 'background-color var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim), transform var(--gb-anim)',
         ...(onClick ? { cursor: 'pointer' } : null),
         ...style,
       }}>{children}</div>
@@ -221,18 +221,18 @@ export function Card({ children, style, pad = 0, hover, onClick, className }) {
 export function SectionTitle({ icon, title, count, right, sub }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '14px 18px',
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '10px 14px',
       borderBottom: '1px solid var(--gb-border-subtle)',
     }}>
       {icon && (
         <span style={{
-          width: 24, height: 24, borderRadius: 6,
+          width: 22, height: 22, borderRadius: 5,
           background: 'var(--gb-fill-subtle)',
           color: 'var(--gb-text-tertiary)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           border: '1px solid var(--gb-border-subtle)',
-        }}>{React.cloneElement(icon, { size: 13 })}</span>
+        }}>{React.cloneElement(icon, { size: 12 })}</span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -391,7 +391,7 @@ export function fullName(c) {
   return [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
 }
 
-export const PAGE_ZOOM = 1.375;
+export const PAGE_ZOOM = 1.25;
 
 export const ARMOR = { boxSizing: 'border-box' };
 
@@ -401,8 +401,28 @@ export const ARMOR = { boxSizing: 'border-box' };
    Inline styles beat stylesheet rules, so hover overrides carry !important. */
 export const UI_CSS =
   '.gbcp-stat:hover {' +
-  '  box-shadow: inset 0 0 0 1px var(--gb-brand-tint-border),' +
-  '              inset 0 0 28px -10px var(--gb-brand-label);' +
+  '  border-color: var(--gb-border-default) !important;' +
+  '  box-shadow: 0 2px 8px rgba(0,0,0,.08);' +
+  '}' +
+  '.gbcp-root { --gbcp-gap: 10px; --gbcp-aside: 296px; }' +
+  '.gbcp-page-grid { display:grid; grid-template-columns:minmax(0,1fr) var(--gbcp-aside); gap:var(--gbcp-gap); align-items:flex-start; }' +
+  '.gbcp-stack { display:flex; flex-direction:column; gap:var(--gbcp-gap); min-width:0; }' +
+  '.gbcp-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--gbcp-gap); }' +
+  '.gbcp-aside { display:flex; flex-direction:column; gap:var(--gbcp-gap); position:sticky; top:58px; }' +
+  '@media (max-width: 1060px) {' +
+  '  .gbcp-page-grid { grid-template-columns:minmax(0,1fr); }' +
+  '  .gbcp-search-grid { grid-template-columns:minmax(0,1fr) !important; }' +
+  '  .gbcp-search-grid > :first-child { position:static !important; display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); }' +
+  '  .gbcp-aside { position:static; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }' +
+  '  .gbcp-hero-grid { grid-template-columns:124px minmax(0,1fr) !important; }' +
+  '  .gbcp-hero-actions { grid-column:1 / -1; border-left:0 !important; border-top:1px solid var(--gb-border-subtle); display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }' +
+  '}' +
+  '@media (max-width: 720px) {' +
+  '  .gbcp-pair, .gbcp-aside { grid-template-columns:minmax(0,1fr); }' +
+  '  .gbcp-search-grid > :first-child { grid-template-columns:minmax(0,1fr); }' +
+  '  .gbcp-hero-grid { grid-template-columns:minmax(0,1fr) !important; }' +
+  '  .gbcp-hero-avatar-cell { display:none !important; }' +
+  '  .gbcp-hero-actions { grid-template-columns:minmax(0,1fr); }' +
   '}' +
   /* Thin themed scrollbar for the capped-height panel scroll areas. */
   '.gb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }' +
@@ -435,10 +455,13 @@ export const UI_CSS =
   '.gb-ibtn-ghost:hover { background: var(--gb-fill-subtle) !important; }' +
   '.gb-ibtn-danger:hover { background: var(--gb-error-tint-strong) !important; }' +
   '.gb-card-hover:hover { border-color: var(--gb-border-default) !important; }' +
-  '.gb-proof:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,.14); border-color: var(--gb-brand-tint-border) !important; }' +
+  '.gb-proof:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.12); border-color: var(--gb-border-default) !important; }' +
   '.gb-actrow:hover { background: var(--gb-fill-faint) !important; }' +
   '.gb-actrow-del { opacity: 0; transition: opacity var(--gb-anim); }' +
-  '.gb-actrow-note:hover .gb-actrow-del { opacity: 1; }';
+  '.gb-actrow-note:hover .gb-actrow-del { opacity: 1; }' +
+  '@media (prefers-reduced-motion: reduce) {' +
+  '  .gbcp-root *, .gbcp-root *::before, .gbcp-root *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }' +
+  '}';
 
 export function ScrollArea({ max = 380, children, style }) {
   return (
@@ -792,9 +815,9 @@ export function ContactPill({ icon, label, value, muted }) {
    tone: 'brand' (tinted card) | 'success' | 'error' | 'warning' | undefined. */
 export function StatCardGrid({ cells }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 1fr)`, gap: 10 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 8 }}>
       {cells.map((c, i) => (
-        <Card key={i} className="gbcp-stat" pad="14px 16px" style={{
+        <Card key={i} className="gbcp-stat" pad="10px 12px" style={{
           ...(c.tone === 'brand' ? { background: 'var(--gb-brand-tint-soft)', borderColor: 'var(--gb-brand-tint-border)' } : null),
         }}>
           <div style={{
@@ -802,7 +825,7 @@ export function StatCardGrid({ cells }) {
             color: c.tone === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
           }}>{c.label}</div>
           <div style={{
-            fontSize: 20, fontWeight: 700, marginTop: 4,
+            fontSize: 18, fontWeight: 700, marginTop: 3,
             color: c.tone === 'brand' ? 'var(--gb-brand-label)' :
                    c.tone === 'success' ? 'var(--gb-success-fg)' :
                    c.tone === 'error' ? 'var(--gb-error-fg)' :
@@ -811,9 +834,8 @@ export function StatCardGrid({ cells }) {
             fontFamily: c.mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
             letterSpacing: -.5, lineHeight: 1.15,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            textShadow: c.glow ? `0 0 18px color-mix(in srgb, var(--gb-brand-label) 35%, transparent)` : 'none',
           }}>{c.value}</div>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 3, fontWeight: 500 }}>{c.sub}</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500 }}>{c.sub}</div>
         </Card>
       ))}
     </div>
@@ -1054,7 +1076,7 @@ export const trStyle = { borderBottom: '1px solid var(--gb-border-subtle)' };
 
 export function Th({ children, align = 'left', style }) {
   return <th style={{
-    padding: '9px 14px', textAlign: align,
+    padding: '7px 12px', textAlign: align,
     fontSize: 9.5, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase',
     color: 'var(--gb-text-muted)',
     borderBottom: '1px solid var(--gb-border-default)',
@@ -1067,7 +1089,7 @@ export function Th({ children, align = 'left', style }) {
 
 export function Td({ children, align = 'left', mono, muted, style }) {
   return <td style={{
-    padding: '10px 14px', textAlign: align, verticalAlign: 'middle',
+    padding: '8px 12px', textAlign: align, verticalAlign: 'middle',
     fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
     fontSize: 11.5, color: muted ? 'var(--gb-text-muted)' : 'var(--gb-text-secondary)',
     fontWeight: 500, ...style,
@@ -1209,7 +1231,7 @@ export function ProofCard({ p }) {
 export function OrdersPanel() {
   const D = useD();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="gbcp-stack">
       <Card>
         <SectionTitle
           icon={<I.cart />} title="Orders" count={num(D.stats.orderCount) ?? D.orders.length}

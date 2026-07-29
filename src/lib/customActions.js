@@ -52,6 +52,9 @@ export function normalizeCustomAction(rec = {}) {
     entryPoints: normalizeEntryPoints(rec.entryPoints || rec.entryPoint),
     enabled: rec.enabled !== false,
     pages,
+    // Extra shelf matcher: a URL substring OR'd with `pages` (same as built-in
+    // features). Shows the action on any page whose URL contains it.
+    customUrl: typeof rec.customUrl === 'string' ? rec.customUrl.trim() : '',
     showInShelf: rec.showInShelf !== false,
     showInPopup: !!rec.showInPopup,
     updatedAt: Number.isFinite(rec.updatedAt) ? rec.updatedAt : Date.now(),

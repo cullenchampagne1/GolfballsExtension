@@ -52,6 +52,7 @@ export function adapt(data) {
     emails: Array.isArray(d.emails) ? d.emails : [],
     proofs: Array.isArray(d.proofs) ? d.proofs : [],
     contacts: Array.isArray(d.contacts) ? d.contacts : [],   // account → related contacts
+    lookups: Array.isArray(d.lookups) ? d.lookups : [],
   };
 }
 
@@ -368,20 +369,20 @@ async function crmCreateLookup(contactId, lookupTypeId, content) {
 export function HeroShell({ avatar, actions, minActionsWidth = 200, children }) {
   return (
     <Card pad={0}>
-      <div style={{ display: 'grid', gridTemplateColumns: avatar ? '160px 1fr auto' : '1fr auto', gap: 0 }}>
+      <div className="gbcp-hero-grid" style={{ display: 'grid', gridTemplateColumns: avatar ? '132px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto', gap: 0 }}>
         {avatar && (
-          <div style={{
-            padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          <div className="gbcp-hero-avatar-cell" style={{
+            padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRight: '1px solid var(--gb-border-subtle)',
-            background: 'radial-gradient(circle at 50% 40%, var(--gb-fill-soft), transparent 70%)',
+            background: 'var(--gb-fill-faint)',
             position: 'relative',
           }}>{avatar}</div>
         )}
-        <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+        <div style={{ padding: '15px 18px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
           {children}
         </div>
-        <div style={{
-          padding: 18, display: 'flex', flexDirection: 'column', gap: 7, flexShrink: 0,
+        <div className="gbcp-hero-actions" style={{
+          padding: 14, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0,
           borderLeft: '1px solid var(--gb-border-subtle)',
           background: 'var(--gb-fill-faint)',
           minWidth: minActionsWidth,
@@ -396,12 +397,12 @@ export function HeroShell({ avatar, actions, minActionsWidth = 200, children }) 
 export function HeroAvatar({ text, badge }) {
   return (
     <div style={{
-      width: 96, height: 96, borderRadius: '50%',
+      width: 76, height: 76, borderRadius: '50%',
       background: `linear-gradient(135deg, ${AVATAR_COLOR}, color-mix(in srgb, ${AVATAR_COLOR} 60%, black))`,
       color: '#fff',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 30, fontWeight: 700, letterSpacing: -.5,
-      boxShadow: '0 1px 0 var(--gb-fill-soft), inset 0 1px 0 rgba(255,255,255,.15), 0 0 0 4px var(--gb-surface-1), 0 0 0 5px var(--gb-border-subtle)',
+      fontSize: 24, fontWeight: 700, letterSpacing: -.4,
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 3px var(--gb-surface-1), 0 0 0 4px var(--gb-border-subtle)',
       position: 'relative',
     }}>
       {text}
@@ -415,7 +416,7 @@ export function HeroTitleRow({ title, tags, id }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <h1 style={{
-        margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -.4,
+        margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: -.3,
         color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)',
       }}>{title}</h1>
       {tags}
@@ -428,8 +429,8 @@ export function HeroTitleRow({ title, tags, id }) {
 export function HeroPillStrip({ children }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
-      paddingTop: 6, borderTop: '1px dashed var(--gb-border-subtle)', marginTop: 2,
+      display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+      paddingTop: 5, borderTop: '1px solid var(--gb-border-subtle)', marginTop: 1,
     }}>{children}</div>
   );
 }
@@ -1590,7 +1591,7 @@ export function DetailPageFrame({ currentLabel, currentPage, topBar, ready = tru
           [data-gb-scale] selector still applies the host-CSS reset
           (box-sizing / line-height / font). height:100% + own scroll so it
           fills the fixed root the engine mounts. */}
-      <div data-gb-scale="custom-page" style={{
+      <div data-gb-scale="custom-page" className="gbcp-root" style={{
         ...ARMOR,
         zoom: PAGE_ZOOM,                 // fixed scale — not slider-driven
         // No PAGE scroll — the sidebar and content column each scroll
@@ -1607,10 +1608,10 @@ export function DetailPageFrame({ currentLabel, currentPage, topBar, ready = tru
         <div className="gb-scroll" style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
           {topBar}
           {!ready && <Spinner />}
-          <div style={{
+          <div className="gbcp-content" style={{
             maxWidth: 2200, margin: '0 auto',
-            padding: '20px 28px 60px',
-            display: 'flex', flexDirection: 'column', gap: 14,
+            padding: '14px 18px 44px',
+            display: 'flex', flexDirection: 'column', gap: 10,
           }}>
             {children}
           </div>
@@ -1813,7 +1814,7 @@ export function TasksPanel() {
     finally { setAdding(false); }
   };
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+    <div className="gbcp-pair">
       <Card>
         <SectionTitle
           icon={<I.task />} title="Open Tasks" count={D.openTasks.length}

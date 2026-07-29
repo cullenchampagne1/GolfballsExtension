@@ -7,7 +7,7 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { I, Icon, TYPE_ICONS } from '../ui/index.js';
 import { loadFlags } from '../lib/flags.js';
 import { shelfActionDefs } from '../lib/features/featureRegistry.js';
-import { loadFeatureConfig, normalizeFeatureConfig, featureShowsOnPage, pageApplies, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
+import { loadFeatureConfig, normalizeFeatureConfig, featureShowsOnPage, pageApplies, urlMatches, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
 import { loadCustomActions, normalizeCustomAction, STORAGE_KEY as CUSTOM_ACTIONS_KEY } from '../lib/customActions.js';
 import {
   customActionEntryPoints,
@@ -164,7 +164,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
   window.__gbFeatureConfig = _featureCfg;
   function shelfShows(key, pageType) {
     if ((window.__gbFeatureFlags || {})[key] === false) return false; // master off
-    return featureShowsOnPage(_featureCfg[key], pageType);             // surface + page
+    return featureShowsOnPage(_featureCfg[key], pageType, window.location.href); // surface + page + custom link
   }
 
   /* Standalone shelf actions (a safe no-arg window global) are generated
@@ -224,7 +224,8 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     clearCustomActions();
     for (const rec of _customActions) {
       if (!rec || rec.enabled === false || !rec.showInShelf) continue;
-      if (!pageApplies(rec.pages, pageType)) continue;
+      // Page chips OR the custom-link matcher (same rule as built-in features).
+      if (!pageApplies(rec.pages, pageType) && !urlMatches(rec.customUrl, window.location.href)) continue;
       const entryMatches = customActionEntryPoints.resolve(
         rec.entryPoints,
         document,
@@ -237,6 +238,9 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
         label: rec.name,
         icon: shelfIcon(rec.icon),
         hint: rec.description || 'Custom action',
+        // User-authored actions sort after every built-in feature so they
+        // never take slots 1/2 ahead of the real features.
+        weight: 100,
         smartFor: (rec.pages || []).includes('*') ? [] : rec.pages,
         whenModalOpen: modalIds,
         handler: () => {
