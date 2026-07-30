@@ -25,4 +25,14 @@ describe('Action Review · contact-page presentation', () => {
     assert.match(source, /\{busy \? 'Searching…' : 'Search'\}/);
     assert.doesNotMatch(source, /Review scope|Apply scope|Updating…/);
   });
+
+  it('renders the filter-only initial response without inventing empty result tables', () => {
+    assert.match(source, /!review\.searched \? <PreSearchState \/>/);
+    assert.match(source, /Choose a sales rep and run Search/);
+    assert.match(source, /creates the Action Review tables only after the search is submitted/);
+    assert.match(source, /review\.resultTables\.activities && <ActivitySection/);
+    assert.match(source, /review\.resultTables\.emails && <EmailSection/);
+    assert.match(source, /review\.resultTables\.tasks && \(/);
+    assert.doesNotMatch(source, /native Action Review tables did not become available/);
+  });
 });

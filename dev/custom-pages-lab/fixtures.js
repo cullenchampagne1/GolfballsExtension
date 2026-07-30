@@ -410,6 +410,12 @@ export function buildActionReviewFixture(mode = 'populated') {
     activities: activityRows,
     emails: emailRows,
     tasks: taskRows,
+    searched: true,
+    resultTables: {
+      activities: true,
+      emails: true,
+      tasks: true,
+    },
     reps: [
       { id: '2370', label: 'Cullen Champagne' },
       { id: '1114', label: 'Alex Sylvester' },

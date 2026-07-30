@@ -273,11 +273,26 @@ function todayIso() {
 
 function normalizeReview(review) {
   if (!review || typeof review !== 'object') return null;
+  const activities = Array.isArray(review.activities) ? review.activities : [];
+  const emails = Array.isArray(review.emails) ? review.emails : [];
+  const tasks = Array.isArray(review.tasks) ? review.tasks : [];
+  const explicitTables = review.resultTables && typeof review.resultTables === 'object'
+    ? review.resultTables
+    : null;
+  const searched = typeof review.searched === 'boolean'
+    ? review.searched
+    : !!(activities.length || emails.length || tasks.length);
   return {
     ...review,
-    activities: Array.isArray(review.activities) ? review.activities : [],
-    emails: Array.isArray(review.emails) ? review.emails : [],
-    tasks: Array.isArray(review.tasks) ? review.tasks : [],
+    activities,
+    emails,
+    tasks,
+    searched,
+    resultTables: {
+      activities: explicitTables ? explicitTables.activities === true : activities.length > 0,
+      emails: explicitTables ? explicitTables.emails === true : emails.length > 0,
+      tasks: explicitTables ? explicitTables.tasks === true : tasks.length > 0,
+    },
     reps: Array.isArray(review.reps) ? review.reps : [],
     selected: {
       rep: review.selected?.rep || '',
@@ -330,7 +345,7 @@ function waitForLiveActionReview(timeoutMs = 10_000) {
         resolve(normalizeReview(parseActionReviewDocument(document)));
         return;
       }
-      reject(new Error('The native Action Review tables did not become available.'));
+      reject(new Error('The native Action Review filters did not become available.'));
     };
     poll();
   });
@@ -399,7 +414,9 @@ function SearchCard({
             {selectedRep?.label || 'Choose a sales rep'} · {range}
           </div>
         </div>
-        <Tag tone={busy ? 'warning' : 'success'} size="sm">{busy ? 'Searching' : 'Loaded'}</Tag>
+        <Tag tone={busy ? 'warning' : review?.searched ? 'success' : 'info'} size="sm">
+          {busy ? 'Searching' : review?.searched ? 'Loaded' : 'Ready'}
+        </Tag>
       </div>
 
       <div className={`gbar-filter-grid ${dateOption === 'BETWEEN' ? 'gbar-filter-grid--between' : ''}`}>
@@ -438,11 +455,42 @@ function SearchCard({
 
       {busy && <div className="gbar-loading-line" />}
 
-      <div className="gbar-stat-strip">
-        <Stat icon={<I.history />} label="Activity" value={review?.activities.length} />
-        <Stat icon={<I.mail />} label="Email" value={review?.emails.length} />
-        <Stat icon={<I.task />} label="Open tasks" value={openTasks} />
-        <Stat icon={<I.check />} label="All tasks" value={review?.tasks.length} />
+      {review?.searched && (
+        <div className="gbar-stat-strip">
+          <Stat icon={<I.history />} label="Activity" value={review?.activities.length} />
+          <Stat icon={<I.mail />} label="Email" value={review?.emails.length} />
+          <Stat icon={<I.task />} label="Open tasks" value={openTasks} />
+          <Stat icon={<I.check />} label="All tasks" value={review?.tasks.length} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PreSearchState() {
+  return (
+    <Card>
+      <div style={{ padding: '34px 24px', textAlign: 'center' }}>
+        <span style={{
+          width: 34,
+          height: 34,
+          margin: '0 auto 10px',
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--gb-brand-label)',
+          background: 'var(--gb-brand-tint-soft)',
+          border: '1px solid var(--gb-brand-tint-border)',
+        }}>
+          <I.search size={15} />
+        </span>
+        <div style={{ color: 'var(--gb-text-primary)', fontSize: 12.5, fontWeight: 650 }}>
+          Choose a sales rep and run Search
+        </div>
+        <div style={{ marginTop: 4, color: 'var(--gb-text-muted)', fontSize: 11 }}>
+          The CRM creates the Action Review tables only after the search is submitted.
+        </div>
       </div>
     </Card>
   );
@@ -856,15 +904,21 @@ export function ActionReviewApp({
                 busy={busy}
                 onSearch={applyFilter}
               />
-              <ActivitySection rows={review.activities} />
-              <EmailSection rows={review.emails} />
-              <TaskSection
-                rows={review.tasks}
-                rowStatus={rowStatus}
-                onEdit={editTask}
-                onComplete={completeTask}
-                actionsEnabled={actionsEnabled}
-              />
+              {!review.searched ? <PreSearchState /> : (
+                <>
+                  {review.resultTables.activities && <ActivitySection rows={review.activities} />}
+                  {review.resultTables.emails && <EmailSection rows={review.emails} />}
+                  {review.resultTables.tasks && (
+                    <TaskSection
+                      rows={review.tasks}
+                      rowStatus={rowStatus}
+                      onEdit={editTask}
+                      onComplete={completeTask}
+                      actionsEnabled={actionsEnabled}
+                    />
+                  )}
+                </>
+              )}
             </>
           ) : null}
         </div>

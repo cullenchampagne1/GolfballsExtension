@@ -176,20 +176,37 @@ function normalizedDateOption(value) {
 
 export function isActionReviewDocument(doc) {
   return !!(
-    doc?.querySelector?.('#SalesRep')
+    doc?.querySelector?.('form')
+    && doc.querySelector('#SalesRep')
     && doc.querySelector('#DateOption')
-    && doc.querySelector('#ActivityTable')
-    && doc.querySelector('#TableTasks')
+    && doc.querySelector('#DateTime')
   );
+}
+
+/** Result sections are conditional native output. The initial Page 286 GET
+ * contains only the form controls, and even a successful POST can omit any
+ * table whose result set is unavailable/empty. */
+export function actionReviewResultTables(doc) {
+  return {
+    activities: !!doc?.querySelector?.('#ActivityTable'),
+    emails: !!findActionReviewEmailTable(doc),
+    tasks: !!doc?.querySelector?.('#TableTasks'),
+  };
 }
 
 export function actionReviewDocumentSignature(doc) {
   if (!isActionReviewDocument(doc)) return 'missing';
+  const tables = actionReviewResultTables(doc);
   const activities = doc.querySelectorAll('#ActivityTable tbody tr').length;
   const emails = parseActionReviewEmails(doc).length;
   const tasks = doc.querySelectorAll('#TableTasks tr[id^="taskrow_"]').length;
   const reps = doc.querySelectorAll('#SalesRep option').length;
-  return `a:${activities};e:${emails};t:${tasks};r:${reps}`;
+  return [
+    `a:${tables.activities ? activities : '-'}`,
+    `e:${tables.emails ? emails : '-'}`,
+    `t:${tables.tasks ? tasks : '-'}`,
+    `r:${reps}`,
+  ].join(';');
 }
 
 export function isActionReviewSnapshotSettled({
@@ -207,10 +224,13 @@ export function isActionReviewSnapshotSettled({
 export function parseActionReviewDocument(doc) {
   const salesRep = doc?.querySelector?.('#SalesRep');
   const form = doc?.querySelector?.('form');
+  const resultTables = actionReviewResultTables(doc);
   return {
     activities: parseActionReviewActivities(doc),
     emails: parseActionReviewEmails(doc),
     tasks: parseActionReviewTasks(doc),
+    searched: Object.values(resultTables).some(Boolean),
+    resultTables,
     reps: parseActionReviewRepOptions(doc),
     selected: {
       rep: salesRep?.value || '',

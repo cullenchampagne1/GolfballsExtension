@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 
 import {
   actionReviewDocumentSignature,
+  actionReviewResultTables,
   buildActionReviewPostFields,
   filterActionReviewTasks,
   isActionReviewDocument,
@@ -98,12 +99,50 @@ function documentFrom(html = fixture) {
   return new JSDOM(html, { url: 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=286' }).window.document;
 }
 
+function withoutResultTables(html = fixture) {
+  const doc = documentFrom(html);
+  doc.querySelector('#ActivityTable')?.remove();
+  doc.querySelector('.email-history')?.remove();
+  doc.querySelector('#TableTasks')?.remove();
+  return doc;
+}
+
 describe('Action Review · native document parsing', () => {
+  it('accepts the initial filter-only response before the CRM creates result tables', () => {
+    const doc = withoutResultTables();
+    const review = parseActionReviewDocument(doc);
+
+    assert.equal(isActionReviewDocument(doc), true);
+    assert.equal(actionReviewDocumentSignature(doc), 'a:-;e:-;t:-;r:2');
+    assert.deepEqual(actionReviewResultTables(doc), {
+      activities: false,
+      emails: false,
+      tasks: false,
+    });
+    assert.equal(review.searched, false);
+    assert.deepEqual(review.resultTables, {
+      activities: false,
+      emails: false,
+      tasks: false,
+    });
+    assert.deepEqual(review.activities, []);
+    assert.deepEqual(review.emails, []);
+    assert.deepEqual(review.tasks, []);
+    assert.equal(review.selected.rep, '2370');
+    assert.equal(review.formState.__VIEWSTATE, 'view-state');
+  });
+
   it('parses all three table contracts and strips hidden activity metadata', () => {
     const doc = documentFrom();
     const review = parseActionReviewDocument(doc);
 
     assert.equal(isActionReviewDocument(doc), true);
+    assert.equal(review.searched, true);
+    assert.deepEqual(review.resultTables, {
+      activities: true,
+      emails: true,
+      tasks: true,
+    });
     assert.deepEqual(review.reps, [
       { id: '1114', label: 'Alex Sylvester' },
       { id: '2370', label: 'Cullen Champagne' },
@@ -151,6 +190,24 @@ describe('Action Review · native document parsing', () => {
     assert.equal(review.formState.__VIEWSTATE, 'view-state');
     assert.equal(review.formState['ctl00$ctl00'], undefined);
     assert.equal(review.formAction, 'Default.aspx?Page=286');
+  });
+
+  it('accepts a completed search when a conditional result table is absent', () => {
+    const doc = documentFrom();
+    doc.querySelector('#TableTasks').remove();
+    const review = parseActionReviewDocument(doc);
+
+    assert.equal(isActionReviewDocument(doc), true);
+    assert.equal(actionReviewDocumentSignature(doc), 'a:1;e:1;t:-;r:2');
+    assert.equal(review.searched, true);
+    assert.deepEqual(review.resultTables, {
+      activities: true,
+      emails: true,
+      tasks: false,
+    });
+    assert.equal(review.activities.length, 1);
+    assert.equal(review.emails.length, 1);
+    assert.deepEqual(review.tasks, []);
   });
 
   it('rejects a login-shaped document as an Action Review response', () => {

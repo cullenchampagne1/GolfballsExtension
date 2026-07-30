@@ -85,6 +85,12 @@ describe('custom pages lab', () => {
     assert.ok(populated.tasks.length >= 200);
     assert.ok(stress.tasks.length >= 2_000);
     assert.deepEqual(empty.tasks, []);
+    assert.equal(empty.searched, true);
+    assert.deepEqual(empty.resultTables, {
+      activities: true,
+      emails: true,
+      tasks: true,
+    });
     assert.deepEqual(filtered.selected, {
       rep: '1114',
       dateOption: 'BETWEEN',
