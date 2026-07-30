@@ -296,6 +296,11 @@ const FIELDS = {
         extract: { sel: '#CreditRequirements', attr: 'value' },
         transform: 'trim',
       },
+      territoryId: {
+        type: 'string',
+        label: 'Sales territory ID',
+        extract: { sel: '#TerritoryID', attr: 'value' },
+      },
       territoryName: {
         type: 'string',
         label: 'Sales territory',

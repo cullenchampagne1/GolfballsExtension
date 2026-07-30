@@ -32,7 +32,7 @@ before(async () => {
       'numberDisplay.durationMs': 777,
       'email.localPart': 'local.user',
       'pageEngine.indexingEnabled': true,
-      'pageEngine.accountId': 'owner-77',
+      'pageEngine.territory': '15',
       'campaignManager.scale': 0.75,
     },
     customPages: { crm: ['contact_details'] },
@@ -111,7 +111,7 @@ describe('remote settings policy', () => {
     assert.equal(stored.devSettings['numberDisplay.durationMs'], 400);
     assert.equal(stored.devSettings['email.localPart'], 'local.user', 'unmanaged identity must stay local');
     assert.equal(stored.devSettings['pageEngine.indexingEnabled'], true, 'indexing opt-in must stay local');
-    assert.equal(stored.devSettings['pageEngine.accountId'], 'owner-77', 'index owner must stay local');
+    assert.equal(stored.devSettings['pageEngine.territory'], '15', 'index territory must stay local');
     assert.equal(stored.featureFlags.workflowManagerEnabled, false, 'renamed unmanaged flag keeps its local value');
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'renamed unmanaged setting keeps its local value');
     assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);

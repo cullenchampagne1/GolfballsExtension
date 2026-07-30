@@ -115,13 +115,13 @@ describe('sharing fallback · preset scopes', () => {
     assert.equal(JSON.stringify(gathered).includes('must-not-export'), false);
   });
 
-  it('keeps Page Engine indexing and owner identity installation-local', async () => {
+  it('keeps Page Engine indexing and Territory identity installation-local', async () => {
     const storageState = {
       devSettings: {
         'numberDisplay.durationMs': 400,
         'email.localPart': 'private-mailbox',
         'pageEngine.indexingEnabled': true,
-        'pageEngine.accountId': 'private-owner-77',
+        'pageEngine.territory': 'P5 / BDR (Cullen)',
       },
     };
     globalThis.chrome = {
@@ -143,14 +143,14 @@ describe('sharing fallback · preset scopes', () => {
     assert.deepEqual(gathered['settings-preferences'].devSettings, {
       'numberDisplay.durationMs': 400,
     });
-    assert.equal(JSON.stringify(gathered).includes('private-owner-77'), false);
+    assert.equal(JSON.stringify(gathered).includes('P5 / BDR (Cullen)'), false);
 
     await applyScopes({
       'settings-preferences': {
         devSettings: {
           'numberDisplay.durationMs': 900,
           'pageEngine.indexingEnabled': false,
-          'pageEngine.accountId': 'imported-owner-must-not-win',
+          'pageEngine.territory': 'imported-territory-must-not-win',
         },
       },
     });
@@ -158,7 +158,7 @@ describe('sharing fallback · preset scopes', () => {
       'numberDisplay.durationMs': 900,
       'email.localPart': 'private-mailbox',
       'pageEngine.indexingEnabled': true,
-      'pageEngine.accountId': 'private-owner-77',
+      'pageEngine.territory': 'P5 / BDR (Cullen)',
     });
   });
 });

@@ -182,10 +182,10 @@
       "label": "Engine Indexing",
       "managedDefault": false
     },
-    "pageEngine.accountId": {
+    "pageEngine.territory": {
       "type": "string",
       "default": "",
-      "label": "Engine Account Id",
+      "label": "Engine Territory",
       "managedDefault": false
     },
     "golfballViewer.showDebugHud": {

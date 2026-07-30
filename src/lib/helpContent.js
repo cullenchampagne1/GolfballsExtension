@@ -5197,28 +5197,28 @@ export const HELP_CONTENT = {
                 "bool",
                 "Off",
                 "",
-                "Build an encrypted local Page Engine index whenever an owned account, contact, opportunity, or order is extracted. Off by default; no snapshots are written while off."
+                "Build an encrypted local Page Engine index whenever an Account or Contact in the configured territory is extracted. Order and Opportunity pages are never stored. Off by default."
               ],
               [
-                "Engine Account Id",
+                "Engine Territory",
                 "string",
                 "(empty)",
                 "",
-                "Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID."
+                "Exact Territory value used to admit Account and Contact snapshots into the local index. The numeric Territory ID is preferred; the exact visible name is also accepted."
               ],
               [
-                "Extract current page owner ID",
+                "Extract current page territory",
                 "action",
                 "—",
                 "",
-                "Runs the Page Engine against the Golfballs page that opened the manager and shows its numeric sales-rep/account-owner ID in a notification."
+                "Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification."
               ]
             ],
             "meta": {
               "settingKeys": [
                 "pageEngine.indexingEnabled",
-                "pageEngine.accountId",
-                "pageEngine.inspectOwner"
+                "pageEngine.territory",
+                "pageEngine.inspectTerritory"
               ]
             }
           },
@@ -9656,27 +9656,27 @@ export const HELP_CONTENT = {
       "keywords": [
         "pageEngine.indexingEnabled"
       ],
-      "description": "Build an encrypted local Page Engine index whenever an owned account, contact, opportunity, or order is extracted. Off by default; no snapshots are written while off.",
+      "description": "Build an encrypted local Page Engine index whenever an Account or Contact in the configured territory is extracted. Order and Opportunity pages are never stored. Off by default.",
       "article": "developer-settings"
     },
     {
-      "id": "devSetting:pageEngine.accountId",
+      "id": "devSetting:pageEngine.territory",
       "category": "Settings",
-      "title": "Engine Account Id",
+      "title": "Engine Territory",
       "keywords": [
-        "pageEngine.accountId"
+        "pageEngine.territory"
       ],
-      "description": "Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID.",
+      "description": "Exact Territory value used to admit Account and Contact snapshots into the local index. The numeric Territory ID is preferred; the exact visible name is also accepted.",
       "article": "developer-settings"
     },
     {
-      "id": "devSetting:pageEngine.inspectOwner",
+      "id": "devSetting:pageEngine.inspectTerritory",
       "category": "Settings",
-      "title": "Extract current page owner ID",
+      "title": "Extract current page territory",
       "keywords": [
-        "pageEngine.inspectOwner"
+        "pageEngine.inspectTerritory"
       ],
-      "description": "Runs the Page Engine against the Golfballs page that opened the manager and shows its numeric sales-rep/account-owner ID in a notification.",
+      "description": "Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification.",
       "article": "developer-settings"
     },
     {

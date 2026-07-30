@@ -9,12 +9,12 @@ before(async () => {
 });
 
 describe('Page Engine index model', () => {
-  it('requires a supported schema, stable entity id, and matching owner', () => {
+  it('requires an Account/Contact schema, stable entity id, and matching territory', () => {
     const contact = {
       schemaId: 'contact',
       data: {
         ids: { contact: '42', account: '900' },
-        account: { salesRepId: '77', salesRep: 'Cullen Champagne' },
+        account: { territoryId: '15', territoryName: 'P5 / BDR (Cullen)' },
       },
     };
     assert.deepEqual(Model.snapshotIdentity(contact), {
@@ -24,13 +24,36 @@ describe('Page Engine index model', () => {
       accountId: '900',
       contactId: '42',
     });
-    assert.equal(Model.normalizeSnapshot(contact, '77').ownerId, '77');
-    assert.equal(Model.normalizeSnapshot(contact, 'cullen champagne').ownerId, 'cullen champagne');
-    assert.throws(() => Model.normalizeSnapshot(contact, '12'), /owner does not match/i);
+    assert.equal(Model.normalizeSnapshot(contact, '15').territory, '15');
+    assert.equal(
+      Model.normalizeSnapshot(contact, 'p5 / bdr (cullen)').territory,
+      'p5 / bdr (cullen)',
+    );
+    assert.throws(() => Model.normalizeSnapshot(contact, '12'), /territory does not match/i);
     assert.throws(
       () => Model.snapshotIdentity({ schemaId: 'contact', data: { ids: {} } }),
       /stable ID/i,
     );
+    assert.throws(
+      () => Model.snapshotIdentity({ schemaId: 'order', data: { ids: { order: '5001' } } }),
+      /not indexable/i,
+    );
+    assert.throws(
+      () => Model.snapshotIdentity({ schemaId: 'opportunity', data: { ids: { opportunity: '28042' } } }),
+      /not indexable/i,
+    );
+  });
+
+  it('does not admit the unassigned Territory option', () => {
+    const unassigned = {
+      schemaId: 'account',
+      data: {
+        ids: { account: '900' },
+        account: { territoryId: '0', territoryName: 'Not Set' },
+      },
+    };
+    assert.deepEqual(Model.territoryCandidates(unassigned.data), []);
+    assert.throws(() => Model.normalizeSnapshot(unassigned, '0'), /territory does not match/i);
   });
 
   it('flattens arrays to reusable relational paths without array positions', () => {

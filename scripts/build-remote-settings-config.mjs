@@ -33,7 +33,7 @@ const keep = (key) => !ADMIN_CONFIG.has(key);
 const INSTALLATION_LOCAL_KEYS = new Set([
   'email.localPart',
   'pageEngine.indexingEnabled',
-  'pageEngine.accountId',
+  'pageEngine.territory',
 ]);
 
 const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((item) => [item.key, item]));

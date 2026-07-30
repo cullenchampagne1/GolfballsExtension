@@ -57,38 +57,34 @@ const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
   ];
 });
 
-export function formatPageEngineOwnerNotice(info = {}) {
-  const ownerId = String(info.ownerId || '').trim();
-  const ownerName = String(info.ownerName || '').trim();
+export function formatPageEngineTerritoryNotice(info = {}) {
+  const territoryId = String(info.territoryId || '').trim();
+  const territoryName = String(info.territoryName || '').trim();
   const schema = String(info.schemaId || 'page').trim();
   const recordId = String(info.recordId || '').trim();
   const pageLabel = recordId ? `${schema} ${recordId}` : schema;
-  if (ownerId) {
+  if (territoryId || territoryName) {
     return {
       tone: 'success',
-      message: `Engine owner ID: ${ownerId}${ownerName ? ` · ${ownerName}` : ''}`,
-    };
-  }
-  if (ownerName) {
-    return {
-      tone: 'warning',
-      message: `No numeric owner ID on ${pageLabel} · Owner: ${ownerName}`,
+      message: `Engine territory: ${territoryId || territoryName}${
+        territoryId && territoryName ? ` · ${territoryName}` : ''
+      }`,
     };
   }
   return {
     tone: 'warning',
-    message: `No owner ID found on ${pageLabel}.`,
+    message: `No territory found on ${pageLabel}.`,
   };
 }
 
-export async function inspectCurrentPageOwner() {
+export async function inspectCurrentPageTerritory() {
   try {
-    const result = await sendBackgroundMessage('pageEngineInspectOwner');
-    const notice = formatPageEngineOwnerNotice(result);
+    const result = await sendBackgroundMessage('pageEngineInspectTerritory');
+    const notice = formatPageEngineTerritoryNotice(result);
     globalThis.window?.__gbToast?.[notice.tone]?.(notice.message, { duration: 8_000 });
     return result;
   } catch (error) {
-    const message = error?.message || 'Unable to inspect the current page owner.';
+    const message = error?.message || 'Unable to inspect the current page territory.';
     globalThis.window?.__gbToast?.error?.(message, { duration: 6_000 });
     return { ok: false, error: message };
   }
@@ -130,26 +126,26 @@ export const DEV_SETTINGS = [
   {
     key:     'pageEngine.indexingEnabled',
     label:   'Engine Indexing',
-    desc:    'Build an encrypted local Page Engine index whenever an owned account, contact, opportunity, or order is extracted. Off by default; no snapshots are written while off.',
+    desc:    'Build an encrypted local Page Engine index whenever an Account or Contact in the configured territory is extracted. Order and Opportunity pages are never stored. Off by default.',
     type:    'bool',
     default: false,
   },
   {
-    key:     'pageEngine.accountId',
-    label:   'Engine Account Id',
-    desc:    'Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID.',
+    key:     'pageEngine.territory',
+    label:   'Engine Territory',
+    desc:    'Exact Territory value used to admit Account and Contact snapshots into the local index. The numeric Territory ID is preferred; the exact visible name is also accepted.',
     type:    'string',
     default: '',
-    placeholder: 'Sales rep ID',
+    placeholder: 'Territory ID or name',
   },
   {
-    key:         'pageEngine.inspectOwner',
-    label:       'Extract current page owner ID',
-    desc:        'Runs the Page Engine against the Golfballs page that opened the manager and shows its numeric sales-rep/account-owner ID in a notification.',
+    key:         'pageEngine.inspectTerritory',
+    label:       'Extract current page territory',
+    desc:        'Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification.',
     type:        'action',
-    buttonLabel: 'Extract owner ID',
+    buttonLabel: 'Extract territory',
     buttonIcon:  'search',
-    runner:      inspectCurrentPageOwner,
+    runner:      inspectCurrentPageTerritory,
   },
   {
     key:     'golfballViewer.showDebugHud',
@@ -595,6 +591,7 @@ export const DEV_SETTINGS = [
 
 export const STORAGE_KEY = 'devSettings';
 const LEGACY_WORKFLOW_SCALE_KEY = 'campaignManager.scale';
+const LEGACY_ENGINE_ACCOUNT_ID_KEY = 'pageEngine.accountId';
 
 // Skip `action` rows — they fire a runner instead of persisting a value,
 // so there's no default to merge into the bag.
@@ -620,6 +617,13 @@ export function normalizeStoredDevSettings(value) {
   }
   if (Object.hasOwn(settings, LEGACY_WORKFLOW_SCALE_KEY)) {
     delete settings[LEGACY_WORKFLOW_SCALE_KEY];
+    changed = true;
+  }
+  /* Owner IDs and Territory IDs are unrelated CRM namespaces. Retire the old
+     owner gate without guessing a Territory value; the new field stays empty
+     until the user extracts/copies the correct Territory from a live page. */
+  if (Object.hasOwn(settings, LEGACY_ENGINE_ACCOUNT_ID_KEY)) {
+    delete settings[LEGACY_ENGINE_ACCOUNT_ID_KEY];
     changed = true;
   }
   return { settings, changed };

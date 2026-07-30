@@ -529,8 +529,8 @@
       "file": "tests/unit/pageEngineIndexModel.test.mjs"
     },
     {
-      "name": "flow \u00b7 Page Engine current owner inspector",
-      "file": "tests/unit/pageEngineOwner.test.mjs"
+      "name": "flow \u00b7 Page Engine current territory inspector",
+      "file": "tests/unit/pageEngineTerritory.test.mjs"
     },
     {
       "name": "flow \u00b7 workflow code import validation",

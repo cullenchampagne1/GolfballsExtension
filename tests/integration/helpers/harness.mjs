@@ -273,6 +273,13 @@ export function makeFakeIndexedDb() {
         request.result = db;
         if (version > oldVersion) {
           db.version = version;
+          request.transaction = {
+            objectStore(storeName) {
+              const meta = db._stores.get(storeName);
+              if (!meta) throw new Error(`Unknown fake IndexedDB store: ${storeName}`);
+              return makeStore(meta);
+            },
+          };
           request.onupgradeneeded?.({ oldVersion, newVersion: version });
         }
         request.onsuccess?.();

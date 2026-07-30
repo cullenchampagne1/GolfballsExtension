@@ -26,7 +26,7 @@ const defaults = defaultDevSettings();
 const installationLocalKeys = new Set([
   'email.localPart',
   'pageEngine.indexingEnabled',
-  'pageEngine.accountId',
+  'pageEngine.territory',
 ]);
 
 describe('settings registry · extension/backend parity', () => {

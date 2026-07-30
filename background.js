@@ -252,16 +252,16 @@ function gbQueryPageEngineTabs() {
   });
 }
 
-function gbRequestPageEngineOwner(tabId) {
+function gbRequestPageEngineTerritory(tabId) {
   return new Promise((resolve, reject) => {
     try {
-      chrome.tabs.sendMessage(tabId, { action: 'pageEngineOwnerInfo' }, (response) => {
+      chrome.tabs.sendMessage(tabId, { action: 'pageEngineTerritoryInfo' }, (response) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
           return;
         }
         if (!response?.ok) {
-          reject(new Error(response?.error || 'Page Engine did not return owner information.'));
+          reject(new Error(response?.error || 'Page Engine did not return territory information.'));
           return;
         }
         resolve(response);
@@ -272,7 +272,7 @@ function gbRequestPageEngineOwner(tabId) {
   });
 }
 
-async function gbInspectCurrentPageOwner() {
+async function gbInspectCurrentPageTerritory() {
   const preferredId = await gbReadLocalValue('orderTabId');
   const preferred = await gbGetTab(preferredId);
   const queried = await gbQueryPageEngineTabs();
@@ -292,12 +292,12 @@ async function gbInspectCurrentPageOwner() {
   let lastError = null;
   for (const tab of candidates) {
     try {
-      return { ...(await gbRequestPageEngineOwner(tab.id)), tabId: tab.id, url: tab.url };
+      return { ...(await gbRequestPageEngineTerritory(tab.id)), tabId: tab.id, url: tab.url };
     } catch (error) {
       lastError = error;
     }
   }
-  throw lastError || new Error('Unable to inspect the current Golfballs page.');
+  throw lastError || new Error('Unable to inspect the current Golfballs page territory.');
 }
 
 // ── Per-product customizer config helpers ────────────────────────────────────
@@ -1364,11 +1364,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── Owner-gated encrypted Page Engine index ─────────────────────────────
-  if (msg.action === 'pageEngineInspectOwner') {
-    gbInspectCurrentPageOwner()
+  // ── Territory-gated encrypted Page Engine index ─────────────────────────
+  if (msg.action === 'pageEngineInspectTerritory') {
+    gbInspectCurrentPageTerritory()
       .then((result) => sendResponse({ ok: true, ...result }))
-      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page owner' }));
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page territory' }));
     return true;
   }
   if (msg.action === 'pageEngineIndexPut') {

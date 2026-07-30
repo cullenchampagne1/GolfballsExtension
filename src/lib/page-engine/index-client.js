@@ -2,6 +2,11 @@
 import { sendBackgroundMessage } from '../backgroundMessage.js';
 
 const STATE_KEY = '__gbPageEngineIndexClientV1';
+const INDEXABLE_SCHEMAS = new Set(['account', 'contact']);
+
+function readTerritory(settings = {}) {
+  return String(settings['pageEngine.territory'] || '').trim();
+}
 
 function createState() {
   const state = {
@@ -14,7 +19,7 @@ function createState() {
         const settings = changes.devSettings.newValue || {};
         state.config = {
           enabled: settings['pageEngine.indexingEnabled'] === true,
-          accountId: String(settings['pageEngine.accountId'] || '').trim(),
+          territory: readTerritory(settings),
         };
         state.configPromise = null;
       }
@@ -38,12 +43,12 @@ async function readConfig() {
           const settings = value?.devSettings || {};
           state.config = {
             enabled: settings['pageEngine.indexingEnabled'] === true,
-            accountId: String(settings['pageEngine.accountId'] || '').trim(),
+            territory: readTerritory(settings),
           };
           resolve(state.config);
         });
       } catch {
-        state.config = { enabled: false, accountId: '' };
+        state.config = { enabled: false, territory: '' };
         resolve(state.config);
       }
     });
@@ -69,9 +74,12 @@ function sourceUrlFor(doc, explicitUrl = '') {
  */
 export async function queueEngineSnapshot(result, { doc, sourceUrl } = {}) {
   if (!result?.schemaId || !result?.data) return { indexed: false, reason: 'no-snapshot' };
+  if (!INDEXABLE_SCHEMAS.has(result.schemaId)) {
+    return { indexed: false, reason: 'unsupported-schema' };
+  }
   const config = await readConfig();
   if (!config.enabled) return { indexed: false, reason: 'disabled' };
-  if (!config.accountId) return { indexed: false, reason: 'missing-account-id' };
+  if (!config.territory) return { indexed: false, reason: 'missing-territory' };
 
   const now = Date.now();
   return sendBackgroundMessage('pageEngineIndexPut', {

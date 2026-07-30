@@ -409,21 +409,21 @@ function __gbAccessAllowed(st, now) {
       return true;
     }
 
-    if (msg.action === 'pageEngineOwnerInfo') {
+    if (msg.action === 'pageEngineTerritoryInfo') {
       const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
-      if (!engine || typeof engine.inspectOwner !== 'function') {
+      if (!engine || typeof engine.inspectTerritory !== 'function') {
         sendResponse({ ok: false, error: 'Page Engine is unavailable on this page.' });
         return true;
       }
       try {
-        const owner = engine.inspectOwner(document);
-        if (!owner) {
-          sendResponse({ ok: false, error: 'This page does not match a supported Page Engine schema.' });
+        const territory = engine.inspectTerritory(document);
+        if (!territory) {
+          sendResponse({ ok: false, error: 'Open an Account or Contact page to extract its territory.' });
         } else {
-          sendResponse({ ok: true, ...owner });
+          sendResponse({ ok: true, ...territory });
         }
       } catch (error) {
-        sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page owner.' });
+        sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page territory.' });
       }
       return true;
     }

@@ -73,10 +73,14 @@ describe('settings migration · workflow and Custom Pages namespaces', () => {
 
     const migratedDev = normalizeStoredDevSettings({
       'campaignManager.scale': 0.75,
+      'pageEngine.accountId': '77',
       'numberDisplay.durationMs': 900,
     });
     assert.equal(migratedDev.settings['workflowManager.scale'], 0.75);
     assert.equal(Object.hasOwn(migratedDev.settings, 'campaignManager.scale'), false);
+    assert.equal(Object.hasOwn(migratedDev.settings, 'pageEngine.accountId'), false);
+    assert.equal(Object.hasOwn(migratedDev.settings, 'pageEngine.territory'), false,
+      'an owner ID cannot be guessed into the unrelated Territory namespace');
   });
 
   it('turns the old CRM page scope into one all-pages setting', () => {

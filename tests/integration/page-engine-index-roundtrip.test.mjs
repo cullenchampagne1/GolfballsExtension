@@ -1,7 +1,7 @@
 /**
- * Integration flow — every Page Engine extraction reaches one owner-gated,
- * encrypted worker store, whether the document is already extracted in a tab
- * or parsed/fetched by a background workflow.
+ * Integration flow — Account/Contact Page Engine extractions reach one
+ * territory-gated encrypted worker store, whether the document is already
+ * extracted in a tab or parsed/fetched by a background workflow.
  */
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ const stored = {
   gbApiInstallation: validInstallation(),
   devSettings: {
     'pageEngine.indexingEnabled': true,
-    'pageEngine.accountId': '77',
+    'pageEngine.territory': '15',
   },
 };
 
@@ -23,7 +23,48 @@ let background;
 let indexClient;
 let pageEngine;
 
+async function seedRetiredOwnerIndex() {
+  await new Promise((resolve, reject) => {
+    const request = fakeDb.indexedDB.open('gb-page-engine-index-secure', 1);
+    request.onupgradeneeded = () => {
+      const records = request.result.createObjectStore('entities', { keyPath: 'storageKey' });
+      records.createIndex('owner', 'owner', { unique: false });
+      records.createIndex('updatedAt', 'updatedAt', { unique: false });
+      records.createIndex('entityType', 'entityType', { unique: false });
+      const fields = request.result.createObjectStore('fields', { keyPath: 'fieldKey' });
+      fields.createIndex('recordKey', 'recordKey', { unique: false });
+      fields.createIndex('pathToken', 'pathToken', { unique: false });
+      fields.createIndex('exactToken', 'exactToken', { unique: false });
+      fields.createIndex('termTokens', 'termTokens', { unique: false, multiEntry: true });
+      request.result.createObjectStore('keys', { keyPath: 'id' });
+    };
+    request.onsuccess = resolve;
+    request.onerror = () => reject(request.error || new Error('Unable to seed retired index'));
+  });
+  const [encryptionKey, lookupKey] = await Promise.all([
+    crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']),
+    crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign']),
+  ]);
+  fakeDb.pageKeys.set('page-engine-device-keys-v1', {
+    id: 'page-engine-device-keys-v1',
+    keyVersion: 1,
+    encryptionKey,
+    lookupKey,
+  });
+  fakeDb.pageEntities.set('legacy-order', {
+    storageKey: 'legacy-order',
+    owner: 'legacy-owner-partition',
+    entityType: 'order',
+    updatedAt: 1,
+  });
+  fakeDb.pageFields.set('legacy-order-field', {
+    fieldKey: 'legacy-order-field',
+    recordKey: 'legacy-order',
+  });
+}
+
 before(async () => {
+  await seedRetiredOwnerIndex();
   const { fetchMock } = createFetchMock();
   background = await loadBackground({ stored, fetchImpl: fetchMock, indexedDb: fakeDb.indexedDB });
   background.chrome.runtime.sendMessage = (message, callback) => {
@@ -45,7 +86,11 @@ function contactSnapshot(overrides = {}) {
         companyName: 'Analytical Engines',
         email: 'ada@example.test',
       },
-      account: { name: 'Analytical Engines', salesRepId: '77', salesRep: 'Cullen Champagne' },
+      account: {
+        name: 'Analytical Engines',
+        territoryId: '15',
+        territoryName: 'P5 / BDR (Cullen)',
+      },
       stats: { totalRevenue: 1_250 },
       activities: [{ subject: 'Pricing follow up' }],
       orders: [{ number: '100', total: 400 }, { number: '101', total: 825 }],
@@ -55,6 +100,20 @@ function contactSnapshot(overrides = {}) {
 }
 
 describe('Page Engine index roundtrip', () => {
+  it('clears the retired owner-partitioned cache before Territory indexing begins', async () => {
+    assert.equal(fakeDb.pageEntities.size, 1);
+    assert.equal(fakeDb.pageFields.size, 1);
+    assert.deepEqual(await indexClient.getEngineIndexStats(), {
+      ok: true,
+      total: 0,
+      byType: {},
+      lastIndexedAt: null,
+    });
+    assert.equal(fakeDb.pageEntities.size, 0);
+    assert.equal(fakeDb.pageFields.size, 0);
+    assert.equal(fakeDb.pageKeys.size, 1, 'the non-extractable device key pair remains reusable');
+  });
+
   it('upserts multiple entity types and leaves identifiers and text encrypted at rest', async () => {
     await indexClient.queueEngineSnapshot(contactSnapshot(), {
       sourceUrl: 'https://crm.test/Default.aspx?Page=240&customerID=42',
@@ -64,7 +123,11 @@ describe('Page Engine index roundtrip', () => {
       data: {
         ids: { account: '900', contact: '42' },
         contact: { firstName: 'Ada', email: 'ada@example.test' },
-        account: { name: 'Analytical Engines', salesRepId: '77' },
+        account: {
+          name: 'Analytical Engines',
+          territoryId: '15',
+          territoryName: 'P5 / BDR (Cullen)',
+        },
         stats: { totalRevenue: 4_000 },
       },
     });
@@ -83,7 +146,7 @@ describe('Page Engine index roundtrip', () => {
     for (const entity of fakeDb.pageEntities.values()) {
       assert.equal(typeof entity.ciphertext, 'string');
       assert.equal(entity.storageKey.includes('42'), false);
-      assert.notEqual(entity.owner, '77');
+      assert.notEqual(entity.owner, '15');
     }
   });
 
@@ -115,13 +178,17 @@ describe('Page Engine index roundtrip', () => {
     assert.deepEqual(ordered.rows.map((row) => row.data.stats.totalRevenue), [4_000, 1_250]);
   });
 
-  it('rejects mismatched owners and upserts newer data under the same entity id', async () => {
+  it('rejects mismatched territories and upserts newer data under the same entity id', async () => {
     await assert.rejects(
       indexClient.queueEngineSnapshot(contactSnapshot({
         ids: { contact: '99', account: '901' },
-        account: { name: 'Other Account', salesRepId: '12' },
+        account: {
+          name: 'Other Account',
+          territoryId: '12',
+          territoryName: 'P4 / BDR (Joshua)',
+        },
       })),
-      /owner does not match/i,
+      /territory does not match/i,
     );
     assert.equal(fakeDb.pageEntities.size, 2);
 
@@ -150,12 +217,12 @@ describe('Page Engine index roundtrip', () => {
       <span id="lblContactEmail">grace@example.test</span>
       <input id="tbContactId" value="88">
       <input id="AccountID" value="902">
-      <select id="ddlSalesRepId"><option value="77" selected>Cullen Champagne</option></select>
+      <select id="TerritoryID"><option value="15" selected>P5 / BDR (Cullen)</option></select>
     `, { url: 'https://crm.test/Default.aspx?Page=240&customerID=88' }).window.document;
 
     const result = pageEngine.runEngine(doc);
     assert.equal(result.schemaId, 'contact');
-    assert.equal(result.data.account.salesRepId, '77');
+    assert.equal(result.data.account.territoryId, '15');
     await settle();
 
     const live = await indexClient.queryEngineIndex({
@@ -165,7 +232,7 @@ describe('Page Engine index roundtrip', () => {
     assert.equal(live.rows[0].data.contact.firstName, 'Grace');
   });
 
-  it('routes the developer owner inspection to the page that opened the manager', async () => {
+  it('routes the developer territory inspection to the page that opened the manager', async () => {
     stored.orderTabId = 37;
     background.chrome.tabs.get = (tabId, callback) => callback({
       id: tabId,
@@ -175,22 +242,47 @@ describe('Page Engine index roundtrip', () => {
     });
     background.chrome.tabs.sendMessage = (tabId, message, callback) => {
       assert.equal(tabId, 37);
-      assert.equal(message.action, 'pageEngineOwnerInfo');
+      assert.equal(message.action, 'pageEngineTerritoryInfo');
       callback({
         ok: true,
         schemaId: 'contact',
         recordId: '88',
         accountId: '902',
-        ownerId: '77',
-        ownerName: 'Cullen Champagne',
+        territoryId: '15',
+        territoryName: 'P5 / BDR (Cullen)',
       });
     };
 
-    const inspected = await background.sendMessage({ action: 'pageEngineInspectOwner' });
+    const inspected = await background.sendMessage({ action: 'pageEngineInspectTerritory' });
     assert.equal(inspected.ok, true, inspected.error);
     assert.equal(inspected.tabId, 37);
-    assert.equal(inspected.ownerId, '77');
-    assert.equal(inspected.ownerName, 'Cullen Champagne');
+    assert.equal(inspected.territoryId, '15');
+    assert.equal(inspected.territoryName, 'P5 / BDR (Cullen)');
+  });
+
+  it('never stores standalone Order or Opportunity page snapshots', async () => {
+    const before = fakeDb.pageEntities.size;
+    assert.deepEqual(
+      await indexClient.queueEngineSnapshot({
+        schemaId: 'order',
+        data: {
+          ids: { order: '5001', account: '900' },
+          account: { territoryId: '15', territoryName: 'P5 / BDR (Cullen)' },
+        },
+      }),
+      { indexed: false, reason: 'unsupported-schema' },
+    );
+    assert.deepEqual(
+      await indexClient.queueEngineSnapshot({
+        schemaId: 'opportunity',
+        data: {
+          ids: { opportunity: '28042', account: '900' },
+          account: { territoryId: '15', territoryName: 'P5 / BDR (Cullen)' },
+        },
+      }),
+      { indexed: false, reason: 'unsupported-schema' },
+    );
+    assert.equal(fakeDb.pageEntities.size, before);
   });
 
   it('honors the disabled default for writes while retaining explicit cache maintenance', async () => {

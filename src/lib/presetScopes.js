@@ -107,7 +107,10 @@ const ALL_KEYS = [...new Set(PRESET_SCOPES.flatMap((s) => s.keys))];
 const INSTALLATION_LOCAL_DEV_SETTING_KEYS = Object.freeze([
   'email.localPart',
   'pageEngine.indexingEnabled',
+  // Retain the retired owner key in the denylist so old exported files cannot
+  // reintroduce it while the canonical local gate is Territory.
   'pageEngine.accountId',
+  'pageEngine.territory',
 ]);
 
 function withoutCredentials(value) {

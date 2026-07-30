@@ -140,19 +140,19 @@ describe('shared detail pages · task owner extraction', () => {
   });
 });
 
-describe('Page Engine ownership and stable ids', () => {
-  it('extracts the configured sales-rep id from account-shaped CRM pages', () => {
+describe('Page Engine territory and stable ids', () => {
+  it('extracts the Territory value and visible name from account-shaped CRM pages', () => {
     const doc = new JSDOM(`
       <input id="AccountID" value="902">
-      <select id="ddlSalesRepId">
-        <option value="12">Other Rep</option>
-        <option value="77" selected>Cullen Champagne</option>
+      <select id="TerritoryID">
+        <option value="12">P4 / BDR (Joshua)</option>
+        <option value="15" selected>P5 / BDR (Cullen)</option>
       </select>
     `).window.document;
     const result = extract(accountSchema, doc);
     assert.equal(result.data.ids.account, '902');
-    assert.equal(result.data.account.salesRep, 'Cullen Champagne');
-    assert.equal(result.data.account.salesRepId, '77');
+    assert.equal(result.data.account.territoryId, '15');
+    assert.equal(result.data.account.territoryName, 'P5 / BDR (Cullen)');
   });
 
   it('extracts the opportunity id required for stable opportunity upserts', () => {

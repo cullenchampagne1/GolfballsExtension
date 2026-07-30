@@ -1108,17 +1108,17 @@
         "policy": "installation-local; never enabled by shared policy or settings templates"
       },
       {
-        "key": "pageEngine.accountId",
+        "key": "pageEngine.territory",
         "type": "string",
         "default": "",
-        "label": "Engine Account Id",
-        "policy": "installation-local exact sales-rep/account-owner id"
+        "label": "Engine Territory",
+        "policy": "installation-local exact Territory ID or visible name"
       },
       {
-        "key": "pageEngine.inspectOwner",
+        "key": "pageEngine.inspectTerritory",
         "type": "action",
-        "label": "Extract current page owner ID",
-        "controls": "Runs the Page Engine against the page that opened the manager and reports the numeric owner ID in a notification"
+        "label": "Extract current page territory",
+        "controls": "Runs the Page Engine against the Account or Contact page that opened the manager and reports the Territory value and name in a notification"
       },
       {
         "key": "marginCalc.minAllowedMargin",
@@ -1598,7 +1598,7 @@
     {
       "key": "gb-page-engine-index-secure / entities",
       "area": "extension IndexedDB",
-      "contains": "owner-partitioned AES-GCM encrypted Page Engine snapshots keyed by HMAC-blinded entity identity"
+      "contains": "Territory-partitioned AES-GCM encrypted Account/Contact Page Engine snapshots keyed by HMAC-blinded entity identity"
     },
     {
       "key": "gb-page-engine-index-secure / fields",
@@ -1625,7 +1625,8 @@
       "excludedDevSettings": [
         "email.localPart",
         "pageEngine.indexingEnabled",
-        "pageEngine.accountId"
+        "pageEngine.accountId",
+        "pageEngine.territory"
       ],
       "merge": "overwrite"
     },

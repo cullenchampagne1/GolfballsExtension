@@ -15,7 +15,7 @@
 import {
   runEngine,
   clearCache,
-  inspectPageOwner,
+  inspectPageTerritory,
   resolvePath,
   evaluateCode,
   extract,
@@ -48,7 +48,7 @@ const api = Object.freeze({
      extracted JSON per-doc so repeat calls are free. */
   runEngine,
   clearCache,
-  inspectOwner: inspectPageOwner,
+  inspectTerritory: inspectPageTerritory,
   resolvePath,
   evaluateCode,
 
@@ -73,7 +73,7 @@ const api = Object.freeze({
   listSchemas,
   getSchemaById,
 
-  /* Durable, owner-gated local cache. Writes happen automatically on
+  /* Durable, territory-gated local cache. Writes happen automatically on
      extraction; these are the internal query/maintenance boundaries for
      future features. */
   engineIndex: Object.freeze({
@@ -115,7 +115,8 @@ if (typeof window !== 'undefined') {
   const indexLoadedPage = () => {
     getEngineIndexConfig()
       .then((config) => {
-        if (config.enabled && config.accountId) {
+        if (config.enabled && config.territory
+            && ['account', 'contact'].includes(detectSchema(document)?.id)) {
           clearCache(document);
           runEngine(document);
         }
