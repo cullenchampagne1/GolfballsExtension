@@ -29,7 +29,7 @@ import {
   fmtCurrency, fmtNumber, fmtDate, coalesce, titleCase,
   parseNumber, parseDate, normalizePhone,
 } from '../lib/page-engine/transforms.js';
-import { codeBodyLengthError } from '../lib/page-engine/code-limits.js';
+import { assertCodeBodyAllowed } from '../lib/page-engine/code-precheck.js';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const EXEC_TIMEOUT_MS = 10000;
@@ -37,25 +37,8 @@ const CHANNEL = decodeURIComponent(location.hash.slice(1));
 
 if (!/^[a-f0-9]{48}$/.test(CHANNEL)) throw new Error('invalid sandbox channel');
 
-/* Mirror of code-runtime.js BLOCKED_PATTERNS — keep in sync. */
-const BLOCKED_PATTERNS = [
-  { re: /\bwhile\s*\(\s*true\s*\)/i, reason: 'infinite while loop' },
-  { re: /\bfor\s*\(\s*;\s*;\s*\)/,   reason: 'infinite for loop' },
-  { re: /\bfetch\s*\(/,              reason: 'use h.fetchJson / h.fetchText instead of fetch()' },
-  { re: /\bchrome\b/,                reason: 'chrome APIs not allowed' },
-  { re: /\bimport\s*\(/,             reason: 'dynamic import not allowed' },
-  { re: /\beval\s*\(/,               reason: 'eval not allowed' },
-  { re: /\bFunction\s*\(/,           reason: 'Function constructor not allowed' },
-  { re: /\bsetTimeout\s*\(/,         reason: 'setTimeout not allowed' },
-  { re: /\bsetInterval\s*\(/,        reason: 'setInterval not allowed' },
-  { re: /\bnew\s+Worker\b/,           reason: 'Worker not allowed' },
-  { re: /\bXMLHttpRequest\b/,         reason: 'XHR not allowed' },
-  { re: /\b(?:window|globalThis|parent|top|opener|postMessage)\b/, reason: 'ambient window access not allowed' },
-];
 function precheck(body) {
-  const lengthIssue = codeBodyLengthError(body);
-  if (lengthIssue) throw new Error(lengthIssue);
-  for (const { re, reason } of BLOCKED_PATTERNS) if (re.test(body)) throw new Error(`blocked: ${reason}`);
+  assertCodeBodyAllowed(body);
 }
 function wrapBody(body) {
   return /\breturn\b/.test(body) ? `"use strict";\n${body}` : `"use strict";\nreturn (${body});`;

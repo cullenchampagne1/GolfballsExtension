@@ -333,7 +333,7 @@ function chooseCycle(anniversary) {
   if (firstNum > todayNum) return { cycleYear, ...cycle };
 
   // First task already passed. Keep this year's cycle ONLY when it is still
-  // in progress AND some existing task (open or done) sits inside its window
+  // in progress AND some existing task (open or done) sits inside its cycle
   // — evidence the cycle was actually started. Otherwise plan next year's.
   const inFlight = lastNum >= todayNum && anniversaryPool.some((task) => {
     const dueNum = taskDueNum(task);
@@ -581,7 +581,7 @@ for (const task of doneTasks) {
   noteTouch(taskDueNum(task));
 }
 // A completed quarterly reach-out covers its own quarter (dated), or claims
-// its window slot when undated — but its date is not a future touch.
+// its quarter slot when undated — but its date is not a future touch.
 const windowSlots = [0, 1, 2, 3].map((offset) => rollingQuarter(offset, today));
 for (const task of doneTasks) {
   const match = String(task.subject || "").match(QUARTERLY_SUBJECT_RE);
@@ -598,10 +598,10 @@ for (const task of doneTasks) {
 /* ── Quarterly reach-outs: gap-midpoint placement + mediation ── */
 
 /* The reach-out belongs in the middle of the real gap around the quarter:
-   from the last touch at or before the window start (or the window start
+   from the last touch at or before the quarter start (or the quarter start
    itself) to the next touch when one lands by the end of the FOLLOWING
    quarter, otherwise to the start of the following quarter. Touches inside
-   the window split it — the reach-out takes the middle of the LARGEST gap,
+   the quarter split it — the reach-out takes the middle of the LARGEST gap,
    clamped into the quarter and never in the past. */
 function gapMidpointForSlot(slot, busy) {
   const qStartNum = calendarDayNumber(new Date(slot.year, (slot.quarter - 1) * 3, 1, 12));

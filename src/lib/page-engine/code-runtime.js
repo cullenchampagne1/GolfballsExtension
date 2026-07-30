@@ -56,7 +56,7 @@ import {
 } from './transforms.js';
 import { loadCatalog } from '../giftCatalog.js';
 import { runEngine } from './runner.js';
-import { codeBodyLengthError } from './code-limits.js';
+import { assertCodeBodyAllowed, staticCheckCodeBody } from './code-precheck.js';
 
 /* Async path only — server calls route through the background worker,
    so allow enough headroom for several slow CDN / Solr round-trips
@@ -67,24 +67,6 @@ const EXEC_TIMEOUT_MS = 10000;
 
 /* AsyncFunction isn't a global binding — derive its constructor. */
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-
-/* Patterns we straight-up refuse. Not a security boundary — a
-   tripwire. Privileged work is the helpers' job, so a real body never
-   needs these tokens. Order matters: most-likely first. */
-const BLOCKED_PATTERNS = [
-  { re: /\bwhile\s*\(\s*true\s*\)/i,           reason: 'infinite while loop' },
-  { re: /\bfor\s*\(\s*;\s*;\s*\)/,             reason: 'infinite for loop' },
-  { re: /\bfetch\s*\(/,                        reason: 'use h.fetchJson / h.fetchText instead of fetch()' },
-  { re: /\bchrome\b/,                          reason: 'chrome APIs not allowed' },
-  { re: /\bimport\s*\(/,                       reason: 'dynamic import not allowed' },
-  { re: /\beval\s*\(/,                         reason: 'eval not allowed' },
-  { re: /\bFunction\s*\(/,                     reason: 'Function constructor not allowed' },
-  { re: /\bsetTimeout\s*\(/,                   reason: 'setTimeout not allowed' },
-  { re: /\bsetInterval\s*\(/,                  reason: 'setInterval not allowed' },
-  { re: /\bnew\s+Worker\b/,                    reason: 'Worker not allowed' },
-  { re: /\bXMLHttpRequest\b/,                  reason: 'XHR not allowed' },
-  { re: /\b(?:window|globalThis|parent|top|opener|postMessage)\b/, reason: 'ambient window access not allowed' },
-];
 
 /* Fetch coalescing + short-lived cache, shared across every resolution.
    Variable resolution runs the full set repeatedly — the popup re-resolves
@@ -455,11 +437,7 @@ export function helpersFor(doc) {
 /* Shared pre-compile validation: length + blocklist. Throws on the
    first problem (caller surfaces the message). */
 function precheck(body) {
-  const lengthIssue = codeBodyLengthError(body);
-  if (lengthIssue) throw new Error(lengthIssue);
-  for (const { re, reason } of BLOCKED_PATTERNS) {
-    if (re.test(body)) throw new Error(`blocked: ${reason}`);
-  }
+  assertCodeBodyAllowed(body);
 }
 
 /** CSP-safe static validation (length + blocklist only — NO eval).
@@ -469,12 +447,7 @@ function precheck(body) {
  *  body passes the static checks. The real compile happens at
  *  resolution time, in the page context. */
 export function staticCheck(body) {
-  const lengthIssue = codeBodyLengthError(body);
-  if (lengthIssue) return lengthIssue;
-  for (const { re, reason } of BLOCKED_PATTERNS) {
-    if (re.test(body)) return `blocked: ${reason}`;
-  }
-  return null;
+  return staticCheckCodeBody(body);
 }
 
 /* Bodies WITHOUT a visible `return` are wrapped so the last

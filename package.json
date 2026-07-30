@@ -157,6 +157,10 @@
       "file": "tests/unit/crmSearchSelection.test.mjs"
     },
     {
+      "name": "crm \u00b7 search presentation icon contract",
+      "file": "tests/unit/crmSearchPresentation.test.mjs"
+    },
+    {
       "name": "crm \u00b7 contact CustomData merge preserves server keys",
       "file": "tests/unit/contactCustomData.test.mjs"
     },
@@ -343,6 +347,10 @@
     {
       "name": "guard \u00b7 code-engine sandbox runner",
       "file": "tests/unit/codeEngineSandboxRunner.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 code-engine sandbox precheck",
+      "file": "tests/unit/codePrecheck.test.mjs"
     },
     {
       "name": "guard \u00b7 code-engine user.* binding",

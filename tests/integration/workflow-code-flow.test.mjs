@@ -14,8 +14,10 @@ import {
 import { runCodeWorkflow } from '../../src/lib/workflow/codeRunner.js';
 import { makeExecutor } from '../../src/lib/codeEngine/executor.js';
 import { shapeLivePage } from '../../src/lib/codeEngine/liveActionRun.js';
-import { makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
+import { instrument } from '../../src/lib/codeEngine/instrument.js';
+import { buildTraceBody, makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
+import { staticCheckCodeBody } from '../../src/lib/page-engine/code-precheck.js';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const RECONCILIATION_WORKFLOW = readFileSync(
@@ -358,6 +360,16 @@ describe('workflow code flow', () => {
     const actionBody = RECONCILIATION_ACTION.slice(RECONCILIATION_ACTION.indexOf(marker));
     assert.ok(workflowBody.length > 1000, 'the workflow body marker exists');
     assert.equal(actionBody, workflowBody, 'the action file body must not drift from the workflow body');
+  });
+
+  it('ships a contact-page action accepted by the live sandbox guard', () => {
+    const traceBody = buildTraceBody(instrument(RECONCILIATION_ACTION).code);
+    assert.equal(staticCheckCodeBody(traceBody), null);
+    assert.match(
+      staticCheckCodeBody('return window.location.href;'),
+      /blocked: ambient window access not allowed/,
+      'real ambient window access must remain blocked',
+    );
   });
 
   it('initiates a brand-new record from its own page through the action surface', async () => {
