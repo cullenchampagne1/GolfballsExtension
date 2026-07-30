@@ -65,4 +65,16 @@ describe('Workflow Manager presentation scale', () => {
     assert.match(blocksSource, /key=\{`\$\{block\.id\}:\$\{d\.runs\}`\}/);
     assert.match(blocksSource, /CALLED ×\{d\.runs\}/);
   });
+
+  it('confirms a live run without hydrating or simulating a contact first', () => {
+    const start = managerSource.indexOf('const startRun = () =>');
+    const end = managerSource.indexOf('\n\n  return (', start);
+    const startRunSource = managerSource.slice(start, end);
+
+    assert.ok(start >= 0 && end > start);
+    assert.match(startRunSource, /planRunFromPipeline\(program\.pipeline, audienceKeyed\.length\)/);
+    assert.doesNotMatch(startRunSource, /prepareWorkflowContact|simulateProgram|audienceKeyed\[0\]/);
+    assert.match(managerSource, /each contact is loaded and evaluated once/);
+    assert.doesNotMatch(managerSource, /Total effects/);
+  });
 });

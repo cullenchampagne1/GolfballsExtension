@@ -1,10 +1,10 @@
 /* ───────────────────────────────────────────────────────────────
-   codeEngine/runPlan — summarize what a REAL run will do.
+   codeEngine/runPlan — summarize simulations and live-run source paths.
 
-   A dry simulation produces a trace of would-be steps. Before a live run
-   actually sends/writes, we show the rep exactly what will happen and the
-   strongest gate required, so nothing outward/irreversible fires without
-   an explicit confirm. Pure: trace in, plan out.
+   Trace plans describe what one completed simulation actually did. Pipeline
+   plans describe which write paths exist in source without loading a CRM
+   record; the live runner then evaluates every contact exactly once. Both
+   projections retain the strongest explicit-confirmation gate.
 ─────────────────────────────────────────────────────────────── */
 
 import { contractGate } from './contracts.js';
@@ -12,13 +12,18 @@ import { contractGate } from './contracts.js';
 const GATE_RANK = { auto: 0, confirm: 1, hard: 2 };
 const EFFECT_CONTRACTS = ['sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask', 'editContact'];
 
+function emptyCounts() {
+  const counts = Object.create(null);
+  for (const contract of EFFECT_CONTRACTS) counts[contract] = 0;
+  return counts;
+}
+
 /**
  * @param {Array<{contract:string, status:string}>} trace  simulateProgram trace
  * @param {number} audienceCount  how many contacts a real run would sweep
  */
 export function planRun(trace, audienceCount = 1) {
-  const counts = Object.create(null);
-  for (const c of EFFECT_CONTRACTS) counts[c] = 0;
+  const counts = emptyCounts();
   let maxGate = 'auto';
   let failed = 0;
   for (const t of Array.isArray(trace) ? trace : []) {
@@ -45,7 +50,7 @@ export function planRun(trace, audienceCount = 1) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** Human one-liner for the confirm dialog (per-contact figures). */
+/** Human one-liner for an already-evaluated trace (per-contact figures). */
 export function planSummary(plan) {
   const c = plan.counts;
   const parts = [];
@@ -57,4 +62,47 @@ export function planSummary(plan) {
   if (c.logCall) parts.push(plural(c.logCall, 'call log'));
   if (c.addNote) parts.push(plural(c.addNote, 'activity note'));
   return parts.join(' · ') || 'no effects';
+}
+
+/**
+ * Build the live-run confirmation from the already-parsed source pipeline.
+ *
+ * Unlike `planRun(trace)`, this never evaluates a contact. Counts describe
+ * source-level write paths only: conditions may skip them and loops may run a
+ * path more than once. The real runner remains the sole place records are
+ * hydrated and effects are decided.
+ */
+export function planRunFromPipeline(pipeline, audienceCount = 1) {
+  const counts = emptyCounts();
+  let maxGate = 'auto';
+  for (const step of Array.isArray(pipeline) ? pipeline : []) {
+    const contract = step?.contract;
+    if (counts[contract] == null) continue;
+    counts[contract] += 1;
+    const gate = contractGate(contract);
+    if (gate && GATE_RANK[gate] > GATE_RANK[maxGate]) maxGate = gate;
+  }
+  const effectSteps = EFFECT_CONTRACTS.reduce((total, contract) => total + counts[contract], 0);
+  return {
+    counts,
+    maxGate,
+    effectSteps,
+    audienceCount: Math.max(0, Math.floor(Number(audienceCount) || 0)),
+    hasEffects: effectSteps > 0,
+    exact: false,
+  };
+}
+
+/** Human summary of source-level action paths (never an audience estimate). */
+export function pipelinePlanSummary(plan) {
+  const c = plan?.counts || {};
+  const parts = [];
+  if (c.sendEmail) parts.push(plural(c.sendEmail, 'email step'));
+  if (c.editContact) parts.push(plural(c.editContact, 'contact-edit step'));
+  if (c.updateTask) parts.push(plural(c.updateTask, 'task-edit step'));
+  if (c.completeTask) parts.push(plural(c.completeTask, 'task-completion step'));
+  if (c.createTask) parts.push(plural(c.createTask, 'task-create step'));
+  if (c.logCall) parts.push(plural(c.logCall, 'call-log step'));
+  if (c.addNote) parts.push(plural(c.addNote, 'activity-note step'));
+  return parts.join(' · ') || 'no CRM write paths';
 }

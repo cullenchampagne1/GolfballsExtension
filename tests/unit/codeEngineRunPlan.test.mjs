@@ -1,9 +1,14 @@
 /**
- * runPlan — summarize what a real run will do (drives the confirm gate).
+ * runPlan — summarize evaluated traces and source-only live-run plans.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { planRun, planSummary } from '../../src/lib/codeEngine/runPlan.js';
+import {
+  pipelinePlanSummary,
+  planRun,
+  planRunFromPipeline,
+  planSummary,
+} from '../../src/lib/codeEngine/runPlan.js';
 
 const TRACE = [
   { contract: 'evaluate', status: 'ran' },
@@ -32,8 +37,29 @@ describe('runPlan', () => {
     assert.equal(plan.hasEffects, true);
   });
 
-  it('summarizes for the confirm dialog', () => {
+  it('summarizes an evaluated trace', () => {
     assert.match(planSummary(planRun(TRACE)), /1 email · 1 contact edit · 1 task edit · 1 task completed · 1 activity note/);
     assert.equal(planSummary(planRun([{ contract: 'evaluate', status: 'ran' }])), 'no effects');
+  });
+
+  it('plans a large live audience from source paths without estimating per-contact writes', () => {
+    const plan = planRunFromPipeline([
+      { id: 'read', contract: 'evaluate' },
+      { id: 'email-branch', contract: 'sendEmail' },
+      { id: 'task-loop', contract: 'createTask' },
+      { id: 'return', contract: null },
+    ], 2_000);
+
+    assert.equal(plan.audienceCount, 2_000);
+    assert.equal(plan.effectSteps, 2);
+    assert.equal(plan.counts.sendEmail, 1);
+    assert.equal(plan.counts.createTask, 1);
+    assert.equal(plan.hasEffects, true);
+    assert.equal(plan.exact, false);
+    assert.equal(Object.hasOwn(plan, 'total'), false);
+    assert.equal(
+      pipelinePlanSummary(plan),
+      '1 email step · 1 task-create step',
+    );
   });
 });

@@ -23,7 +23,7 @@ import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
 import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
 import { makeExecutor } from '../lib/codeEngine/executor.js';
-import { planRun, planSummary } from '../lib/codeEngine/runPlan.js';
+import { pipelinePlanSummary, planRunFromPipeline } from '../lib/codeEngine/runPlan.js';
 import { readEmailConfig, sendEmail } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
@@ -758,6 +758,7 @@ function WorkflowSettings({ workflow, onChange }) {
 /* Real-run confirmation — nothing outward/irreversible fires without this. */
 function ConfirmRunModal({ plan, summary, audience, onConfirm, onCancel }) {
   const [busy, setBusy] = useState(false);
+  const audienceLabel = Number(audience || 0).toLocaleString();
   return (
     <div className="gb-workflow-scope" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -768,15 +769,15 @@ function ConfirmRunModal({ plan, summary, audience, onConfirm, onCancel }) {
         </div>
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 12.5, color: 'var(--gb-text-secondary)', lineHeight: 1.6 }}>
-            This will apply live changes to the CRM — <b>not a dry run</b>. Per contact: <b>{summary}</b>.
+            This will apply live changes to the CRM — <b>not a dry run</b>. The workflow contains <b>{summary}</b>.
           </div>
           <div style={{ display: 'flex', gap: 18, padding: '10px 12px', background: 'var(--gb-fill-subtle)', borderRadius: 'var(--gb-r-md)' }}>
-            <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Contacts</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{audience}</div></div>
-            <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Total effects</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>{plan.total}</div></div>
-            {plan.counts.sendEmail ? <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Emails</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)' }}>{plan.counts.sendEmail * audience}</div></div> : null}
+            <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Contacts</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{audienceLabel}</div></div>
+            <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Write paths</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>{plan.effectSteps}</div></div>
+            {plan.counts.sendEmail ? <div><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Email paths</div><div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)' }}>{plan.counts.sendEmail}</div></div> : null}
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-            Runs are not de-duplicated — running again repeats the effects. Each email renders against its audience record, so verify with a single contact first.
+            No contact is loaded for this confirmation. After you confirm, each contact is loaded and evaluated once; conditions and loops determine its actual writes at run time.
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
@@ -1099,30 +1100,17 @@ export function WorkflowManager({ onClose, contacts = [] }) {
     });
   };
 
-  const startRun = async () => {
+  const startRun = () => {
     if (!audienceKeyed.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
     if (!program.effectCount) { toast?.warning?.('Add a CRM action before running.'); return; }
     if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
     if (dryRun) { beginDryRun(); return; }
-    // A real run — dry-preview one contact to compute the impact, then confirm.
-    let preview;
-    try {
-      const contact = audienceKeyed[0] || {};
-      const prepared = await prepareWorkflowContact(contact, audienceKeyed);
-      const evaluateRef = (ref) => evaluateWorkflowTemplate(ref, prepared.context);
-      preview = await simulateProgram(workflow.automation || '', prepared.page, {
-        run: makeSandboxRunner({
-          exec: runInSandbox,
-          doc: prepared.context?.doc,
-          evaluateRef,
-        }),
-        user: userData,
-        evaluateRef,
-      });
-    } catch (e) { toast?.error?.('Couldn’t preview the run — ' + String(e?.message || e)); return; }
-    const plan = planRun(preview.trace, audienceKeyed.length);
+    // Confirm from the parsed source only. Hydration belongs exclusively to
+    // the real runner so even a 2,000-contact audience loads each record once,
+    // in sequence, with its normal animation and pacing.
+    const plan = planRunFromPipeline(program.pipeline, audienceKeyed.length);
     if (!plan.hasEffects) { toast?.warning?.('Nothing to run — no sends/edits/completes.'); return; }
-    setConfirmRun({ plan, summary: planSummary(plan) });
+    setConfirmRun({ plan, summary: pipelinePlanSummary(plan) });
   };
 
   return (

@@ -21,7 +21,7 @@ export const EFFECT_CLASSES = Object.freeze(['read', 'local', 'remote', 'outward
 export const GATE_BY_EFFECT = Object.freeze({
   read: 'auto',      // no prompt
   local: 'auto',     // trivially reversible
-  remote: 'confirm', // CRM write — visible preview + click
+  remote: 'confirm', // CRM write — source action plan + click
   outward: 'confirm',// sends something external
   money: 'hard',     // never auto-runs; explicit human confirmation + admin gate
 });
