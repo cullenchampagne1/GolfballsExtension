@@ -431,7 +431,13 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
           </span>
           {showRating && p.rating && <Rating value={p.rating} count={p.reviews} size={10} />}
         </div>
-        <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
+        {/* Fixed 2-line INTEGER-px title box in BOTH modes. An `em` min-height
+            (and letting compact titles size to 1–2 lines) gave cards fractional
+            and uneven heights; under the catalog's magnifying `transform: scale`
+            those fractional row heights accumulate and the next row creeps up
+            into this one. A fixed integer height makes every card — and every
+            grid row — identical, so rows can't overlap. */}
+        <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: compact ? 32 : 34, flexShrink: 0 }}>{p.title}</div>
         {p.sku && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
             <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>

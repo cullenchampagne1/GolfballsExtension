@@ -11,6 +11,14 @@ const cachedStorage = (cacheWrites = []) => ({
 });
 
 describe('employee identity', () => {
+  it('reads the signed-in employee id from the CRM toolbar on Search pages', () => {
+    const searchPage = new JSDOM(
+      '<iframe id="ccaiFrame" src="/toolbar/index.html?mode=crm&userId=48174"></iframe>',
+      { url: 'https://api.golfballs.com/golfballs/crm/Admin/Default.aspx?Page=360' },
+    );
+    assert.equal(employeeIdFromDocument(searchPage.window.document), '48174');
+  });
+
   it('reads the employee id from an inline window.employeeID script', () => {
     const scripted = new JSDOM('<script>window.employeeID = 48174;</script>');
     assert.equal(employeeIdFromDocument(scripted.window.document), '48174');

@@ -295,6 +295,19 @@ export function nextTaskTempId() {
   return __gbTaskTmp;
 }
 
+/**
+ * Reload the page after a create, the way the native CRM postback does, so the
+ * new task/opportunity comes back from the server WITH its real backend id and
+ * the page engine re-extracts it. Optimistically inserting a row is pointless
+ * here: the backend owns the id, so a client-side row can only carry a fake
+ * temp id (useless for editing, completing, or linking the record). A short
+ * delay lets the success toast flash before the reload. Mirrors the existing
+ * post-write reload in the Actions Shelf phone-update path.
+ */
+export function reloadForFreshIds(delay = 1000) {
+  setTimeout(() => { try { window.location.reload(); } catch { /* no window */ } }, delay);
+}
+
 export const OPP_STAGES = [
   { value: '1', label: 'Open' }, { value: '2', label: 'Proposed' }, { value: '3', label: 'Ordered' },
   { value: '4', label: 'Closed - Won' }, { value: '5', label: 'Closed - Lost' }, { value: '6', label: 'Automation' },
@@ -752,17 +765,13 @@ export function OpportunityModal({ opportunityId }) {
     if (!o.Subject.trim() || busy) return;
     setBusy(true);
     try {
-      const { payload, resp } = await crmSaveOpportunity(D.ids.contact, o);
-      const id = payload.opportunityId || resp.opportunityId || `new-${nextTaskTempId()}`;
-      const stageLabel = (OPP_STAGES.find((s) => s.value === payload.OpportunityStageId) || {}).label || '';
-      const ownerLabel = (empOpts.find((option) => String(option.value) === String(payload.empAssignedId)) || {}).label || 'Account Owner';
-      patch((Dd) => {
-        const row = { id: String(id), subject: payload.Subject, owner: ownerLabel, stage: stageLabel, estimatedValue: Number(payload.EstimatedValue) || 0, estimatedCloseDate: payload.EstimatedClosedDate };
-        const list = Dd.opportunities || [];
-        const exists = list.some((x) => String(x.id) === String(id));
-        return { ...Dd, opportunities: exists ? list.map((x) => String(x.id) === String(id) ? { ...x, ...row } : x) : [row, ...list] };
-      });
+      // The write is the source of truth. Instead of guessing an optimistic row
+      // (which would carry a fake temp id on create), reload like the native
+      // postback so the server returns the opportunity with its real id.
+      await crmSaveOpportunity(D.ids.contact, o);
+      gbToast(editing ? 'Opportunity updated' : 'Opportunity created', 'success');
       closeModal();
+      reloadForFreshIds();
     } catch (e) { gbToast('Could not save opportunity', 'error'); setBusy(false); }
   };
   return (
@@ -1854,8 +1863,13 @@ export function TasksPanel({ canCreate = true }) {
   const editTask = (t) => openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />);
   const [quickTask, setQuickTask] = useState('');
   const [adding, setAdding] = useState(false);
-  // Optimistically prepend a row (after a real create) and animate it in.
-  const addRow = (row) => patch((Dd) => ({ ...Dd, openTasks: [{ id: `new-${nextTaskTempId()}`, category: '', status: 'Open', ...row }, ...(Dd.openTasks || [])] }));
+  // After a REAL create, reload the page like the native postback so the new
+  // task returns from the server with its real id (the page engine re-extracts
+  // #TableTasks). An optimistic client row could only carry a useless temp id.
+  const addRow = (row) => {
+    gbToast(`Task created${row && row.subject ? ` · ${row.subject}` : ''}`, 'success');
+    reloadForFreshIds();
+  };
   // A quick-task button: fire the referenced saved template directly, no modal.
   const runTaskTemplate = async (chip) => {
     try {

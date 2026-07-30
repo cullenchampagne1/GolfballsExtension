@@ -21,6 +21,7 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { runEngine, resolvePath, evaluateCode } from '../page-engine/index.js';
+import { resolveEmployeeId, validEmployeeId } from '../employeeIdentity.js';
 import { SIGNAL_BY_ID } from './fields.js';
 import { resolveWorkflowRecordIds } from './codeContext.js';
 
@@ -129,6 +130,12 @@ export async function buildContactContext(contact, deps = {}) {
     || resolvePath(doc, 'contact.email') || contact.email || '').toString();
   const contactName = `${first} ${last}`.trim() || contact.contactName || contact.name || '';
   const accountId = recordIds.accountId;
+  // A CRM Search launch starts from a page that may not have populated the
+  // extension cache. The hydrated contact/account HTML still carries the
+  // authenticated toolbar identity, so resolve against that fetched document
+  // before falling back to memory/storage.
+  const employeeId = validEmployeeId(rep.employeeId)
+    || await resolveEmployeeId({ doc: doc || undefined });
 
   // "Do not contact" flag — set when the phrase appears in the name or email
   // (case-insensitive, flexible whitespace). Reps stash it in those fields.
@@ -151,7 +158,7 @@ export async function buildContactContext(contact, deps = {}) {
 
   return {
     contact, html, doc, data, signals, error,
-    contactId, employeeId: rep.employeeId || '', phone, contactName, firstName: first, lastName: last, email, accountId,
+    contactId, employeeId, phone, contactName, firstName: first, lastName: last, email, accountId,
     bounceCode, mailerRemoved, doNotContact,
     emailConfig, signature, fromLocalPart, dispatch, dryRun,
     getValue,

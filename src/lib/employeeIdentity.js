@@ -13,6 +13,20 @@ export function validEmployeeId(value) {
 export function employeeIdFromDocument(doc = globalThis.document) {
   if (!doc) return '';
 
+  // The CRM's authenticated toolbar carries the signed-in employee id in its
+  // iframe URL on pages (notably CRM Search) that do not repeat the usual
+  // employee form field or inline variable. This is the same authoritative
+  // source the legacy smartUserId() detector uses.
+  const authFrame = doc.getElementById?.('ccaiFrame');
+  for (const source of [
+    authFrame?.getAttribute?.('src'),
+    authFrame?.getAttribute?.('data-src'),
+    authFrame?.src,
+  ]) {
+    const id = validEmployeeId((String(source || '').match(/[?&]userId=(\d{1,12})/i) || [])[1]);
+    if (id) return id;
+  }
+
   const fields = [
     '#employeeID', '#EmployeeID', '#employeeId', '#EmployeeId',
     '[name="employeeID"]', '[name="EmployeeID"]',

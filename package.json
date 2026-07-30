@@ -621,6 +621,10 @@
       "file": "tests/unit/settingsMenus.test.mjs"
     },
     {
+      "name": "crm \u00b7 custom page create reloads for real ids",
+      "file": "tests/unit/crmDetailReload.test.mjs"
+    },
+    {
       "name": "remote \u00b7 update-channel integrity",
       "file": "tests/integration/remoteIntegrity.test.mjs"
     },

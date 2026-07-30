@@ -28,6 +28,7 @@ import { readEmailConfig, sendEmail } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { submitCallLog } from '../lib/submitCallLog.js';
+import { resolveEmployeeId } from '../lib/employeeIdentity.js';
 import { completeTaskById, updateTaskById } from '../lib/crmTasks.js';
 import { crmUpdateContact } from '../lib/crm-detail-shared.jsx';
 import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
@@ -307,7 +308,7 @@ function makeContactExecutor(context, runDeps, dispatch) {
   return makeExecutor({
     ctx: {
       contactId: c.contactId, contactName: c.contactName || c.name, phone: c.phone,
-      employeeId: runDeps.employeeId, accountId: c.accountId, email: c.email,
+      employeeId: c.employeeId || runDeps.employeeId, accountId: c.accountId, email: c.email,
     },
     prepareInput: async (contract, input) => {
       if (input?.evaluated) return input;
@@ -1057,17 +1058,11 @@ export function WorkflowManager({ onClose, contacts = [] }) {
 
   const buildRunDeps = async () => {
     const emailConfig = await readEmailConfig();
-    let employeeId = await new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res(d?.gbEmployeeId || '')); } catch { res(''); } });
-    // The cache can be empty (e.g. the rep hasn't opened a page that exposes the
-    // employee id yet). Fall back to the shared identity resolver — the same one
-    // submitQuickTask uses — so every CRM write in the run has an owner id and
-    // doesn't fail with "Missing valid employee ID".
-    if (!/^\d{1,12}$/.test(String(employeeId))) {
-      try {
-        const { resolveEmployeeId } = await import('../lib/employeeIdentity.js');
-        employeeId = (await resolveEmployeeId()) || employeeId;
-      } catch { /* keep whatever the cache had */ }
-    }
+    // Resolve against the current page BEFORE the cache. CRM Search exposes
+    // the signed-in id through #ccaiFrame; a cache-first read skipped that
+    // source and left first-run workflows without an employee id.
+    let employeeId = '';
+    try { employeeId = await resolveEmployeeId(); } catch { /* fail closed in the writers */ }
     return { emailConfig, employeeId };
   };
 
