@@ -204,10 +204,26 @@ export function CustomActionEditor({ action }) {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <Field label="Link contains" hint="Show on any page whose URL contains this text.">
-                <CustomLinkField value={customUrl} onChange={setCustomUrl} />
+            <motion.div
+              data-custom-target-row="link"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, delay: 0.03, ease: 'easeOut' }}
+              style={{ marginBottom: 10 }}
+            >
+              <Field label="Link contains" hint="Optional — show the action when the page URL contains this text.">
+                <CustomLinkField value={customUrl} onChange={setCustomUrl} alwaysOpen />
               </Field>
+            </motion.div>
+            <motion.div
+              data-custom-target-row="entry-points"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, delay: 0.08, ease: 'easeOut' }}
+              style={{ marginBottom: 10 }}
+            >
               <Field label="Entry points" hint="Optional. Providers or CSS selectors, comma-separated.">
                 <Input
                   value={entryPointsText}
@@ -216,7 +232,7 @@ export function CustomActionEditor({ action }) {
                   placeholder=".gb-task-list-modal, modal:task-list"
                 />
               </Field>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -30,6 +30,7 @@ import { runCode, runCodeSync, compile, compileAsync, describeHelpers } from './
 import { runInSandbox } from './sandbox-bridge.js';
 import { detectSchema } from '../page-schemas/registry.js';
 import { runEngine, clearCache } from './runner.js';
+import { inspectPageOwner, ownerInfoFromResult } from './owner.js';
 import {
   getEngineIndexConfig,
   queryEngineIndex,
@@ -74,6 +75,8 @@ export {
   extract,
   runEngine,
   clearCache,
+  inspectPageOwner,
+  ownerInfoFromResult,
   resolve,
   listPaths,
   toDisplayString,

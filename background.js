@@ -204,6 +204,102 @@ try {
 let editorWindowId   = null;
 let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
 
+const GB_PAGE_ENGINE_TAB_PATTERNS = [
+  'https://www.golfballs.com/*',
+  'https://api.golfballs.com/*',
+];
+
+function gbPageEngineTabAllowed(tab) {
+  try {
+    const url = new URL(tab?.url || '');
+    return url.protocol === 'https:'
+      && (url.hostname === 'www.golfballs.com' || url.hostname === 'api.golfballs.com');
+  } catch {
+    return false;
+  }
+}
+
+function gbReadLocalValue(key) {
+  return new Promise((resolve) => {
+    try { chrome.storage.local.get(key, (value) => resolve(value?.[key])); }
+    catch { resolve(undefined); }
+  });
+}
+
+function gbGetTab(tabId) {
+  return new Promise((resolve) => {
+    if (!Number.isInteger(tabId) || tabId < 0 || !chrome.tabs?.get) {
+      resolve(null);
+      return;
+    }
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab) resolve(null);
+      else resolve(tab);
+    });
+  });
+}
+
+function gbQueryPageEngineTabs() {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.query({ url: GB_PAGE_ENGINE_TAB_PATTERNS }, (tabs) => {
+        if (chrome.runtime.lastError) resolve([]);
+        else resolve((tabs || []).filter(gbPageEngineTabAllowed));
+      });
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+function gbRequestPageEngineOwner(tabId) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { action: 'pageEngineOwnerInfo' }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error || 'Page Engine did not return owner information.'));
+          return;
+        }
+        resolve(response);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function gbInspectCurrentPageOwner() {
+  const preferredId = await gbReadLocalValue('orderTabId');
+  const preferred = await gbGetTab(preferredId);
+  const queried = await gbQueryPageEngineTabs();
+  queried.sort((left, right) => (
+    Number(!!right.active) - Number(!!left.active)
+    || Number(right.lastAccessed || 0) - Number(left.lastAccessed || 0)
+  ));
+  const candidates = [];
+  for (const tab of [preferred, ...queried]) {
+    if (gbPageEngineTabAllowed(tab) && !candidates.some((item) => item.id === tab.id)) {
+      candidates.push(tab);
+    }
+  }
+  if (!candidates.length) {
+    throw new Error('No open Golfballs page is available. Open the page you want to inspect first.');
+  }
+  let lastError = null;
+  for (const tab of candidates) {
+    try {
+      return { ...(await gbRequestPageEngineOwner(tab.id)), tabId: tab.id, url: tab.url };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('Unable to inspect the current Golfballs page.');
+}
+
 // ── Per-product customizer config helpers ────────────────────────────────────
 // The real per-product options are driven by the product page's __NEXT_DATA__
 // (product.ProductModification + product.ProductChild), NOT the corporate
@@ -1269,6 +1365,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // ── Owner-gated encrypted Page Engine index ─────────────────────────────
+  if (msg.action === 'pageEngineInspectOwner') {
+    gbInspectCurrentPageOwner()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page owner' }));
+    return true;
+  }
   if (msg.action === 'pageEngineIndexPut') {
     GBPageEngineIndex.indexSnapshot(msg.snapshot)
       .then((result) => sendResponse({ ok: true, ...result }))
@@ -2314,6 +2416,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === 'openEditor') {
+    const sourceTabId = Number.isInteger(sender.tab?.id)
+      ? sender.tab.id
+      : (Number.isInteger(msg.sourceTabId) ? msg.sourceTabId : null);
+    if (sourceTabId !== null) chrome.storage.local.set({ orderTabId: sourceTabId });
     if (msg.openSettings === true) {
       const target = typeof msg.settingsTarget === 'string' ? msg.settingsTarget.trim().slice(0, 160) : '';
       chrome.storage.local.set({

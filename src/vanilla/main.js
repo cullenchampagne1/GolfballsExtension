@@ -409,6 +409,25 @@ function __gbAccessAllowed(st, now) {
       return true;
     }
 
+    if (msg.action === 'pageEngineOwnerInfo') {
+      const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+      if (!engine || typeof engine.inspectOwner !== 'function') {
+        sendResponse({ ok: false, error: 'Page Engine is unavailable on this page.' });
+        return true;
+      }
+      try {
+        const owner = engine.inspectOwner(document);
+        if (!owner) {
+          sendResponse({ ok: false, error: 'This page does not match a supported Page Engine schema.' });
+        } else {
+          sendResponse({ ok: true, ...owner });
+        }
+      } catch (error) {
+        sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page owner.' });
+      }
+      return true;
+    }
+
 
     if (msg.action === 'getPageInfo') {
       // Async: grouped rule trees evaluate through the page engine

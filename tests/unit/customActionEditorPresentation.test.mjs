@@ -10,6 +10,10 @@ const iconSource = await readFile(
   new URL('../../src/ui/components/IconPicker.jsx', import.meta.url),
   'utf8',
 );
+const customLinkSource = await readFile(
+  new URL('../../src/ui/components/CustomLinkField.jsx', import.meta.url),
+  'utf8',
+);
 const bridgeSource = await readFile(
   new URL('../../src/content/editor-bridge.jsx', import.meta.url),
   'utf8',
@@ -25,6 +29,10 @@ const closeActionSource = bridgeSource.slice(
 const deleteActionSource = bridgeSource.slice(
   bridgeSource.indexOf('async function deleteActionById'),
   bridgeSource.indexOf('/** Explicit-save bridge'),
+);
+const customTargetingSource = editorSource.slice(
+  editorSource.indexOf('{/* Custom targeting'),
+  editorSource.indexOf('{/* Meta — name + description'),
 );
 
 describe('custom action editor presentation and lifecycle', () => {
@@ -70,6 +78,13 @@ describe('custom action editor presentation and lifecycle', () => {
     assert.match(editorSource, /\{pageType === 'custom' && \(/);
     assert.match(editorSource, /AnimatePresence initial=\{false\}/);
     assert.match(editorSource, /label="Link contains"/);
+    assert.match(customTargetingSource, /data-custom-target-row="link"/);
+    assert.match(customTargetingSource, /data-custom-target-row="entry-points"/);
+    assert.match(customTargetingSource, /alwaysOpen/);
+    assert.doesNotMatch(customTargetingSource, /gridTemplateColumns: '1fr 1fr'/);
+    assert.match(customTargetingSource, /Optional — show the action when the page URL contains/);
+    assert.match(editorSource, /<CustomLinkField value=\{customUrl\} onChange=\{setCustomUrl\} alwaysOpen \/>/);
+    assert.match(customLinkSource, /\{!alwaysOpen && \(\s*<div[^>]*>\s*Shows the shelf action/);
   });
 
   it('keeps new actions in memory until Save Action is clicked', () => {

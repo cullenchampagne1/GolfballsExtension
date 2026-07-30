@@ -165,6 +165,34 @@ describe('Page Engine index roundtrip', () => {
     assert.equal(live.rows[0].data.contact.firstName, 'Grace');
   });
 
+  it('routes the developer owner inspection to the page that opened the manager', async () => {
+    stored.orderTabId = 37;
+    background.chrome.tabs.get = (tabId, callback) => callback({
+      id: tabId,
+      url: 'https://api.golfballs.com/Golfballs/AdminNew/Default.aspx?Page=240&customerID=88',
+      active: true,
+      lastAccessed: 100,
+    });
+    background.chrome.tabs.sendMessage = (tabId, message, callback) => {
+      assert.equal(tabId, 37);
+      assert.equal(message.action, 'pageEngineOwnerInfo');
+      callback({
+        ok: true,
+        schemaId: 'contact',
+        recordId: '88',
+        accountId: '902',
+        ownerId: '77',
+        ownerName: 'Cullen Champagne',
+      });
+    };
+
+    const inspected = await background.sendMessage({ action: 'pageEngineInspectOwner' });
+    assert.equal(inspected.ok, true, inspected.error);
+    assert.equal(inspected.tabId, 37);
+    assert.equal(inspected.ownerId, '77');
+    assert.equal(inspected.ownerName, 'Cullen Champagne');
+  });
+
   it('honors the disabled default for writes while retaining explicit cache maintenance', async () => {
     const oldValue = stored.devSettings;
     stored.devSettings = {

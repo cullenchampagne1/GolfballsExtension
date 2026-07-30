@@ -1115,6 +1115,12 @@
         "policy": "installation-local exact sales-rep/account-owner id"
       },
       {
+        "key": "pageEngine.inspectOwner",
+        "type": "action",
+        "label": "Extract current page owner ID",
+        "controls": "Runs the Page Engine against the page that opened the manager and reports the numeric owner ID in a notification"
+      },
+      {
         "key": "marginCalc.minAllowedMargin",
         "type": "number",
         "default": 30,

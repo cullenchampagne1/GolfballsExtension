@@ -508,7 +508,14 @@ function PopupApp() {
   }, []);
 
   /* ── header openers ── */
-  const openManager = () => { try { chrome.runtime.sendMessage({ action: 'openEditor' }, () => void chrome.runtime.lastError); } catch {} };
+  const openManager = () => {
+    try {
+      chrome.runtime.sendMessage(
+        { action: 'openEditor', sourceTabId: Number.isInteger(tab?.id) ? tab.id : null },
+        () => void chrome.runtime.lastError,
+      );
+    } catch {}
+  };
 
   /* ── stage routes ── */
   // templateCount in the header reflects the user's total enabled templates

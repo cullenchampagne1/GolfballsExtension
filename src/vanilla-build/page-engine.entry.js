@@ -15,6 +15,7 @@
 import {
   runEngine,
   clearCache,
+  inspectPageOwner,
   resolvePath,
   evaluateCode,
   extract,
@@ -47,6 +48,7 @@ const api = Object.freeze({
      extracted JSON per-doc so repeat calls are free. */
   runEngine,
   clearCache,
+  inspectOwner: inspectPageOwner,
   resolvePath,
   evaluateCode,
 

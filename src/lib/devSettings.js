@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { sendBackgroundMessage } from './backgroundMessage.js';
 
 /* ───────────────────────────────────────────────────────────────
    devSettings.js — low-priority knobs that don't deserve a top-
@@ -56,6 +57,43 @@ const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
   ];
 });
 
+export function formatPageEngineOwnerNotice(info = {}) {
+  const ownerId = String(info.ownerId || '').trim();
+  const ownerName = String(info.ownerName || '').trim();
+  const schema = String(info.schemaId || 'page').trim();
+  const recordId = String(info.recordId || '').trim();
+  const pageLabel = recordId ? `${schema} ${recordId}` : schema;
+  if (ownerId) {
+    return {
+      tone: 'success',
+      message: `Engine owner ID: ${ownerId}${ownerName ? ` · ${ownerName}` : ''}`,
+    };
+  }
+  if (ownerName) {
+    return {
+      tone: 'warning',
+      message: `No numeric owner ID on ${pageLabel} · Owner: ${ownerName}`,
+    };
+  }
+  return {
+    tone: 'warning',
+    message: `No owner ID found on ${pageLabel}.`,
+  };
+}
+
+export async function inspectCurrentPageOwner() {
+  try {
+    const result = await sendBackgroundMessage('pageEngineInspectOwner');
+    const notice = formatPageEngineOwnerNotice(result);
+    globalThis.window?.__gbToast?.[notice.tone]?.(notice.message, { duration: 8_000 });
+    return result;
+  } catch (error) {
+    const message = error?.message || 'Unable to inspect the current page owner.';
+    globalThis.window?.__gbToast?.error?.(message, { duration: 6_000 });
+    return { ok: false, error: message };
+  }
+}
+
 export const DEV_SETTINGS = [
   {
     key:     'numberDisplay.enabled',
@@ -103,6 +141,15 @@ export const DEV_SETTINGS = [
     type:    'string',
     default: '',
     placeholder: 'Sales rep ID',
+  },
+  {
+    key:         'pageEngine.inspectOwner',
+    label:       'Extract current page owner ID',
+    desc:        'Runs the Page Engine against the Golfballs page that opened the manager and shows its numeric sales-rep/account-owner ID in a notification.',
+    type:        'action',
+    buttonLabel: 'Extract owner ID',
+    buttonIcon:  'search',
+    runner:      inspectCurrentPageOwner,
   },
   {
     key:     'golfballViewer.showDebugHud',

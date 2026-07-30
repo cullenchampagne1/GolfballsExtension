@@ -13,6 +13,9 @@ Both developer settings are disabled/empty by default:
 - `pageEngine.accountId` — the exact sales-rep/account-owner ID allowed into
   this installation's index. An exact owner display name remains a fallback
   for older pages that do not expose a numeric ID.
+- `pageEngine.inspectOwner` — an **Extract owner ID** developer button that
+  runs the engine against the Golfballs page that opened the manager and shows
+  its owner ID/name in a notification. This action stores no setting.
 
 The content-side Page Engine checks the settings before sending a snapshot.
 The service worker rereads the current settings and independently validates

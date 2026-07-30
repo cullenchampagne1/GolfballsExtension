@@ -8,27 +8,30 @@ import { I } from '../icons.jsx';
    both the built-in FeatureRow and the custom-action editor so the two
    surfaces behave identically.
 ─────────────────────────────────────────────────────────────── */
-export function CustomLinkField({ value, onChange }) {
+export function CustomLinkField({ value, onChange, alwaysOpen = false }) {
   const active = !!(value && value.trim());
-  const [open, setOpen] = useState(active);
+  const [opened, setOpened] = useState(active);
+  const open = alwaysOpen || opened;
 
   return (
     <div>
-      <button type="button" onClick={() => setOpen((o) => !o)}
-        title="Show on any page whose URL contains a link you specify"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
-          fontSize: 10.5, fontWeight: 700, transition: 'background .12s ease, color .12s ease, border-color .12s ease',
-          border: `1px solid ${active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
-          background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
-          color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-        }}>
-        <I.link size={10} />Custom link
-      </button>
+      {!alwaysOpen && (
+        <button type="button" onClick={() => setOpened((o) => !o)}
+          title="Show on any page whose URL contains a link you specify"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
+            fontSize: 10.5, fontWeight: 700, transition: 'background .12s ease, color .12s ease, border-color .12s ease',
+            border: `1px solid ${active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+            background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
+            color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+          }}>
+          <I.link size={10} />Custom link
+        </button>
+      )}
       {/* Animated reveal (grid 0fr → 1fr) of the URL input. */}
       <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows var(--gb-anim, .18s ease)' }}>
         <div style={{ overflow: 'hidden', minHeight: 0 }}>
-          <div style={{ paddingTop: 7 }}>
+          <div style={{ paddingTop: alwaysOpen ? 0 : 7 }}>
             <input
               value={value || ''}
               onChange={(e) => onChange(e.target.value)}
@@ -39,9 +42,11 @@ export function CustomLinkField({ value, onChange }) {
                 background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)',
                 fontFamily: 'var(--gb-font-mono)', fontSize: 11, outline: 'none',
               }} />
-            <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 4 }}>
-              Shows the shelf action on any page whose URL contains this text.
-            </div>
+            {!alwaysOpen && (
+              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 4 }}>
+                Shows the shelf action on any page whose URL contains this text.
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -5205,12 +5205,20 @@ export const HELP_CONTENT = {
                 "(empty)",
                 "",
                 "Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID."
+              ],
+              [
+                "Extract current page owner ID",
+                "action",
+                "—",
+                "",
+                "Runs the Page Engine against the Golfballs page that opened the manager and shows its numeric sales-rep/account-owner ID in a notification."
               ]
             ],
             "meta": {
               "settingKeys": [
                 "pageEngine.indexingEnabled",
-                "pageEngine.accountId"
+                "pageEngine.accountId",
+                "pageEngine.inspectOwner"
               ]
             }
           },
@@ -9659,6 +9667,16 @@ export const HELP_CONTENT = {
         "pageEngine.accountId"
       ],
       "description": "Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:pageEngine.inspectOwner",
+      "category": "Settings",
+      "title": "Extract current page owner ID",
+      "keywords": [
+        "pageEngine.inspectOwner"
+      ],
+      "description": "Runs the Page Engine against the Golfballs page that opened the manager and shows its numeric sales-rep/account-owner ID in a notification.",
       "article": "developer-settings"
     },
     {
