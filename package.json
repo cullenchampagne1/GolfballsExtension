@@ -133,6 +133,10 @@
       "file": "tests/unit/actionReviewModel.test.mjs"
     },
     {
+      "name": "crm \u00b7 Action Review contact-page presentation",
+      "file": "tests/unit/actionReviewPresentation.test.mjs"
+    },
+    {
       "name": "crm \u00b7 host DataTables bridge",
       "file": "tests/unit/customPageHostBridge.test.mjs"
     },

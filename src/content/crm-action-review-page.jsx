@@ -2,7 +2,7 @@
 /**
  * Action Review custom page (CRM Page 286).
  *
- * The native WebForms page is three datasets behind one server-side scope:
+ * The native WebForms page returns three datasets from one server-side search:
  * Activity, Email History, and Tasks. The task table can exceed 20,000 rows,
  * so the takeover keeps all three tables full-width while paging only the
  * task DOM. Parsing and postback construction live in actionReviewModel.js.
@@ -37,11 +37,14 @@ import {
   DASH,
   DataCtx,
   DetailErrorBoundary,
+  EmptyRow,
   I,
   IconBtn,
+  ScrollArea,
   SectionTitle,
   Spinner,
   Tag,
+  TaskCheckbox,
   Td,
   Th,
   fmtBytes,
@@ -51,7 +54,7 @@ import {
   txt,
 } from '../lib/detail-shared.jsx';
 import {
-  ActivityDetailModal,
+  ActivityRow,
   Breadcrumb,
   DetailPageFrame,
   EditTaskModal,
@@ -79,14 +82,14 @@ const ACTION_REVIEW_CSS = `
     flex-direction: column;
     gap: 12px;
   }
-  .gbar-scope-head {
+  .gbar-review-search-head {
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 12px 14px 10px;
     border-bottom: 1px solid var(--gb-border-subtle);
   }
-  .gbar-scope-icon {
+  .gbar-review-search-icon {
     width: 30px;
     height: 30px;
     display: grid;
@@ -99,10 +102,13 @@ const ACTION_REVIEW_CSS = `
   }
   .gbar-filter-grid {
     display: grid;
-    grid-template-columns: minmax(230px, 1.4fr) minmax(125px, .65fr) minmax(165px, .8fr) minmax(165px, .8fr) auto;
+    grid-template-columns: minmax(230px, 1.4fr) minmax(125px, .65fr) minmax(165px, .8fr) auto;
     gap: 10px;
     align-items: end;
     padding: 12px 14px 14px;
+  }
+  .gbar-filter-grid--between {
+    grid-template-columns: minmax(230px, 1.4fr) minmax(125px, .65fr) minmax(165px, .8fr) minmax(165px, .8fr) auto;
   }
   .gbar-field {
     min-width: 0;
@@ -169,44 +175,6 @@ const ACTION_REVIEW_CSS = `
     border: 1px solid var(--gb-error-tint-border);
     border-radius: var(--gb-r-md);
     font-size: 11.5px;
-  }
-  .gbar-table-scroll {
-    width: 100%;
-    overflow: auto;
-    scrollbar-gutter: stable;
-  }
-  .gbar-table-scroll--activity { max-height: 410px; }
-  .gbar-table-scroll--email { max-height: 350px; }
-  .gbar-table-scroll--tasks { height: min(570px, 62vh); min-height: 360px; }
-  .gbar-table { min-width: 920px; }
-  .gbar-table--email { min-width: 1080px; }
-  .gbar-table--tasks { min-width: 1040px; }
-  .gbar-table tbody tr:last-child { border-bottom: 0 !important; }
-  .gbar-tr-clickable { cursor: pointer; }
-  .gbar-subject {
-    display: block;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--gb-detail-text-primary, var(--gb-text-primary));
-    line-height: 1.35;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .gbar-meta-chip {
-    display: inline-flex;
-    align-items: center;
-    max-width: 100%;
-    padding: 2px 6px;
-    overflow: hidden;
-    color: var(--gb-text-tertiary);
-    background: var(--gb-fill-subtle);
-    border: 1px solid var(--gb-border-subtle);
-    border-radius: 5px;
-    font-size: 9.5px;
-    font-weight: 550;
-    line-height: 1.3;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .gbar-task-tools {
     display: grid;
@@ -279,14 +247,17 @@ const ACTION_REVIEW_CSS = `
     .gbar-filter-grid {
       grid-template-columns: minmax(210px, 1fr) minmax(120px, .55fr) minmax(155px, .7fr) auto;
     }
-    .gbar-filter-grid .gbar-field--second-date { grid-column: 3; }
+    .gbar-filter-grid--between {
+      grid-template-columns: minmax(210px, 1fr) minmax(120px, .55fr) minmax(155px, .7fr) minmax(155px, .7fr) auto;
+    }
     .gbar-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .gbar-stat:nth-child(3) { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .gbar-stat:nth-child(4) { border-top: 1px solid var(--gb-border-subtle); }
   }
   @media (max-width: 760px) {
-    .gbar-scope-head { align-items: flex-start; }
-    .gbar-filter-grid { grid-template-columns: minmax(0, 1fr); }
+    .gbar-review-search-head { align-items: flex-start; }
+    .gbar-filter-grid,
+    .gbar-filter-grid--between { grid-template-columns: minmax(0, 1fr); }
     .gbar-filter-grid .gbar-field--second-date { grid-column: auto; }
     .gbar-stat-strip { grid-template-columns: minmax(0, 1fr); }
     .gbar-stat { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
@@ -395,7 +366,7 @@ function Stat({ icon, label, value }) {
   );
 }
 
-function ScopeCard({
+function SearchCard({
   review,
   rep,
   setRep,
@@ -406,7 +377,7 @@ function ScopeCard({
   date2,
   setDate2,
   busy,
-  onApply,
+  onSearch,
 }) {
   const selectedRep = review?.reps.find((item) => String(item.id) === String(rep));
   const completeTasks = review?.tasks.filter((task) => /complete/i.test(task.status || '')).length || 0;
@@ -418,20 +389,20 @@ function ScopeCard({
 
   return (
     <Card style={{ overflow: 'visible', position: 'relative', zIndex: 8 }}>
-      <div className="gbar-scope-head">
-        <span className="gbar-scope-icon"><I.filter size={14} /></span>
+      <div className="gbar-review-search-head">
+        <span className="gbar-review-search-icon"><I.search size={14} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontSize: 13, fontWeight: 650 }}>
-            Review scope
+            Search
           </div>
           <div style={{ marginTop: 2, overflow: 'hidden', color: 'var(--gb-text-muted)', fontSize: 10.5, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {selectedRep?.label || 'Choose a sales rep'} · {range}
           </div>
         </div>
-        <Tag tone={busy ? 'warning' : 'success'} size="sm">{busy ? 'Updating' : 'Loaded'}</Tag>
+        <Tag tone={busy ? 'warning' : 'success'} size="sm">{busy ? 'Searching' : 'Loaded'}</Tag>
       </div>
 
-      <div className="gbar-filter-grid">
+      <div className={`gbar-filter-grid ${dateOption === 'BETWEEN' ? 'gbar-filter-grid--between' : ''}`}>
         <FilterField label="Sales rep">
           <Dropdown
             value={rep}
@@ -452,16 +423,16 @@ function ScopeCard({
           <FilterField label="To" className="gbar-field--second-date">
             <DatePicker value={date2} onChange={setDate2} includeTime={false} clearable={false} placeholder="Choose date" />
           </FilterField>
-        ) : <div aria-hidden="true" />}
+        ) : null}
         <Btn
           variant="primary"
           size="md"
-          icon={<I.refresh />}
-          onClick={onApply}
+          icon={<I.search />}
+          onClick={onSearch}
           disabled={busy || invalid || !(review?.reps.length)}
           style={{ minWidth: 108 }}
         >
-          {busy ? 'Updating…' : 'Apply scope'}
+          {busy ? 'Searching…' : 'Search'}
         </Btn>
       </div>
 
@@ -477,56 +448,32 @@ function ScopeCard({
   );
 }
 
-function EmptyTableRow({ colSpan, children }) {
+function ActivitySection({ rows }) {
   return (
-    <tr>
-      <td colSpan={colSpan} style={{ padding: 28, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 11.5 }}>
-        {children}
-      </td>
-    </tr>
-  );
-}
-
-function ActivitySection({ rows, onOpen }) {
-  return (
-    <Card>
+    <Card style={{ overflow: 'visible', position: 'relative', zIndex: 2 }}>
       <SectionTitle
         icon={<I.history />}
-        title="Activity"
+        title="Activity Feed"
         count={NUMBER.format(rows.length)}
-        sub="Calls, notes, emails, and workflow events in the selected scope"
+        sub="System, workflow, and human-logged events"
       />
-      <div className="gbar-table-scroll gbar-table-scroll--activity">
-        <table style={tableStyle} className="gbar-table">
-          <thead>
-            <tr>
-              <Th style={{ width: 132 }}>Employee</Th>
-              <Th style={{ width: 126 }}>Category</Th>
-              <Th style={{ width: 84 }}>Direction</Th>
-              <Th>Subject</Th>
-              <Th align="right" style={{ width: 168 }}>Date</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((activity, index) => (
-              <tr
-                key={activity.id || `${activity.date}-${index}`}
-                className={activity.id ? 'gb-actrow gbar-tr-clickable' : 'gb-actrow'}
-                style={trStyle}
-                onClick={activity.id ? () => onOpen(activity) : undefined}
-                title={activity.id ? 'View activity detail' : undefined}
-              >
-                <Td style={{ width: 132, fontWeight: 500 }}>{activity.employee || DASH}</Td>
-                <Td style={{ width: 126 }}><span className="gbar-meta-chip">{activity.category || DASH}</span></Td>
-                <Td muted style={{ width: 84 }}>{activity.direction || DASH}</Td>
-                <Td><span className="gbar-subject" title={activity.subject || ''}>{activity.subject || DASH}</span></Td>
-                <Td align="right" mono muted style={{ width: 168, whiteSpace: 'nowrap' }}>{fmtDateTime(activity.date)}</Td>
-              </tr>
-            ))}
-            {!rows.length && <EmptyTableRow colSpan={5}>No activity in this scope.</EmptyTableRow>}
-          </tbody>
-        </table>
+      <div className="gbcp-list-head" aria-hidden="true">
+        <span>Type</span><span>Activity</span><span>Owner</span><span style={{ textAlign: 'right' }}>Date</span>
       </div>
+      <ScrollArea max={460}>
+        {rows.map((activity, index) => (
+          <ActivityRow
+            key={activity.id || `${activity.date}-${index}`}
+            a={activity}
+            last={index === rows.length - 1}
+          />
+        ))}
+        {!rows.length && (
+          <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>
+            No activity returned by this search.
+          </div>
+        )}
+      </ScrollArea>
     </Card>
   );
 }
@@ -547,10 +494,10 @@ function EmailSection({ rows }) {
         icon={<I.mail />}
         title="Email History"
         count={NUMBER.format(rows.length)}
-        sub="Inbound and outbound messages for the selected rep and date"
+        sub="Messages returned for the selected rep and date"
       />
-      <div className="gbar-table-scroll gbar-table-scroll--email">
-        <table style={tableStyle} className="gbar-table gbar-table--email">
+      <ScrollArea max={420}>
+        <table style={tableStyle}>
           <thead>
             <tr>
               <Th style={{ width: 230 }}>From</Th>
@@ -563,10 +510,10 @@ function EmailSection({ rows }) {
           </thead>
           <tbody>
             {rows.map((email, index) => (
-              <tr key={`${email.href || email.date}-${index}`} className="gb-actrow" style={trStyle}>
-                <Td style={{ width: 230, fontWeight: 500 }}><span className="gbar-subject" title={email.from}>{email.from || DASH}</span></Td>
-                <Td muted style={{ width: 230 }}><span className="gbar-subject" title={email.to}>{email.to || DASH}</span></Td>
-                <Td><span className="gbar-subject" title={email.subject}>{email.subject || DASH}</span></Td>
+              <tr key={`${email.href || email.date}-${index}`} style={trStyle}>
+                <Td style={{ width: 230 }}><span style={{ fontWeight: 500, color: 'var(--gb-text-secondary)' }}>{email.from || DASH}</span></Td>
+                <Td muted style={{ width: 230 }}>{email.to || DASH}</Td>
+                <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{email.subject || DASH}</span></Td>
                 <Td align="right" mono muted style={{ width: 168, whiteSpace: 'nowrap' }}>{fmtDateTime(email.date)}</Td>
                 <Td align="right" mono muted style={{ width: 80, whiteSpace: 'nowrap' }}>{email.size ? fmtBytes(email.size) : DASH}</Td>
                 <Td align="center" style={{ width: 54 }}>
@@ -576,10 +523,10 @@ function EmailSection({ rows }) {
                 </Td>
               </tr>
             ))}
-            {!rows.length && <EmptyTableRow colSpan={6}>No email in this scope.</EmptyTableRow>}
+            {!rows.length && <EmptyRow colSpan={6} label="No email returned by this search." />}
           </tbody>
         </table>
-      </div>
+      </ScrollArea>
     </Card>
   );
 }
@@ -634,7 +581,8 @@ function TaskSection({
 
   const goPage = (next) => {
     setPage(next);
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    const scroller = scrollRef.current?.closest?.('.gb-scroll') || scrollRef.current;
+    if (scroller) scroller.scrollTop = 0;
   };
 
   return (
@@ -668,16 +616,17 @@ function TaskSection({
         />
       </div>
 
-      <div ref={scrollRef} className="gbar-table-scroll gbar-table-scroll--tasks">
-        <table style={tableStyle} className="gbar-table gbar-table--tasks">
+      <ScrollArea max={520}>
+        <div ref={scrollRef}>
+        <table style={tableStyle}>
           <thead>
             <tr>
-              <Th>Subject</Th>
+              <Th>Task</Th>
               <Th style={{ width: 190 }}>Category</Th>
               <Th align="center" style={{ width: 105 }}>Status</Th>
               <Th align="right" style={{ width: 118 }}>Live</Th>
               <Th align="right" style={{ width: 118 }}>Due</Th>
-              <Th align="center" style={{ width: 82 }}>Actions</Th>
+              <Th align="right" style={{ width: 54 }}></Th>
             </tr>
           </thead>
           <tbody>
@@ -685,33 +634,50 @@ function TaskSection({
               const pending = rowStatus[task.id];
               const complete = /complete/i.test(task.status || '');
               return (
-                <tr key={task.id} className="gb-actrow" style={trStyle}>
-                  <Td><span className="gbar-subject" title={task.subject}>{txt(task.subject) || DASH}</span></Td>
-                  <Td muted style={{ width: 190 }}><span className="gbar-subject" title={task.category}>{txt(task.category) || DASH}</span></Td>
-                  <Td align="center" style={{ width: 105 }}><Tag tone={taskTone(task.status)} size="sm">{task.status || DASH}</Tag></Td>
+                <tr key={task.id} style={trStyle}>
+                  <Td>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      {pending === 'running' ? (
+                        <span style={{ width: 15, height: 15, display: 'inline-block', flexShrink: 0, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+                      ) : pending === 'error' ? (
+                        <span style={{ width: 15, height: 15, color: 'var(--gb-error-fg)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} title="Task update failed"><I.close size={12} sw={2.6} /></span>
+                      ) : (
+                        <TaskCheckbox
+                          tone="success"
+                          done={complete || pending === 'done'}
+                          disabled={complete || !actionsEnabled}
+                          onClick={!complete && actionsEnabled ? () => onComplete(task) : undefined}
+                          title={complete ? 'Task complete' : 'Complete task'}
+                        />
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{
+                          color: complete ? 'var(--gb-text-muted)' : 'var(--gb-detail-text-primary, var(--gb-text-primary))',
+                          fontWeight: 500,
+                          lineHeight: 1.3,
+                          textDecoration: complete ? 'line-through' : 'none',
+                        }}>{txt(task.subject) || DASH}</div>
+                        {task.id && <div style={{ marginTop: 2, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', fontSize: 9.5 }}>#{task.id}</div>}
+                      </div>
+                    </div>
+                  </Td>
+                  <Td muted style={{ width: 190 }}>{txt(task.category) || DASH}</Td>
+                  <Td align="center" style={{ width: 105 }}><Tag tone={taskTone(task.status)} size="xs">{task.status || DASH}</Tag></Td>
                   <Td align="right" mono muted style={{ width: 118, whiteSpace: 'nowrap' }}>{txt(task.live) || DASH}</Td>
                   <Td align="right" mono muted style={{ width: 118, whiteSpace: 'nowrap' }}>{txt(task.due) || DASH}</Td>
-                  <Td align="center" style={{ width: 82, whiteSpace: 'nowrap' }}>
-                    {pending === 'running' ? (
-                      <span style={{ width: 13, height: 13, display: 'inline-block', borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
-                    ) : pending === 'done' ? (
-                      <span style={{ color: 'var(--gb-success)', display: 'inline-flex' }}><I.check size={14} sw={3} /></span>
-                    ) : pending === 'error' ? (
-                      <span style={{ color: 'var(--gb-error)', display: 'inline-flex' }} title="Task update failed"><I.close size={13} sw={2.6} /></span>
-                    ) : actionsEnabled ? (
-                      <span style={{ display: 'inline-flex', gap: 4 }}>
-                        <IconBtn size="xs" ghost icon={<I.edit />} title="Edit task" onClick={() => onEdit(task)} />
-                        {!complete && <IconBtn size="xs" ghost icon={<I.check />} title="Complete task" onClick={() => onComplete(task)} />}
-                      </span>
+                  <Td align="right" style={{ width: 54, whiteSpace: 'nowrap' }}>
+                    {actionsEnabled ? (
+                      <IconBtn size="xs" ghost icon={<I.edit />} title="Edit task" onClick={() => onEdit(task)} />
                     ) : <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>}
                   </Td>
                 </tr>
               );
             })}
-            {!pagination.rows.length && <EmptyTableRow colSpan={6}>No tasks match these table filters.</EmptyTableRow>}
+            {!pagination.rows.length && <EmptyRow colSpan={6} label="No tasks match these table filters." />}
           </tbody>
         </table>
-      </div>
+        </div>
+      </ScrollArea>
 
       <div className="gbar-task-footer">
         <span className="gbar-task-range">
@@ -798,7 +764,7 @@ export function ActionReviewApp({
   const applyFilter = async () => {
     if (busy || !review) return;
     if (!rep || !date1 || (dateOption === 'BETWEEN' && !date2)) {
-      setError('Choose a sales rep and the complete date scope before applying.');
+      setError('Choose a sales rep and the complete date range before searching.');
       return;
     }
     setBusy(true);
@@ -822,15 +788,12 @@ export function ActionReviewApp({
         filters,
       }));
     } catch (filterError) {
-      setError(filterError?.message || 'The CRM could not apply this Action Review scope.');
+      setError(filterError?.message || 'The CRM could not run this Action Review search.');
     } finally {
       setBusy(false);
     }
   };
 
-  const openActivity = (activity) => {
-    if (activity?.id) modalHost.openModal(<ActivityDetailModal activityId={activity.id} />);
-  };
   const editTask = (task) => {
     if (actionsEnabled && task?.id) modalHost.openModal(<EditTaskModal taskId={task.id} />);
   };
@@ -880,7 +843,7 @@ export function ActionReviewApp({
             <Card><Spinner label="Loading the full Action Review…" /></Card>
           ) : review ? (
             <>
-              <ScopeCard
+              <SearchCard
                 review={review}
                 rep={rep}
                 setRep={setRep}
@@ -891,9 +854,9 @@ export function ActionReviewApp({
                 date2={date2}
                 setDate2={setDate2}
                 busy={busy}
-                onApply={applyFilter}
+                onSearch={applyFilter}
               />
-              <ActivitySection rows={review.activities} onOpen={openActivity} />
+              <ActivitySection rows={review.activities} />
               <EmailSection rows={review.emails} />
               <TaskSection
                 rows={review.tasks}
