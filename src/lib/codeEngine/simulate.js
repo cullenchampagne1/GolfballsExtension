@@ -80,6 +80,31 @@ export function actionResultRef(actionId, field) {
   return `${ACTION_RESULT_PREFIX}${String(actionId)}:${String(field)}`;
 }
 
+/* Scan an action's raw input for a reference to a PRIOR action that failed.
+   e.g. updateTask({ id: created.taskId }) after createTask threw: the id is a
+   `__gb_action_result__:<createId>:taskId` placeholder whose action stored an
+   { ok:false } result. Returns that action's error string (so the dependent
+   step is skipped with the REAL reason) or null when no dependency failed. */
+function findFailedDependency(value, results) {
+  if (typeof value === 'string' && value.startsWith(ACTION_RESULT_PREFIX)) {
+    const rest = value.slice(ACTION_RESULT_PREFIX.length);
+    const splitAt = rest.lastIndexOf(':');
+    if (splitAt > 0) {
+      const upstream = results.get(rest.slice(0, splitAt));
+      if (upstream && upstream.ok === false) return upstream.error || upstream.reason || 'a prior step failed';
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) { const found = findFailedDependency(item, results); if (found) return found; }
+    return null;
+  }
+  if (value && typeof value === 'object' && Object.prototype.toString.call(value) !== '[object Date]') {
+    for (const item of Object.values(value)) { const found = findFailedDependency(item, results); if (found) return found; }
+  }
+  return null;
+}
+
 function resolveActionResults(value, results, preserveMissing) {
   if (typeof value === 'string' && value.startsWith(ACTION_RESULT_PREFIX)) {
     const rest = value.slice(ACTION_RESULT_PREFIX.length);
@@ -161,18 +186,26 @@ export async function simulateProgram(
     // stops before any further real write fires.
     if (typeof isCancelled === 'function' && isCancelled()) throw cancelledError();
     const resolvedInput = resolveActionResults(input, actionResults, !executor);
+    // On a live run, a step whose input references a FAILED prior step (e.g. an
+    // updateTask that sets the live date of a createTask that just threw) is
+    // skipped — not failed — carrying the upstream reason, so the real cause
+    // isn't buried under a misleading "updateTask needs a task id".
+    const failedDependency = executor ? findFailedDependency(input, actionResults) : null;
     const check = validateContractInput(name, resolvedInput);
     const entry = {
       id,
       contract: name,
-      status: check.ok ? 'ran' : 'failed',
+      status: failedDependency ? 'skipped' : (check.ok ? 'ran' : 'failed'),
       summary: describeContract(name, resolvedInput),
-      errors: check.errors,
+      errors: failedDependency ? [] : check.errors,
     };
+    if (failedDependency) entry.reason = `Skipped — prior step failed: ${failedDependency}`;
     trace.push(entry);
 
     const isEffect = EFFECT_CONTRACTS.has(name);
-    let result = { ok: check.ok, dry: !executor, simulated: !executor };
+    let result = failedDependency
+      ? { ok: false, skipped: true, reason: entry.reason, dry: !executor, simulated: !executor }
+      : { ok: check.ok, dry: !executor, simulated: !executor };
 
     if (check.ok && isEffect && typeof beforeEffect === 'function') {
       const decision = await beforeEffect({

@@ -630,7 +630,7 @@ function AudienceRunView({ workflow, audience, pipeline, runner, dryRun, onExit 
               <div style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email || ''}</div>
               <RunPipeline pipeline={pipeline} row={st} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label || (st.status === 'queued' ? 'Up next' : '—')}</div>
+                <div title={st.status === 'failed' ? (st.firstError || st.label || '') : undefined} style={{ fontSize: 11.5, fontWeight: 600, color: st.status === 'failed' ? 'var(--gb-error-fg)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label || (st.status === 'queued' ? 'Up next' : '—')}</div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 4, background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 10, fontWeight: 700, letterSpacing: .4, fontFamily: 'var(--gb-font-mono)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{tone.label}</span>
@@ -1057,7 +1057,17 @@ export function WorkflowManager({ onClose, contacts = [] }) {
 
   const buildRunDeps = async () => {
     const emailConfig = await readEmailConfig();
-    const employeeId = await new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res(d?.gbEmployeeId || '')); } catch { res(''); } });
+    let employeeId = await new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res(d?.gbEmployeeId || '')); } catch { res(''); } });
+    // The cache can be empty (e.g. the rep hasn't opened a page that exposes the
+    // employee id yet). Fall back to the shared identity resolver — the same one
+    // submitQuickTask uses — so every CRM write in the run has an owner id and
+    // doesn't fail with "Missing valid employee ID".
+    if (!/^\d{1,12}$/.test(String(employeeId))) {
+      try {
+        const { resolveEmployeeId } = await import('../lib/employeeIdentity.js');
+        employeeId = (await resolveEmployeeId()) || employeeId;
+      } catch { /* keep whatever the cache had */ }
+    }
     return { emailConfig, employeeId };
   };
 

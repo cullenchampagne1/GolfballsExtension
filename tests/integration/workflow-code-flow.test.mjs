@@ -440,6 +440,45 @@ describe('workflow code flow', () => {
     assert.match(String(result.result), /^Skipped — no CRM record readable on this page/);
   });
 
+  it('skips a write that depends on a failed prior write and surfaces the real reason', async () => {
+    // A createTask that fails at the CRM layer must not cascade into a
+    // misleading "updateTask needs a task id"; the dependent update is SKIPPED
+    // carrying the upstream reason, so one real failure reads as one failure.
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '77', account: '' },
+        contact: { id: '77', contactId: '77', contactName: 'Dep Buyer' },
+        orders: [],
+        tasks: { open: [], done: [] },
+      },
+    });
+    const code = `
+      const created = await actions.createTask({ subject: "New" });
+      if (created?.taskId) {
+        await actions.updateTask({ id: created.taskId, fields: { liveDate: "2026-08-01" } });
+      }
+      return "done";
+    `;
+    let updateCalls = 0;
+    const result = await simulateProgram(code, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: makeExecutor({
+        ctx: { contactId: '77', contactName: 'Dep Buyer', employeeId: '7' },
+        submitQuickTask: async () => ({ ok: false, error: 'CRM returned HTTP 500.' }),
+        updateTaskById: async () => { updateCalls += 1; return { ok: true }; },
+      }),
+    });
+
+    const create = result.trace.find((entry) => entry.contract === 'createTask');
+    const update = result.trace.find((entry) => entry.contract === 'updateTask');
+    assert.equal(create.status, 'failed');
+    assert.match(create.errors[0], /CRM returned HTTP 500/);
+    // The dependent update is skipped, not failed, and never hits the CRM.
+    assert.equal(update.status, 'skipped');
+    assert.match(update.reason, /prior step failed: CRM returned HTTP 500/);
+    assert.equal(updateCalls, 0, 'a dependent of a failed create never calls the real writer');
+  });
+
   it('leaves an existing non-owned task as read-only context and never edits it', async () => {
     // A task the workflow does not own (a manual follow-up, or a leftover
     // promotion task) is counted as a quarter-covering touch but is never

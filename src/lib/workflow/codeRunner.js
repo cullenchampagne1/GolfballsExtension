@@ -168,13 +168,17 @@ export async function runCodeWorkflow({
     // not inflate live-run action counts.
     const ran = trace.filter((entry) => entry.kind !== 'function' && entry.status === 'ran').length;
     const failed = !result?.ok || trace.some((entry) => entry.status === 'failed');
+    // Per-step executor failures don't throw the program, so result.error is
+    // null even though a step failed. Surface the first failed step's reason as
+    // the contact-level error so the run view can show WHY it failed.
+    const firstFailure = trace.find((entry) => entry.status === 'failed' && entry.errors?.length);
     const summary = {
       contact,
       status: failed ? 'failed' : ran ? 'sent' : 'skipped',
       ran,
       trace,
       result: result?.result ?? null,
-      error: result?.error || null,
+      error: result?.error || firstFailure?.errors?.[0] || null,
     };
     results.push(summary);
     onContactDone(summary);

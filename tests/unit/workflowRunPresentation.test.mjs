@@ -94,4 +94,47 @@ describe('workflow run presentation · source steps and repeats', () => {
     assert.equal(done.activeStepId, null);
     assert.equal(shown.find((step) => step.kind === 'return').runs, 1);
   });
+
+  it('captures a failed step reason and surfaces it on the settled row', () => {
+    const pipeline = buildRunPipeline(translateProgram(
+      'await actions.createTask({ subject: "x" });',
+    ).blocks);
+    const action = pipeline.find((step) => step.contract === 'createTask');
+    // A failed effect carries its reason on entry.errors (and result.error).
+    const running = advanceRunRow({}, {
+      id: action.id,
+      name: 'createTask',
+      status: 'failed',
+      entry: { summary: 'Create task “x”', status: 'failed', errors: ['Missing valid employee ID. Open from a real contact or account page first.'] },
+      result: { ok: false, error: 'Missing valid employee ID. Open from a real contact or account page first.' },
+    }, pipeline);
+    // The reason is retained on the row, not just a red-dot boolean.
+    assert.match(running.firstError, /Missing valid employee ID/);
+    assert.equal(running.stepFailures[action.id], true);
+
+    const done = finishRunRow(running, {
+      status: 'failed',
+      ran: 0,
+      error: 'Missing valid employee ID. Open from a real contact or account page first.',
+      trace: [{ summary: 'Create task “x”', status: 'failed', errors: ['Missing valid employee ID. Open from a real contact or account page first.'] }],
+    }, pipeline);
+    // The settled row LEADS with the reason instead of the action description.
+    assert.match(done.label, /Missing valid employee ID/);
+    assert.equal(done.status, 'failed');
+  });
+
+  it('falls back to the first failed trace entry when no contact-level error is set', () => {
+    const pipeline = buildRunPipeline(translateProgram(
+      'await actions.createTask({ subject: "x" });',
+    ).blocks);
+    // summary.error is null (per-step failure didn't throw the program); the
+    // reason must still come through from the trace entry's errors.
+    const done = finishRunRow({ status: 'sending' }, {
+      status: 'failed',
+      ran: 0,
+      error: null,
+      trace: [{ summary: 'Create task “x”', status: 'failed', errors: ['no valid contact id — pass createTask({ contactId }) or a { taskId } to resolve one'] }],
+    }, pipeline);
+    assert.match(done.label, /no valid contact id/);
+  });
 });

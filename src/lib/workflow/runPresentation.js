@@ -119,6 +119,14 @@ export function advanceRunRow(current = {}, event = {}, pipeline = []) {
   const stepOrder = Array.isArray(row.stepOrder) ? [...row.stepOrder] : [];
   if (!stepOrder.includes(step.id)) stepOrder.push(step.id);
 
+  // Keep the FIRST real failure reason so the settled row can show WHY it
+  // failed instead of just a red dot. Prefer the executor error captured on
+  // the trace entry, then the effect result's error.
+  const failureReason = failed
+    ? (event.entry?.errors?.[0] || event.result?.error || event.entry?.reason || '')
+    : '';
+  const firstError = row.firstError || (failureReason || undefined);
+
   return {
     ...row,
     status: 'sending',
@@ -128,6 +136,7 @@ export function advanceRunRow(current = {}, event = {}, pipeline = []) {
     pulse: (row.pulse || 0) + 1,
     stepRuns,
     stepFailures,
+    firstError,
     stepOrder,
     runtimeSteps,
   };
@@ -159,13 +168,23 @@ export function finishRunRow(current = {}, summary = {}, pipeline = []) {
   const last = effectTrace.length
     ? effectTrace[effectTrace.length - 1].summary
     : '';
+  // A failed run leads with the REASON (contact-level error, else the first
+  // step's captured error) so the row is self-explaining; a successful run
+  // keeps its normal last-step / return-value label.
+  const failureReason = summary.status === 'failed'
+    ? (summary.error
+        || row.firstError
+        || (effectTrace.find((entry) => entry?.errors?.length)?.errors?.[0])
+        || '')
+    : '';
   return {
     ...row,
     ran: summary.ran ?? row.ran ?? 0,
-    label: summary.error
+    label: failureReason
       || last
       || summary.result
       || (summary.suppressReason ? `Suppressed · ${summary.suppressReason}` : '—'),
+    firstError: row.firstError || failureReason || undefined,
     status: summary.status || row.status || 'queued',
     activeStepId: null,
   };
