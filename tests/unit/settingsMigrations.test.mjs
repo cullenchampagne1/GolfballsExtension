@@ -56,10 +56,12 @@ describe('settings migration · workflow and Custom Pages namespaces', () => {
   it('moves legacy workflow flag and scale values without overriding canonical values', () => {
     const migratedFlags = normalizeStoredFlags({
       campaignManagerEnabled: false,
+      submitProofEnabled: false,
       copyIdsEnabled: true,
     });
     assert.equal(migratedFlags.flags.workflowManagerEnabled, false);
     assert.equal(Object.hasOwn(migratedFlags.flags, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(migratedFlags.flags, 'submitProofEnabled'), false);
     assert.equal(migratedFlags.changed, true);
 
     const canonicalWins = normalizeStoredFlags({

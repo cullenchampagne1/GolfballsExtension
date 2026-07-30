@@ -462,7 +462,7 @@
       "pageContext": [
         "order"
       ],
-      "flag": "submitProofEnabled",
+      "flag": "imagePreviewEnabled",
       "submits": "CRM Page=128",
       "relatedSettings": [
         "submitProof.defaultOrderType"
@@ -845,12 +845,6 @@
       "default": true,
       "section": "Email & Templates",
       "controls": "Order Edit button + modal"
-    },
-    {
-      "name": "submitProofEnabled",
-      "default": true,
-      "section": "Email & Templates",
-      "controls": "Submit Proof modal"
     },
     {
       "name": "emailPreviewEnabled",
@@ -2161,7 +2155,7 @@
       "id": "submit-proof",
       "name": "Submit Proof",
       "surface": "SubmitProof modal",
-      "flag": "submitProofEnabled",
+      "flag": "imagePreviewEnabled",
       "summary": "Submit decoration proofs to the CRM with artist/item pickers and proof gallery."
     },
     {

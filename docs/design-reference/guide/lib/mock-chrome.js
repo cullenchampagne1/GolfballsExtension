@@ -11,7 +11,7 @@
       copyIdsEnabled: true, chargeEnabled: true, orderEditEnabled: true,
       emailPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true,
       watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true,
-      crmQueryBuilderEnabled: true, submitProofEnabled: true, taskListEnabled: true,
+      crmQueryBuilderEnabled: true, taskListEnabled: true,
       marginCalcEnabled: true, crmSearchEnabled: true, phoneFinderEnabled: true,
       emailTemplatesEnabled: true, powerAutomateEnabled: false, powerAutomateUrl: '',
     };

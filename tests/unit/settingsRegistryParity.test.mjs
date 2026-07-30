@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 import {
   FEATURE_DEFAULTS,
-  FEATURE_FLAGS,
+  FEATURE_FLAG_META,
 } from '../../src/lib/flags.js';
 import {
   DEV_SETTINGS,
@@ -21,7 +21,7 @@ const registry = JSON.parse(match[1]);
 
 const adminKeys = new Set(ADMIN_ONLY.configKeys || []);
 const keep = (key) => !adminKeys.has(key);
-const featureMeta = Object.fromEntries(FEATURE_FLAGS.map((row) => [row.key, row]));
+const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((row) => [row.key, row]));
 const defaults = defaultDevSettings();
 
 describe('settings registry · extension/backend parity', () => {
@@ -29,14 +29,16 @@ describe('settings registry · extension/backend parity', () => {
     const expectedKeys = Object.keys(FEATURE_DEFAULTS).filter(keep).sort();
     assert.deepEqual(Object.keys(registry.features).sort(), expectedKeys);
     for (const key of expectedKeys) {
+      assert.ok(featureMeta[key], `${key} must have canonical display metadata`);
       assert.deepEqual(registry.features[key], {
         type: 'bool',
         default: FEATURE_DEFAULTS[key],
-        label: featureMeta[key]?.name || key,
+        label: featureMeta[key].name,
         managedDefault: true,
       });
     }
     assert.equal(Object.hasOwn(registry.features, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(registry.features, 'submitProofEnabled'), false);
   });
 
   it('matches every remotely manageable developer setting', () => {

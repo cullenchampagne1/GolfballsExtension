@@ -58,12 +58,6 @@
       "label": "Signifyd Glow",
       "managedDefault": true
     },
-    "submitProofEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "submitProofEnabled",
-      "managedDefault": true
-    },
     "taskListEnabled": {
       "type": "bool",
       "default": true,
@@ -97,7 +91,7 @@
     "powerAutomateEnabled": {
       "type": "bool",
       "default": false,
-      "label": "powerAutomateEnabled",
+      "label": "Power Automate",
       "managedDefault": true
     },
     "actionsShelfEnabled": {

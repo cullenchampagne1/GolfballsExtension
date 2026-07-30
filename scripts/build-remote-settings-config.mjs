@@ -9,7 +9,7 @@
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { FEATURE_DEFAULTS, FEATURE_FLAGS } from '../src/lib/flags.js';
+import { FEATURE_DEFAULTS, FEATURE_FLAG_META } from '../src/lib/flags.js';
 import { DEV_SETTINGS, defaultDevSettings } from '../src/lib/devSettings.js';
 import { CUSTOM_PAGE_SECTIONS } from '../src/lib/customPages.js';
 import { ADMIN_ONLY } from './strip-admin.mjs';
@@ -32,7 +32,7 @@ const keep = (key) => !ADMIN_CONFIG.has(key);
 // identity and is never replaced by a shared policy value.
 const INSTALLATION_LOCAL_KEYS = new Set(['email.localPart']);
 
-const featureMeta = Object.fromEntries(FEATURE_FLAGS.map((item) => [item.key, item]));
+const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((item) => [item.key, item]));
 const featureDefaultEntries = Object.entries(FEATURE_DEFAULTS).filter(([key]) => keep(key));
 const developerRows = DEV_SETTINGS.filter((item) => item.type !== 'action' && keep(item.key));
 const developerDefaults = defaultDevSettings();

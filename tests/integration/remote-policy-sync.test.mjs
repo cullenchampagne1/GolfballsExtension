@@ -51,6 +51,7 @@ before(async () => {
       copyIdsEnabled: true,
       personalUnknownFlag: true,
       campaignManagerEnabled: false,
+      submitProofEnabled: false,
     },
     devSettings: {
       'numberDisplay.durationMs': 777,
@@ -109,6 +110,7 @@ describe('remote policy sync', () => {
     assert.equal(stored.featureFlags.workflowManagerEnabled, false, 'legacy local workflow flag is retained');
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'legacy local workflow scale is retained');
     assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(stored.featureFlags, 'submitProofEnabled'), false);
     assert.equal(Object.hasOwn(stored.devSettings, 'campaignManager.scale'), false);
 
     const policy = stored.gbRemoteSettingsPolicy;

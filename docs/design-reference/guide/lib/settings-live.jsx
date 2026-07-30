@@ -15,7 +15,6 @@
     { key: 'emailTemplatesEnabled', name: 'Email Templates', icon: 'mail', desc: 'Shows the template dropdown, resolved-variables readout, and Send button in the popup.' },
     { key: 'chargeEnabled', name: 'Charge Card', icon: 'card', desc: "Shows the Charge Card / Refund button in the email template popup. Disable if you don't process payments through the extension." },
     { key: 'orderEditEnabled', name: 'Order Edit', icon: 'edit', desc: "Shows the Order Edit button in the email template popup." },
-    { key: 'submitProofEnabled', name: 'Submit Proof', icon: 'send', desc: 'Shows the Submit Proof button for sending art proofs directly from the order page.' },
     { key: 'marginCalcEnabled', name: 'Margin Calculator', icon: 'calc', desc: 'Displays margin calculations and profit metrics on order pages.' },
     { key: 'watchListEnabled', name: 'Watchlist', icon: 'eye', desc: 'Enables the watchlist feature to track orders across sessions.' },
     { key: 'taskListEnabled', name: 'Task List', icon: 'check', desc: 'Shows an integrated task list for tracking order-related todos.' },

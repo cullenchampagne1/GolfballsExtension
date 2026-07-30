@@ -250,7 +250,7 @@ function PopupApp() {
       const credentials = await loadCredentials();
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
-        chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
+        chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
         notificationsEnabled: true,
         ...(data.featureFlags || {}),
@@ -488,7 +488,7 @@ function PopupApp() {
       if (changes.featureFlags) {
         const next = changes.featureFlags.newValue || {};
         setFlags({
-          chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
+          chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true,
           taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
           notificationsEnabled: true,
           ...next,

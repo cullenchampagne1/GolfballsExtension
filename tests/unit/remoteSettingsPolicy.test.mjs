@@ -26,6 +26,7 @@ before(async () => {
       copyIdsEnabled: false,
       personalUnknownFlag: true,
       campaignManagerEnabled: false,
+      submitProofEnabled: false,
     },
     devSettings: {
       'numberDisplay.durationMs': 777,
@@ -110,6 +111,7 @@ describe('remote settings policy', () => {
     assert.equal(stored.featureFlags.workflowManagerEnabled, false, 'renamed unmanaged flag keeps its local value');
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'renamed unmanaged setting keeps its local value');
     assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(stored.featureFlags, 'submitProofEnabled'), false);
     assert.equal(Object.hasOwn(stored.devSettings, 'campaignManager.scale'), false);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
@@ -120,6 +122,7 @@ describe('remote settings policy', () => {
     assert.equal(stored.gbRemoteSettingsBackup.featureFlags.copyIdsEnabled, false);
     assert.equal(stored.gbRemoteSettingsBackup.featureFlags.workflowManagerEnabled, false);
     assert.equal(Object.hasOwn(stored.gbRemoteSettingsBackup.featureFlags, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(stored.gbRemoteSettingsBackup.featureFlags, 'submitProofEnabled'), false);
     assert.ok(alarms.some(({ options }) => options.periodInMinutes === 1));
   });
 

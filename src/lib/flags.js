@@ -16,7 +16,6 @@ export const FEATURE_DEFAULTS = {
   watchListEnabled:         true,
   autoPushEnabled:          true,
   signifydGlowEnabled:      true,
-  submitProofEnabled:       true,
   taskListEnabled:          true,
   marginCalcEnabled:        true,
   crmSearchEnabled:         true,
@@ -87,6 +86,20 @@ export const FEATURE_FLAGS = [
   { key: 'actionsShelfEnabled', section: 'Tools', name: 'Quick Actions Shelf',  desc: 'Floating bottom-right quick-actions shelf (Shift×2).', icon: 'bolt' },
 ];
 
+/* Flags with bespoke Settings UI still need canonical metadata for the
+   backend registry, generated help, and parity tests. */
+export const AUXILIARY_FEATURE_FLAGS = [
+  {
+    key: 'powerAutomateEnabled',
+    section: 'Integration',
+    name: 'Power Automate',
+    desc: 'Route emails through your Power Automate flow for silent sending. Off = pre-filled Outlook windows.',
+    icon: 'send',
+  },
+];
+
+export const FEATURE_FLAG_META = [...FEATURE_FLAGS, ...AUXILIARY_FEATURE_FLAGS];
+
 const LEGACY_WORKFLOW_FLAG = 'campaignManagerEnabled';
 
 /** Canonicalize stored flags without mutating the storage result. */
@@ -107,6 +120,7 @@ export function normalizeStoredFlags(value) {
   for (const key of [
     'powerAutomateUrl', 'directSendUrl', 'replyWithTemplateEnabled',
     'directSendEnabled', 'developerMode', 'crmQueryBuilderEnabled',
+    'submitProofEnabled',
   ]) {
     if (Object.hasOwn(flags, key)) {
       delete flags[key];

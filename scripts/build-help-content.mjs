@@ -42,7 +42,7 @@ const ADMIN_HELP_DOCS = new Set(IS_CONSUMER ? (ADMIN_ONLY.helpDocs || []) : []);
 const ADMIN_MODAL_IDS = new Set(IS_CONSUMER ? (ADMIN_ONLY.adminModals || []) : []);
 const ADMIN_TUTORIAL_IDS = new Set(IS_CONSUMER ? (ADMIN_ONLY.adminTutorials || []) : []);
 
-const { FEATURE_FLAGS, FEATURE_DEFAULTS, KEYBOARD_SHORTCUTS_DEFAULTS } =
+const { FEATURE_FLAG_META, FEATURE_DEFAULTS, KEYBOARD_SHORTCUTS_DEFAULTS } =
   await import(path.join(ROOT, 'src/lib/flags.js'));
 const { DEV_SETTINGS } = await import(path.join(ROOT, 'src/lib/devSettings.js'));
 
@@ -96,24 +96,8 @@ const SHORTCUT_LABELS = {
   crmNewContact: 'New Contact',
 };
 
-// Flags present in defaults but absent from the display registry
-// (rendered separately in the settings panel's Integration section).
-const EXTRA_FLAG_META = {
-  powerAutomateEnabled: {
-    section: 'Integration',
-    name: 'Power Automate',
-    desc: 'Route emails through your Power Automate flow for silent sending. Off = pre-filled Outlook windows.',
-  },
-};
-
 function generatedFeatureFlagBlocks() {
-  const known = new Set(FEATURE_FLAGS.map((f) => f.key));
-  const all = [
-    ...FEATURE_FLAGS,
-    ...Object.keys(FEATURE_DEFAULTS)
-      .filter((k) => typeof FEATURE_DEFAULTS[k] === 'boolean' && !known.has(k))
-      .map((k) => ({ key: k, ...(EXTRA_FLAG_META[k] || { section: 'Other', name: k, desc: '' }) })),
-  ];
+  const all = FEATURE_FLAG_META;
   const sections = [...new Set(all.map((f) => f.section))];
   const blocks = [];
   for (const section of sections) {
@@ -376,10 +360,7 @@ for (const t of tutorials) {
   });
 }
 
-const searchableFlags = [
-  ...FEATURE_FLAGS,
-  ...Object.entries(EXTRA_FLAG_META).map(([key, meta]) => ({ key, ...meta })),
-];
+const searchableFlags = FEATURE_FLAG_META;
 for (const f of searchableFlags) {
   searchIndex.push({
     id: `flag:${f.key}`,

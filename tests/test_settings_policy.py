@@ -180,6 +180,10 @@ class SettingsPolicyTests(unittest.TestCase):
             "value": False, "hidden": True, "managed": False,
             "label": "Campaign Manager",
         }
+        legacy_document["features"]["submitProofEnabled"] = {
+            "value": False, "hidden": False, "managed": True,
+            "label": "Submit Proof",
+        }
         del legacy_document["features"]["workflowManagerEnabled"]
         legacy_document["developer_settings"]["campaignManager.scale"] = {
             "value": 0.75, "hidden": True, "managed": False,
@@ -217,6 +221,7 @@ class SettingsPolicyTests(unittest.TestCase):
 
         migrated = self.store.global_document()
         self.assertNotIn("campaignManagerEnabled", migrated["features"])
+        self.assertNotIn("submitProofEnabled", migrated["features"])
         self.assertEqual(migrated["features"]["workflowManagerEnabled"], {
             "value": False, "hidden": True, "managed": False,
             "label": "Workflow Manager",

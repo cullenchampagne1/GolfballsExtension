@@ -81,7 +81,7 @@
         if (cancelled || !currentTab) return;
         const data = await storageGet(['templates', 'watchList', 'featureFlags']);
         const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
-        const mergedFlags = { chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true, taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true, ...(data.featureFlags || {}) };
+        const mergedFlags = { chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true, taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true, ...(data.featureFlags || {}) };
         setTab(currentTab); setAllTemplates(tpls); setWatchList(data.watchList || []); setFlags(mergedFlags);
         const info = await sendMessage(currentTab.id, { action: 'getPageInfo', templates: tpls });
         if (cancelled) return;
@@ -100,7 +100,7 @@
     useEffect(() => {
       const listener = (changes, area) => {
         if (area !== 'local') return;
-        if (changes.featureFlags) setFlags({ chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true, taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true, ...(changes.featureFlags.newValue || {}) });
+        if (changes.featureFlags) setFlags({ chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true, taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true, ...(changes.featureFlags.newValue || {}) });
         if (changes.watchList) setWatchList(changes.watchList.newValue || []);
       };
       chrome.storage.onChanged.addListener(listener);
@@ -217,7 +217,7 @@
             )}
             {flags.taskListEnabled && <Reveal key="tasks"><div data-demo="tasks"><Btn full size="sm" icon={<Ic.checkbox />} onClick={() => onToast?.('Opening My Tasks…')}>My Tasks</Btn></div></Reveal>}
             {flags.crmSearchEnabled && <Reveal key="crmSearch"><div data-demo="crmSearch"><Btn full size="sm" icon={<I.search />} onClick={() => onToast?.('Opening CRM Search…')}>CRM Search</Btn></div></Reveal>}
-            {flags.submitProofEnabled && <Reveal key="proof"><div data-demo="proof"><Btn full size="sm" disabled={proofDisabled} icon={<Ic.paperclip />} onClick={() => onToast?.('Opening Submit Proof…')}>Submit Proof</Btn></div></Reveal>}
+            {flags.imagePreviewEnabled && <Reveal key="proof"><div data-demo="proof"><Btn full size="sm" disabled={proofDisabled} icon={<Ic.paperclip />} onClick={() => onToast?.('Opening Submit Proof…')}>Submit Proof</Btn></div></Reveal>}
           </AnimatePresence>
         </div>
 

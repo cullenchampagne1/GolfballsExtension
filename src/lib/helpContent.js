@@ -596,7 +596,7 @@ export const HELP_CONTENT = {
       ],
       "summary": "The full proof request form — multi-item selection with per-item fields, logo status, rush flags, the prior-proof gallery, and the results panel with shareable links.",
       "feature": "submit-proof",
-      "flag": "submitProofEnabled",
+      "flag": "imagePreviewEnabled",
       "covers": [
         "submit-proof"
       ],
@@ -4805,30 +4805,6 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
-            "text": "Other"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Feature",
-              "Default",
-              "What it controls"
-            ],
-            "rows": [
-              [
-                "submitProofEnabled",
-                "On",
-                ""
-              ]
-            ],
-            "meta": {
-              "flagKeys": [
-                "submitProofEnabled"
-              ]
-            }
-          },
-          {
-            "type": "heading",
             "text": "Integration"
           },
           {
@@ -7450,7 +7426,7 @@ export const HELP_CONTENT = {
       "estMinutes": 4,
       "prerequisites": [
         "On an order page with artwork",
-        "imagePreviewEnabled and submitProofEnabled are on"
+        "imagePreviewEnabled is on"
       ],
       "steps": [
         {
@@ -7899,7 +7875,7 @@ export const HELP_CONTENT = {
       "description": "The full proof request form — multi-item selection with per-item fields, logo status, rush flags, the prior-proof gallery, and the results panel with shareable links.",
       "article": "submit-proof",
       "shortcut": null,
-      "flag": "submitProofEnabled"
+      "flag": "imagePreviewEnabled"
     },
     {
       "id": "article:crm-search",

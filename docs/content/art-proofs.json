@@ -86,7 +86,7 @@
       "keywords": ["proof", "artist", "submit", "art approval", "decoration proof", "rush", "logo status", "gallery"],
       "summary": "The full proof request form — multi-item selection with per-item fields, logo status, rush flags, the prior-proof gallery, and the results panel with shareable links.",
       "feature": "submit-proof",
-      "flag": "submitProofEnabled",
+      "flag": "imagePreviewEnabled",
       "covers": ["submit-proof"],
       "body": {
         "beginner": [

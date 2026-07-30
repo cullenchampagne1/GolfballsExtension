@@ -97,7 +97,7 @@
       "title": "Extract a logo & submit a proof",
       "tier": "intermediate",
       "estMinutes": 4,
-      "prerequisites": ["On an order page with artwork", "imagePreviewEnabled and submitProofEnabled are on"],
+      "prerequisites": ["On an order page with artwork", "imagePreviewEnabled is on"],
       "steps": [
         { "action": "Hover the product/render image and click the expand button.", "expected": "The Image Viewer opens and resolves the best-quality original (direct file → express upload → CDN → render fallback).", "visualCue": "Floating button appears over the image on hover.", "tip": "Shift+click the button to download the logo immediately, skipping the viewer." },
         { "action": "Zoom and pan to inspect the artwork; download or copy the URL if needed.", "expected": "Crisp original artwork, not the page's cropped render.", "visualCue": "Zoom controls in the viewer." },
