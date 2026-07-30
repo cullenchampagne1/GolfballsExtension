@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 import {
+  actionReviewEmailTarget,
   actionReviewDocumentSignature,
   actionReviewResultTables,
   buildActionReviewPostFields,
+  buildActionReviewRequest,
   filterActionReviewTasks,
   isActionReviewDocument,
   isActionReviewSnapshotSettled,
   paginateActionReviewRows,
   parseActionReviewDocument,
-  prepareActionReviewPostback,
   toIsoActionReviewDate,
   toWebFormsActionReviewDate,
 } from '../../src/lib/actionReviewModel.js';
@@ -169,6 +170,30 @@ describe('Action Review · native document parsing', () => {
       size: 8283,
       href: 'Default.aspx?Page=268&MessageID=40698357',
     });
+    assert.deepEqual(
+      actionReviewEmailTarget(
+        review.emails[0],
+        'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=286',
+      ),
+      {
+        href: 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=268&MessageID=40698357',
+        messageId: '40698357',
+        messageGuid: '',
+        meta: {
+          from: 'LogoProof@golfballs.com',
+          to: 'Cullen@golfballs.com',
+          subject: 'Custom Logo Proof Approved',
+          date: '7/29/2026 12:44:00 PM',
+        },
+      },
+    );
+    assert.equal(
+      actionReviewEmailTarget(
+        { ...review.emails[0], href: 'https://example.com/steal?MessageID=40698357' },
+        'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=286',
+      ),
+      null,
+    );
     assert.deepEqual(review.tasks, [
       {
         id: '755756',
@@ -300,27 +325,40 @@ describe('Action Review · WebForms date and postback contract', () => {
     assert.equal(fields['ctl00$SecondDateTime'], '7/29/2026');
   });
 
-  it('prepares the authenticated native form instead of depending on a fetch response', () => {
-    const doc = documentFrom();
-    const form = prepareActionReviewPostback(doc, {
+  it('builds an authenticated background POST without navigating the page', () => {
+    const request = buildActionReviewRequest({
+      formAction: 'Default.aspx?Page=286',
+      formState: {
+        __VIEWSTATE: 'view-state',
+        __VIEWSTATEGENERATOR: 'generator',
+        __EVENTVALIDATION: 'event-validation',
+      },
+    }, {
       rep: '1114',
       dateOption: 'BETWEEN',
       date1: '2026-07-29',
       date2: '2026-07-31',
-    });
+    }, 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=286');
+    const body = new URLSearchParams(request.init.body);
 
-    assert.equal(form, doc.querySelector('form'));
-    assert.equal(form.querySelector('[name="__EVENTTARGET"]').value, 'GetSalesRep');
-    assert.deepEqual(JSON.parse(form.querySelector('[name="__EVENTARGUMENT"]').value), {
+    assert.equal(request.url, 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=286');
+    assert.equal(request.init.method, 'POST');
+    assert.equal(request.init.credentials, 'include');
+    assert.equal(request.init.cache, 'no-store');
+    assert.equal(body.get('__EVENTTARGET'), 'GetSalesRep');
+    assert.deepEqual(JSON.parse(body.get('__EVENTARGUMENT')), {
       SalesRep: '1114',
       DateOption: 'BETWEEN',
       DateTime: '7/29/2026',
       SecondDateTime: '7/31/2026',
     });
-    assert.equal(doc.querySelector('#SalesRep').value, '1114');
-    assert.equal(doc.querySelector('#DateOption').value, 'BETWEEN');
-    assert.equal(doc.querySelector('#DateTime').value, '7/29/2026');
-    assert.equal(doc.querySelector('#SecondDateTime').value, '7/31/2026');
+    assert.equal(body.get('ctl00$SalesRep'), '1114');
+    assert.equal(body.get('ctl00$DateOption'), 'BETWEEN');
+    assert.equal(body.get('ctl00$DateTime'), '7/29/2026');
+    assert.equal(body.get('ctl00$SecondDateTime'), '7/31/2026');
+    assert.equal(body.get('__VIEWSTATE'), 'view-state');
+    assert.equal(body.get('__VIEWSTATEGENERATOR'), 'generator');
+    assert.equal(body.get('__EVENTVALIDATION'), 'event-validation');
   });
 });
 

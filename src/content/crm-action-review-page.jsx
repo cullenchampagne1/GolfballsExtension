@@ -19,13 +19,14 @@ import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import {
+  actionReviewEmailTarget,
   actionReviewDocumentSignature,
+  buildActionReviewRequest,
   filterActionReviewTasks,
   isActionReviewDocument,
   isActionReviewSnapshotSettled,
   paginateActionReviewRows,
   parseActionReviewDocument,
-  prepareActionReviewPostback,
   toIsoActionReviewDate,
 } from '../lib/actionReviewModel.js';
 import { Dropdown } from '../ui/components/Dropdown.jsx';
@@ -37,6 +38,7 @@ import {
   DASH,
   DataCtx,
   DetailErrorBoundary,
+  EmailHistoryTable,
   EmptyRow,
   I,
   IconBtn,
@@ -47,8 +49,6 @@ import {
   TaskCheckbox,
   Td,
   Th,
-  fmtBytes,
-  fmtDateTime,
   tableStyle,
   trStyle,
   txt,
@@ -351,13 +351,23 @@ function waitForLiveActionReview(timeoutMs = 10_000) {
   });
 }
 
-function submitNativeActionReview(filters) {
-  const form = prepareActionReviewPostback(document, filters);
-  const nativeSubmit = window.HTMLFormElement?.prototype?.submit;
-  if (typeof nativeSubmit !== 'function') {
-    throw new Error('The native Action Review form cannot be submitted.');
+async function requestActionReview({ review, filters }) {
+  const request = buildActionReviewRequest(review, filters, window.location.href);
+  const response = await fetch(request.url, request.init);
+  if (!response.ok) {
+    throw new Error(`Action Review returned HTTP ${response.status}.`);
   }
-  nativeSubmit.call(form);
+  const html = await response.text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  if (!isActionReviewDocument(doc)) {
+    throw new Error('The CRM returned a sign-in or incomplete page instead of Action Review.');
+  }
+  return {
+    ...normalizeReview(parseActionReviewDocument(doc)),
+    // A successful POST is still a completed search when the CRM omits every
+    // conditional result table because the result set is empty.
+    searched: true,
+  };
 }
 
 function FilterField({ label, className = '', children }) {
@@ -527,13 +537,21 @@ function ActivitySection({ rows }) {
 }
 
 function EmailSection({ rows }) {
-  const openEmail = (href) => {
-    if (!href) return;
-    try {
-      const url = new URL(href, window.location.href);
-      if (url.origin !== window.location.origin) return;
-      window.open(url.href, '_blank', 'noopener,noreferrer');
-    } catch (error) {}
+  const viewEmail = (email) => {
+    const target = actionReviewEmailTarget(email, window.location.href);
+    if (target && typeof window.__gbOpenEmailPreview === 'function') {
+      window.__gbOpenEmailPreview({
+        messageId: target.messageId,
+        messageGuid: target.messageGuid,
+        meta: target.meta,
+      });
+      return;
+    }
+    if (target) window.open(target.href, '_blank', 'noopener,noreferrer');
+  };
+  const downloadEmail = (email) => {
+    const target = actionReviewEmailTarget(email, window.location.href);
+    if (target) window.open(target.href, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -544,37 +562,12 @@ function EmailSection({ rows }) {
         count={NUMBER.format(rows.length)}
         sub="Messages returned for the selected rep and date"
       />
-      <ScrollArea max={420}>
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <Th style={{ width: 230 }}>From</Th>
-              <Th style={{ width: 230 }}>To</Th>
-              <Th>Subject</Th>
-              <Th align="right" style={{ width: 168 }}>Date</Th>
-              <Th align="right" style={{ width: 80 }}>Size</Th>
-              <Th align="center" style={{ width: 54 }}>File</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((email, index) => (
-              <tr key={`${email.href || email.date}-${index}`} style={trStyle}>
-                <Td style={{ width: 230 }}><span style={{ fontWeight: 500, color: 'var(--gb-text-secondary)' }}>{email.from || DASH}</span></Td>
-                <Td muted style={{ width: 230 }}>{email.to || DASH}</Td>
-                <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{email.subject || DASH}</span></Td>
-                <Td align="right" mono muted style={{ width: 168, whiteSpace: 'nowrap' }}>{fmtDateTime(email.date)}</Td>
-                <Td align="right" mono muted style={{ width: 80, whiteSpace: 'nowrap' }}>{email.size ? fmtBytes(email.size) : DASH}</Td>
-                <Td align="center" style={{ width: 54 }}>
-                  {email.href ? (
-                    <IconBtn size="xs" ghost icon={<I.download />} title="Open email file" onClick={() => openEmail(email.href)} />
-                  ) : DASH}
-                </Td>
-              </tr>
-            ))}
-            {!rows.length && <EmptyRow colSpan={6} label="No email returned by this search." />}
-          </tbody>
-        </table>
-      </ScrollArea>
+      <EmailHistoryTable
+        rows={rows}
+        onOpen={viewEmail}
+        onDownload={downloadEmail}
+        emptyLabel="No email returned by this search."
+      />
     </Card>
   );
 }
@@ -762,7 +755,7 @@ function TaskSection({
 export function ActionReviewApp({
   store,
   initialReview = null,
-  reviewClient = null,
+  reviewClient = requestActionReview,
   actionsEnabled = true,
 }) {
   const [D] = useDetailData(store);
@@ -818,16 +811,6 @@ export function ActionReviewApp({
     setBusy(true);
     setError('');
     const filters = { rep, dateOption, date1, date2 };
-
-    if (!reviewClient) {
-      try {
-        submitNativeActionReview(filters);
-      } catch (filterError) {
-        setError(filterError?.message || 'The native Action Review form could not be submitted.');
-        setBusy(false);
-      }
-      return;
-    }
 
     try {
       acceptReview(await reviewClient({

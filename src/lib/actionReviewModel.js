@@ -92,6 +92,35 @@ export function parseActionReviewEmails(doc) {
   return rows;
 }
 
+/** Convert one Action Review email row into the same target shape used by the
+ * contact/account Email Preview, while refusing cross-origin links. */
+export function actionReviewEmailTarget(email, currentHref = '') {
+  try {
+    const current = new URL(currentHref);
+    const url = new URL(email?.href || '', current.href);
+    if (url.origin !== current.origin) return null;
+    const params = Array.from(url.searchParams.entries());
+    const readParam = (name) => (
+      params.find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] || ''
+    );
+    const messageId = readParam('MessageID');
+    if (!messageId) return null;
+    return {
+      href: url.href,
+      messageId,
+      messageGuid: readParam('MessageGUID'),
+      meta: {
+        from: email?.from || '',
+        to: email?.to || '',
+        subject: email?.subject || '',
+        date: email?.date || '',
+      },
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
 function taskCellOffset(cells) {
   if (TASK_STATUS.test(cells[2] || '')) return 0;
   if (TASK_STATUS.test(cells[3] || '')) return 1;
@@ -273,39 +302,34 @@ export function buildActionReviewPostFields(formState, {
   };
 }
 
-function ensureActionReviewFormControl(doc, form, name) {
-  const existing = Array.from(form.querySelectorAll('[name]'))
-    .find((control) => control.name === name);
-  if (existing) return existing;
-
-  const input = doc.createElement('input');
-  input.type = 'hidden';
-  input.name = name;
-  form.appendChild(input);
-  return input;
-}
-
 /**
- * Mutate the live WebForms form exactly as __doPostBack('GetSalesRep', ...)
- * does. Submitting this existing form preserves the CRM's authenticated page
- * navigation; fetching the action URL can instead return a login-shaped shell.
+ * Build the same authenticated WebForms POST as __doPostBack('GetSalesRep',
+ * ...), but as a background fetch request so the custom page never navigates.
+ * The caller parses the returned HTML and renders those rows in place.
  */
-export function prepareActionReviewPostback(doc, filters = {}) {
-  const form = doc?.querySelector?.('form');
-  if (!form) throw new Error('The native Action Review form is unavailable.');
+export function buildActionReviewRequest(review, filters = {}, currentHref = '') {
+  const current = new URL(currentHref);
+  let target = current;
+  try {
+    const candidate = new URL(review?.formAction || current.href, current.href);
+    if (candidate.origin === current.origin && /[?&]Page=286\b/i.test(candidate.href)) {
+      target = candidate;
+    }
+  } catch (error) {}
 
-  const fields = buildActionReviewPostFields(null, filters);
-  [
-    '__EVENTTARGET',
-    '__EVENTARGUMENT',
-    'ctl00$SalesRep',
-    'ctl00$DateOption',
-    'ctl00$DateTime',
-    'ctl00$SecondDateTime',
-  ].forEach((name) => {
-    ensureActionReviewFormControl(doc, form, name).value = fields[name];
-  });
-  return form;
+  const fields = buildActionReviewPostFields(review?.formState, filters);
+  return {
+    url: target.href,
+    init: {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      },
+      body: new URLSearchParams(fields).toString(),
+    },
+  };
 }
 
 export function filterActionReviewTasks(tasks, { query = '', status = 'all' } = {}) {

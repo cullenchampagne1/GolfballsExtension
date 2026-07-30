@@ -1374,25 +1374,27 @@ export function OrdersPanel() {
   );
 }
 
-export function EmailsPanel({ onCompose }) {
-  const D = useD();
-  const me = (D.contact.email || '').toLowerCase();
-  const dirOf = (e) => {
-    const from = (e.from || '').toLowerCase();
-    if (me && from.indexOf(me) !== -1) return 'in';
-    if (/support|service|noreply|no-reply/.test(from)) return 'auto';
-    return 'out';
-  };
+function emailDirection(email, contactEmail = '') {
+  const from = String(email?.from || '').toLowerCase();
+  const to = String(email?.to || '').toLowerCase();
+  const contact = String(contactEmail || '').toLowerCase();
+  const internal = /(?:^|@)(?:[^@.]+\.)*(?:golfballs\.com|loyaltylogo\.com|gbcadmin)(?:$|\b)/i;
+  if (contact && from.includes(contact)) return 'in';
+  if (/support|service|noreply|no-reply/.test(from)) return 'auto';
+  if (!contact && !internal.test(from) && internal.test(to)) return 'in';
+  return 'out';
+}
+
+export function EmailHistoryTable({
+  rows = [],
+  contactEmail = '',
+  onOpen,
+  onDownload,
+  emptyLabel = 'No emails.',
+  max = 420,
+}) {
   return (
-    <Card>
-      <SectionTitle
-        icon={<I.mail />} title="Email History" count={`${D.emails.length} shown`}
-        sub="All emails to or from this contact"
-        right={onCompose && (
-          <Btn variant="tinted" size="sm" icon={<I.send />} onClick={onCompose}>Compose</Btn>
-        )}
-      />
-      <ScrollArea max={420}>
+    <ScrollArea max={max}>
       <table style={tableStyle}>
         <thead><tr>
           <Th>Dir</Th>
@@ -1404,26 +1406,46 @@ export function EmailsPanel({ onCompose }) {
           <Th></Th>
         </tr></thead>
         <tbody>
-          {D.emails.map((e, i) => (
-            <tr key={i} style={trStyle}>
-              <Td><DirArrow dir={dirOf(e)} /></Td>
+          {rows.map((e, i) => (
+            <tr key={e.href || e.messageId || `${e.date || ''}-${i}`} style={trStyle}>
+              <Td><DirArrow dir={emailDirection(e, contactEmail)} /></Td>
               <Td><span style={{ fontWeight: 500, color: 'var(--gb-text-secondary)' }}>{e.from}</span></Td>
               <Td muted>{e.to}</Td>
               <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{e.subject}</span></Td>
               <Td align="right" mono muted>{fmtDateTime(e.date)}</Td>
-              <Td align="right" mono muted>{fmtBytes(e.sizeBytes)}</Td>
+              <Td align="right" mono muted>{fmtBytes(e.sizeBytes ?? e.size)}</Td>
               <Td align="right">
                 <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                  <IconBtn size="xs" ghost icon={<I.mail />} title="Open email" onClick={() => openEmailRow(i)} />
-                  <IconBtn size="xs" ghost icon={<I.download />} title="Download .eml" onClick={() => downloadEmailRow(i)} />
+                  {onOpen && <IconBtn size="xs" ghost icon={<I.mail />} title="Open email" onClick={() => onOpen(e, i)} />}
+                  {onDownload && <IconBtn size="xs" ghost icon={<I.download />} title="Download .eml" onClick={() => onDownload(e, i)} />}
                 </div>
               </Td>
             </tr>
           ))}
-          {D.emails.length === 0 && <EmptyRow colSpan={7} label="No emails." />}
+          {rows.length === 0 && <EmptyRow colSpan={7} label={emptyLabel} />}
         </tbody>
       </table>
-      </ScrollArea>
+    </ScrollArea>
+  );
+}
+
+export function EmailsPanel({ onCompose }) {
+  const D = useD();
+  return (
+    <Card>
+      <SectionTitle
+        icon={<I.mail />} title="Email History" count={`${D.emails.length} shown`}
+        sub="All emails to or from this contact"
+        right={onCompose && (
+          <Btn variant="tinted" size="sm" icon={<I.send />} onClick={onCompose}>Compose</Btn>
+        )}
+      />
+      <EmailHistoryTable
+        rows={D.emails}
+        contactEmail={D.contact.email}
+        onOpen={(_email, index) => openEmailRow(index)}
+        onDownload={(_email, index) => downloadEmailRow(index)}
+      />
     </Card>
   );
 }
