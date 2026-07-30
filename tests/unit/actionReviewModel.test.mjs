@@ -268,6 +268,38 @@ describe('Action Review · WebForms date and postback contract', () => {
     assert.equal(fields.__VIEWSTATE, 'view-state');
   });
 
+  it('keeps the hidden second date populated for an ON search', () => {
+    const fields = buildActionReviewPostFields(
+      { __VIEWSTATE: 'view-state' },
+      {
+        rep: '2370',
+        dateOption: 'ON',
+        date1: '2026-07-29',
+        date2: '2026-07-30',
+      },
+    );
+
+    assert.deepEqual(JSON.parse(fields.__EVENTARGUMENT), {
+      SalesRep: '2370',
+      DateOption: 'ON',
+      DateTime: '7/29/2026',
+      SecondDateTime: '7/30/2026',
+    });
+    assert.equal(fields['ctl00$SecondDateTime'], '7/30/2026');
+  });
+
+  it('falls back to the first date when the hidden second date is unavailable', () => {
+    const fields = buildActionReviewPostFields(null, {
+      rep: '2370',
+      dateOption: 'BEFORE',
+      date1: '2026-07-29',
+      date2: '',
+    });
+
+    assert.equal(JSON.parse(fields.__EVENTARGUMENT).SecondDateTime, '7/29/2026');
+    assert.equal(fields['ctl00$SecondDateTime'], '7/29/2026');
+  });
+
   it('prepares the authenticated native form instead of depending on a fetch response', () => {
     const doc = documentFrom();
     const form = prepareActionReviewPostback(doc, {

@@ -251,7 +251,11 @@ export function buildActionReviewPostFields(formState, {
 } = {}) {
   const option = normalizedDateOption(dateOption);
   const firstDate = toWebFormsActionReviewDate(date1);
-  const secondDate = option === 'BETWEEN' ? toWebFormsActionReviewDate(date2) : '';
+  // The native page always includes its hidden SecondDateTime value in the
+  // GetSalesRep JSON. The server deserializes it as a non-nullable DateTime
+  // before inspecting DateOption, so an empty value 500s even for ON/BEFORE/
+  // AFTER searches. Preserve the native field and fall back to the first date.
+  const secondDate = toWebFormsActionReviewDate(date2) || firstDate;
   const argument = {
     SalesRep: String(rep || ''),
     DateOption: option,
