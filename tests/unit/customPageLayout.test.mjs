@@ -5,10 +5,36 @@ import {
   FULL_HEIGHT_LIST_PAGE_CSS,
   nextProgressiveResultCount,
   opportunityStageTone,
+  paginateCustomPageRows,
   searchRailIsFloating,
   searchRailTransitionSeconds,
   smartSearchBarVisible,
 } from '../../src/lib/customPageLayout.js';
+
+describe('custom page layout · detail table pagination', () => {
+  it('keeps every materialized task or opportunity reachable in ten-row pages', () => {
+    const rows = Array.from({ length: 23 }, (_, id) => ({ id }));
+    const second = paginateCustomPageRows(rows, 2);
+
+    assert.deepEqual(second.rows.map((row) => row.id), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    assert.deepEqual(
+      { page: second.page, pageCount: second.pageCount, start: second.start, end: second.end, total: second.total },
+      { page: 2, pageCount: 3, start: 11, end: 20, total: 23 },
+    );
+  });
+
+  it('clamps a stale page after rows shrink and handles an empty table', () => {
+    const clamped = paginateCustomPageRows(Array.from({ length: 12 }, (_, id) => id), 99);
+    assert.equal(clamped.page, 2);
+    assert.deepEqual(clamped.rows, [10, 11]);
+
+    const empty = paginateCustomPageRows([], 4);
+    assert.deepEqual(
+      { page: empty.page, pageCount: empty.pageCount, start: empty.start, end: empty.end },
+      { page: 1, pageCount: 1, start: 0, end: 0 },
+    );
+  });
+});
 
 describe('custom page layout · full-height list pages', () => {
   it('fills the content viewport while keeping table scrolling internal', () => {

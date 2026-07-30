@@ -7,6 +7,29 @@ export function opportunityStageTone(stage) {
 }
 
 /**
+ * Bound the rows mounted by the shared CRM detail tables while keeping every
+ * materialized native row reachable. The page is clamped after data changes so
+ * completing/deleting the last row on a page cannot leave an empty view.
+ */
+export function paginateCustomPageRows(rows, page = 1, pageSize = 10) {
+  const allRows = Array.isArray(rows) ? rows : [];
+  const size = Math.max(1, Math.floor(Number(pageSize) || 10));
+  const total = allRows.length;
+  const pageCount = Math.max(1, Math.ceil(total / size));
+  const currentPage = Math.min(pageCount, Math.max(1, Math.floor(Number(page) || 1)));
+  const offset = (currentPage - 1) * size;
+  return {
+    rows: allRows.slice(offset, offset + size),
+    page: currentPage,
+    pageCount,
+    pageSize: size,
+    total,
+    start: total ? offset + 1 : 0,
+    end: Math.min(offset + size, total),
+  };
+}
+
+/**
  * CRM Search and Task List use the same viewport-filling two-column shell.
  * Keeping this CSS page-local prevents detail pages from inheriting list-only
  * height/overflow behavior.

@@ -25,6 +25,47 @@
     'table.OHTable',
   ];
 
+  function legacySettingsFor(jq, element) {
+    var settings = (jq.fn && (jq.fn.dataTableSettings
+      || (jq.fn.dataTable && jq.fn.dataTable.settings))) || [];
+    for (var i = 0; i < settings.length; i++) {
+      if (settings[i] && settings[i].nTable === element) return settings[i];
+    }
+    return null;
+  }
+
+  function expandTable(jq, element) {
+    // DataTables 1.10+ API.
+    try {
+      if (jq.fn.dataTable
+          && typeof jq.fn.dataTable.isDataTable === 'function'
+          && jq.fn.dataTable.isDataTable(element)) {
+        var modern = jq(element).DataTable();
+        if (modern && modern.page && typeof modern.page.len === 'function') {
+          if (modern.page.len() === -1) return false;
+          modern.page.len(-1).draw(false);
+          return true;
+        }
+      }
+    } catch (error) { /* fall through to the CRM's legacy API */ }
+
+    // Golfballs CRM still ships DataTables 1.9. Its capital DataTable alias
+    // returns a jQuery object, not the 1.10 API, so `.page.len()` never existed
+    // and the old bridge silently left every table on its first 10 rows.
+    try {
+      var settings = legacySettingsFor(jq, element);
+      if (!settings || settings._iDisplayLength === -1) return false;
+      settings._iDisplayStart = 0;
+      settings._iDisplayLength = -1;
+      var instance = settings.oInstance;
+      if (!instance || typeof instance.fnDraw !== 'function') {
+        instance = jq(element).dataTable();
+      }
+      if (instance && typeof instance.fnDraw === 'function') instance.fnDraw(false);
+      return true;
+    } catch (error) { return false; }
+  }
+
   function expand() {
     var expanded = 0;
     try {
@@ -33,12 +74,12 @@
         for (var i = 0; i < TABLES.length; i++) {
           var selector = TABLES[i];
           try {
-            if (!jq.fn.dataTable.isDataTable(selector)) continue;
-            var table = jq(selector).DataTable();
-            if (!table || !table.page || typeof table.page.len !== 'function') continue;
-            if (table.page.len() !== -1) {
-              table.page.len(-1).draw(false);
-              expanded += 1;
+            // Query actual elements, not a jQuery id selector. Account pages
+            // contain TWO #TableTasks nodes (a native CRM duplicate-id bug);
+            // selector-based lookup only ever expanded one of them.
+            var elements = document.querySelectorAll(selector);
+            for (var j = 0; j < elements.length; j++) {
+              if (expandTable(jq, elements[j])) expanded += 1;
             }
           } catch (inner) { /* keep expanding the remaining tables */ }
         }

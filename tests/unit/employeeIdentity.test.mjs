@@ -13,7 +13,10 @@ const cachedStorage = (cacheWrites = []) => ({
 describe('employee identity', () => {
   it('reads the signed-in employee id from the CRM toolbar on Search pages', () => {
     const searchPage = new JSDOM(
-      '<iframe id="ccaiFrame" src="/toolbar/index.html?mode=crm&userId=48174"></iframe>',
+      [
+        '<iframe id="ccaiFrame" src="/toolbar/index.html?mode=crm&userId=48174"></iframe>',
+        '<input name="EmployeeID" value="999">', // record owner, not the signed-in rep
+      ].join(''),
       { url: 'https://api.golfballs.com/golfballs/crm/Admin/Default.aspx?Page=360' },
     );
     assert.equal(employeeIdFromDocument(searchPage.window.document), '48174');

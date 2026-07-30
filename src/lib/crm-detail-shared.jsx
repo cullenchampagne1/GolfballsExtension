@@ -18,7 +18,7 @@ import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
 import { buildAccountPayload, accountUpdateUrl, checkAccountResponse } from './accountUpdate.js';
 import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
-import { opportunityStageTone } from './customPageLayout.js';
+import { opportunityStageTone, paginateCustomPageRows } from './customPageLayout.js';
 import { TASK_CATEGORY_OPTIONS } from './taskCategories.js';
 import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
 import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
@@ -1122,6 +1122,59 @@ export function DncButton({ full = false }) {
   );
 }
 
+function useDetailTablePage(rows) {
+  const [page, setPage] = useState(1);
+  const pagination = useMemo(
+    () => paginateCustomPageRows(rows, page, 10),
+    [rows, page],
+  );
+  useEffect(() => {
+    if (page !== pagination.page) setPage(pagination.page);
+  }, [page, pagination.page]);
+  return [pagination, setPage];
+}
+
+function DetailTablePager({ pagination, onPage }) {
+  if (!pagination || pagination.total <= pagination.pageSize) return null;
+  return (
+    <div style={{
+      minHeight: 42,
+      padding: '7px 12px',
+      borderTop: '1px solid var(--gb-border-subtle)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      background: 'var(--gb-fill-faint)',
+    }}>
+      <span style={{ color: 'var(--gb-text-muted)', fontSize: 10.5, fontFamily: 'var(--gb-font-mono)' }}>
+        {pagination.start}–{pagination.end} of {pagination.total}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <Btn
+          variant="secondary"
+          size="xs"
+          disabled={pagination.page <= 1}
+          onClick={() => onPage(pagination.page - 1)}
+        >
+          Previous
+        </Btn>
+        <span style={{ minWidth: 44, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 10.5, fontFamily: 'var(--gb-font-mono)' }}>
+          {pagination.page}/{pagination.pageCount}
+        </span>
+        <Btn
+          variant="secondary"
+          size="xs"
+          disabled={pagination.page >= pagination.pageCount}
+          onClick={() => onPage(pagination.page + 1)}
+        >
+          Next
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 export function OpportunitiesPanel({ canCreate = true }) {
   const D = useD();
   const { openModal } = useModal();
@@ -1130,6 +1183,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
   const opps = [...(D.opportunities || [])].sort(
     (a, b) => (/open|propos/i.test(String(a?.stage || '')) ? 0 : 1) - (/open|propos/i.test(String(b?.stage || '')) ? 0 : 1),
   );
+  const [pagination, setPage] = useDetailTablePage(opps);
   return (
     <Card>
       <SectionTitle
@@ -1149,7 +1203,7 @@ export function OpportunitiesPanel({ canCreate = true }) {
           <Th align="right">Actions</Th>
         </tr></thead>
         <tbody>
-          {opps.map((o, i) => (
+          {pagination.rows.map((o, i) => (
             <tr key={i} style={trStyle}>
               <Td><span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', fontWeight: 600 }}>{o.id}</span></Td>
               <Td><span style={{ color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', fontWeight: 400 }}>{o.subject}</span></Td>
@@ -1165,10 +1219,11 @@ export function OpportunitiesPanel({ canCreate = true }) {
               </Td>
             </tr>
           ))}
-          {D.opportunities.length === 0 && <EmptyRow colSpan={7} label="No opportunities." />}
+          {pagination.total === 0 && <EmptyRow colSpan={7} label="No opportunities." />}
         </tbody>
       </table>
       </ScrollArea>
+      <DetailTablePager pagination={pagination} onPage={setPage} />
     </Card>
   );
 }
@@ -1858,6 +1913,8 @@ export function TasksPanel({ canCreate = true }) {
     const ta = Date.parse(a?.dueDate || a?.due); const tb = Date.parse(b?.dueDate || b?.due);
     return (Number.isNaN(ta) ? Infinity : ta) - (Number.isNaN(tb) ? Infinity : tb);
   });
+  const [openPagination, setOpenPage] = useDetailTablePage(openTasks);
+  const [donePagination, setDonePage] = useDetailTablePage(D.doneTasks || []);
   const qt = useTemplates(QT_KEY);
   const [manage, setManage] = useState(false);
   const editTask = (t) => openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />);
@@ -1956,11 +2013,12 @@ export function TasksPanel({ canCreate = true }) {
             <Th></Th>
           </tr></thead>
           <tbody>
-            {openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
-            {openTasks.length === 0 && <EmptyRow colSpan={7} label="No open tasks." />}
+            {openPagination.rows.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
+            {openPagination.total === 0 && <EmptyRow colSpan={7} label="No open tasks." />}
           </tbody>
         </table>
         </ScrollArea>
+        <DetailTablePager pagination={openPagination} onPage={setOpenPage} />
       </Card>
 
       <Card>
@@ -1976,7 +2034,7 @@ export function TasksPanel({ canCreate = true }) {
             <Th align="right">Due</Th>
           </tr></thead>
           <tbody>
-            {D.doneTasks.map((t, i) => (
+            {donePagination.rows.map((t, i) => (
               <tr key={i} style={trStyle}>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1994,10 +2052,11 @@ export function TasksPanel({ canCreate = true }) {
                 <Td align="right" mono muted>{fmtDate(t.dueDate)}</Td>
               </tr>
             ))}
-            {D.doneTasks.length === 0 && <EmptyRow colSpan={6} label="No completed tasks." />}
+            {donePagination.total === 0 && <EmptyRow colSpan={6} label="No completed tasks." />}
           </tbody>
         </table>
         </ScrollArea>
+        <DetailTablePager pagination={donePagination} onPage={setDonePage} />
       </Card>
     </div>
   );

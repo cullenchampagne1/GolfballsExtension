@@ -174,6 +174,35 @@
     // My Recent History (Page=279) — stable class names; ids are DataTables-assigned.
     'table.PCHTable', 'table.AHTable', 'table.CHTable', 'table.LHTable', 'table.OHTable',
   ];
+  function hostTableSettings(jq, element) {
+    var settings = (jq.fn && (jq.fn.dataTableSettings
+      || (jq.fn.dataTable && jq.fn.dataTable.settings))) || [];
+    for (var i = 0; i < settings.length; i++) {
+      if (settings[i] && settings[i].nTable === element) return settings[i];
+    }
+    return null;
+  }
+  function expandHostTable(jq, element) {
+    try {
+      if (typeof jq.fn.dataTable.isDataTable === 'function'
+          && jq.fn.dataTable.isDataTable(element)) {
+        var modern = jq(element).DataTable();
+        if (modern && modern.page && typeof modern.page.len === 'function') {
+          if (modern.page.len() !== -1) modern.page.len(-1).draw(false);
+          return;
+        }
+      }
+    } catch (e) { /* use the CRM's DataTables 1.9 API below */ }
+    try {
+      var settings = hostTableSettings(jq, element);
+      if (!settings || settings._iDisplayLength === -1) return;
+      settings._iDisplayStart = 0;
+      settings._iDisplayLength = -1;
+      var instance = settings.oInstance;
+      if (!instance || typeof instance.fnDraw !== 'function') instance = jq(element).dataTable();
+      if (instance && typeof instance.fnDraw === 'function') instance.fnDraw(false);
+    } catch (e) {}
+  }
   function expandHostTables() {
     // The native CRM owns jQuery in the MAIN page world, which Chrome keeps
     // isolated from this content script. Ask the document_start host bridge
@@ -188,9 +217,8 @@
       for (var i = 0; i < HOST_DATATABLES.length; i++) {
         var sel = HOST_DATATABLES[i];
         try {
-          if (!jq.fn.dataTable.isDataTable(sel)) continue;
-          var dt = jq(sel).DataTable();
-          if (dt.page.len() !== -1) dt.page.len(-1).draw(false);
+          var elements = document.querySelectorAll(sel);
+          for (var j = 0; j < elements.length; j++) expandHostTable(jq, elements[j]);
         } catch (inner) { /* one bad table shouldn't stop the rest */ }
       }
     } catch (e) {}
