@@ -44,10 +44,46 @@ const giftSetLine = {
   splits: [{ qty: 4, price: 12.5 }],
 };
 
+// Mirrors the reported Srixon email: 12 paid at the volume tier plus 4
+// materialized free dozens at the lower break. The email subtotal includes the
+// giveaway's full $259.96 value, then the promotion must show its code and
+// subtract that value before the estimated total.
+const srixonProduct = {
+  title: 'Srixon Z-Star Diamond 3 Golf Balls',
+  brand: 'Srixon',
+  img: 'https://static.golfballs.com/srixon-z-star-diamond.png',
+  price: 64.99,
+  orig: 64.99,
+  breaks: [{ q: 1, p: 64.99 }, { q: 12, p: 59.99 }],
+};
+const srixonPaidLine = {
+  id: 'SZ1',
+  product: srixonProduct,
+  splits: [{ id: 'SZ1', qty: 12, price: 59.99 }],
+};
+const srixonFreeLine = {
+  id: 'SZ1-PROMO',
+  parentLineId: 'SZ1',
+  free: true,
+  product: srixonProduct,
+  splits: [{ id: 'SZ1-PROMO', qty: 4, price: 0 }],
+};
+const srixonPromotion = {
+  promo: 'EVERY12GETS4',
+  promoType: 'FREE_QUANTITY',
+  totalPromoDiscount: 259.96,
+  totalDiscount: 259.96,
+  freeItems: [{ itemGuid: 'SZ1-PROMO', amount: 4 }],
+};
+
 globalThis.__gbTestProposalCarts = {
   CART1: { lines: [tp5Line] },
   CARTF: { lines: [freeLine] },
   CARTG: { lines: [giftSetLine] },
+  CARTS: {
+    lines: [srixonPaidLine, srixonFreeLine],
+    promotion: srixonPromotion,
+  },
 };
 
 describe('buildEmailSourceFromCartIds — single cart', () => {
@@ -100,6 +136,26 @@ describe('buildEmailSourceFromCartIds — single cart', () => {
     assert.equal(row.lineTotal, 30);
     assert.equal(row.origUnit, null);        // free lines never get a strike
     assert.equal(src.total, 30);             // subtotal includes the free line
+  });
+
+  it('carries a free-item promotion into the email and deducts its full value from the subtotal', async () => {
+    const src = await buildEmailSourceFromCartIds(['CARTS'], { name: 'Srixon Z-Star Diamond' });
+
+    assert.equal(src.lines.length, 2);
+    assert.equal(src.lines[0].lineTotal, 719.88);
+    assert.equal(src.lines[0].origTotal, 779.88);
+    assert.equal(src.lines[1].free, true);
+    assert.equal(src.lines[1].unitPrice, 64.99);
+    assert.equal(src.lines[1].lineTotal, 259.96);
+    assert.equal(src.total, 979.84, 'subtotal includes the free merchandise at full value');
+    assert.equal(src.discount, 259.96, 'promotion removes the free merchandise');
+    assert.equal(src.promoCode, 'EVERY12GETS4');
+    assert.equal(src.freePromo, true);
+    assert.equal(
+      Math.round((src.total - src.discount) * 100) / 100,
+      719.88,
+      'estimated total is the paid merchandise only',
+    );
   });
 });
 

@@ -9,8 +9,8 @@
 
    Pipeline (mirrors GiftCatalog): for each cartId,
      cartToEntry(await loadProposalCart(cartId), meta) → linesFromSaved(entry, rid)
-   → proposalToEmailSource(lines, name, { cartLink }). Single cart returns the
-   single source; multiple carts return the combined multi shape
+   → proposalToEmailSource(lines, name, { promotion, cartLink }). Single cart
+   returns the single source; multiple carts return the combined multi shape
    (buildMultiEmailSource).
 ─────────────────────────────────────────────────────────────── */
 import { loadProposalCart, cartToEntry, linesFromSaved } from './saveProposal.js';
@@ -155,7 +155,14 @@ export async function buildEmailSourceFromCartIds(cartIds, baseMeta = {}) {
     const entry = cartToEntry(await loadProposalCart(cartId), meta);
     const lines = linesFromSaved(entry, rid);
     const name = meta.name || `Option ${i + 1}`;
-    sources.push(proposalToEmailSource(lines, name, { cartLink: cartLinkOf(cartId) }));
+    // `cartToEntry` recovers both the materialized `-PROMO` giveaway line and
+    // the cart's promotion object. The line alone can render "FREE", but the
+    // promotion is what supplies the code and tells proposalToEmailSource to
+    // net the giveaway's full value out of the subtotal.
+    sources.push(proposalToEmailSource(lines, name, {
+      promotion: entry.promotion,
+      cartLink: cartLinkOf(cartId),
+    }));
   }
   if (sources.length === 1) return sources[0];
   // Combined multi shape — mirrors GiftCatalog's buildMultiEmailSource (~3186).

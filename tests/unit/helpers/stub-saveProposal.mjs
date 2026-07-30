@@ -12,7 +12,7 @@ export async function loadProposalCart(cartId) {
 }
 
 export function cartToEntry(cart, meta) {
-  return { cart, meta };
+  return { cart, meta, promotion: cart?.promotion || null };
 }
 
 export function linesFromSaved(entry) {
