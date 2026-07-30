@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Btn, Field, Input, Segmented, EditorHeader, I } from '../ui/index.js';
 import { IconPicker } from '../ui/components/IconPicker.jsx';
 import { CustomLinkField } from '../ui/components/CustomLinkField.jsx';
@@ -23,7 +24,12 @@ import { normalizeEntryPoints } from '../lib/customActionEntryPoints.js';
    from the Action Shelf on a live page.
 ─────────────────────────────────────────────────────────────── */
 
-const PT_OPTIONS = ACTION_PAGE_TYPES.map((p) => ({ id: p.id, label: p.label }));
+/* Type-tab options — mirrors the email template editor's top Segmented. */
+const PT_ICONS = { contact: I.user, account: I.users, order: I.card, any: I.sparkle, custom: I.link };
+const PT_OPTIONS = ACTION_PAGE_TYPES.map((p) => {
+  const Glyph = PT_ICONS[p.id];
+  return { id: p.id, label: p.label, icon: Glyph ? <Glyph /> : undefined };
+});
 
 export function EmptyState() {
   const goBack = () => {
@@ -177,34 +183,48 @@ export function CustomActionEditor({ action }) {
         onDelete={isNew ? undefined : onDelete}
       />
 
+      {/* ── Type tabs — same top-row pattern as the email template editor:
+          Contact / Account / Order / Any / Custom right under the header. ── */}
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Segmented value={pageType} onChange={changePageType} options={PT_OPTIONS} />
+        <div style={{ flex: 1 }} />
+      </div>
+
+      {/* Custom targeting — not a standing section: it animates in under the
+          tabs only while the Custom type is selected. Link = show on any page
+          whose URL contains the text; entry points further gate on a live
+          provider / CSS selector (e.g. an open modal). */}
+      <AnimatePresence initial={false}>
+        {pageType === 'custom' && (
+          <motion.div
+            key="custom-targeting"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <Field label="Link contains" hint="Show on any page whose URL contains this text.">
+                <CustomLinkField value={customUrl} onChange={setCustomUrl} />
+              </Field>
+              <Field label="Entry points" hint="Optional. Providers or CSS selectors, comma-separated.">
+                <Input
+                  value={entryPointsText}
+                  onChange={setEntryPointsText}
+                  size="sm"
+                  placeholder=".gb-task-list-modal, modal:task-list"
+                />
+              </Field>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Meta — name + description */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 10, marginBottom: 10 }}>
         <Field label="Action name"><Input value={name} placeholder="e.g. Create 5 tasks" size="sm" onChange={setName} /></Field>
         <Field label="Description"><Input value={description} placeholder="Short hint shown on the shelf" size="sm" onChange={setDescription} /></Field>
-      </div>
-      {/* Meta — page type */}
-      <div style={{ marginBottom: 10 }}>
-        <Field label="Runs on"><Segmented value={pageType} onChange={changePageType} options={PT_OPTIONS} /></Field>
-      </div>
-      {/* Custom link matcher — also show this action on any page whose URL
-          contains the given text (OR'd with the page type above). */}
-      <div style={{ marginBottom: 10 }}>
-        <Field label="Custom link" hint="Optional. Also show on any page whose URL contains this text.">
-          <CustomLinkField value={customUrl} onChange={setCustomUrl} />
-        </Field>
-      </div>
-      <div style={{ marginBottom: 10 }}>
-        <Field
-          label="Entry points"
-          hint="Optional. Show only while a matching provider or CSS selector exists. Separate multiple values with commas."
-        >
-          <Input
-            value={entryPointsText}
-            onChange={setEntryPointsText}
-            size="sm"
-            placeholder=".gb-task-list-modal, modal:task-list"
-          />
-        </Field>
       </div>
       {/* Meta — icon (full-width row) */}
       <div style={{ marginBottom: 12 }}>
@@ -228,7 +248,7 @@ export function CustomActionEditor({ action }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 20px' }}>
         <Btn size="sm" variant="secondary" icon={<I.play />} onClick={startSim} disabled={simBusy}>Simulate</Btn>
         <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>
-          Dry run against a sample {pageType} page — no writes. The real, confirm-gated run happens from the Action Shelf.
+          Dry run against a sample {pageType === 'any' || pageType === 'custom' ? 'page' : `${pageType} page`} — no writes. The real, confirm-gated run happens from the Action Shelf.
         </span>
       </div>
     </div>

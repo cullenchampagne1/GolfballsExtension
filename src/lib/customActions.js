@@ -19,18 +19,22 @@ import { normalizeEntryPoints } from './customActionEntryPoints.js';
 export const STORAGE_KEY = 'gbCustomActions';
 
 /** Page types a rep can author against. order/contact/account scope `page.*`
- *  to that CRM page; `custom` gives read-only DOM access on any page. */
+ *  to that CRM page; `any` shows the action everywhere with no extra
+ *  targeting; `custom` shows everywhere too but adds the link / entry-point
+ *  matchers (the editor reveals those fields only for this type). */
 export const ACTION_PAGE_TYPES = Object.freeze([
   { id: 'contact', label: 'Contact' },
   { id: 'account', label: 'Account' },
   { id: 'order', label: 'Order' },
-  { id: 'custom', label: 'Custom (any page)' },
+  { id: 'any', label: 'Any' },
+  { id: 'custom', label: 'Custom' },
 ]);
 const PAGE_TYPE_IDS = ACTION_PAGE_TYPES.map((p) => p.id);
 
-/** Default shelf pages for a page type: the type itself, or any page for custom. */
+/** Default shelf pages for a page type: the type itself, or any page for
+ *  the any/custom types. */
 export function defaultPagesFor(pageType) {
-  return pageType === 'custom' ? ['*'] : [pageType];
+  return pageType === 'custom' || pageType === 'any' ? ['*'] : [pageType];
 }
 
 /** Fresh unique id. Not pure (time/random) — only called when creating. */
@@ -76,7 +80,7 @@ export function blankCustomAction(pageType = 'contact') {
 
 /** A tiny, safe starter script per page type so the editor isn't blank. */
 export function starterSource(pageType) {
-  if (pageType === 'custom') {
+  if (pageType === 'custom' || pageType === 'any') {
     return [
       '// Custom action — runs on any page.',
       '// Use actions.* (confirm-gated writes) and page.* where available.',

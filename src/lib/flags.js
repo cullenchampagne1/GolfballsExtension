@@ -63,7 +63,7 @@ export const FEATURE_FLAGS = [
   { key: 'orderEditEnabled',      section: 'Email & Templates', name: 'Order Edit',        desc: 'Order Edit button in the email popup.',                               icon: 'edit' },
   { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Click email rows in Case Email History to open the full thread.',     icon: 'mail' },
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
-  { key: 'workflowManagerEnabled', section: 'Workflows', name: 'Workflow Manager', desc: 'Run one reusable set of steps for each selected account or contact.', icon: 'megaphone' },
+  { key: 'workflowManagerEnabled', section: 'Tools', name: 'Workflow Manager', desc: 'Run one reusable set of steps for each selected account or contact.', icon: 'megaphone' },
   { key: 'notificationsEnabled', section: 'Tools', name: 'Notifications', desc: 'Receive targeted messages and completion alerts in the toolbar notification center.', icon: 'alert' },
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },

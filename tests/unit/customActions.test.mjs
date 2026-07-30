@@ -37,6 +37,14 @@ describe('customActions · normalize', () => {
     assert.deepEqual(normalizeCustomAction({ pageType: 'custom' }).pages, ['*']);
   });
 
+  it('any page type is valid and scopes to every page', () => {
+    assert.deepEqual(defaultPagesFor('any'), ['*']);
+    const a = normalizeCustomAction({ pageType: 'any' });
+    assert.equal(a.pageType, 'any');
+    assert.deepEqual(a.pages, ['*']);
+    assert.match(starterSource('any'), /runs on any page/);
+  });
+
   it('preserves a saved page scope + surface flags + custom link', () => {
     const a = normalizeCustomAction({
       pageType: 'order',

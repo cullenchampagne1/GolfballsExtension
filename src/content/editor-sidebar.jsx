@@ -118,13 +118,24 @@ function ActionMenu({ onClose, anchorRef, children }) {
   // on outside scroll so the menu doesn't float when the list scrolls.
   // Portal-to-body escapes every parent stacking context (motion's layout
   // transform on TemplateRow was elevating rows above an inline menu).
+  // The menu is height-capped and scrolls internally: with many folders the
+  // "Move to folder" list used to grow past the viewport and push Share
+  // off-screen. When the space under the anchor is too tight, the whole
+  // menu shifts up so the cap still fits on screen.
+  const MENU_MAX_H = 320;
   const [pos, setPos] = useState(null);
   useEffect(() => {
     function update() {
       const el = anchorRef?.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setPos({ top: r.bottom + 4, left: r.right - MENU_W });
+      let top = r.bottom + 4;
+      let maxH = Math.min(MENU_MAX_H, window.innerHeight - top - 12);
+      if (maxH < 180) {
+        top = Math.max(12, window.innerHeight - 12 - MENU_MAX_H);
+        maxH = Math.min(MENU_MAX_H, window.innerHeight - top - 12);
+      }
+      setPos({ top, left: r.right - MENU_W, maxH });
     }
     update();
     window.addEventListener('resize', update);
@@ -161,6 +172,9 @@ function ActionMenu({ onClose, anchorRef, children }) {
         position: 'fixed', top: pos.top, left: pos.left,
         zIndex: 2147483400,
         width: MENU_W,
+        maxHeight: pos.maxH,
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
         borderRadius: 'var(--gb-r-md)',

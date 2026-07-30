@@ -55,6 +55,23 @@ describe('custom action editor presentation and lifecycle', () => {
     assert.match(editorSource, /\.gb-task-list-modal, modal:task-list/);
   });
 
+  it('puts the type switcher at the top and reveals custom targeting inline', () => {
+    // The Segmented type tabs render directly after the EditorHeader, before
+    // the name/description meta row — the email-editor pattern.
+    const headerIdx = editorSource.indexOf('<EditorHeader');
+    const tabsIdx = editorSource.indexOf('<Segmented value={pageType}');
+    const metaIdx = editorSource.indexOf('label="Action name"');
+    assert.ok(headerIdx >= 0 && tabsIdx > headerIdx && metaIdx > tabsIdx,
+      'type tabs sit between the header and the meta row');
+    // No standing "Runs on" / "Custom link" sections — the link + entry-point
+    // boxes animate in only while the Custom type is selected.
+    assert.doesNotMatch(editorSource, /label="Runs on"/);
+    assert.doesNotMatch(editorSource, /label="Custom link"/);
+    assert.match(editorSource, /\{pageType === 'custom' && \(/);
+    assert.match(editorSource, /AnimatePresence initial=\{false\}/);
+    assert.match(editorSource, /label="Link contains"/);
+  });
+
   it('keeps new actions in memory until Save Action is clicked', () => {
     assert.match(newActionSource, /__isNew: true/);
     assert.match(newActionSource, /currentActionDraft = rec/);
