@@ -713,12 +713,19 @@ function WorkflowSettings({ workflow, onChange }) {
         </div>
         <div>
           <SectionLabel>Pacing</SectionLabel>
-          <div style={{ padding: 12, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-            <I.zap size={14} style={{ color: 'var(--gb-brand-label)', alignSelf: 'center' }} />
-            <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>~{ratePerMin}</span>
-            <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)' }}>per minute · runs only while the tab is open</span>
+          {/* Rate on its own row (no baseline conflict with the caption), with
+              a short one-line description beneath so nothing wraps oddly. */}
+          <div style={{ padding: 12, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <I.zap size={14} style={{ color: 'var(--gb-brand-label)', flex: 'none' }} />
+              <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', lineHeight: 1, color: 'var(--gb-brand-label)' }}>~{ratePerMin}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-brand-label)' }}>/min</span>
+            </div>
+            <div style={{ marginTop: 5, fontSize: 10.5, lineHeight: 1.4, color: 'var(--gb-text-tertiary)' }}>
+              Estimated actions per minute — the run advances only while this tab stays open.
+            </div>
           </div>
-          <Field label={<span>Delay between actions · {paceLo}–{paceHi}s</span>} hint="Each action waits a random time in this range — keeps the run looking human.">
+          <Field label="Delay between actions" hint={`Random ${paceLo}–${paceHi}s wait before each action.`}>
             <RangeSlider values={[paceLo, paceHi]} min={1} max={90} step={1} unit="s" onChange={([a, b]) => upd({ paceDelay: Math.round((a + b) / 2), paceJitter: Math.round((b - a) / 2) })} />
           </Field>
         </div>

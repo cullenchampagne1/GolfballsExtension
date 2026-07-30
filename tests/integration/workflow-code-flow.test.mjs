@@ -400,38 +400,24 @@ describe('workflow code flow', () => {
     });
     assert.equal(result.ok, true);
 
-    // Both promotion tasks are created (live today by CRM initialization).
-    assert.deepEqual(
-      createWrites.slice(0, 2).map((write) => [write.template.subject, write.template.daysOut]),
-      [
-        ['#1 Srixon Promotion Campaign Follow Up', 0],
-        ['#2 Srixon Promotion Campaign Follow Up', 7],
-      ],
-    );
-    assert.ok(createWrites.every((write) => write.context.contactId === '909'));
-
-    // Quarterly coverage initiates around the promotion touches at the
-    // documented gap midpoints.
-    const busy = [dayNumOf(atNoonDay(0)), dayNumOf(atNoonDay(7))];
+    // No orders and no tasks → only the four rolling quarters are initiated,
+    // each placed at the documented gap midpoint (each placement becomes a
+    // touch for the next quarter's gap). No promotion tasks are ever created.
+    const busy = [];
     const expected = [];
     for (let offset = 0; offset < 4; offset += 1) {
       const slot = rollingSlotOf(offset);
-      const key = `${slot.year}-Q${slot.quarter}`;
-      const covered = busy.some((day) => {
-        const date = dateOfDayNum(day);
-        return `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}` === key;
-      });
-      if (covered) continue;
       const mid = gapMidpointOf(offset, busy);
+      if (mid == null) continue;
       busy.push(mid);
       expected.push([`Q${slot.quarter} Reach Out Opportunity`, mid - dayNumOf(atNoonDay(0))]);
     }
     assert.deepEqual(
-      createWrites.slice(2).map((write) => [write.template.subject, write.template.daysOut]),
+      createWrites.map((write) => [write.template.subject, write.template.daysOut]),
       expected,
     );
+    assert.ok(createWrites.every((write) => write.context.contactId === '909'));
     assert.equal(updateWrites.length, expected.length, 'each quarterly create receives its live date');
-    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 2 created/);
     assert.match(String(result.result), /Anniversary: 0 edited, 0 unchanged, 0 created/);
     assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 0 created/);
   });
@@ -454,7 +440,13 @@ describe('workflow code flow', () => {
     assert.match(String(result.result), /^Skipped — no CRM record readable on this page/);
   });
 
-  it('makes every promotion task live today and treats completed ones as covered', async () => {
+  it('leaves an existing non-owned task as read-only context and never edits it', async () => {
+    // A task the workflow does not own (a manual follow-up, or a leftover
+    // promotion task) is counted as a quarter-covering touch but is never
+    // revived, re-dated, or recreated — the workflow only owns anniversary,
+    // quarterly, and brand tasks.
+    const currentSlot = rollingSlotOf(0);
+    const touchDate = new Date(currentSlot.year, (currentSlot.quarter - 1) * 3 + 1, 12, 12);
     const page = shapeLivePage({
       data: {
         ids: { contact: '202', account: '' },
@@ -463,15 +455,13 @@ describe('workflow code flow', () => {
         tasks: {
           open: [
             {
-              id: 'promo-1',
+              id: 'manual-1',
               subject: '#1 Srixon Promotion Campaign Follow Up',
-              dueDate: isoOf(atNoonDay(10)),
-              liveDate: isoOf(atNoonDay(6)),   // pushed into the future — hidden
+              dueDate: isoOf(touchDate),
+              liveDate: isoOf(atNoonDay(6)),   // future live date — left untouched
             },
           ],
-          done: [
-            { id: 'promo-done', subject: '#2 Srixon Promotion Campaign Follow Up' },
-          ],
+          done: [],
         },
       },
     });
@@ -493,18 +483,16 @@ describe('workflow code flow', () => {
     });
     assert.equal(result.ok, true);
 
-    // Neither promotion subject is recreated: #1 is open (revived), #2 done.
+    // The non-owned task is never touched (no revive, no recreate).
+    assert.ok(!updateWrites.some((write) => write.id === 'manual-1'), 'a non-owned task is never edited');
     assert.ok(
       !createWrites.some((write) => /Promotion Campaign Follow Up/.test(write.template.subject)),
-      'existing + completed promotion tasks are covered, not recreated',
+      'the workflow never creates promotion tasks',
     );
-    // The hidden task is revived to live TODAY via one in-place edit.
-    const promoEdit = updateWrites.find((write) => write.id === 'promo-1');
-    assert.deepEqual(promoEdit.fields, { liveDate: isoOf(atNoonDay(0)) });
-    assert.match(String(result.result), /promotion: 1 revived to live today, 0 already live, 0 created/);
 
-    // Quarterly coverage still initiates around the promotion touch.
-    const busy = [dayNumOf(atNoonDay(10))];
+    // But it counts as a touch covering its quarter; the other three quarters
+    // each get one reach-out at the documented gap midpoint.
+    const busy = [dayNumOf(touchDate)];
     const expected = [];
     for (let offset = 0; offset < 4; offset += 1) {
       const slot = rollingSlotOf(offset);
@@ -516,12 +504,13 @@ describe('workflow code flow', () => {
       if (covered) continue;
       const mid = gapMidpointOf(offset, busy);
       busy.push(mid);
-      expected.push({ subject: `Q${slot.quarter} Reach Out Opportunity`, mid });
+      expected.push([`Q${slot.quarter} Reach Out Opportunity`, mid - dayNumOf(atNoonDay(0))]);
     }
     assert.deepEqual(
       createWrites.map((write) => [write.template.subject, write.template.daysOut]),
-      expected.map((slot) => [slot.subject, slot.mid - dayNumOf(atNoonDay(0))]),
+      expected,
     );
+    assert.match(String(result.result), /quarterly: 3 created, 0 rescheduled, 0 already placed, 1 covered/);
   });
 
   it('reschedules existing quarterly tasks to the middle of the gap and retires duplicates', async () => {
@@ -621,7 +610,6 @@ describe('workflow code flow', () => {
       String(result.result),
       /quarterly: 2 created, 1 rescheduled, 0 already placed, 1 covered, 1 duplicate\(s\) retired/,
     );
-    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 0 created/);
   });
 
   it('preserves an in-flight anniversary cycle instead of pushing it a year out', async () => {
@@ -703,7 +691,6 @@ describe('workflow code flow', () => {
       String(result.result),
       /Anniversary: 0 edited, 2 unchanged, 1 created, 1 already completed, 0 past slot\(s\) skipped, 0 retired/,
     );
-    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 2 created/);
     assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 1 created, 0 retired/);
   });
 
@@ -820,13 +807,12 @@ describe('workflow code flow', () => {
     const quarterly = writes
       .filter(([name, input]) => name === 'createTask' && /^Q[1-4] Reach Out Opportunity$/.test(input.subject))
       .map(([, input]) => input);
-    // The existing dated touch plus the two created promotion tasks cover the
-    // current quarter; the next three quarters each get one reach-out.
+    // The existing dated touch covers the current quarter; the next three
+    // quarters each get one reach-out.
     assert.equal(quarterly.length, 3);
     assert.ok(quarterly.every((task) => task.daysOut >= 0));
     assert.ok(quarterly.every((task) => task.categoryId === 14));
     assert.match(String(result.result), /quarterly: 3 created, 0 rescheduled, 0 already placed, 1 covered/);
-    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 2 created/);
     assert.match(String(result.result), /Anniversary: 0 edited, 0 unchanged, 0 created/);
     assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 0 created/);
   });
@@ -980,14 +966,11 @@ describe('workflow code flow', () => {
     ]);
     const anniversaryDates = cycles.flatMap((cycle) => cycle.dates);
     const todayN = dayNumOf(atNoonDay(0));
-    // Busy touches during quarterly placement: the eight anniversary dates
-    // (old-1 is edited onto the first one), the two promotion creations, and
-    // the Titleist brand task's 2030 review date.
-    const busy = [
-      ...anniversaryDates.map(dayNumOf),
-      todayN, todayN + 7,
-      dayNumOf(new Date(2030, 11, 17, 12)),
-    ];
+    // Busy touches during quarterly placement: only the eight anniversary
+    // dates (old-1 is edited onto the first one). Brand tasks are placed after
+    // quarterly and their far-future 2030 due date is outside every rolling
+    // quarter, so it is not a touch; the unrelated + tier tasks are undated.
+    const busy = [...anniversaryDates.map(dayNumOf)];
     const coveredKeys = new Set(busy.map((day) => {
       const date = dateOfDayNum(day);
       return `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`;
@@ -1036,12 +1019,11 @@ describe('workflow code flow', () => {
     // NOTHING is completed-and-remade: no completeTask writes at all.
     assert.ok(!writes.some(([name]) => name === 'completeTask'), 'reconciliation never retires matched tasks');
 
-    // Write shape: 7 anniversary creates (each with its liveDate update), the
-    // two promotion creates, one create+update per uncovered quarter, two
-    // brand creates with updates, then the two staged in-place edits.
+    // Write shape: 7 anniversary creates (each with its liveDate update), one
+    // create+update per uncovered quarter, two brand creates with updates,
+    // then the two staged in-place edits.
     assert.deepEqual(writes.map(([name]) => name), [
       ...Array.from({ length: 7 }, () => ['createTask', 'updateTask']).flat(),
-      'createTask', 'createTask',
       ...Array.from({ length: quarterly.length }, () => ['createTask', 'updateTask']).flat(),
       ...Array.from({ length: 2 }, () => ['createTask', 'updateTask']).flat(),
       'updateTask', 'updateTask',
@@ -1054,8 +1036,6 @@ describe('workflow code flow', () => {
         // The legacy Prior Year #1 matched the first #1 slot, so only the
         // remaining seven anniversary tasks are created.
         ...anniversarySubjects.filter((_, index) => index !== 0),
-        '#1 Srixon Promotion Campaign Follow Up',
-        '#2 Srixon Promotion Campaign Follow Up',
         ...quarterly.map((slot) => slot.subject),
         'Callaway Customer - Tier 1',
         'Vice Customer - Tier 3',
@@ -1090,11 +1070,13 @@ describe('workflow code flow', () => {
     assert.equal(priorEdit.fields.liveDate, isoOf(new Date(cycles[0].dates[0].getTime() - 14 * DAY_MS)));
     assert.match(priorEdit.fields.description, /Prior-year reorder timeline/);
 
-    // The stale Titleist tier task moved to Tier 2 in place.
+    // The stale Titleist tier task moved to Tier 2 in place. Its due date is
+    // the 2030 review, but its live date is TODAY so it indexes now (it had no
+    // prior live date to preserve).
     const brandEdit = edits.find((edit) => edit.id === 'old-brand-1');
     assert.equal(brandEdit.fields.subject, 'Titleist Customer - Tier 2');
     assert.equal(brandEdit.fields.dueDate, '2030-12-17');
-    assert.equal(brandEdit.fields.liveDate, '2030-12-03');
+    assert.equal(brandEdit.fields.liveDate, isoOf(atNoonDay(0)));
     assert.match(brandEdit.fields.description, /Order count: 2/);
     assert.match(brandEdit.fields.description, /#5063056/);
     assert.match(brandEdit.fields.description, /#5048594/);
@@ -1105,15 +1087,19 @@ describe('workflow code flow', () => {
     const brandCreates = created.filter((task) => / Customer - Tier /.test(task.subject));
     assert.match(brandCreates[0].body, /Order count: 4/);
     assert.match(brandCreates[1].body, /Order count: 1/);
-    assert.ok(brandCreates.every((task) => /Review date: 12\/17\/2030/.test(task.body)));
+    assert.ok(brandCreates.every((task) => /review due 12\/17\/2030/.test(task.body)));
     const computedBrandDue = atNoonDay(brandCreates[0].daysOut);
     assert.deepEqual(
       [computedBrandDue.getFullYear(), computedBrandDue.getMonth() + 1, computedBrandDue.getDate()],
       [2030, 12, 17],
     );
+    // Newly created brand tasks are made live today via their liveDate update.
+    const brandCreateUpdates = writes
+      .filter(([name, input]) => name === 'updateTask' && String(input.id).startsWith('task-'))
+      .map(([, input]) => input.fields.liveDate);
+    assert.ok(brandCreateUpdates.includes(isoOf(atNoonDay(0))), 'a created brand task is set live today');
 
     assert.match(result.result, /Anniversary: 1 edited, 0 unchanged, 7 created, 0 already completed, 0 past slot\(s\) skipped, 0 retired/);
-    assert.match(result.result, /promotion: 0 revived to live today, 0 already live, 2 created/);
     assert.match(result.result, new RegExp(`quarterly: ${quarterly.length} created, 0 rescheduled, 0 already placed, ${4 - quarterly.length} covered, 0 duplicate\\(s\\) retired`));
     assert.match(result.result, /brand: 1 edited, 0 unchanged, 2 created, 0 retired/);
   });

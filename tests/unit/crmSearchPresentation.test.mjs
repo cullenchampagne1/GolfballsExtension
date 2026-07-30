@@ -18,6 +18,5 @@ describe('CRM Search presentation · shared icon contract', () => {
     const missing = [...used].filter((key) => !registered.has(key)).sort();
 
     assert.deepEqual(missing, []);
-    assert.equal(used.has('ext'), true, 'the full-page action exercises the external-link icon');
   });
 });

@@ -288,12 +288,10 @@ workflows are ranked by newest supporting order and a lower-ranked candidate
 is skipped entirely when any of its tasks would land within 20 days of an
 accepted workflow's task.
 
-**Promotion tasks.** Configure `PROMO_SUBJECT_RE` and `PROMO_TASKS` at the
-top of the file for the active promotion. After a run every open promotion
-task is live TODAY (future or unreadable live dates are set to today;
-already-live tasks are untouched). Missing subjects are created with their
-configured daysOut; an open or completed task with the subject counts as
-covered.
+The workflow owns exactly three task families — anniversary, quarterly, and
+brand tier. Every other task on a record (manual follow-ups, promotion tasks,
+anything else) is read-only context: it counts as a scheduled touch and as
+quarter coverage but is never created, revived, re-dated, or edited.
 
 **Quarterly reach-outs.** Coverage spans the rolling four quarters — the
 whole scheduling year. Any other dated task covers its quarter. An uncovered
@@ -310,11 +308,15 @@ chronologically so each placement becomes a touch for the next gap. This
 coverage still runs for records with no usable orders.
 
 **Brand tier tasks.** A brand is the first word of each order summary; one
-`<Brand> Customer - Tier N` task per brand reviews on December 17, 2030 (live
-two weeks before). Tiering counts matching order rows — one order is Tier 3,
-two or three Tier 2, four or more Tier 1 — and when the tier moves, the
-existing task's subject is edited in place; duplicates are retired; missing
-brand tasks are created.
+`<Brand> Customer - Tier N` task per brand reviews on December 17, 2030.
+Unlike the other families its live date is **today, not due − 14**: these
+tasks feed the complete-contact-data cache and are only indexed once live, so
+a 2030 live date (the original defect) would hide them for years. A brand task
+that is already live today-or-earlier is left as-is; a missing or still-future
+live date is pulled forward to today. Tiering counts matching order rows — one
+order is Tier 3, two or three Tier 2, four or more Tier 1 — and when the tier
+moves, the existing task's subject is edited in place; duplicates are retired;
+missing brand tasks are created.
 
 Field writes are minimal by design: only fields that differ are staged, the
 description refreshes only when another field changed (the page schema cannot
@@ -372,7 +374,7 @@ to them. A contact with no Task List row cannot be discovered from this
 surface; the full reconciliation workflow is the authoritative flow — this
 action is only the quick in-modal surface, and anything it creates is
 re-mediated by the workflow's gap-midpoint rule on the next workflow run.
-Note that promotion repair CANNOT run from this surface: the Task List pull
-only renders already-live tasks, so tasks with future live dates are
-invisible here; per-record workflow hydration (the contact/account page) is
-the surface that still sees them.
+Note that brand tier tasks are NOT reconciled from this surface: they carry a
+2030 due date and are only visible once live, so per-record workflow
+hydration (the contact/account page) is the surface that owns them and keeps
+their live date current.

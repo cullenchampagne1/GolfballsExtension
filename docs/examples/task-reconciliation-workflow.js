@@ -20,12 +20,6 @@
 //     next year. A completed task within two weeks of a desired slot counts
 //     as fulfilled and is never recreated.
 //
-//   • Promotion tasks (config below) — after a run every open promotion task
-//     is LIVE TODAY (live dates in the future, or unreadable, are set to
-//     today; already-live ones are left alone). Missing subjects from
-//     PROMO_TASKS are created (CRM initializes their live date to today);
-//     an open or completed task with the subject counts as covered.
-//
 //   • Q1–Q4 Reach Out Opportunity coverage across the rolling four quarters —
 //     any other dated task covers its quarter. An uncovered quarter gets one
 //     reach-out placed at the MIDDLE OF THE GAP between the surrounding
@@ -35,10 +29,13 @@
 //     dates get fixed), duplicate quarterly tasks for one slot are retired,
 //     and live dates sit two weeks before due, category Workflow Task.
 //
-//   • Brand tier tasks ("<Brand> Customer - Tier N", due 12/17/2030) — the
-//     tier is recomputed from the order count (1 order = Tier 3, 2–3 =
-//     Tier 2, 4+ = Tier 1) and the existing task is edited when the tier
-//     moved; missing brand tasks are created; duplicates are retired.
+//   • Brand tier tasks ("<Brand> Customer - Tier N") — the tier is recomputed
+//     from the order count (1 order = Tier 3, 2–3 = Tier 2, 4+ = Tier 1) and
+//     the existing task is edited when the tier moved; missing brand tasks are
+//     created; duplicates are retired. The review DUE date is far out
+//     (12/17/2030) but the LIVE date is TODAY, not due−14: these tasks feed
+//     the complete-contact-data cache and must be indexed immediately, so a
+//     brand task is never left with a future live date that would hide it.
 //
 // The body below (from the Config marker) is IDENTICAL to
 // task-reconciliation-contact-action.js — the single-page Action Shelf
@@ -46,16 +43,6 @@
 // and copy the body across (or vice versa).
 
 /* ── Config ─────────────────────────────────────────────────── */
-
-// What counts as one of the active promotion's tasks (matched on subjects).
-const PROMO_SUBJECT_RE = /srixon promotion/i;
-
-// The full set of tasks the promotion should leave on each record. Missing
-// subjects are created; daysOut sets the due date from today.
-const PROMO_TASKS = [
-  { subject: "#1 Srixon Promotion Campaign Follow Up", daysOut: 0 },
-  { subject: "#2 Srixon Promotion Campaign Follow Up", daysOut: 7 },
-];
 
 /* CRM task categories are numeric wire ids; the page schema shows labels. */
 const ANNIVERSARY_CATEGORY_ID = 7;
@@ -175,7 +162,6 @@ function classifyTask(subject) {
   if (QUARTERLY_SUBJECT_RE.test(text)) return "quarterly";
   if (ANNIVERSARY_SUBJECT_RE.test(text)) return "anniversary";
   if (BRAND_SUBJECT_RE.test(text)) return "brand";
-  if (PROMO_SUBJECT_RE.test(text)) return "promo";
   return "other";
 }
 
@@ -526,47 +512,6 @@ if (desiredAnniversary.length) {
   }
 }
 
-/* ── Reconcile promotion tasks ──────────────────────────────── */
-
-progress.section("Reconciling promotion tasks");
-
-const normalizedSubject = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
-
-let promoRevived = 0;
-let promoAlreadyLive = 0;
-let promoCreated = 0;
-
-const promoOpen = openTasks.filter((task) => classifyTask(task.subject) === "promo");
-const promoDone = doneTasks.filter((task) => classifyTask(task.subject) === "promo");
-for (const task of promoOpen) {
-  const live = calendarDate(task.liveDate || task.live_date);
-  if (!live || calendarDayNumber(live) > todayNum) {
-    task.liveDate = isoDate(today);
-    promoRevived += 1;
-  } else {
-    promoAlreadyLive += 1;
-  }
-}
-
-const promoCovered = new Set([...promoOpen, ...promoDone].map((task) => normalizedSubject(task.subject)));
-const promoCreatedDayNums = [];
-for (const wanted of PROMO_TASKS) {
-  if (promoCovered.has(normalizedSubject(wanted.subject))) continue;
-  const daysOut = Math.max(0, Number(wanted.daysOut) || 0);
-  await actions.createTask({
-    subject: wanted.subject,
-    body: [
-      `Promotion follow-up coverage for ${recordName}.`,
-      "Created by the reconciliation workflow because no open or completed",
-      "task carried this subject.",
-    ].join("\n"),
-    priority: "med",
-    daysOut
-  });
-  promoCreatedDayNums.push(todayNum + daysOut);
-  promoCreated += 1;
-}
-
 /* ── Busy touches & quarter coverage ────────────────────────── */
 
 // Every date the contact is being touched, using RECONCILED dates (the task
@@ -584,7 +529,6 @@ function noteTouch(dayNum) {
   coverageKeys.add(quarterKey(dateFromDayNumber(dayNum)));
 }
 for (const dayNum of fulfilledDayNums) noteTouch(dayNum);
-for (const dayNum of promoCreatedDayNums) noteTouch(dayNum);
 for (const dayNum of createdAnniversaryDayNums) noteTouch(dayNum);
 for (const task of openTasks) {
   const kind = classifyTask(task.subject);
@@ -720,6 +664,19 @@ for (const slot of windowSlots) {
 /* ── Brand tier tasks: edit the tier in place ───────────────── */
 
 const brandTaskDate = makeCalendarDate(BRAND_TASK_YEAR, BRAND_TASK_MONTH, BRAND_TASK_DAY);
+
+/* Brand tasks are DUE far out (the 2030 review) but must be LIVE now: they
+   feed the complete-contact-data cache and are only indexed once live. So the
+   live date is today, NOT due−14 (which would sit in 2030 and hide them for
+   years — the original defect). Keep an existing live date that is already
+   today-or-earlier so a re-run doesn't churn it; only pull a missing or
+   still-future live date forward to today. */
+function brandLiveDateIso(task) {
+  const existing = task ? calendarDate(task.liveDate || task.live_date) : null;
+  if (existing && calendarDayNumber(existing) <= todayNum) return isoDate(existing);
+  return isoDate(today);
+}
+
 let brandEdited = 0;
 let brandUnchanged = 0;
 let brandCreated = 0;
@@ -743,7 +700,7 @@ for (const plan of brandPlans) {
     `Order count: ${plan.orders.length}.`,
     `Tier: ${plan.tier}.`,
     "Tier rules: 1 order = Tier 3; 2–3 orders = Tier 2; 4+ orders = Tier 1.",
-    `Review date: ${formatShortDate(brandTaskDate)}.`,
+    `Live now (indexed); review due ${formatShortDate(brandTaskDate)}.`,
     "",
     "Matching orders:",
     sourceOrders
@@ -762,7 +719,8 @@ for (const plan of brandPlans) {
       daysOut: daysOutFor(brandTaskDate)
     });
     if (createdBrand?.taskId) {
-      await actions.updateTask({ id: createdBrand.taskId, fields: { liveDate: liveDateFor(brandTaskDate) } });
+      // Live TODAY (indexed now), not due−14 — see brandLiveDateIso.
+      await actions.updateTask({ id: createdBrand.taskId, fields: { liveDate: isoDate(today) } });
     }
     brandCreated += 1;
     continue;
@@ -775,7 +733,7 @@ for (const plan of brandPlans) {
   const changed = stageTaskEdits(matches[0], {
     subject: desiredSubject,
     dueDateIso: isoDate(brandTaskDate),
-    liveDateIso: liveDateFor(brandTaskDate),
+    liveDateIso: brandLiveDateIso(matches[0]),
     description
   });
   if (changed) brandEdited += 1; else brandUnchanged += 1;
@@ -786,7 +744,6 @@ for (const plan of brandPlans) {
 return [
   `Anniversary: ${annivEdited} edited, ${annivUnchanged} unchanged, ${annivCreated} created, `
     + `${annivFulfilled} already completed, ${annivPastSkipped} past slot(s) skipped, ${annivRetired} retired`,
-  `promotion: ${promoRevived} revived to live today, ${promoAlreadyLive} already live, ${promoCreated} created`,
   `quarterly: ${quarterlyCreated} created, ${quarterlyMediated} rescheduled, ${quarterlyInPlace} already placed, `
     + `${quarterlyCovered} covered, ${quarterlyRetired} duplicate(s) retired`,
   `brand: ${brandEdited} edited, ${brandUnchanged} unchanged, ${brandCreated} created, ${brandRetired} retired`,
