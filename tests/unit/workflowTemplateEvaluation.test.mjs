@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { evaluateCampaignTemplate } from '../../src/lib/campaign/templateEvaluation.js';
+import { evaluateWorkflowTemplate } from '../../src/lib/workflow/templateEvaluation.js';
 
-describe('campaign template evaluation · hydrated record rendering', () => {
+describe('workflow template evaluation · hydrated record rendering', () => {
   it('renders saved variables and recipient selection for the current contact', async () => {
-    const outbound = await evaluateCampaignTemplate({
+    const outbound = await evaluateWorkflowTemplate({
       id: 'e2',
       name: 'Personal hello',
       kind: 'email',
@@ -36,7 +36,7 @@ describe('campaign template evaluation · hydrated record rendering', () => {
   });
 
   it('prefers explicit imported values and the imported recipient', async () => {
-    const outbound = await evaluateCampaignTemplate({
+    const outbound = await evaluateWorkflowTemplate({
       id: 'e3',
       name: 'Imported contact',
       kind: 'email',

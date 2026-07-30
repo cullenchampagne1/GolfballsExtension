@@ -63,7 +63,7 @@
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 13px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-brand-tint-soft)' }}>
               <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}><b style={{ color: 'var(--gb-brand-label)' }}>{sel.size} selected</b> of {rows.length}</span>
               <div style={{ flex: 1 }} />
-              <Btn size="xs" variant="ghost" icon={<I.send size={10} />}>Run campaign</Btn>
+              <Btn size="xs" variant="ghost" icon={<I.send size={10} />}>Run workflow</Btn>
               <Btn size="xs" variant="ghost" icon={<I.mail size={10} />}>Email selected</Btn>
               <Btn size="xs" variant="ghost" icon={<I.copy size={10} />}>Export CSV</Btn>
             </div>
@@ -307,7 +307,7 @@
         <ul>
           <li><strong>Email selected</strong> — hand the rows to the bulk template runner (subject/body resolve per recipient, with variations).</li>
           <li><strong>Export CSV</strong> — download the chosen rows with every column (Excel-safe UTF-8).</li>
-          <li><strong>Run campaign</strong> — open the campaign manager to sequence emails / tasks across the selection.</li>
+          <li><strong>Run workflow</strong> — open the workflow manager to sequence emails / tasks across the selection.</li>
         </ul>
         <p style={{ marginTop: 16 }}>Need a more precise set than keywords can give? Switch to the <a href="#crm-query">Query Builder</a>.</p>
       </div>

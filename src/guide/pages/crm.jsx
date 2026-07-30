@@ -28,7 +28,7 @@ const CS_STEPS = [
   { target: 'sortheader', caption: 'Click a column to sort — YTD Revenue puts your biggest accounts on top.', run: (api) => api.onSort('yearToDateRevenue_f'), hold: 2400 },
   { target: 'row', caption: 'Each row: the name, its account, a Contact / Account tag, email, and the order + revenue stats.', hold: 2800 },
   { target: 'header', caption: 'Tick rows to select them…', run: (api) => api.selectN(3), hold: 1600 },
-  { target: 'selbar', caption: '…and the selection bar gives you Run campaign, Email selected, and Export CSV across all of them.', hold: 3000 },
+  { target: 'selbar', caption: '…and the selection bar gives you Run workflow, Email selected, and Export CSV across all of them.', hold: 3000 },
 ];
 
 function ToolbarSnippet() {
@@ -93,7 +93,7 @@ export function SearchPage() {
       </TourBox>
 
       <TourBox n={2} eyebrow="Act on many" title="Selection & bulk actions" live={<MiniFrame width={560} label="crm search · selection bar" pad={false}><SelectionBar selCount={3} total={6} /></MiniFrame>} flip>
-        <p>Tick rows and the selection bar slides in: <strong>Run campaign</strong> builds the selected-contact audience and opens the Campaign Manager, <strong>Email selected</strong> opens the bulk runner, and <strong>Export CSV</strong> downloads them — each acting on every checked row.</p>
+        <p>Tick rows and the selection bar slides in: <strong>Run workflow</strong> builds the selected-contact audience and opens the Workflow Manager, <strong>Email selected</strong> opens the bulk runner, and <strong>Export CSV</strong> downloads them — each acting on every checked row.</p>
       </TourBox>
 
       <TourBox n={3} eyebrow="Email selected → Quick Send" title="Bulk email, with a progress ring" live={<QuickSendPanel contactCount={3} />} wide>
@@ -206,10 +206,10 @@ const QB_CALLOUTS = [
   { n: 2, target: 'qb-joiner', title: 'AND / OR joiner', text: 'Each group matches ALL of its conditions (AND) or ANY of them (OR). Toggle it per group.' },
   { n: 3, target: 'qb-not', title: 'NOT', text: 'Negate the whole group — “none of these” — for exclusion filters.' },
   { n: 4, target: 'qb-condition', title: 'A condition', text: 'Field + operator + value. The operators adapt to the field type: text (is / contains / is set), number (= ≠ > between), date (within the last / before / after today).' },
-  { n: 5, target: 'qb-addgroup', title: 'Add condition / group', text: 'Stack more conditions, or nest a sub-group to mix AND and OR — the same grouped logic as template rules and campaign branches.' },
+  { n: 5, target: 'qb-addgroup', title: 'Add condition / group', text: 'Stack more conditions, or nest a sub-group to mix AND and OR — the same grouped logic as template rules and workflow branches.' },
   { n: 6, target: 'qb-human', title: 'Human preview', text: 'A plain-English read-out of the query so you can sanity-check it before running.' },
   { n: 7, target: 'qb-fq', title: 'Solr (fq) preview', text: 'The exact Solr filter query it compiles to — what actually runs against the index.' },
-  { n: 8, target: 'qb-save', title: 'Save query', text: 'Name and save it to reuse; promote it into the presets list. A saved query is a reusable campaign audience.' },
+  { n: 8, target: 'qb-save', title: 'Save query', text: 'Name and save it to reuse; promote it into the presets list. A saved query is a reusable workflow audience.' },
 ];
 const QB_STEPS = [
   { target: 'qb-presets', caption: 'Start from a preset like “VIP accounts,” or build from scratch.', hold: 2400 },
@@ -219,7 +219,7 @@ const QB_STEPS = [
   { target: 'qb-addgroup', caption: 'Add more conditions, or nest groups to mix AND and OR.', hold: 2200 },
   { target: 'qb-human', caption: 'The Human preview reads the query back in plain English…', hold: 2400 },
   { target: 'qb-fq', caption: '…and the Solr fq preview shows exactly what runs against the index.', hold: 2400 },
-  { target: 'qb-save', caption: 'Save it to reuse — a saved query becomes a reusable campaign audience.', hold: 2400 },
+  { target: 'qb-save', caption: 'Save it to reuse — a saved query becomes a reusable workflow audience.', hold: 2400 },
 ];
 
 export function QBPage() {
@@ -265,8 +265,8 @@ export function QBPage() {
       <div className="docnote brand">
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Saved queries are campaign audiences</div>
-          <p style={{ margin: 0 }}>Name a query and Save to reuse it; promote it (bolt icon) into the quick-presets list. Build the audience here, <em>verify it visually</em> in the results, then select-all and Run Campaign — the cleanest path to a precise send. Same grouped-condition logic as template rules and <a href="#campaigns">campaign branches</a>: learn it once, use it everywhere.</p>
+          <div className="dn-t">Saved queries are workflow audiences</div>
+          <p style={{ margin: 0 }}>Name a query and Save to reuse it; promote it (bolt icon) into the quick-presets list. Build the audience here, <em>verify it visually</em> in the results, then select-all and Run Workflow — the cleanest path to a precise send. Same grouped-condition logic as template rules and <a href="#workflow-manager">workflow branches</a>: learn it once, use it everywhere.</p>
         </div>
       </div>
     </div>
@@ -298,7 +298,7 @@ const NC_SEG = [
   ['Est. revenue', 'No', 'Estimated annual-revenue bracket.'],
   ['Customer type', 'No', 'How the account is classified.'],
   ['Territory', 'No', 'Sales territory (searchable).'],
-  ['Campaign', 'No', 'The source / marketing campaign (searchable).'],
+  ['Workflow', 'No', 'The source / marketing workflow (searchable).'],
 ];
 const NC_SOURCE = [
   ['Source details', 'No', 'Free text — where the lead came from (e.g. “PGA Show 2026 — booth visit”).'],
@@ -406,7 +406,7 @@ function NcFormDemo() {
         <NcSec>Segmentation &amp; Assignment</NcSec>
         <div data-demo="nc-seg">
           <NcRow><NcFld label="Industry" ph="Select…" /><NcFld label="Employee range" ph="Select…" /><NcFld label="Est. revenue" ph="Select…" /></NcRow>
-          <NcRow><NcFld label="Customer type" ph="Select…" /><NcFld label="Territory" ph="Select…" /><NcFld label="Campaign" ph="Select…" /></NcRow>
+          <NcRow><NcFld label="Customer type" ph="Select…" /><NcFld label="Territory" ph="Select…" /><NcFld label="Workflow" ph="Select…" /></NcRow>
         </div>
         <NcSec>Source &amp; Flags</NcSec>
         <div data-demo="nc-source">
@@ -430,7 +430,7 @@ const NC_CALLOUTS = [
   { n: 1, target: 'nc-contact', title: 'Contact basics', text: 'First name, Last name, and Email are required. Phone, Job title, and Company are optional but feed segmentation.' },
   { n: 2, target: 'nc-account', title: 'Account — link OR create', text: 'Type to search existing accounts and pick one to LINK; type a brand-new name and leave it unpicked to CREATE a new account on Create.' },
   { n: 3, target: 'nc-website', title: 'Account website', text: 'Required only when you’re creating a NEW account. Auto-filled and locked (“linked — website on file”) when you link an existing account.' },
-  { n: 4, target: 'nc-seg', title: 'Segmentation & assignment', text: 'Industry, employee range, est. revenue, customer type, territory, and campaign — all optional, used to filter and target later.' },
+  { n: 4, target: 'nc-seg', title: 'Segmentation & assignment', text: 'Industry, employee range, est. revenue, customer type, territory, and workflow — all optional, used to filter and target later.' },
   { n: 5, target: 'nc-source', title: 'Source & flags', text: 'Free-text source (where the lead came from) plus quick classification chips: Consumer · Custom · Rep · One-to-One · Retail · Delay.' },
   { n: 6, target: 'nc-create', title: 'Create', text: 'Posts the contact — and any brand-new account — straight to the CRM. Account is required by default (a dev setting can relax it).' },
 ];
@@ -438,7 +438,7 @@ const NC_STEPS = [
   { target: 'nc-contact', caption: 'Start with the basics — First name, Last name, and Email are the only always-required fields.', hold: 2400 },
   { target: 'nc-account', caption: 'The Account field does double duty: search to LINK an existing account, or type a new name to CREATE one.', hold: 2800 },
   { target: 'nc-website', caption: 'Creating a new account? Its website is required (it locks to “linked” when you attach an existing account instead).', hold: 2600 },
-  { target: 'nc-seg', caption: 'Segmentation is all optional — industry, size, revenue, type, territory, campaign — but it makes the record filterable.', hold: 2600 },
+  { target: 'nc-seg', caption: 'Segmentation is all optional — industry, size, revenue, type, territory, workflow — but it makes the record filterable.', hold: 2600 },
   { target: 'nc-source', caption: 'Note where the lead came from and tag it with the quick flag chips.', hold: 2200 },
   { target: 'nc-create', caption: 'Create posts the contact (and any new account) to the CRM — no page reload, no lost place.', hold: 2400 },
 ];
@@ -485,7 +485,7 @@ export function NewPage() {
       </TourBox>
 
       <h2 className="sec">Every field, by section</h2>
-      <p>The form is four sections. The three Contact fields and the Account field are the only required ones (account is gated by a dev setting — see below); everything else is optional segmentation that makes the record richer for later filtering and campaigns.</p>
+      <p>The form is four sections. The three Contact fields and the Account field are the only required ones (account is gated by a dev setting — see below); everything else is optional segmentation that makes the record richer for later filtering and workflows.</p>
 
       <h3 className="sub">1 · Contact</h3>
       <NcFieldTable rows={NC_CONTACT} />

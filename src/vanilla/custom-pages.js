@@ -2,8 +2,8 @@
    custom-pages.js — the Custom Pages engine.
 
    Consumes the "Custom Pages" setting (Settings → Custom Pages,
-   chrome.storage.local.customPages = { crm: ['contact_details', …] })
-   and, on a matching + enabled CRM page, REPLACES the screen with a
+   chrome.storage.local.customPages = { all: ['contact_details', …] })
+   and, on a matching + enabled supported page, REPLACES the screen with a
    custom React UI instead of the original page.
 
    Strategy: OVERLAY, don't destroy. The host Default.aspx page still
@@ -99,7 +99,7 @@
 
   // ── enabled-set helpers ──────────────────────────────────────
   function flatten(pages) {
-    // { crm: ['contact_details', …], … } → ['contact_details', …]
+    // { all: ['contact_details', …] } → ['contact_details', …]
     var out = [];
     if (!pages) return out;
     Object.keys(pages).forEach(function (section) {

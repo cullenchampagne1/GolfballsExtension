@@ -7,7 +7,7 @@
       "icon": "sparkle",
       "tiers": ["beginner"],
       "keywords": ["overview", "intro", "what is", "about", "features"],
-      "summary": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and campaigns without switching tabs.",
+      "summary": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and workflows without switching tabs.",
       "covers": [],
       "body": {
         "beginner": [
@@ -19,7 +19,7 @@
             ["CRM & Contacts", "Instant search (Ctrl+K), quick tasks, call logging, contact creation, phone finder"],
             ["Gifting & Proposals", "Full product catalog with logo/text/monogram customization, gift sets, tracked quote emails"],
             ["Art & Proofs", "Logo extraction, recolor mockups, 3D ball previews, proof submission"],
-            ["Campaigns", "Bulk email from any selection, multi-step conditional outreach with pacing and dry-run"]
+            ["Workflows", "Bulk email from any selection, multi-step conditional outreach with pacing and dry-run"]
           ] },
           { "type": "callout", "kind": "tip", "text": "Everything is optional. Each feature has a toggle in Settings → Features, so your team can run as lean or as full a setup as it likes." }
         ]

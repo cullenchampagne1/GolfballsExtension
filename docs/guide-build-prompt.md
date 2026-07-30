@@ -57,7 +57,7 @@ Keep the design's grouping (it reads well); correct and extend it with our conte
 | Find People | CRM Search / Query Builder / New Contact | `pages/page-crm.jsx` | `crm-search`, `query-builder`, `new-contact`, `phone-finder` — replace invented Solr fields/form fields |
 | On-page Helpers | Email/Chat Viewer, Image Viewer, 3D Viewer, Margin Calc | `pages/page-viewers.jsx`, `page-viewers-2.jsx` | `email-thread-preview`, `text-note-preview`, `image-viewer`, `3d-product-viewer`, `mockup-composer`, `margin-calculator` |
 | Catalog & Art | Gift Catalog & Proposals (`catalog`, WIP) | — | `gift-catalog`, `customizing-item`, `gift-sets`, `proposal-panel`, `proposal-breakdown`, `custom-service-items`, `supplier-import`, `promo-codes`, `build-email-proposal`, `gifting-glossary` — big section, likely 2–3 pages |
-| **Campaigns (ADD — missing from design)** | Quick Send + Campaign Manager | follow design's page style | `bulk-email-selection`, `campaign-manager`, `campaign-conditions` |
+| **Workflows (ADD — missing from design)** | Quick Send + Workflow Manager | follow design's page style | `bulk-email-selection`, `workflow-manager`, `workflow-conditions` |
 | **Reference (ADD)** | Troubleshooting + FAQ | `WipPage`-style simple prose pages | all 8 `ts-*` articles, `faq` |
 | **Power User (ADD)** | Code Variables, Hidden Settings | simple prose pages | `code-variables`, `hidden-settings`, `modal-playground`, `debug-storage` |
 | For Developers | Wiring Audit (`audit`) | — | drop it, or point at `docs/inventory.json` |
@@ -68,7 +68,7 @@ Search: replace the design's hand-written `SEARCH_KEYWORDS` with `HELP_SEARCH_IN
 
 - **Replica surfaces** (popup, settings strip): the design's `lib/popup-live.jsx` / `lib/settings-live.jsx` approach is right — small purpose-built replicas driven by sample data, instrumented with `data-demo` attributes and an imperative api ref for Play steps. Rebuild them with real `src/ui` components; sample data must be realistic per the articles (real category names, real field names, real button labels).
 - **Real components where cheap**: `TemplatePicker`, `KeyVal`, `Btn`, pickers, `MarginCalc`-style pure-math UIs can be mounted directly in MiniFrames with props — no chrome needed.
-- **Heavy modals** (Gift Catalog, Campaign Manager, Image Viewer 3D): do NOT wire live; use static MiniFrame compositions or screenshots-as-images later. A wrong-but-clickable demo is worse than an honest static one.
+- **Heavy modals** (Gift Catalog, Workflow Manager, Image Viewer 3D): do NOT wire live; use static MiniFrame compositions or screenshots-as-images later. A wrong-but-clickable demo is worse than an honest static one.
 - Every demo's visible strings (labels, categories, statuses, prices) must match the articles. Demo captions/steps are content too — rewrite them from the tutorials in `docs/content/tutorials.json` (12 authored walkthroughs with action/expected/cue per step — these map directly onto LiveStage `steps`).
 
 ## Build order (one page fully done beats five stubs)
@@ -77,7 +77,7 @@ Search: replace the design's hand-written `SEARCH_KEYWORDS` with `HELP_SEARCH_IN
 2. Port LiveStage + TourBox + MiniFrame + guide.css onto our tokens/components.
 3. **The Popup** page complete (design's exemplar, corrected content + popup replica with real sample data).
 4. Settings & Manager, Email Templates (these have design pages to correct), then Stay Organized + Find People (heavy correction), then Viewers.
-5. New sections: Catalog & Proposals, Campaigns, Troubleshooting/FAQ, Power User.
+5. New sections: Catalog & Proposals, Workflows, Troubleshooting/FAQ, Power User.
 6. Polish: deep links from `?page=` too, manifest version in sidebar, `npm run help-content && npm run build` green.
 
 Acceptance: opens in its own tab from Settings; sidebar/search/theme work; no CDN scripts; every visible factual claim traceable to `docs/content` or the registries; all four theme variants render; Popup + Settings + Templates pages fully built with at least one LiveStage each; remaining nav shows styled WIP pages, not dead links.

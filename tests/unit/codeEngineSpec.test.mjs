@@ -1,6 +1,6 @@
 /**
  * buildCodeSpec — the machine-readable API an assistant reads to author
- * campaigns. Pins that it enumerates every action with its params + gate
+ * workflows. Pins that it enumerates every action with its params + gate
  * (derived from the live registry), documents the bindings, and carries the
  * rep's saved template names so generated code references real templates.
  */

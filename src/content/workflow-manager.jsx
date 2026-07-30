@@ -3,14 +3,14 @@ import { mountFloating } from '../lib/mountFloating.js';
 import { ensureTheme } from '../lib/theme.js';
 import { ensureScales } from '../lib/scales.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
-import { CampaignManager } from '../modals/CampaignManager.jsx';
+import { WorkflowManager } from '../modals/WorkflowManager.jsx';
 
 /* ───────────────────────────────────────────────────────────────
-   campaign-manager.jsx — content-script entry for the Campaign
+   workflow-manager.jsx — content-script entry for the Workflow
    Manager surface.
 
    Exposes:
-     window.__gbOpenCampaignManager(contacts)
+     window.__gbOpenWorkflowManager(contacts)
        Mounts the full-page manager over the page. `contacts` is the
        audience handed off from CRM Search / Task List (the same
        { contactId, contactName, contactUrl } shape EmailRunner
@@ -18,18 +18,18 @@ import { CampaignManager } from '../modals/CampaignManager.jsx';
        the audience run view.
 ─────────────────────────────────────────────────────────────── */
 
-if (!window.__gbCampaignManagerLoaded) {
-  window.__gbCampaignManagerLoaded = true;
+if (!window.__gbWorkflowManagerLoaded) {
+  window.__gbWorkflowManagerLoaded = true;
   ensureTheme();
   ensureScales();
 
-  const HOST_ID = '__gb-campaign-manager';
+  const HOST_ID = '__gb-workflow-manager';
 
-  window.__gbOpenCampaignManager = function (contacts = []) {
-    if ((window.__gbFeatureFlags || {}).campaignManagerEnabled === false) return;
+  window.__gbOpenWorkflowManager = function (contacts = []) {
+    if ((window.__gbFeatureFlags || {}).workflowManagerEnabled === false) return;
     mountFloating(HOST_ID, ({ onClosed }) => (
       <ToastHost installGlobal={false}>
-        <CampaignManager onClose={onClosed} contacts={Array.isArray(contacts) ? contacts : []} />
+        <WorkflowManager onClose={onClosed} contacts={Array.isArray(contacts) ? contacts : []} />
       </ToastHost>
     ), { scaleCategory: null });
   };

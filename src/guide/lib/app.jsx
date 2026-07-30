@@ -143,9 +143,9 @@ export const NAV = [
     { id: 'catalog', title: 'Gift Catalog', icon: 'gift', slugs: ['gift-catalog', 'customizing-item', 'gift-sets', 'custom-service-items', 'supplier-import', 'gifting-glossary'] },
     { id: 'proposals', title: 'Proposals & Quotes', icon: 'sparkle', slugs: ['proposal-panel', 'proposal-breakdown', 'promo-codes', 'build-email-proposal'] },
   ]},
-  { group: 'Campaigns', items: [
+  { group: 'Workflows', items: [
     { id: 'quicksend', title: 'Quick Send (Bulk)', icon: 'megaphone', slugs: ['bulk-email-selection'] },
-    { id: 'campaigns', title: 'Campaign Manager', icon: 'flow', slugs: ['campaign-manager', 'campaign-conditions'] },
+    { id: 'workflow-manager', title: 'Workflow Manager', icon: 'flow', slugs: ['workflow-manager', 'workflow-conditions'] },
   ]},
   { group: 'Reference', items: [
     { id: 'manual', title: 'Full Reference', icon: 'stack', slugs: [] },

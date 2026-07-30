@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from sqlalchemy import Boolean, Column, DateTime, JSON, String, create_engine
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.pool import StaticPool
 
 
@@ -60,12 +60,19 @@ class SettingsPolicyTests(unittest.TestCase):
         self.project_dir = Path(self.temporary.name)
         registry = {
             "schemaVersion": 1,
-            "features": {"featureEnabled": {"type": "bool", "default": True, "label": "Feature", "managedDefault": True}},
-            "developerSettings": {
-                "density": {"type": "select", "default": "compact", "options": ["compact", "roomy"], "label": "Density", "managedDefault": True}
+            "features": {
+                "featureEnabled": {"type": "bool", "default": True, "label": "Feature", "managedDefault": True},
+                "workflowManagerEnabled": {"type": "bool", "default": True, "label": "Workflow Manager", "managedDefault": True},
             },
-            "customPageScopes": {"orders": {"type": "bool", "default": False, "pageIds": ["orders"]}},
-            "customPages": {"type": "bool", "default": True},
+            "developerSettings": {
+                "density": {"type": "select", "default": "compact", "options": ["compact", "roomy"], "label": "Density", "managedDefault": True},
+                "workflowManager.scale": {"type": "number", "default": 1.2, "min": 0.5, "max": 2, "label": "Workflow Manager: zoom scale", "managedDefault": True},
+            },
+            "customPageScopes": {
+                "orders": {"type": "bool", "default": False, "pageIds": ["orders"]},
+                "all": {"type": "bool", "default": False, "label": "Custom Pages", "pageIds": ["contact_details"]},
+            },
+            "customPages": {"type": "bool", "default": True, "label": "Custom pages"},
         }
         source = (
             "(function (root) {\n  root.GB_SETTINGS_REGISTRY = Object.freeze("
@@ -78,15 +85,18 @@ class SettingsPolicyTests(unittest.TestCase):
             "refresh_minutes": 15,
             "developer_section": {"hidden": False},
             "features": {
-                "featureEnabled": {"value": True, "hidden": False, "managed": True, "label": "Feature"}
+                "featureEnabled": {"value": True, "hidden": False, "managed": True, "label": "Feature"},
+                "workflowManagerEnabled": {"value": True, "hidden": False, "managed": True, "label": "Workflow Manager"},
             },
             "developer_settings": {
-                "density": {"value": "compact", "hidden": False, "managed": True, "label": "Density"}
+                "density": {"value": "compact", "hidden": False, "managed": True, "label": "Density"},
+                "workflowManager.scale": {"value": 1.2, "hidden": False, "managed": True, "label": "Workflow Manager: zoom scale"},
             },
             "custom_pages": {
-                "value": True, "hidden": False, "managed": True,
+                "value": True, "hidden": False, "managed": True, "label": "Custom pages",
                 "scopes": {
-                    "orders": {"value": False, "hidden": False, "managed": True, "label": "Orders"}
+                    "orders": {"value": False, "hidden": False, "managed": True, "label": "Orders"},
+                    "all": {"value": False, "hidden": False, "managed": True, "label": "Custom Pages"},
                 },
             },
         }
@@ -163,6 +173,74 @@ class SettingsPolicyTests(unittest.TestCase):
             "label": "New feature",
         })
         self.assertEqual(self.legacy.read_count, 1)
+
+    def test_renamed_settings_and_override_paths_keep_values_and_refresh_labels(self):
+        legacy_document = json.loads(json.dumps(self.document))
+        legacy_document["features"]["campaignManagerEnabled"] = {
+            "value": False, "hidden": True, "managed": False,
+            "label": "Campaign Manager",
+        }
+        del legacy_document["features"]["workflowManagerEnabled"]
+        legacy_document["developer_settings"]["campaignManager.scale"] = {
+            "value": 0.75, "hidden": True, "managed": False,
+            "label": "Campaign Manager: zoom scale",
+        }
+        del legacy_document["developer_settings"]["workflowManager.scale"]
+        legacy_document["custom_pages"]["scopes"]["crm"] = {
+            "value": True, "hidden": True, "managed": False,
+            "label": "CRM",
+        }
+        del legacy_document["custom_pages"]["scopes"]["all"]
+
+        now = datetime.utcnow()
+        with Session(self.engine) as session:
+            session.add(Policy(
+                policy_id=settings_policy.GLOBAL_POLICY_ID,
+                document=legacy_document,
+                seeded_from="existing database",
+                created_at=now,
+                updated_at=now,
+            ))
+            session.add(Override(
+                credential_id="install-legacy",
+                setting_path=settings_policy._path_key(
+                    ["features", "campaignManagerEnabled"]
+                ),
+                has_value_override=True,
+                value_override=True,
+                hidden_override=False,
+                managed_override=True,
+                created_at=now,
+                updated_at=now,
+            ))
+            session.commit()
+
+        migrated = self.store.global_document()
+        self.assertNotIn("campaignManagerEnabled", migrated["features"])
+        self.assertEqual(migrated["features"]["workflowManagerEnabled"], {
+            "value": False, "hidden": True, "managed": False,
+            "label": "Workflow Manager",
+        })
+        self.assertNotIn("campaignManager.scale", migrated["developer_settings"])
+        self.assertEqual(migrated["developer_settings"]["workflowManager.scale"], {
+            "value": 0.75, "hidden": True, "managed": False,
+            "label": "Workflow Manager: zoom scale",
+        })
+        self.assertNotIn("crm", migrated["custom_pages"]["scopes"])
+        self.assertEqual(migrated["custom_pages"]["scopes"]["all"], {
+            "value": True, "hidden": True, "managed": False,
+            "label": "Custom Pages",
+        })
+
+        resolved, _ = self.store.resolve("install-legacy")
+        self.assertTrue(resolved["features"]["workflowManagerEnabled"]["value"])
+        overrides = self.store.overrides("install-legacy")
+        self.assertEqual(overrides[0]["path"], [
+            "features", "workflowManagerEnabled",
+        ])
+        self.assertEqual(overrides[0]["path_key"], settings_policy._path_key([
+            "features", "workflowManagerEnabled",
+        ]))
 
 
 if __name__ == "__main__":

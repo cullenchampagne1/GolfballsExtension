@@ -33,9 +33,9 @@ import { parseContactFile, contactIdsFromRow } from '../lib/contactImport.js';
    Failure path: toast.action with primary "Use template data"
    that fills the table with MOCK_RESULTS so the design is demo-able.
 
-   Search + select, then hand off: the "Run campaign" button builds the
-   selected-contact audience and opens the Campaign Manager
-   (window.__gbOpenCampaignManager) to run the PA email / task flow there.
+   Search + select, then hand off: the "Run workflow" button builds the
+   selected-contact audience and opens the Workflow Manager
+   (window.__gbOpenWorkflowManager) to run the PA email / task flow there.
 ─────────────────────────────────────────────────────────────── */
 
 const ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIndexCrm.asmx/Query';
@@ -117,7 +117,7 @@ const rowToEmailContact = (row, useMock) => {
   };
 };
 
-const rowToCampaignContact = (row, useMock) => {
+const rowToWorkflowContact = (row, useMock) => {
   const { contactId, accountId } = contactIdsFromRow(row);
   return {
     contactId,
@@ -157,10 +157,10 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   // display + pass to Solr's fq= param. Until that lands, this stays
   // null and the bar is hidden.
   const [qbFilter, setQbFilter] = useState(null);
-  // Run Campaign opens the Campaign Manager submodal which owns the
+  // Run Workflow opens the Workflow Manager submodal which owns the
   // picker + engine. CRMSearch's job here is just to hand off the
   // selection — the manager reads it and drives execution + UI from
-  // there. Storage of the campaign list lives in the manager, not here.
+  // there. Storage of the workflow list lives in the manager, not here.
   const [lastIdx, setLastIdx] = useState(null);   // shift-click anchor
   const [activeIdx, setActiveIdx] = useState(-1); // keyboard-focused row; -1 = none
   const [sortKey, setSortKey] = useState('lastOrderDate_dt');
@@ -709,7 +709,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
           ? (total > results.length
               ? `${results.length.toLocaleString()} of ${total.toLocaleString()} loaded — scroll for more`
               : `${results.length.toLocaleString()} result${results.length === 1 ? '' : 's'}`)
-          : 'Search contacts & accounts · select · run campaigns';
+          : 'Search contacts & accounts · select · run workflows';
 
   /* Submit the current query to Solr. Used by Enter on the Input,
      the explicit Search button, and the "Search server instead"
@@ -1079,7 +1079,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       </div>
 
       {/* Imported batch stays isolated as a temporary modal view. Every
-          accepted row is selected by default so normal email/campaign
+          accepted row is selected by default so normal email/workflow
           actions work immediately; nothing is added to the local index. */}
       <AnimatePresence initial={false}>
         {mode === 'imported' && importSummary && (
@@ -1277,7 +1277,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                 {' '}of {displayedRows.length} result{displayedRows.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              {/* Run Campaign opens the Campaign Manager submodal. The
+              {/* Run Workflow opens the Workflow Manager submodal. The
                   manager owns the picker, engine, and CRM-UI control —
                   CRMSearch just hands off the current selection. */}
               <Btn
@@ -1287,13 +1287,13 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                 onClick={() => {
                   const audience = displayedRows
                     .filter((r) => selected.has(r.id))
-                    .map((r) => rowToCampaignContact(r, useMock))
+                    .map((r) => rowToWorkflowContact(r, useMock))
                     .filter((c) => c.contactUrl || c.email);
                   if (!audience.length) { toast?.info?.('Select contacts first', { placement: 'top-center' }); return; }
-                  if (typeof window.__gbOpenCampaignManager === 'function') window.__gbOpenCampaignManager(audience);
-                  else toast?.info?.('Campaign manager unavailable here', { duration: 2400, placement: 'top-center' });
+                  if (typeof window.__gbOpenWorkflowManager === 'function') window.__gbOpenWorkflowManager(audience);
+                  else toast?.info?.('Workflow manager unavailable here', { duration: 2400, placement: 'top-center' });
                 }}
-              >Run campaign</Btn>
+              >Run workflow</Btn>
               <Btn
                 size="sm"
                 variant="ghost"

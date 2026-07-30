@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.4.2",
-  "generatedAt": "2026-07-29",
+  "generatedAt": "2026-07-30",
   "tree": [
     {
       "title": "Getting Started",
@@ -186,17 +186,17 @@ export const HELP_CONTENT = {
           ]
         },
         {
-          "title": "Campaigns",
+          "title": "Workflows",
           "icon": "megaphone",
           "items": [
             {
               "article": "bulk-email-selection"
             },
             {
-              "article": "campaign-manager"
+              "article": "workflow-manager"
             },
             {
-              "article": "campaign-conditions"
+              "article": "workflow-conditions"
             }
           ]
         }
@@ -286,7 +286,7 @@ export const HELP_CONTENT = {
           "title": "Advanced",
           "items": [
             {
-              "tutorial": "run-campaign"
+              "tutorial": "run-workflow"
             },
             {
               "tutorial": "import-supplier"
@@ -670,275 +670,6 @@ export const HELP_CONTENT = {
       "sectionLabel": "Core Features / Art & Proofs"
     },
     {
-      "slug": "bulk-email-selection",
-      "title": "Quick Send (Bulk Email)",
-      "icon": "megaphone",
-      "tiers": [
-        "intermediate"
-      ],
-      "keywords": [
-        "bulk",
-        "blast",
-        "quick send",
-        "run campaign",
-        "selected",
-        "mass email",
-        "delay",
-        "pacing",
-        "variation weights"
-      ],
-      "summary": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
-      "feature": "campaigns",
-      "flag": "campaignManagerEnabled",
-      "covers": [
-        "email-runner"
-      ],
-      "tutorial": "run-campaign",
-      "body": {
-        "intermediate": [
-          {
-            "type": "p",
-            "text": "Tick rows in Task List or CRM Search and the selection bar offers 'Email selected'. The Quick Send panel docks bottom-right with a big progress ring and three phases:"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Phase",
-              "What you see / do"
-            ],
-            "rows": [
-              [
-                "Setup",
-                "'N contacts selected' · template picker (templates with variations expand to show '(original)' + each variation) · variation weight sliders when the template has variations (always sum to 100%) · the delay slider: 5–80 seconds, 'random per contact — keeps the blast looking human' · Run · N button"
-              ],
-              [
-                "Running",
-                "The ring fills with %. A 'Now sending' card shows the current contact (avatar, name, email); between sends a 'Pacing — next send in X.Xs' countdown card takes its place. Chips track sent / queued / fail counts, and a trail lists the last four results. 'Cancel run' stops cleanly after the current send."
-              ],
-              [
-                "Done",
-                "Checkmark burst · 'All N delivered' or 'N sent · M failed' · stat tiles (Sent, Failed, Success %, Elapsed) · a per-contact timeline bar chart (green full bars = sent, short red = failed, hover for names) · Close / Send again"
-              ]
-            ]
-          },
-          {
-            "type": "p",
-            "text": "Under the hood each contact's page opens in a background tab, the template's variables resolve against their real data, the email sends, and the tab closes — which is why every recipient gets genuinely personalized content, not mail-merge blanks."
-          },
-          {
-            "type": "callout",
-            "kind": "warning",
-            "text": "Keep Chrome open until the ring completes. And with Power Automate off, every send opens an Outlook window instead — enable it before any real bulk run."
-          }
-        ]
-      },
-      "related": [
-        "campaign-manager",
-        "how-email-sending-works",
-        "crm-search",
-        "task-list"
-      ],
-      "sectionLabel": "Core Features / Campaigns"
-    },
-    {
-      "slug": "campaign-manager",
-      "title": "Campaign Manager",
-      "icon": "flow",
-      "tiers": [
-        "advanced"
-      ],
-      "keywords": [
-        "campaign",
-        "steps",
-        "branch",
-        "conditions",
-        "pacing",
-        "dry run",
-        "sequence",
-        "automation",
-        "simulate",
-        "send cap"
-      ],
-      "summary": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
-      "feature": "campaigns",
-      "flag": "campaignManagerEnabled",
-      "covers": [
-        "campaign-manager"
-      ],
-      "tutorial": "run-campaign",
-      "body": {
-        "advanced": [
-          {
-            "type": "p",
-            "text": "Campaign Manager is a full-page editor in three columns: the campaign list (grouped Active / Drafts / Paused, with status dots and search), the flow timeline in the middle, and the inspector on the right. A stats strip along the bottom shows pacing, step count, gates, and validity, plus the Save campaign button."
-          },
-          {
-            "type": "heading",
-            "text": "Steps and the timeline"
-          },
-          {
-            "type": "p",
-            "text": "Steps run top to bottom, numbered 1, 2, 3…, joined by connector lines. Each step card shows its type icon, label, template or code summary, and a conditions preview ('if FIELD OP +N more'). Copy and trash icons duplicate/delete; click a card to edit it in the inspector."
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Step type",
-              "Configuration"
-            ],
-            "rows": [
-              [
-                "Email",
-                "Template picker; variation weight sliders appear when the template has variations"
-              ],
-              [
-                "Call",
-                "Create a call log (saved template or custom: category, direction, subject, notes, voicemail flag) — or complete the contact's open tasks (latest / all)"
-              ],
-              [
-                "Task",
-                "Create a task (template or custom: subject, notes, due-in days, priority) — or complete open tasks"
-              ],
-              [
-                "Custom",
-                "A sandboxed code editor (ctx = contact/account data, h = read-only fetch/catalog/domText helpers) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"
-              ]
-            ]
-          },
-          {
-            "type": "heading",
-            "text": "Branches and groups"
-          },
-          {
-            "type": "list",
-            "items": [
-              "Branch step — flip the Branch toggle and the step becomes conditional: if its conditions pass, it fires and the campaign STOPS for that contact; if not, it's skipped and the main path continues. Child steps (assigned via 'Branch membership' in the inspector) indent under it as 1a, 1b… and only run when the branch fired.",
-              "Group label — steps sharing a group name are mutually exclusive: only the first whose conditions pass runs. Use it for 'send exactly one of these three pitches'.",
-              "Conditions — the same grouped AND/OR builder as everywhere else, over campaign signals: order count, days since last order, lifetime spend, has-ordered-brand, order-item-contains — plus schema fields and code expressions. (Email/call-history signals are visible but not yet active.)"
-            ]
-          },
-          {
-            "type": "heading",
-            "text": "Campaign defaults (click empty space to edit)"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Setting",
-              "Detail"
-            ],
-            "rows": [
-              [
-                "Status",
-                "Draft / Active / Paused pills"
-              ],
-              [
-                "Pacing",
-                "Delay-between-sends range slider (1–90s); shown as '~R sends per minute · runs only while the tab is open'"
-              ],
-              [
-                "Suppressions",
-                "Checked by default: Skip 'do not contact' · Skip bounced contacts · Skip mailer-removed contacts"
-              ],
-              [
-                "Audience order",
-                "As selected · Highest value · Shuffle"
-              ],
-              [
-                "Send cap",
-                "Stop the run after N sends/actions (0 = unlimited)"
-              ]
-            ]
-          },
-          {
-            "type": "heading",
-            "text": "Simulate, dry-run, and the real run"
-          },
-          {
-            "type": "list",
-            "items": [
-              "Simulate — animates the flow step by step in the timeline (pulsing badges, tracing connectors) so you can sanity-check the routing without an audience.",
-              "Dry run — the toggle next to Run. The full run executes against the real audience with 'Dry-run · nothing is sent' across the top: every step reports 'Would email…' / 'Would log call…' with zero sends and zero CRM writes.",
-              "Run view — a live audience table: each contact's row shows their pipeline dots, current step, and a status badge (Queued / Running / Done / Skipped / Branch · stop / Suppressed / Failed), with Pause / Resume / Stop & edit controls and a progress bar."
-            ]
-          },
-          {
-            "type": "callout",
-            "kind": "bestPractice",
-            "text": "Dry-run every campaign before going live, and read at least a handful of per-contact results — it is the cheapest QA you will ever do."
-          }
-        ]
-      },
-      "related": [
-        "campaign-conditions",
-        "bulk-email-selection",
-        "query-builder",
-        "code-variables"
-      ],
-      "sectionLabel": "Core Features / Campaigns"
-    },
-    {
-      "slug": "campaign-conditions",
-      "title": "Campaign Conditions & Signals",
-      "icon": "branch",
-      "tiers": [
-        "advanced"
-      ],
-      "keywords": [
-        "condition",
-        "signal",
-        "rule",
-        "and or",
-        "criteria",
-        "order count",
-        "days since"
-      ],
-      "summary": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
-      "feature": "campaigns",
-      "flag": "campaignManagerEnabled",
-      "covers": [],
-      "body": {
-        "advanced": [
-          {
-            "type": "p",
-            "text": "Branch steps gate on conditions built from three sources, combined with the same grouped AND/OR + NOT logic used by template rules and the Query Builder:"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Source",
-              "What it offers"
-            ],
-            "rows": [
-              [
-                "Signal",
-                "Pre-computed CRM stats: Order count · Days since last order · Lifetime spend ($) · Has ordered brand · Order item contains"
-              ],
-              [
-                "Schema",
-                "Any contact/account field path — contact.email, account.id, orders[any].total with array quantifiers"
-              ],
-              [
-                "Code",
-                "A JavaScript expression evaluated per contact in the sandbox — anything the other two can't express"
-              ]
-            ]
-          },
-          {
-            "type": "callout",
-            "kind": "info",
-            "text": "Email/call-history signals (replied, days since last call, sent count…) exist in the editor but are marked not-ready — they'll activate in a future release. Don't build campaigns around them yet."
-          }
-        ]
-      },
-      "related": [
-        "campaign-manager",
-        "code-variables",
-        "query-builder"
-      ],
-      "sectionLabel": "Core Features / Campaigns"
-    },
-    {
       "slug": "crm-search",
       "title": "CRM Search",
       "icon": "search",
@@ -957,7 +688,7 @@ export const HELP_CONTENT = {
         "index",
         "typeahead"
       ],
-      "summary": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
+      "summary": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for workflows.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "shortcut": "Ctrl+K",
@@ -990,7 +721,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input."
+            "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run workflow, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input."
           },
           {
             "type": "heading",
@@ -998,7 +729,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Import list accepts .xlsx or .csv rows with contact_id or account_id plus either account_name, a full name, or first_name/last_name. Email is optional: when it is blank, Email selected and campaign runs open the matching CRM page and let the page engine resolve the recipient and template variables. Non-empty malformed email values are rejected instead of silently used."
+            "text": "Import list accepts .xlsx or .csv rows with contact_id or account_id plus either account_name, a full name, or first_name/last_name. Email is optional: when it is blank, Email selected and workflow runs open the matching CRM page and let the page engine resolve the recipient and template variables. Non-empty malformed email values are rejected instead of silently used."
           }
         ],
         "advanced": [
@@ -1050,7 +781,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "On the first run, the scan covers the previous seven days. After a successful run it stores a local watermark under gbScanRecentOrders_lastRun; later runs continue from that point. Results load into CRM Search where you can inspect, select, export, email, or launch a campaign."
+            "text": "On the first run, the scan covers the previous seven days. After a successful run it stores a local watermark under gbScanRecentOrders_lastRun; later runs continue from that point. Results load into CRM Search where you can inspect, select, export, email, or launch a workflow."
           }
         ],
         "advanced": [
@@ -1063,7 +794,7 @@ export const HELP_CONTENT = {
       "related": [
         "crm-search",
         "query-builder",
-        "campaign-manager"
+        "workflow-manager"
       ],
       "sectionLabel": "Core Features / CRM & Contacts"
     },
@@ -1170,13 +901,13 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Two live previews update as you build: HUMAN (the query in plain English, e.g. 'Email contains \"sale\" AND Order count > 5') and FQ (the compiled Solr filter) — both copyable. Name the query and Save to keep it; saved queries can be promoted (bolt icon) into the quick-presets list for one-click reuse, and they double as campaign audiences."
+            "text": "Two live previews update as you build: HUMAN (the query in plain English, e.g. 'Email contains \"sale\" AND Order count > 5') and FQ (the compiled Solr filter) — both copyable. Name the query and Save to keep it; saved queries can be promoted (bolt icon) into the quick-presets list for one-click reuse, and they double as workflow audiences."
           }
         ]
       },
       "related": [
         "crm-search",
-        "campaign-manager"
+        "workflow-manager"
       ],
       "sectionLabel": "Core Features / CRM & Contacts"
     },
@@ -1356,7 +1087,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run campaign, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task."
+            "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run workflow, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task."
           },
           {
             "type": "heading",
@@ -1761,12 +1492,12 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Each block carries an editable name field: type a label like 'Warm' or 'Value-first' and it shows everywhere the variation is offered (the popup picker, the Email Runner, and the Campaign Manager split) instead of a generic 'Variation N'. Renaming sticks — deleting a variation no longer renumbers or clobbers the others' names. Added blocks number from 2 (the initial email holds slot 1)."
+            "text": "Each block carries an editable name field: type a label like 'Warm' or 'Value-first' and it shows everywhere the variation is offered (the popup picker, the Email Runner, and the Workflow Manager split) instead of a generic 'Variation N'. Renaming sticks — deleting a variation no longer renumbers or clobbers the others' names. Added blocks number from 2 (the initial email holds slot 1)."
           },
           {
             "type": "callout",
             "kind": "info",
-            "text": "Names are part of the template, so an imported template carries its variation names too (the import accepts a 'baseLabel' for the initial email plus a 'label' on each variation). At send time the popup picks randomly among all blocks unless one is pinned; the Campaign Runner lets you set weighted splits instead of uniform odds."
+            "text": "Names are part of the template, so an imported template carries its variation names too (the import accepts a 'baseLabel' for the initial email plus a 'label' on each variation). At send time the popup picks randomly among all blocks unless one is pinned; Quick Send lets you set weighted splits instead of uniform odds."
           }
         ]
       },
@@ -2302,8 +2033,8 @@ export const HELP_CONTENT = {
           "a": "It's re-indexing the full site catalog — happens when the local cache (24h) expires. Subsequent opens are instant."
         },
         {
-          "q": "Will a campaign email people twice if I run it again?",
-          "a": "A campaign processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first."
+          "q": "Will a workflow email people twice if I run it again?",
+          "a": "A workflow processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first."
         },
         {
           "q": "Did 'reply with template' send my email?",
@@ -2384,7 +2115,7 @@ export const HELP_CONTENT = {
         "about",
         "features"
       ],
-      "summary": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and campaigns without switching tabs.",
+      "summary": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and workflows without switching tabs.",
       "covers": [],
       "body": {
         "beginner": [
@@ -2424,7 +2155,7 @@ export const HELP_CONTENT = {
                 "Logo extraction, recolor mockups, 3D ball previews, proof submission"
               ],
               [
-                "Campaigns",
+                "Workflows",
                 "Bulk email from any selection, multi-step conditional outreach with pacing and dry-run"
               ]
             ]
@@ -4550,7 +4281,7 @@ export const HELP_CONTENT = {
         "expression",
         "custom logic"
       ],
-      "summary": "Sandboxed JavaScript expressions inside templates and campaign conditions — with prebuilt recipes for the common cases.",
+      "summary": "Sandboxed JavaScript expressions inside templates and workflow conditions — with prebuilt recipes for the common cases.",
       "feature": "code-variables",
       "covers": [
         "code-variables",
@@ -4660,13 +4391,13 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "warning",
-            "text": "Code variables run per-contact during campaigns and bulk sends. An expression that fetches pages adds those seconds for every contact in the audience — keep them lean."
+            "text": "Code variables run per-contact during workflows and bulk sends. An expression that fetches pages adds those seconds for every contact in the audience — keep them lean."
           }
         ]
       },
       "related": [
         "email-templates-popup",
-        "campaign-conditions"
+        "workflow-conditions"
       ],
       "sectionLabel": "Power User Corner"
     },
@@ -4880,11 +4611,6 @@ export const HELP_CONTENT = {
                 "Text Preview",
                 "On",
                 "Hover preview of case notes / chat transcripts."
-              ],
-              [
-                "Campaign Manager",
-                "On",
-                "Multi-step campaign automation (from CRM Search / Tasks)."
               ]
             ],
             "meta": {
@@ -4893,8 +4619,31 @@ export const HELP_CONTENT = {
                 "chargeEnabled",
                 "orderEditEnabled",
                 "emailPreviewEnabled",
-                "textPreviewEnabled",
-                "campaignManagerEnabled"
+                "textPreviewEnabled"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "Workflows"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Feature",
+              "Default",
+              "What it controls"
+            ],
+            "rows": [
+              [
+                "Workflow Manager",
+                "On",
+                "Run one reusable set of steps for each selected account or contact."
+              ]
+            ],
+            "meta": {
+              "flagKeys": [
+                "workflowManagerEnabled"
               ]
             }
           },
@@ -6093,7 +5842,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
-            "text": "campaignManager"
+            "text": "Workflow Manager"
           },
           {
             "type": "table",
@@ -6106,16 +5855,16 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Campaign Manager: zoom scale",
+                "Workflow Manager: zoom scale",
                 "number",
                 "1.2×",
                 "0.5–2×",
-                "Independent magnification of the Campaign Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale."
+                "Independent magnification of the Workflow Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale."
               ]
             ],
             "meta": {
               "settingKeys": [
-                "campaignManager.scale"
+                "workflowManager.scale"
               ]
             }
           },
@@ -7153,6 +6902,273 @@ export const HELP_CONTENT = {
         "hidden-settings"
       ],
       "sectionLabel": "Troubleshooting"
+    },
+    {
+      "slug": "bulk-email-selection",
+      "title": "Quick Send (Bulk Email)",
+      "icon": "megaphone",
+      "tiers": [
+        "intermediate"
+      ],
+      "keywords": [
+        "bulk",
+        "blast",
+        "quick send",
+        "email selected",
+        "mass email",
+        "delay",
+        "pacing",
+        "variation weights"
+      ],
+      "summary": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
+      "feature": "workflows",
+      "flag": null,
+      "covers": [
+        "email-runner"
+      ],
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "Tick rows in Task List or CRM Search and the selection bar offers 'Email selected'. The Quick Send panel docks bottom-right with a big progress ring and three phases:"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Phase",
+              "What you see / do"
+            ],
+            "rows": [
+              [
+                "Setup",
+                "'N contacts selected' · template picker (templates with variations expand to show '(original)' + each variation) · variation weight sliders when the template has variations (always sum to 100%) · the delay slider: 5–80 seconds, 'random per contact — keeps the blast looking human' · Run · N button"
+              ],
+              [
+                "Running",
+                "The ring fills with %. A 'Now sending' card shows the current contact (avatar, name, email); between sends a 'Pacing — next send in X.Xs' countdown card takes its place. Chips track sent / queued / fail counts, and a trail lists the last four results. 'Cancel run' stops cleanly after the current send."
+              ],
+              [
+                "Done",
+                "Checkmark burst · 'All N delivered' or 'N sent · M failed' · stat tiles (Sent, Failed, Success %, Elapsed) · a per-contact timeline bar chart (green full bars = sent, short red = failed, hover for names) · Close / Send again"
+              ]
+            ]
+          },
+          {
+            "type": "p",
+            "text": "Under the hood each contact's page opens in a background tab, the template's variables resolve against their real data, the email sends, and the tab closes — which is why every recipient gets genuinely personalized content, not mail-merge blanks."
+          },
+          {
+            "type": "callout",
+            "kind": "warning",
+            "text": "Keep Chrome open until the ring completes. And with Power Automate off, every send opens an Outlook window instead — enable it before any real bulk run."
+          }
+        ]
+      },
+      "related": [
+        "workflow-manager",
+        "how-email-sending-works",
+        "crm-search",
+        "task-list"
+      ],
+      "sectionLabel": "Core Features / Workflows"
+    },
+    {
+      "slug": "workflow-manager",
+      "title": "Workflow Manager",
+      "icon": "flow",
+      "tiers": [
+        "advanced"
+      ],
+      "keywords": [
+        "workflow",
+        "steps",
+        "branch",
+        "conditions",
+        "pacing",
+        "dry run",
+        "sequence",
+        "automation",
+        "simulate",
+        "send cap"
+      ],
+      "summary": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
+      "feature": "workflows",
+      "flag": "workflowManagerEnabled",
+      "covers": [
+        "workflow-manager"
+      ],
+      "tutorial": "run-workflow",
+      "body": {
+        "advanced": [
+          {
+            "type": "p",
+            "text": "Workflow Manager is a full-page editor in three columns: the workflow list (grouped Active / Drafts / Paused, with status dots and search), the flow timeline in the middle, and the inspector on the right. A stats strip along the bottom shows pacing, step count, gates, and validity, plus the Save workflow button."
+          },
+          {
+            "type": "heading",
+            "text": "Steps and the timeline"
+          },
+          {
+            "type": "p",
+            "text": "Steps run top to bottom, numbered 1, 2, 3…, joined by connector lines. Each step card shows its type icon, label, template or code summary, and a conditions preview ('if FIELD OP +N more'). Copy and trash icons duplicate/delete; click a card to edit it in the inspector."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Step type",
+              "Configuration"
+            ],
+            "rows": [
+              [
+                "Email",
+                "Template picker; variation weight sliders appear when the template has variations"
+              ],
+              [
+                "Call",
+                "Create a call log (saved template or custom: category, direction, subject, notes, voicemail flag) — or complete the contact's open tasks (latest / all)"
+              ],
+              [
+                "Task",
+                "Create a task (template or custom: subject, notes, due-in days, priority) — or complete open tasks"
+              ],
+              [
+                "Custom",
+                "A sandboxed code editor (ctx = contact/account data, h = read-only fetch/catalog/domText helpers) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Branches and groups"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Branch step — flip the Branch toggle and the step becomes conditional: if its conditions pass, it fires and the workflow STOPS for that contact; if not, it's skipped and the main path continues. Child steps (assigned via 'Branch membership' in the inspector) indent under it as 1a, 1b… and only run when the branch fired.",
+              "Group label — steps sharing a group name are mutually exclusive: only the first whose conditions pass runs. Use it for 'send exactly one of these three pitches'.",
+              "Conditions — the same grouped AND/OR builder as everywhere else, over workflow signals: order count, days since last order, lifetime spend, has-ordered-brand, order-item-contains — plus schema fields and code expressions. (Email/call-history signals are visible but not yet active.)"
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Workflow defaults (click empty space to edit)"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Detail"
+            ],
+            "rows": [
+              [
+                "Status",
+                "Draft / Active / Paused pills"
+              ],
+              [
+                "Pacing",
+                "Delay-between-sends range slider (1–90s); shown as '~R sends per minute · runs only while the tab is open'"
+              ],
+              [
+                "Suppressions",
+                "Checked by default: Skip 'do not contact' · Skip bounced contacts · Skip mailer-removed contacts"
+              ],
+              [
+                "Audience order",
+                "As selected · Highest value · Shuffle"
+              ],
+              [
+                "Send cap",
+                "Stop the run after N sends/actions (0 = unlimited)"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Simulate, dry-run, and the real run"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Simulate — animates the flow step by step in the timeline (pulsing badges, tracing connectors) so you can sanity-check the routing without an audience.",
+              "Dry run — the toggle next to Run. The full run executes against the real audience with 'Dry-run · nothing is sent' across the top: every step reports 'Would email…' / 'Would log call…' with zero sends and zero CRM writes.",
+              "Run view — a live audience table: each contact's row shows their pipeline dots, current step, and a status badge (Queued / Running / Done / Skipped / Branch · stop / Suppressed / Failed), with Pause / Resume / Stop & edit controls and a progress bar."
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "bestPractice",
+            "text": "Dry-run every workflow before going live, and read at least a handful of per-contact results — it is the cheapest QA you will ever do."
+          }
+        ]
+      },
+      "related": [
+        "workflow-conditions",
+        "bulk-email-selection",
+        "query-builder",
+        "code-variables"
+      ],
+      "sectionLabel": "Core Features / Workflows"
+    },
+    {
+      "slug": "workflow-conditions",
+      "title": "Workflow Conditions & Signals",
+      "icon": "branch",
+      "tiers": [
+        "advanced"
+      ],
+      "keywords": [
+        "condition",
+        "signal",
+        "rule",
+        "and or",
+        "criteria",
+        "order count",
+        "days since"
+      ],
+      "summary": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
+      "feature": "workflows",
+      "flag": "workflowManagerEnabled",
+      "covers": [],
+      "body": {
+        "advanced": [
+          {
+            "type": "p",
+            "text": "Branch steps gate on conditions built from three sources, combined with the same grouped AND/OR + NOT logic used by template rules and the Query Builder:"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Source",
+              "What it offers"
+            ],
+            "rows": [
+              [
+                "Signal",
+                "Pre-computed CRM stats: Order count · Days since last order · Lifetime spend ($) · Has ordered brand · Order item contains"
+              ],
+              [
+                "Schema",
+                "Any contact/account field path — contact.email, account.id, orders[any].total with array quantifiers"
+              ],
+              [
+                "Code",
+                "A JavaScript expression evaluated per contact in the sandbox — anything the other two can't express"
+              ]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "text": "Email/call-history signals (replied, days since last call, sent count…) exist in the editor but are marked not-ready — they'll activate in a future release. Don't build workflows around them yet."
+          }
+        ]
+      },
+      "related": [
+        "workflow-manager",
+        "code-variables",
+        "query-builder"
+      ],
+      "sectionLabel": "Core Features / Workflows"
     }
   ],
   "tutorials": [
@@ -7471,53 +7487,53 @@ export const HELP_CONTENT = {
       ]
     },
     {
-      "id": "run-campaign",
-      "title": "Run a bulk campaign",
+      "id": "run-workflow",
+      "title": "Run a bulk workflow",
       "tier": "advanced",
       "estMinutes": 8,
       "prerequisites": [
-        "campaignManagerEnabled is on",
+        "workflowManagerEnabled is on",
         "Power Automate strongly recommended for real sends"
       ],
       "steps": [
         {
           "action": "Press Ctrl+K, search or apply a saved query, and tick the rows you want.",
-          "expected": "A selection summary bar appears with campaign actions.",
+          "expected": "A selection summary bar appears with workflow actions.",
           "visualCue": "Summary bar above the results.",
           "tip": "Build the audience as a saved query first (Query Builder) so you can verify and reuse it."
         },
         {
-          "action": "Click Run Campaign.",
-          "expected": "The Campaign Runner opens over your selection.",
-          "visualCue": ""
+          "action": "Click Run Workflow.",
+          "expected": "Workflow Manager opens with the selected rows loaded as the audience.",
+          "visualCue": "Audience count in the top bar."
         },
         {
-          "action": "Pick a template and Preview one recipient.",
-          "expected": "Variables resolve against that contact's real data.",
-          "visualCue": "Preview pane.",
-          "commonMistake": "Skipping preview — one bad variable repeats across the whole list."
+          "action": "Choose a saved workflow or create one, then add and configure its steps.",
+          "expected": "The timeline shows each email, task, call, or custom step in execution order.",
+          "visualCue": "Step cards in the center timeline.",
+          "commonMistake": "Use Email selected—not Run Workflow—when you only want the separate Quick Send bulk-email panel."
         },
         {
-          "action": "Click Send All and watch the progress bar.",
-          "expected": "Each contact opens in a background tab, resolves, sends, closes — with randomized pacing. Failures collect for retry.",
-          "visualCue": "Per-recipient progress list.",
-          "warning": "Keep Chrome open until it finishes. With Power Automate off, every send opens an Outlook window instead."
+          "action": "Click Simulate and inspect at least one selected contact.",
+          "expected": "The trace shows conditions, routing, resolved templates, and planned actions without CRM writes.",
+          "visualCue": "Simulation trace in Workflow Manager."
         },
         {
-          "action": "For multi-step sequences, open Campaign Manager: add steps (email → task → conditional email), set grouped AND/OR conditions and pacing.",
-          "expected": "The campaign saves as a draft you can run against any audience.",
-          "visualCue": "Step editor with condition cards."
+          "action": "Turn on Dry run and click Dry run.",
+          "expected": "The full selected audience is processed with zero emails sent and zero CRM writes.",
+          "visualCue": "Dry run status and audience progress.",
+          "tip": "Review several contacts before a live pass; it is the cheapest QA available."
         },
         {
-          "action": "Dry-run the campaign before going live.",
-          "expected": "Full simulation per contact — conditions, routing, resolved templates — with zero emails sent and zero CRM writes.",
-          "visualCue": "Dry-run toggle.",
-          "tip": "Read the simulation for at least a handful of contacts; it's the cheapest QA you'll ever do."
+          "action": "Turn Dry run off and click Run workflow.",
+          "expected": "The workflow runs once for each selected account or contact, with live progress and pause/resume controls.",
+          "visualCue": "Workflow run progress.",
+          "warning": "Keep Chrome open until the run completes."
         }
       ],
       "related": [
         "bulk-email-selection",
-        "campaign-manager",
+        "workflow-manager",
         "query-builder"
       ]
     },
@@ -7648,15 +7664,15 @@ export const HELP_CONTENT = {
         },
         {
           "action": "Click Save and name the query.",
-          "expected": "It appears in your saved queries for one-click reuse — and as a campaign audience.",
+          "expected": "It appears in your saved queries for one-click reuse — and as a workflow audience.",
           "visualCue": "Saved queries list.",
-          "tip": "Verify the audience visually here before ever pointing a campaign at it."
+          "tip": "Verify the audience visually here before ever pointing a workflow at it."
         }
       ],
       "related": [
         "query-builder",
         "crm-search",
-        "run-campaign"
+        "run-workflow"
       ]
     },
     {
@@ -7791,7 +7807,7 @@ export const HELP_CONTENT = {
           "commonMistake": "A differently named query is not used. Save it as exactly My Clients."
         },
         {
-          "action": "Inspect the results before selecting, exporting, emailing, or starting a campaign.",
+          "action": "Inspect the results before selecting, exporting, emailing, or starting a workflow.",
           "expected": "Only the records you intentionally select move into a bulk action.",
           "visualCue": "Selection summary appears after checking rows."
         },
@@ -7886,65 +7902,6 @@ export const HELP_CONTENT = {
       "flag": "submitProofEnabled"
     },
     {
-      "id": "article:bulk-email-selection",
-      "category": "Articles",
-      "title": "Quick Send (Bulk Email)",
-      "keywords": [
-        "bulk",
-        "blast",
-        "quick send",
-        "run campaign",
-        "selected",
-        "mass email",
-        "delay",
-        "pacing",
-        "variation weights"
-      ],
-      "description": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
-      "article": "bulk-email-selection",
-      "shortcut": null,
-      "flag": "campaignManagerEnabled"
-    },
-    {
-      "id": "article:campaign-manager",
-      "category": "Articles",
-      "title": "Campaign Manager",
-      "keywords": [
-        "campaign",
-        "steps",
-        "branch",
-        "conditions",
-        "pacing",
-        "dry run",
-        "sequence",
-        "automation",
-        "simulate",
-        "send cap"
-      ],
-      "description": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
-      "article": "campaign-manager",
-      "shortcut": null,
-      "flag": "campaignManagerEnabled"
-    },
-    {
-      "id": "article:campaign-conditions",
-      "category": "Articles",
-      "title": "Campaign Conditions & Signals",
-      "keywords": [
-        "condition",
-        "signal",
-        "rule",
-        "and or",
-        "criteria",
-        "order count",
-        "days since"
-      ],
-      "description": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
-      "article": "campaign-conditions",
-      "shortcut": null,
-      "flag": "campaignManagerEnabled"
-    },
-    {
       "id": "article:crm-search",
       "category": "Articles",
       "title": "CRM Search",
@@ -7958,7 +7915,7 @@ export const HELP_CONTENT = {
         "index",
         "typeahead"
       ],
-      "description": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
+      "description": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for workflows.",
       "article": "crm-search",
       "shortcut": "Ctrl+K",
       "flag": "crmSearchEnabled"
@@ -8300,9 +8257,9 @@ export const HELP_CONTENT = {
     {
       "id": "faq:faq:6",
       "category": "FAQ",
-      "title": "Will a campaign email people twice if I run it again?",
+      "title": "Will a workflow email people twice if I run it again?",
       "keywords": [],
-      "description": "A campaign processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first.",
+      "description": "A workflow processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first.",
       "article": "faq"
     },
     {
@@ -8356,7 +8313,7 @@ export const HELP_CONTENT = {
         "about",
         "features"
       ],
-      "description": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and campaigns without switching tabs.",
+      "description": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and workflows without switching tabs.",
       "article": "what-this-extension-does",
       "shortcut": null,
       "flag": null
@@ -8857,7 +8814,7 @@ export const HELP_CONTENT = {
         "expression",
         "custom logic"
       ],
-      "description": "Sandboxed JavaScript expressions inside templates and campaign conditions — with prebuilt recipes for the common cases.",
+      "description": "Sandboxed JavaScript expressions inside templates and workflow conditions — with prebuilt recipes for the common cases.",
       "article": "code-variables",
       "shortcut": null,
       "flag": null
@@ -9145,6 +9102,64 @@ export const HELP_CONTENT = {
       "flag": null
     },
     {
+      "id": "article:bulk-email-selection",
+      "category": "Articles",
+      "title": "Quick Send (Bulk Email)",
+      "keywords": [
+        "bulk",
+        "blast",
+        "quick send",
+        "email selected",
+        "mass email",
+        "delay",
+        "pacing",
+        "variation weights"
+      ],
+      "description": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
+      "article": "bulk-email-selection",
+      "shortcut": null,
+      "flag": null
+    },
+    {
+      "id": "article:workflow-manager",
+      "category": "Articles",
+      "title": "Workflow Manager",
+      "keywords": [
+        "workflow",
+        "steps",
+        "branch",
+        "conditions",
+        "pacing",
+        "dry run",
+        "sequence",
+        "automation",
+        "simulate",
+        "send cap"
+      ],
+      "description": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
+      "article": "workflow-manager",
+      "shortcut": null,
+      "flag": "workflowManagerEnabled"
+    },
+    {
+      "id": "article:workflow-conditions",
+      "category": "Articles",
+      "title": "Workflow Conditions & Signals",
+      "keywords": [
+        "condition",
+        "signal",
+        "rule",
+        "and or",
+        "criteria",
+        "order count",
+        "days since"
+      ],
+      "description": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
+      "article": "workflow-conditions",
+      "shortcut": null,
+      "flag": "workflowManagerEnabled"
+    },
+    {
       "id": "tutorial:initial-configuration",
       "category": "Tutorials",
       "title": "Set up the extension",
@@ -9215,14 +9230,14 @@ export const HELP_CONTENT = {
       "tutorial": "verify-logo"
     },
     {
-      "id": "tutorial:run-campaign",
+      "id": "tutorial:run-workflow",
       "category": "Tutorials",
-      "title": "Run a bulk campaign",
+      "title": "Run a bulk workflow",
       "keywords": [
         "advanced"
       ],
       "description": "6 steps · ~8 min",
-      "tutorial": "run-campaign"
+      "tutorial": "run-workflow"
     },
     {
       "id": "tutorial:import-supplier",
@@ -9365,16 +9380,16 @@ export const HELP_CONTENT = {
       "flag": "textPreviewEnabled"
     },
     {
-      "id": "flag:campaignManagerEnabled",
+      "id": "flag:workflowManagerEnabled",
       "category": "Settings",
-      "title": "Campaign Manager",
+      "title": "Workflow Manager",
       "keywords": [
-        "campaignManagerEnabled",
-        "Email & Templates"
+        "workflowManagerEnabled",
+        "Workflows"
       ],
-      "description": "Multi-step campaign automation (from CRM Search / Tasks).",
+      "description": "Run one reusable set of steps for each selected account or contact.",
       "article": "feature-toggles",
-      "flag": "campaignManagerEnabled"
+      "flag": "workflowManagerEnabled"
     },
     {
       "id": "flag:notificationsEnabled",
@@ -9923,13 +9938,13 @@ export const HELP_CONTENT = {
       "article": "developer-settings"
     },
     {
-      "id": "devSetting:campaignManager.scale",
+      "id": "devSetting:workflowManager.scale",
       "category": "Settings",
-      "title": "Campaign Manager: zoom scale",
+      "title": "Workflow Manager: zoom scale",
       "keywords": [
-        "campaignManager.scale"
+        "workflowManager.scale"
       ],
-      "description": "Independent magnification of the Campaign Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale.",
+      "description": "Independent magnification of the Workflow Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale.",
       "article": "developer-settings"
     },
     {

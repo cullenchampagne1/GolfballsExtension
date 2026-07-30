@@ -425,7 +425,7 @@ export function TemplatesPage() {
 
       <TourBox n={7} eyebrow="A/B versions" title="Variations" live={<VariationsSnippet />} flip>
         <p>A template can hold several <strong>variations</strong> — alternate subject + body versions that share the same variables. Add the first one and the <strong>initial email converts into a block too</strong> (named “Variation 1” by default), so every option is a uniform, <strong>renameable</strong> block — give them names like <em>Warm</em> or <em>Value-first</em> right in the editor.</p>
-        <p>Those names show wherever the version is offered. In the popup, selecting the parent (shuffle badge) sends a <strong>random</strong> version each time; expand the row to <strong>pin</strong> one (check badge). In bulk sends, the Campaign Runner lets you set <strong>weighted</strong> splits instead.</p>
+        <p>Those names show wherever the version is offered. In the popup, selecting the parent (shuffle badge) sends a <strong>random</strong> version each time; expand the row to <strong>pin</strong> one (check badge). In bulk sends, Quick Send lets you set <strong>weighted</strong> splits instead.</p>
       </TourBox>
 
       <h2 className="sec">When does a template show up?</h2>

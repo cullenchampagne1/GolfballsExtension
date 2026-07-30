@@ -53,7 +53,7 @@ export function crmRowToEmailContact(row, contactUrl = '') {
   };
 }
 
-export function crmRowToCampaignContact(row, contactUrl = '') {
+export function crmRowToWorkflowContact(row, contactUrl = '') {
   const { contactId, accountId } = contactIdsFromRow(row);
   return {
     contactId,

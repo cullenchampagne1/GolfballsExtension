@@ -8,7 +8,7 @@ import { I } from '../icons.jsx';
 /* ───────────────────────────────────────────────────────────────
    CodeAutomationPanel — the authoring body (Code ⇆ Blocks).
 
-   A controlled display: the parent (CampaignManager) owns the code, the
+   A controlled display: the parent (WorkflowManager) owns the code, the
    simulation, and the run. The panel renders the editor OR the block
    flow (fed the parent's trace/runningId/done) with an animated
    transition between them, and forwards the caret token up (onContext)

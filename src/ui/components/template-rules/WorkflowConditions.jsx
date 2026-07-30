@@ -8,7 +8,7 @@ import { listPaths } from '../../../lib/page-engine/resolve.js';
 import { contactSchema } from '../../../lib/page-schemas/contact.js';
 
 /* ───────────────────────────────────────────────────────────────
-   CampaignConditions — run conditions for a campaign step.
+   WorkflowConditions — run conditions for a workflow step.
 
    Two subject sources, both reusing the exact Settings-page pieces:
      • SCHEMA — the same VariableSchemaPicker dropdown the account /
@@ -80,7 +80,7 @@ const ARRAY_MODES = [
   { id: 'index', label: 'At index' },
 ];
 
-export function opsForCampaignCondition(c) {
+export function opsForWorkflowCondition(c) {
   const t = c?.type || 'string';
   return OPS_BY_TYPE[t] || COLLECTION_OPS[t] || OPS_BY_TYPE.string;
 }
@@ -100,11 +100,11 @@ function SourceToggle({ source, onPick }) {
   );
 }
 
-/* The campaign subject uses RuleGroups' split contract: { header, body }.
+/* The workflow subject uses RuleGroups' split contract: { header, body }.
    header = the Schema/Code source toggle; body = the schema picker, or the
    Returns-type row + code editor. NOT + delete are supplied by ConditionRow's
    header line, so they're not rendered here. */
-function renderCampaignSubject(condition, patch) {
+function renderWorkflowSubject(condition, patch) {
   const isCode = condition.source === 'var';
   const pickSource = (src) => {
     if (src === 'var') patch({ source: 'var', ref: '', type: 'string', op: DEFAULT_OP.string, value: '' });
@@ -160,13 +160,13 @@ function renderCampaignSubject(condition, patch) {
   return { header, body };
 }
 
-export function CampaignConditions({ initial, onChange }) {
+export function WorkflowConditions({ initial, onChange }) {
   return (
     <RuleGroups
       initial={initial}
       defaultSource="schema"
-      renderSubject={renderCampaignSubject}
-      opsFor={opsForCampaignCondition}
+      renderSubject={renderWorkflowSubject}
+      opsFor={opsForWorkflowCondition}
       allowEmpty
       onChange={onChange}
       label="Run conditions"

@@ -209,7 +209,7 @@ const TL_STEPS = [
   { target: 'sortheader', caption: '…then Shift+click Priority to chain a second sort — the 1 / 2 rank badges show the order.', run: (api) => api.onSort('priority', true), hold: 2800 },
   { target: 'row', caption: 'Each row reads across: account with its category underneath, the contact, the due date, a priority tag, the subject, and a status badge that flags Overdue or Due today.', hold: 3400 },
   { target: 'header', caption: 'Tick rows to select them…', run: (api) => api.selectN(3), hold: 1600 },
-  { target: 'selbar', caption: '…and the selection bar appears with Run campaign, Email selected, and Export CSV — acting on all of them at once.', hold: 3200 },
+  { target: 'selbar', caption: '…and the selection bar appears with Run workflow, Email selected, and Export CSV — acting on all of them at once.', hold: 3200 },
   { target: 'footer', caption: 'The footer adds Open Tabs (each record in its own tab) and Quick Task (a follow-up on every selected row).', hold: 2800 },
 ];
 
@@ -280,7 +280,7 @@ export function TasksPage() {
       </TourBox>
 
       <TourBox n={2} eyebrow="Act on many" title="Selection & bulk actions" live={<MiniFrame width={560} label="task list · selection bar" pad={false}><SelectionBar selCount={3} total={7} /></MiniFrame>} flip>
-        <p>Tick rows and a selection bar slides in at the top: <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong> — each acting on every checked row.</p>
+        <p>Tick rows and a selection bar slides in at the top: <strong>Run workflow</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong> — each acting on every checked row.</p>
         <p>The footer carries two more: <strong>Open Tabs</strong> opens each selected record in its own browser tab, and <strong>Quick Task</strong> drops a follow-up task on every one.</p>
       </TourBox>
 
@@ -307,7 +307,7 @@ export function TasksPage() {
       <div className="docnote brand">
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Selections feed campaigns</div>
+          <div className="dn-t">Selections feed workflows</div>
           <p style={{ margin: 0 }}>The same selection that bulk-completes tasks can launch a <a href="#quicksend">Quick Send</a> — each selected task's contact gets a personalized email. It's the fastest path from “these 30 follow-ups” to “30 sent.”</p>
         </div>
       </div>

@@ -53,7 +53,7 @@
       "id": "sandbox",
       "name": "Code Sandbox (hidden)",
       "entryPoint": "sandbox.html (invisible iframe; MV3 sandboxed page)",
-      "purpose": "The only context allowed to eval user code — evaluates 'code variables' for templates and campaign conditions via postMessage.",
+      "purpose": "The only context allowed to eval user code — evaluates 'code variables' for templates and workflow conditions via postMessage.",
       "mainSections": [],
       "relatedFeatures": [
         "code-variables"
@@ -86,7 +86,7 @@
       "component": "TaskList",
       "file": "src/modals/TaskList.jsx",
       "displayName": "My Tasks",
-      "purpose": "Searchable, filterable view of the rep's CRM task list with bulk select, open-tabs, and campaign launch.",
+      "purpose": "Searchable, filterable view of the rep's CRM task list with bulk select, open-tabs, and workflow launch.",
       "openedBy": [
         "Ctrl+X (configurable)",
         "actions shelf",
@@ -108,7 +108,7 @@
       "component": "CRMSearch",
       "file": "src/modals/CRMSearch.jsx",
       "displayName": "CRM Search",
-      "purpose": "Instant search of contacts/accounts/orders via CRM Solr; filter chips, saved queries, bulk selection for campaigns.",
+      "purpose": "Instant search of contacts/accounts/orders via CRM Solr; filter chips, saved queries, bulk selection for workflows.",
       "openedBy": [
         "Ctrl+K (configurable)",
         "actions shelf",
@@ -378,37 +378,37 @@
       "id": "email-runner",
       "component": "EmailRunner",
       "file": "src/modals/EmailRunner.jsx",
-      "displayName": "Campaign Runner",
+      "displayName": "Quick Send",
       "purpose": "Bulk-email selected rows from Task List or CRM Search: pick a template, preview, then watch per-recipient progress with retry.",
       "openedBy": [
-        "'Run Campaign' with rows selected in TaskList/CRMSearch"
+        "'Email selected' with rows selected in TaskList/CRMSearch"
       ],
       "pageContext": [
         "inside TaskList/CRMSearch"
       ],
-      "flag": "campaignManagerEnabled",
+      "flag": null,
       "backend": "local EmailRunner orchestration using validated fetchRaw and paAutomate worker calls"
     },
     {
-      "id": "campaign-manager",
-      "component": "CampaignManager",
-      "file": "src/modals/CampaignManager.jsx",
-      "displayName": "Campaign Manager",
-      "purpose": "Define multi-step outreach campaigns (email / task / call-log / code actions) with grouped AND/OR conditions, audience ordering, pacing + jitter, dry-run simulation, and pause/resume.",
+      "id": "workflow-manager",
+      "component": "WorkflowManager",
+      "file": "src/modals/WorkflowManager.jsx",
+      "displayName": "Workflow Manager",
+      "purpose": "Define multi-step outreach workflows (email / task / call-log / code actions) with grouped AND/OR conditions, audience ordering, pacing + jitter, dry-run simulation, and pause/resume.",
       "openedBy": [
-        "Run Campaign from selected CRM Search rows",
-        "Run Campaign from selected Task List rows",
-        "window.__gbOpenCampaignManager()"
+        "Run Workflow from selected CRM Search rows",
+        "Run Workflow from selected Task List rows",
+        "window.__gbOpenWorkflowManager()"
       ],
       "pageContext": [
         "inside TaskList/CRMSearch"
       ],
-      "flag": "campaignManagerEnabled",
+      "flag": "workflowManagerEnabled",
       "libs": [
-        "campaign/*",
+        "workflow/*",
         "matchEngine"
       ],
-      "storage": "campaigns"
+      "storage": "workflows"
     },
     {
       "id": "calendar",
@@ -865,10 +865,10 @@
       "controls": "Case note / chat transcript preview"
     },
     {
-      "name": "campaignManagerEnabled",
+      "name": "workflowManagerEnabled",
       "default": true,
-      "section": "Email & Templates",
-      "controls": "Campaign Manager + Campaign Runner"
+      "section": "Workflows",
+      "controls": "Workflow Manager"
     },
     {
       "name": "notificationsEnabled",
@@ -1462,9 +1462,9 @@
       "contains": "per-surface zoom factors"
     },
     {
-      "key": "campaigns",
+      "key": "workflows",
       "area": "local",
-      "contains": "campaign definitions + run state"
+      "contains": "workflow definitions + run state"
     },
     {
       "key": "gbSavedProposals",
@@ -1539,7 +1539,7 @@
     {
       "key": "gbEmailSendLog",
       "area": "local",
-      "contains": "recipient-to-last-sent timestamps used by Campaign Runner skip-recent controls"
+      "contains": "recipient-to-last-sent timestamps used by Quick Send skip-recent controls"
     },
     {
       "key": "gbCpQuickTasks / gbCpQuickLogs",
@@ -1873,8 +1873,8 @@
   },
   "automations": [
     {
-      "name": "Campaign Runner orchestration",
-      "trigger": "Run Campaign from a selected CRM Search or Task List result",
+      "name": "Quick Send orchestration",
+      "trigger": "Email selected from a CRM Search or Task List selection",
       "what": "EmailRunner resolves each recipient, validates a configured sender, sends sequentially through the bounded worker transport, records last-sent timestamps, and exposes per-recipient retry/progress."
     },
     {
@@ -2049,7 +2049,7 @@
       "name": "Task List",
       "surface": "TaskList modal",
       "flag": "taskListEnabled",
-      "summary": "Search/filter/bulk-act on your CRM tasks; launch campaigns from selections."
+      "summary": "Search/filter/bulk-act on your CRM tasks; launch workflows from selections."
     },
     {
       "id": "call-log",
@@ -2151,11 +2151,11 @@
       "summary": "Import third-party customizable products with cost ladders and markup."
     },
     {
-      "id": "campaigns",
-      "name": "Campaign Manager & Bulk Email",
-      "surface": "CampaignManager + EmailRunner",
-      "flag": "campaignManagerEnabled",
-      "summary": "Multi-step conditional outreach with pacing, dry-run, and bulk sends from any selection."
+      "id": "workflows",
+      "name": "Workflow Manager",
+      "surface": "WorkflowManager",
+      "flag": "workflowManagerEnabled",
+      "summary": "One-pass, multi-step account or contact processing with conditions, pacing, simulation, and dry-run."
     },
     {
       "id": "submit-proof",
@@ -2202,7 +2202,7 @@
     {
       "id": "code-variables",
       "name": "Code Variables & Recipes",
-      "surface": "template/campaign editors",
+      "surface": "template/workflow editors",
       "flag": null,
       "audience": "advanced",
       "summary": "Sandboxed JS expressions with prebuilt recipes (OOS scanner, replacement recommender)."
@@ -2271,13 +2271,13 @@
       ]
     },
     {
-      "id": "run-campaign",
-      "name": "Run a bulk campaign",
+      "id": "run-workflow",
+      "name": "Run a bulk workflow",
       "persona": "manager",
       "steps": [
         "CRM Search / Task List → select rows",
-        "Run Campaign",
-        "Pick template / or build multi-step campaign in Campaign Manager",
+        "Run Workflow",
+        "Pick template / or build multi-step workflow in Workflow Manager",
         "Dry-run preview",
         "Run with pacing; monitor progress; pause/resume"
       ]

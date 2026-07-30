@@ -1,17 +1,17 @@
-# Golfballs CRM Campaign Authoring Toolset
+# Golfballs CRM Workflow Authoring Toolset
 
-Campaign Manager is code-first. A campaign stores one asynchronous JavaScript
+Workflow Manager is code-first. A workflow stores one asynchronous JavaScript
 program in `automation`; that program runs once for each selected CRM Search or
 Task List record.
 
-Use this document when generating JSON for Campaign Manager → Import. The
+Use this document when generating JSON for Workflow Manager → Import. The
 legacy `steps[]` authoring format is retained only as stored compatibility
 metadata and is not executable by the code-first editor.
 
 ## Import envelope
 
-Paste one campaign object, an array of campaign objects, or
-`{ "campaigns": [...] }`.
+Paste one workflow object, an array of workflow objects, or
+`{ "workflows": [...] }`.
 
 ```json
 {
@@ -24,7 +24,7 @@ Paste one campaign object, an array of campaign objects, or
   "suppressDoNotContact": true,
   "sendCap": 0,
   "audienceOrder": "list",
-  "automation": "const task = await actions.createTask({ subject: \"Campaign QA\", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: \"Campaign QA\", body: \"Verified helper execution.\" });\npage.contact.jobTitle = \"Campaign verified\";\nawait page.contact.commit();\nreturn \"verified\";"
+  "automation": "const task = await actions.createTask({ subject: \"Workflow QA\", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: \"Workflow QA\", body: \"Verified helper execution.\" });\npage.contact.jobTitle = \"Workflow verified\";\nawait page.contact.commit();\nreturn \"verified\";"
 }
 ```
 
@@ -40,8 +40,8 @@ Fields:
 - `sendCap`: maximum effects across the entire run; `0` is unlimited.
 - `audienceOrder`: `list`, `valueDesc`, or `shuffle`.
 
-The importer assigns a fresh campaign id and never overwrites an existing
-campaign.
+The importer assigns a fresh workflow id and never overwrites an existing
+workflow.
 
 ## Runtime model
 
@@ -62,8 +62,8 @@ page.tasks.items  // Task List entry-point rows; otherwise open + done
 ```
 
 `page` retains the parsed schema for whichever record was selected. A contact
-campaign gets that contact page's own `page.orders`, `page.tasks`, contact
-fields, and contact ID; it does not require an account. An account campaign gets
+workflow gets that contact page's own `page.orders`, `page.tasks`, contact
+fields, and contact ID; it does not require an account. An account workflow gets
 the corresponding account-page tables. CRM task writes are contact-indexed, so
 an account audience row uses that page's first related contact as its writer
 contact while a contact row uses its exact contact ID.
@@ -94,7 +94,7 @@ await page.tasks.completeLatest();
 await page.tasks.completeAll();
 ```
 
-Existing tasks are mutable in both campaigns and custom actions. Direct
+Existing tasks are mutable in both workflows and custom actions. Direct
 assignments are grouped into one confirm-gated CRM write per task:
 
 ```js
@@ -114,7 +114,7 @@ await task.commit(); // optional early flush
 Approved fields are `subject`, `description`/`body`, `liveDate`/`live_date`,
 `dueDate`/`due_date`/`due`, `categoryId`/`category_id`, and `priority`.
 Task List custom actions receive every loaded row through `page.tasks.items`;
-campaigns receive the same mutable task objects through `open` and `done`.
+workflows receive the same mutable task objects through `open` and `done`.
 
 ## Saved templates
 
@@ -237,13 +237,13 @@ return "email sent · task " + followUp.taskId;
 composition, and returns are projected into the Blocks view. Unknown ordinary
 JavaScript remains a raw code block but still runs inside the guarded sandbox.
 
-## Non-email verification campaign
+## Non-email verification workflow
 
 This is the safest full helper check because it performs no email send:
 
 ```json
 {
-  "name": "Campaign engine · non-email verification",
+  "name": "Workflow engine · non-email verification",
   "status": "Draft",
   "paceDelay": 1,
   "paceJitter": 0,
@@ -252,18 +252,18 @@ This is the safest full helper check because it performs no email send:
   "suppressBounced": false,
   "suppressMailerRemoved": false,
   "suppressDoNotContact": true,
-  "automation": "const contact = page.contact;\nconst task = await actions.createTask({ subject: \"Campaign QA · \" + contact.contactName, body: \"Created by the campaign-engine verification run.\", priority: \"low\", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: \"Campaign engine QA\", body: \"Create task, complete task, note, and contact edit were exercised.\" });\ncontact.jobTitle = \"Campaign QA verified\";\nawait contact.commit();\nreturn \"verified \" + contact.contactId;"
+  "automation": "const contact = page.contact;\nconst task = await actions.createTask({ subject: \"Workflow QA · \" + contact.contactName, body: \"Created by the workflow-engine verification run.\", priority: \"low\", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: \"Workflow engine QA\", body: \"Create task, complete task, note, and contact edit were exercised.\" });\ncontact.jobTitle = \"Workflow QA verified\";\nawait contact.commit();\nreturn \"verified \" + contact.contactId;"
 }
 ```
 
 Run it first as a dry run, select one disposable test contact, inspect the
 preview, and only then switch off Dry run.
 
-## Full task reconciliation campaign
+## Full task reconciliation workflow
 
-The paste-ready campaign at
-[`docs/examples/task-reconciliation-campaign.js`](examples/task-reconciliation-campaign.js)
-is the ONE campaign that both initiates and reconciles every owned task flow.
+The paste-ready workflow at
+[`docs/examples/task-reconciliation-workflow.js`](examples/task-reconciliation-workflow.js)
+is the ONE workflow that both initiates and reconciles every owned task flow.
 Run it against any contact or account audience, as often as needed: each
 record converges to the same consistent state. Existing tasks are edited in
 place — never completed and remade — missing tasks are created, and running
@@ -284,9 +284,9 @@ in-flight cycle is preserved (overdue open tasks keep their dates and only
 naming/category are corrected, past slots with no task are skipped, not
 created late); a cycle with no evidence whose first task passed rolls to next
 year; surplus anniversary tasks with no slot are retired. Candidate monthly
-campaigns are ranked by newest supporting order and a lower-ranked candidate
+workflows are ranked by newest supporting order and a lower-ranked candidate
 is skipped entirely when any of its tasks would land within 20 days of an
-accepted campaign's task.
+accepted workflow's task.
 
 **Promotion tasks.** Configure `PROMO_SUBJECT_RE` and `PROMO_TASKS` at the
 top of the file for the active promotion. After a run every open promotion
@@ -334,7 +334,7 @@ through the page engine — `page.orders` and `page.tasks.open`/`done`,
 including tasks whose live date is in the future — and account pages resolve
 their representative contact as the task writer. On a page with no readable
 CRM record the action returns "Skipped" without writing. When editing the
-rules, change the campaign file and copy the body across (the sync test fails
+rules, change the workflow file and copy the body across (the sync test fails
 otherwise).
 
 ## Task List quarterly reach-out custom action
@@ -358,7 +358,7 @@ tasks get a live date fourteen days before their due date. Every other task —
 promotion follow-ups, manual follow-ups, brand tiers — keeps its subject,
 live date, and category untouched. It creates each missing task in the rolling
 four-quarter window, placed at the middle of the gap between that contact's
-surrounding touches (the same rule the reconciliation campaign uses), and
+surrounding touches (the same rule the reconciliation workflow uses), and
 immediately gives the new task the same two-week live-date offset through the
 ordinary confirmation-gated executor.
 
@@ -369,10 +369,10 @@ List pull entirely (the CRM only renders already-live tasks there).
 
 Contacts with no contact ID are skipped because the CRM cannot attach a task
 to them. A contact with no Task List row cannot be discovered from this
-surface; the full reconciliation campaign is the authoritative flow — this
+surface; the full reconciliation workflow is the authoritative flow — this
 action is only the quick in-modal surface, and anything it creates is
-re-mediated by the campaign's gap-midpoint rule on the next campaign run.
+re-mediated by the workflow's gap-midpoint rule on the next workflow run.
 Note that promotion repair CANNOT run from this surface: the Task List pull
 only renders already-live tasks, so tasks with future live dates are
-invisible here; per-record campaign hydration (the contact/account page) is
+invisible here; per-record workflow hydration (the contact/account page) is
 the surface that still sees them.

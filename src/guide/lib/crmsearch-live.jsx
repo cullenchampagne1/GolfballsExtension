@@ -95,7 +95,7 @@ export function SelectionBar({ selCount, total }) {
     <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-brand-tint-soft)', display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}><span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span> of {total} results</div>
       <div style={{ flex: 1 }} />
-      <Btn size="sm" variant="ghost" icon={<I.megaphone size={11} />}>Run campaign</Btn>
+      <Btn size="sm" variant="ghost" icon={<I.megaphone size={11} />}>Run workflow</Btn>
       <Btn size="sm" variant="ghost" icon={<I.mail size={11} />}>Email selected</Btn>
       <Btn size="sm" variant="ghost" icon={<I.copy size={11} />}>Export CSV</Btn>
     </div>

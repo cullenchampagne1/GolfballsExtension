@@ -7,7 +7,7 @@
       "icon": "code",
       "tiers": ["advanced"],
       "keywords": ["code variable", "javascript", "recipe", "oos", "expression", "custom logic"],
-      "summary": "Sandboxed JavaScript expressions inside templates and campaign conditions — with prebuilt recipes for the common cases.",
+      "summary": "Sandboxed JavaScript expressions inside templates and workflow conditions — with prebuilt recipes for the common cases.",
       "feature": "code-variables",
       "covers": ["code-variables", "sandbox"],
       "body": {
@@ -39,10 +39,10 @@
             ["Out-of-stock items", "Scans the order page for items flagged OOS — fully self-contained, sync"],
             ["Recommended replacement", "For each OOS item, fetches the brand's catalog and scores candidates by name/price/decoration to suggest the closest in-stock match (async)"]
           ] },
-          { "type": "callout", "kind": "warning", "text": "Code variables run per-contact during campaigns and bulk sends. An expression that fetches pages adds those seconds for every contact in the audience — keep them lean." }
+          { "type": "callout", "kind": "warning", "text": "Code variables run per-contact during workflows and bulk sends. An expression that fetches pages adds those seconds for every contact in the audience — keep them lean." }
         ]
       },
-      "related": ["email-templates-popup", "campaign-conditions"]
+      "related": ["email-templates-popup", "workflow-conditions"]
     },
     {
       "slug": "hidden-settings",

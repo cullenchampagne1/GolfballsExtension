@@ -45,7 +45,7 @@ decisions below:
   find phone for the current contact; apply note / commit dates on the current
   order; categorise the current case). Query Builder produces its query
   **directly**, never opening the child modal.
-- **Out (for now):** the entire corporate‑catalog / proposal workflow; campaigns;
+- **Out (for now):** the entire corporate‑catalog / proposal workflow; workflows;
   all email send/reply; operating on **task‑list rows** (ambiguous — no ambient
   subject); `charge` and `order‑edit`; name→object smart resolution when off the
   subject's page.
@@ -123,7 +123,7 @@ verb be safe whether the AI proposes it or an admin pushes it.
 | **read‑only** | open a surface, run a search, apply a filter, view a thread | **auto‑run** |
 | **mutates‑local** | set a setting/feature/theme, add a watch item, save a query | **auto‑run** (trivially reversible) |
 | **mutates‑remote** | complete a task, log a call, create a contact, categorise a case, apply an order note, find phone | **confirm** (preview + click, showing the resolved object) |
-| **outward‑facing** | create a share link, send an email, run a campaign, export CSV | **confirm** (AI‑proposed shares always) |
+| **outward‑facing** | create a share link, send an email, run a workflow, export CSV | **confirm** (AI‑proposed shares always) |
 | **money‑critical** | charge a card, commit approval/commitment dates, start an order‑edit | **hard gate** (§9). Never AI‑auto‑runnable. |
 
 ---
@@ -274,7 +274,7 @@ outward · `$` money. **Gate**: `auto` / `confirm` / `hard` / `admin`. **Scope**
 **crm_search** — `crmSearchEnabled` · `__gbShowCrmSearchModal()` *(needs params)*
 - ✅ `open {query,type,filter}` — filter may be a **compiled query** (query‑builder result, no child modal) — R/auto
 - ✅ `run_search`, `apply_filter`, `sort`, `select`, `open_record` — R/auto
-- ⏸ `export_csv` (O), `email_selected` (O), `run_campaign` (O) — confirm; **out of near‑term**
+- ⏸ `export_csv` (O), `email_selected` (O), `run_workflow` (O) — confirm; **out of near‑term**
 
 **task_list** — `taskListEnabled` · `__gbShowTaskListModal()` *(needs params)*
 - ✅ `open {filter,status,priority,query}`, `refresh`, `sort` — R/auto
@@ -308,7 +308,7 @@ pass it to `open crm_search {filter}` (§4.6).
 **quick_order_note** — `autoPushEnabled` · `__gbShowQuickOrderNoteModal({orderId})`
 - ✅ `apply_order_note` for the **current order** (Tier 0) — M/confirm. Inputs `{subject,body,audienceVal,daysOut}`.
 
-**proposal_email · email_runner** — ⏸ **out** (email send / campaign runner).
+**proposal_email · email_runner** — ⏸ **out** (email send / workflow runner).
 **editor_templates · editor_notes · editor_signature** — ⏸ author surfaces; open/save are L/auto but low near‑term value.
 
 ### 6.3 Gifting & products — ⏸ proposal workflow out; read‑only open in
@@ -338,7 +338,7 @@ pass it to `open crm_search {filter}` (§4.6).
 
 **charge_refund** — `chargeEnabled` — ⏸ **out.** `run_charge` is `$`; you excluded it.
 **order_edit** — `orderEditEnabled` — ⏸ **out.** `start_order_edit` is `$`; excluded.
-**campaign_manager** — `campaignManagerEnabled` — ⏸ **out** (in‑depth, specific).
+**workflow_manager** — `workflowManagerEnabled` — ⏸ **out** (in‑depth, specific).
 
 **actions_shelf** — the hub; buttons inherit their target's class. Two silent‑write
 shelf actions you **kept in**: ✅ `find_phone` (M, current contact) and ✅
@@ -379,7 +379,7 @@ chooses the gate and never supplies a raw object it wasn't handed.
 
 Baked‑in decision: **near‑term verbs bind only to Tier‑0 ambient objects on the
 current page.** Tier‑1 smart resolve, Tier‑2 picks, and the deep
-gift/campaign/email workflows are deferred.
+gift/workflow/email workflows are deferred.
 
 | Phase | Scope | Risk |
 |---|---|---|
@@ -389,7 +389,7 @@ gift/campaign/email workflows are deferred.
 | **3 — approved money verb (hard gate)** | `commit_order_dates` on the current order only — fresh explicit click showing the dates, admin/consent gate, anti‑spoof label. | high (§9) |
 
 **Explicitly out of near‑term scope:** corporate‑catalog + proposal build/save/
-email/checkout; campaigns; all email send/reply; **task‑list row operations**
+email/checkout; workflows; all email send/reply; **task‑list row operations**
 (complete/push a specific task — Tier‑2, ambiguous); `run_charge`, `start_order_edit`;
 Tier‑1 name→object resolution off the subject's page. Each is revisited only after
 Tier‑0 proves out.
@@ -442,6 +442,6 @@ Gifting/products: `gift_catalog`, `gift_customize`*, `proposal_checkout`*,
 `mockup_studio`, `mockup_catalog_admin`†, `grass_mockup`*, `golfball_viewer`*,
 `image_preview`, `submit_proof` ·
 Orders/system: `margin_calc`, `order_calendar`, `charge_refund`, `order_edit`,
-`campaign_manager`, `notifications`, `actions_shelf`
+`workflow_manager`, `notifications`, `actions_shelf`
 
 `*` child surface (no global opener) · `†` admin‑only build.

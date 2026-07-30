@@ -117,7 +117,7 @@
         {sel.size > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 12px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-brand-tint-soft)' }}>
             <span style={{ fontSize: 11.5 }}><b style={{ color: 'var(--gb-brand-label)' }}>{sel.size} selected</b></span><div style={{ flex: 1 }} />
-            <Btn size="xs" variant="ghost" icon={<I.send size={10} />}>Run campaign</Btn>
+            <Btn size="xs" variant="ghost" icon={<I.send size={10} />}>Run workflow</Btn>
             <Btn size="xs" variant="ghost" icon={<I.mail size={10} />}>Email</Btn>
             <Btn size="xs" variant="ghost" icon={<I.copy size={10} />}>Export CSV</Btn>
           </div>
@@ -540,7 +540,7 @@
         <h1 className="title">Tasks</h1>
         <p className="lede">Your CRM task queue, pulled live and made fast. See every open task, search and filter it, then act on one or many at once — complete, push the due date, <strong>email the whole batch</strong>, or spin up a new task — without round-tripping through the CRM's own pages.</p>
         <TourBox stack title="Every open task, in one table" live={<TasksSnippet />} eyebrow="⌃X · My Tasks">
-          <p>Columns mirror the CRM: <strong>Account, Contact, Due, Category, Priority, Subject</strong>. Overdue dates show red, due-today amber. Search or filter by status/priority, sort any column, and tick rows to reveal bulk actions — <strong>Run campaign</strong>, <strong>Email</strong>, <strong>Export CSV</strong>. Select rows in the table above to see the action bar appear.</p>
+          <p>Columns mirror the CRM: <strong>Account, Contact, Due, Category, Priority, Subject</strong>. Overdue dates show red, due-today amber. Search or filter by status/priority, sort any column, and tick rows to reveal bulk actions — <strong>Run workflow</strong>, <strong>Email</strong>, <strong>Export CSV</strong>. Select rows in the table above to see the action bar appear.</p>
         </TourBox>
         <h2 className="sec">Quick Task — act without leaving</h2>
         <p>The <strong>Quick Task</strong> button (footer, or per row) opens a small moveable popover that writes straight back to the CRM for the selected task(s):</p>
@@ -559,8 +559,8 @@
         </div>
 
         <h2 className="sec">Bulk email from your tasks</h2>
-        <p>The biggest time-saver here: select a batch of tasks and <strong>email every contact at once</strong>. Tick the rows, hit <strong>Email</strong> (or <strong>Run campaign</strong>), and the <strong>Email Runner</strong> pops up — a small, draggable panel that personalizes one template per recipient and sends them on a human-looking, randomized delay.</p>
-        <TourBox title="The Email Runner popover" live={<EmailRunnerSnippet />} eyebrow="Email / Run campaign on a selection" flip>
+        <p>The biggest time-saver here: select a batch of tasks and <strong>email every contact at once</strong>. Tick the rows, hit <strong>Email</strong> (or <strong>Run workflow</strong>), and the <strong>Email Runner</strong> pops up — a small, draggable panel that personalizes one template per recipient and sends them on a human-looking, randomized delay.</p>
+        <TourBox title="The Email Runner popover" live={<EmailRunnerSnippet />} eyebrow="Email / Run workflow on a selection" flip>
           <p>Pick a <strong>template</strong> (variations send a random version per contact, so a big blast doesn't read like a form letter), set a <strong>delay range</strong> between sends, and press <strong>Run</strong>. The card then tracks the run at a glance:</p>
           <ul>
             <li>A <strong>radial progress ring</strong> with a live percentage, and a sweeping scan-light while it's in flight.</li>
@@ -574,7 +574,7 @@
           <thead><tr><th>Bulk action</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td><b>Email</b></td><td>Opens the Email Runner over the selected tasks — one personalized template per contact.</td></tr>
-            <tr><td><b>Run campaign</b></td><td>Hands the selection to the campaign manager to sequence multiple emails / tasks over time.</td></tr>
+            <tr><td><b>Run workflow</b></td><td>Hands the selection to the workflow manager to sequence multiple emails / tasks over time.</td></tr>
             <tr><td><b>Export CSV</b></td><td>Download the selected tasks with every column (Excel-safe).</td></tr>
             <tr><td><b>Open Tabs</b></td><td>Open each selected task's record in its own browser tab.</td></tr>
           </tbody>

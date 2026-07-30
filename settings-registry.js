@@ -61,7 +61,7 @@
     "submitProofEnabled": {
       "type": "bool",
       "default": true,
-      "label": "Submit Proof",
+      "label": "submitProofEnabled",
       "managedDefault": true
     },
     "taskListEnabled": {
@@ -142,10 +142,10 @@
       "label": "Text Preview",
       "managedDefault": true
     },
-    "campaignManagerEnabled": {
+    "workflowManagerEnabled": {
       "type": "bool",
       "default": true,
-      "label": "Campaign Manager",
+      "label": "Workflow Manager",
       "managedDefault": true
     },
     "notificationsEnabled": {
@@ -248,11 +248,11 @@
     },
     "golfballViewer.printAreaScale": {
       "type": "number",
-      "default": 0.7,
+      "default": 0.5208,
       "label": "Golfball viewer: print area scale",
       "managedDefault": true,
-      "min": 0.2,
-      "max": 1.5
+      "min": 0.1,
+      "max": 1
     },
     "golfballViewer.spinSpeed": {
       "type": "number",
@@ -376,10 +376,10 @@
       "min": 1,
       "max": 3
     },
-    "campaignManager.scale": {
+    "workflowManager.scale": {
       "type": "number",
       "default": 1.2,
-      "label": "Campaign Manager: zoom scale",
+      "label": "Workflow Manager: zoom scale",
       "managedDefault": true,
       "min": 0.5,
       "max": 2
@@ -1081,10 +1081,10 @@
     }
   },
   "customPageScopes": {
-    "crm": {
+    "all": {
       "type": "bool",
       "default": false,
-      "label": "CRM",
+      "label": "Custom Pages",
       "managedDefault": true,
       "pageIds": [
         "dashboard",

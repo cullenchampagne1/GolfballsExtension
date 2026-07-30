@@ -2,15 +2,15 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  CAMPAIGN_MANAGER_SCALE_DEFAULT,
-  fitCampaignManagerScale,
-  normalizeCampaignManagerScale,
-} from '../../src/lib/campaign/presentation.js';
+  WORKFLOW_MANAGER_SCALE_DEFAULT,
+  fitWorkflowManagerScale,
+  normalizeWorkflowManagerScale,
+} from '../../src/lib/workflow/presentation.js';
 import { applyFloatingHostScale } from '../../src/lib/floatingHost.js';
 import { DEV_SETTINGS } from '../../src/lib/devSettings.js';
 
 const managerSource = readFileSync(
-  new URL('../../src/modals/CampaignManager.jsx', import.meta.url),
+  new URL('../../src/modals/WorkflowManager.jsx', import.meta.url),
   'utf8',
 );
 const blocksSource = readFileSync(
@@ -27,15 +27,15 @@ function fakeHost() {
   };
 }
 
-describe('Campaign Manager presentation scale', () => {
+describe('Workflow Manager presentation scale', () => {
   it('accepts the requested 0.5× scale and clamps unsafe stored values', () => {
-    const registry = DEV_SETTINGS.find((setting) => setting.key === 'campaignManager.scale');
+    const registry = DEV_SETTINGS.find((setting) => setting.key === 'workflowManager.scale');
     assert.equal(registry?.min, 0.5);
-    assert.equal(normalizeCampaignManagerScale(0.5), 0.5);
-    assert.equal(normalizeCampaignManagerScale('0.75'), 0.75);
-    assert.equal(normalizeCampaignManagerScale(0.1), 0.5);
-    assert.equal(normalizeCampaignManagerScale(9), 2);
-    assert.equal(normalizeCampaignManagerScale('not-a-number'), CAMPAIGN_MANAGER_SCALE_DEFAULT);
+    assert.equal(normalizeWorkflowManagerScale(0.5), 0.5);
+    assert.equal(normalizeWorkflowManagerScale('0.75'), 0.75);
+    assert.equal(normalizeWorkflowManagerScale(0.1), 0.5);
+    assert.equal(normalizeWorkflowManagerScale(9), 2);
+    assert.equal(normalizeWorkflowManagerScale('not-a-number'), WORKFLOW_MANAGER_SCALE_DEFAULT);
   });
 
   it('lets a self-scaled surface opt out of the shared modal root scale', () => {
@@ -48,15 +48,15 @@ describe('Campaign Manager presentation scale', () => {
   });
 
   it('uniformly fits the full editor when page zoom reduces the CSS viewport', () => {
-    assert.equal(fitCampaignManagerScale(1.2, 1920, 1080), 1.2);
-    assert.equal(fitCampaignManagerScale(1.2, 800, 600), 0.5875);
-    assert.equal(fitCampaignManagerScale(0.5, 1920, 1080), 0.5);
+    assert.equal(fitWorkflowManagerScale(1.2, 1920, 1080), 1.2);
+    assert.equal(fitWorkflowManagerScale(1.2, 800, 600), 0.5875);
+    assert.equal(fitWorkflowManagerScale(0.5, 1920, 1080), 0.5);
   });
 
-  it('keeps campaign identity and completed-run navigation discoverable', () => {
-    assert.match(managerSource, /<Field label="Campaign name"/);
-    assert.match(managerSource, />\s*Back to campaigns\s*</);
-    assert.match(managerSource, /@keyframes cm-repeat-hit/);
+  it('keeps workflow identity and completed-run navigation discoverable', () => {
+    assert.match(managerSource, /<Field label="Workflow name"/);
+    assert.match(managerSource, />\s*Back to workflows\s*</);
+    assert.match(managerSource, /@keyframes workflow-repeat-hit/);
     assert.match(managerSource, /advanceRunRow\(current\[contact\._key\], event, pipeline\)/);
   });
 

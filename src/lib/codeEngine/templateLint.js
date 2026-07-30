@@ -1,7 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
    codeEngine/templateLint — flag missing saved-template dependencies.
 
-   A campaign is portable code: if it's shared and the recipient doesn't
+   A workflow is portable code: if it's shared and the recipient doesn't
    have the saved email/task/call it references by name, that should show
    up as a problem AT AUTHOR TIME, not only when it runs. This scans for
    literal `user.email("X")` / `user.task("X")` / `user.call("X")` and
@@ -75,5 +75,5 @@ export function lintTemplateRefs(source, bindings) {
 }
 
 function dependencyMsg(kind, ref) {
-  return `No saved ${kind} “${ref}”. Create a ${kind} with that name, or fix the reference — this campaign depends on it.`;
+  return `No saved ${kind} “${ref}”. Create a ${kind} with that name, or fix the reference — this workflow depends on it.`;
 }

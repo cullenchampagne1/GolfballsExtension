@@ -1,6 +1,6 @@
 # Code‑First Automation Engine — Architecture & Phase 1
 
-> Replace the block‑based Campaign Manager with a **code‑first** engine: you
+> Replace the block‑based Workflow Manager with a **code‑first** engine: you
 > write ordinary JS (`if`/`for`/`switch`, action calls), it renders as blocks
 > and branches with the existing run/simulation animation, and every extension
 > action is a callable object‑oriented contract. The JSON payload API and this
@@ -9,7 +9,7 @@
 ## Implementation status — July 2026
 
 The contact-level Phase 1 path is implemented. CRM Search and Task List pass
-compact audience records to Campaign Manager; each record is fetched and
+compact audience records to Workflow Manager; each record is fetched and
 hydrated before its program runs. The code runner now enforces audience order,
 suppression, pacing, pause/stop, and a run-wide action cap, while the content
 side replays allowlisted effects through the existing email, task, call-log,
@@ -31,7 +31,7 @@ mostly *rewires* it, and adds one new translator.
 
 | Concern | Today | Redesign |
 |---|---|---|
-| **Execution** | `runCampaign()` (pure, callback‑driven) walks a flat `steps[]` and calls `runStepAction()` per step | keep the engine; the "steps" now come from parsed code, not a hand‑built list |
+| **Execution** | `runWorkflow()` (pure, callback‑driven) walks a flat `steps[]` and calls `runStepAction()` per step | keep the engine; the "steps" now come from parsed code, not a hand‑built list |
 | **Actions** | `runStepAction` dispatches kind→`sendEmail`/`submitCallLog`/`submitQuickTask`, **with a `dryRun` short‑circuit before any side effect** | promote this into a **contract registry** shared with the JSON verbs |
 | **Sandbox** | custom code runs in an opaque‑origin iframe; **the code only *decides*, the engine *executes*** | keep exactly — this is the security spine |
 | **Simulation / animation** | two‑phase evaluate→replay + a `pending/running/ran/skipped/failed/cut` state machine, keyed by a `{stepId,status}` trace | keep; re‑key the trace by **AST node id** |
@@ -53,12 +53,12 @@ chain you described — create opportunity → build item objects → proposal b
 
 ## 1. What we keep (the reusable substrate)
 
-- **`src/lib/campaign/engine.js` `runCampaign({campaign, audience, lookupTemplate,
+- **`src/lib/workflow/engine.js` `runWorkflow({workflow, audience, lookupTemplate,
   deps, control, on})`** — pure logic; the UI drives it via injected `control`
   (pause/stop) and `on` callbacks (`contactStart`/`stepResult`/`contactDone`/
   `progress`/`complete`). Audience ordering, pacing/jitter, suppression, send cap
   all live here and are authoring‑agnostic.
-- **`src/lib/campaign/actions.js` `runStepAction(step, template, ctx, {dryRun})`**
+- **`src/lib/workflow/actions.js` `runStepAction(step, template, ctx, {dryRun})`**
   → normalizes every action to `{ ok, transport?, detail?, error?, kill? }`.
   **Dry‑run returns `{transport:'dry', detail:'Would …'}` before touching
   anything.** This uniform return + the dry‑run gate is the contract shape the
@@ -69,7 +69,7 @@ chain you described — create opportunity → build item objects → proposal b
   calls are proxied out as `hcall` and serviced against an explicit allowlist.
   Today custom code returns only a control signal (`'kill'`); **the engine does
   the side effects.** This is the boundary we extend, not replace.
-- **The simulation/run machine** — `src/modals/CampaignManager.jsx`: two‑phase
+- **The simulation/run machine** — `src/modals/WorkflowManager.jsx`: two‑phase
   `startSim()` (evaluate with `dryRun:true`, collect a `trace` of
   `{stepId,status,reason}`, then replay at 750 ms), the per‑unit state machine
   (`pending/running/ran/skipped/failed/cut`), the full‑audience row machine
@@ -254,7 +254,7 @@ not Phase 1.
 4. Emit a `{nodeId,status}` trace from the sandbox run; re‑key the existing
    sim/run state machine on node ids so the animation lights up the blocks.
 5. Author in `CodeVarEditor` with action autocomplete; ship an editor mode toggle
-   (code ↔ blocks). Keep `runCampaign`'s pacing/suppression/cap around the run.
+   (code ↔ blocks). Keep `runWorkflow`'s pacing/suppression/cap around the run.
 
 **Phase 2 — conditions & control as code + object reads.** Replace the
 matchEngine condition trees with `if (page.order.count > 3)` in code (the `var`
@@ -287,13 +287,13 @@ dry‑run, the anti‑spoof envelope — holds for both.
 
 | Concern | File |
 |---|---|
-| Run engine | `src/lib/campaign/engine.js` (`runCampaign`) |
-| Action dispatch + dry‑run | `src/lib/campaign/actions.js` (`runStepAction`) |
-| Sim/run UI + state machine | `src/modals/CampaignManager.jsx` (`startSim`, `useCampaignRunner`) |
+| Run engine | `src/lib/workflow/engine.js` (`runWorkflow`) |
+| Action dispatch + dry‑run | `src/lib/workflow/actions.js` (`runStepAction`) |
+| Sim/run UI + state machine | `src/modals/WorkflowManager.jsx` (`startSim`, `useWorkflowRunner`) |
 | Sandbox | `src/lib/page-engine/sandbox-bridge.js`, `src/sandbox/sandbox-eval.entry.js` |
 | Code runtime | `src/lib/page-engine/code-runtime.js` |
 | Code box | `src/ui/components/CodeVarEditor.jsx` |
 | Page object model | `src/lib/page-engine/{index,extract,resolve}.js`, `src/lib/page-schemas/*` |
 | Email/proposal contracts | `src/lib/{emailSender,emailReply,saveProposal,proposalEmailSource,cartSerializer}.js` |
 | Payload API (shared registry) | `src/lib/{openParamRules,helpActions}.js`, `lib/action-language.js`, `lib/action-runtime.js` |
-| Persistence | `src/lib/campaign/store.js` (`campaigns` key) |
+| Persistence | `src/lib/workflow/store.js` (`workflows` key) |

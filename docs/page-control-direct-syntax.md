@@ -1,6 +1,6 @@
 # Direct page control — tasks + grouped edits via `page.*` syntax
 
-Goal: give campaign code full, safe control of the current CRM page — complete
+Goal: give workflow code full, safe control of the current CRM page — complete
 tasks and edit approved contact fields — using direct syntax:
 
 ```js
@@ -64,7 +64,7 @@ final, opt-in wiring step.
   `editContact` (remote) + `APPROVED_CONTACT_FIELDS`.
 - `simulate.js` records a dry trace; the real gated executor is not yet built
   (`simulate.js:16` anticipates it). Live effects today go through
-  `campaign/actions.js` (`runStepAction`).
+  `workflow/actions.js` (`runStepAction`).
 
 ---
 

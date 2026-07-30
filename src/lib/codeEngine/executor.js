@@ -4,7 +4,7 @@
    simulateProgram records a dry trace; on a live run it also hands each
    effect step to this executor, which performs the actual write via the
    PROVEN lib functions (injected as deps, so the wiring stays in
-   CampaignManager and this stays unit-testable):
+   WorkflowManager and this stays unit-testable):
 
      sendEmail        → emailSender.sendEmail(...)       (arbitrary `to`)
      createTask       → submitQuickTask({template,context})
@@ -71,7 +71,7 @@ function activityTemplate(input, { note = false } = {}) {
     : (value.direction === 'inbound' ? 1 : 0);
   return {
     ...value,
-    subject: value.subject || (note ? 'Campaign note' : 'Campaign call'),
+    subject: value.subject || (note ? 'Workflow note' : 'Workflow call'),
     callDirection: direction === 1 ? 1 : 0,
     callCategory: Number(value.callCategory ?? value.categoryId ?? 35) || 35,
     callVoicemail: value.callVoicemail ?? value.voicemail ?? false,

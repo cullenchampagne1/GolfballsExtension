@@ -162,7 +162,7 @@ function tokenAt(state) {
   return text.slice(start, end).replace(/^\.+|\.+$/g, '');
 }
 
-/* Completions for the campaign-code bindings — page / user / actions. */
+/* Completions for the workflow-code bindings — page / user / actions. */
 const BINDING_OPTIONS = {
   actions: [
     { label: 'actions.sendEmail', type: 'function', detail: '(email) — saved or {subject,body}' },
@@ -384,7 +384,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
       <div ref={hostRef} style={fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined} />
 
       {/* Namespace legend + test action — hidden when actions are hidden
-          (e.g. the campaign code editor, which has its own bindings/docs). */}
+          (e.g. the workflow code editor, which has its own bindings/docs). */}
       {!hideActions && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>

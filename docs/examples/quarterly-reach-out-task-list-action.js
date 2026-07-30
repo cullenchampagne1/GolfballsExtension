@@ -15,7 +15,7 @@
 // tiers) counts toward quarter coverage but keeps its subject, live date, and
 // category untouched. Missing rolling quarters receive one task placed at the
 // middle of the gap between the contact's surrounding touches (same rule as
-// the reconciliation campaign), with the same two-week live-date offset.
+// the reconciliation workflow), with the same two-week live-date offset.
 
 const data = page.entryPoint?.data;
 const taskRows = Array.isArray(data?.tasks) ? data.tasks : [];
@@ -83,7 +83,7 @@ function dateFromDayNumber(dayNumber) {
   return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 12);
 }
 
-/* Same placement rule as the reconciliation campaign: the reach-out sits at
+/* Same placement rule as the reconciliation workflow: the reach-out sits at
    the middle of the real gap around the quarter — from the last touch at or
    before the window to the next touch landing by the end of the FOLLOWING
    quarter (else the start of the following quarter); touches inside the

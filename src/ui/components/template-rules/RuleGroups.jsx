@@ -93,7 +93,7 @@ export function RuleGroups({
      would otherwise be shoved right). Default keeps the pill. */
   shouldHideNot = () => false,
   /* Optional: allow removing the very last condition / group, collapsing back
-     to the empty state. For campaign steps (conditions are optional, "no
+     to the empty state. For workflow steps (conditions are optional, "no
      rules = always runs") vs. template match-rules (a template needs a rule). */
   allowEmpty = false,
 }) {

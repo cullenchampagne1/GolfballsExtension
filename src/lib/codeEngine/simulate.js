@@ -10,7 +10,7 @@
      • node/test → AsyncFunction (same shape the sandbox uses)
 
    The result is the ordered `{ id, contract, status }` trace the existing
-   campaign run/sim animation consumes — the whole point of Phase 1's
+   workflow run/sim animation consumes — the whole point of Phase 1's
    "write code → watch the blocks light up" with zero real effects.
 
    The runner is injected so this module stays pure and unit-testable; a
@@ -180,7 +180,7 @@ export async function simulateProgram(
       });
       if (decision === false || decision?.allow === false) {
         entry.status = 'skipped';
-        entry.reason = decision?.reason || 'Skipped by campaign policy';
+        entry.reason = decision?.reason || 'Skipped by workflow policy';
         entry.errors = [];
         result = {
           ok: false,

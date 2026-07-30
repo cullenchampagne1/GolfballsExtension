@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildCrmSelectionCsv,
-  crmRowToCampaignContact,
+  crmRowToWorkflowContact,
   crmRowToEmailContact,
   selectedCrmRows,
   toggleCrmSelection,
@@ -76,8 +76,8 @@ describe('CRM Search selection · row filtering and action handoff', () => {
     });
   });
 
-  it('builds the Campaign Manager audience contract with value and source id', () => {
-    assert.deepEqual(crmRowToCampaignContact(rows[1], '/account/17'), {
+  it('builds the Workflow Manager audience contract with value and source id', () => {
+    assert.deepEqual(crmRowToWorkflowContact(rows[1], '/account/17'), {
       contactId: '',
       accountId: '17',
       contactName: 'Babbage Works',

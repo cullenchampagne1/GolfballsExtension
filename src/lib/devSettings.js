@@ -333,9 +333,9 @@ export const DEV_SETTINGS = [
     unit:    '×',
   },
   {
-    key:     'campaignManager.scale',
-    label:   'Campaign Manager: zoom scale',
-    desc:    'Independent magnification of the Campaign Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale.',
+    key:     'workflowManager.scale',
+    label:   'Workflow Manager: zoom scale',
+    desc:    'Independent magnification of the Workflow Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale.',
     type:    'number',
     default: 1.2,
     min:     0.5,
@@ -532,6 +532,7 @@ export const DEV_SETTINGS = [
 ];
 
 export const STORAGE_KEY = 'devSettings';
+const LEGACY_WORKFLOW_SCALE_KEY = 'campaignManager.scale';
 
 // Skip `action` rows — they fire a runner instead of persisting a value,
 // so there's no default to merge into the bag.
@@ -544,6 +545,24 @@ export function defaultDevSettings() {
   return { ...DEFAULTS };
 }
 
+/** Move renamed developer keys into their canonical workflow namespace. */
+export function normalizeStoredDevSettings(value) {
+  const settings = value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...value }
+    : {};
+  let changed = false;
+  if (!Object.hasOwn(settings, 'workflowManager.scale')
+      && Object.hasOwn(settings, LEGACY_WORKFLOW_SCALE_KEY)) {
+    settings['workflowManager.scale'] = settings[LEGACY_WORKFLOW_SCALE_KEY];
+    changed = true;
+  }
+  if (Object.hasOwn(settings, LEGACY_WORKFLOW_SCALE_KEY)) {
+    delete settings[LEGACY_WORKFLOW_SCALE_KEY];
+    changed = true;
+  }
+  return { settings, changed };
+}
+
 /** Read once, merged with defaults so callers never see undefined. */
 export function loadDevSettings() {
   return new Promise((resolve) => {
@@ -552,7 +571,9 @@ export function loadDevSettings() {
       return;
     }
     chrome.storage.local.get(STORAGE_KEY, (d) => {
-      resolve({ ...DEFAULTS, ...(d[STORAGE_KEY] || {}) });
+      const { settings, changed } = normalizeStoredDevSettings(d[STORAGE_KEY]);
+      if (changed) chrome.storage.local.set({ [STORAGE_KEY]: settings });
+      resolve({ ...DEFAULTS, ...settings });
     });
   });
 }
@@ -560,7 +581,8 @@ export function loadDevSettings() {
 /** Persist the whole bag — UI calls this on every edit. */
 export function saveDevSettings(settings) {
   if (typeof chrome === 'undefined' || !chrome.storage) return;
-  chrome.storage.local.set({ [STORAGE_KEY]: settings });
+  const { settings: canonical } = normalizeStoredDevSettings(settings);
+  chrome.storage.local.set({ [STORAGE_KEY]: canonical });
 }
 
 /**
@@ -576,8 +598,8 @@ export function useDevSettings() {
     loadDevSettings().then((d) => { if (alive) setSettings(d); });
     function onChanged(changes) {
       if (!changes[STORAGE_KEY]) return;
-      const v = changes[STORAGE_KEY].newValue || {};
-      setSettings({ ...DEFAULTS, ...v });
+      const { settings: next } = normalizeStoredDevSettings(changes[STORAGE_KEY].newValue);
+      setSettings({ ...DEFAULTS, ...next });
     }
     if (chrome?.storage?.onChanged) chrome.storage.onChanged.addListener(onChanged);
     return () => {

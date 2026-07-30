@@ -47,8 +47,16 @@ function buildConfiguration(reg) {
 before(async () => {
   stored = {
     gbApiInstallation: validInstallation(),
-    featureFlags: { copyIdsEnabled: true, personalUnknownFlag: true },
-    devSettings: { 'numberDisplay.durationMs': 777, 'email.localPart': 'local.user' },
+    featureFlags: {
+      copyIdsEnabled: true,
+      personalUnknownFlag: true,
+      campaignManagerEnabled: false,
+    },
+    devSettings: {
+      'numberDisplay.durationMs': 777,
+      'email.localPart': 'local.user',
+      'campaignManager.scale': 0.75,
+    },
     customPages: { crm: ['contact_details'] },
     secret_settings: { legacy: true },
   };
@@ -67,8 +75,10 @@ before(async () => {
 
   const configuration = buildConfiguration(registry);
   configuration.features.copyIdsEnabled = { value: false, hidden: true, managed: true };
+  configuration.features.workflowManagerEnabled = { value: true, hidden: false, managed: false };
   configuration.developer_settings['numberDisplay.durationMs'] = { value: 400, hidden: true, managed: true };
-  configuration.custom_pages.scopes.crm = { value: true, hidden: true, managed: true };
+  configuration.developer_settings['workflowManager.scale'] = { value: 1.2, hidden: false, managed: false };
+  configuration.custom_pages.scopes.all = { value: true, hidden: true, managed: true };
   payloadHolder = {
     schema_version: 1, admin_bypass: false, revision: 'a'.repeat(64), configuration,
   };
@@ -96,18 +106,23 @@ describe('remote policy sync', () => {
     assert.equal(stored.featureFlags.personalUnknownFlag, true, 'unmanaged local flags survive');
     assert.equal(stored.devSettings['numberDisplay.durationMs'], 400);
     assert.equal(stored.devSettings['email.localPart'], 'local.user', 'unmanaged identity stays local');
+    assert.equal(stored.featureFlags.workflowManagerEnabled, false, 'legacy local workflow flag is retained');
+    assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'legacy local workflow scale is retained');
+    assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(stored.devSettings, 'campaignManager.scale'), false);
 
     const policy = stored.gbRemoteSettingsPolicy;
     assert.equal(policy.adminBypass, false);
     assert.equal(policy.revision, 'a'.repeat(64));
     assert.equal(policy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(policy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
-    assert.equal(policy.hiddenCustomPageScopes.crm, true);
+    assert.equal(policy.hiddenCustomPageScopes.all, true);
     assert.deepEqual(
-      Array.from(stored.customPages.crm),
-      registry.customPageScopes.crm.pageIds,
+      Array.from(stored.customPages.all),
+      registry.customPageScopes.all.pageIds,
       'a managed-on scope enables the full page list',
     );
+    assert.equal(Object.hasOwn(stored.customPages, 'crm'), false);
     assert.equal(Object.hasOwn(stored, 'secret_settings'), false, 'the legacy key is purged');
     assert.ok(alarms.some(({ name, options }) => name === 'gbRemoteSettingsSync' && options.periodInMinutes === 1));
   });
@@ -117,8 +132,11 @@ describe('remote policy sync', () => {
     assert.equal(backup.version, 1);
     assert.equal(backup.hadFeatureFlags, true);
     assert.equal(backup.featureFlags.copyIdsEnabled, true, 'the backup keeps the user value, not the policy value');
+    assert.equal(backup.featureFlags.workflowManagerEnabled, false);
+    assert.equal(Object.hasOwn(backup.featureFlags, 'campaignManagerEnabled'), false);
     assert.equal(backup.devSettings['numberDisplay.durationMs'], 777);
-    assert.deepEqual(Array.from(backup.customPages.crm), ['contact_details']);
+    assert.equal(backup.devSettings['workflowManager.scale'], 0.75);
+    assert.deepEqual(Array.from(backup.customPages.all), registry.customPageScopes.all.pageIds);
   });
 
   it('rejects an invalid envelope without touching applied state', async () => {
@@ -135,7 +153,9 @@ describe('remote policy sync', () => {
     assert.equal(result.adminBypass, true);
     assert.equal(stored.devSettings['numberDisplay.durationMs'], 777, 'admin bypass restores pre-policy values');
     assert.equal(stored.featureFlags.copyIdsEnabled, true);
-    assert.deepEqual(Array.from(stored.customPages.crm), ['contact_details']);
+    assert.equal(stored.featureFlags.workflowManagerEnabled, false);
+    assert.equal(stored.devSettings['workflowManager.scale'], 0.75);
+    assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds);
     assert.equal(stored.gbRemoteSettingsPolicy.adminBypass, true);
     assert.equal(stored.gbRemoteSettingsPolicy.revision, 'b'.repeat(64));
     assert.equal(Object.hasOwn(stored, 'gbRemoteSettingsBackup'), false, 'the backup is consumed');

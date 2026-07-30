@@ -279,7 +279,7 @@ Two accepted shapes:
 
 ## 7 · Variations
 
-Optional alternate phrasings of the same template — the popup can pin one or shuffle per send; bulk campaigns can split-weight them.
+Optional alternate phrasings of the same template — the popup can pin one or shuffle per send; bulk workflows can split-weight them.
 ```json
 "variations": [
   { "label": "Direct",  "subject": "Your order {{order_number}}", "body": "<p>…</p>" },

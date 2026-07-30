@@ -289,12 +289,12 @@
       "file": "tests/unit/alignmentGeometry.test.mjs"
     },
     {
-      "name": "ui \u00b7 Campaign Manager deterministic scaling",
-      "file": "tests/unit/campaignPresentation.test.mjs"
+      "name": "ui \u00b7 Workflow Manager deterministic scaling",
+      "file": "tests/unit/workflowPresentation.test.mjs"
     },
     {
-      "name": "ui \u00b7 Campaign Manager repeated-step run presentation",
-      "file": "tests/unit/campaignRunPresentation.test.mjs"
+      "name": "ui \u00b7 Workflow Manager repeated-step run presentation",
+      "file": "tests/unit/workflowRunPresentation.test.mjs"
     },
     {
       "name": "ui \u00b7 Actions Shelf panel motion",
@@ -517,24 +517,24 @@
       "file": "tests/integration/order-note-relay.test.mjs"
     },
     {
-      "name": "flow \u00b7 campaign audience \u2192 hydrated CRM actions",
-      "file": "tests/integration/campaign-code-flow.test.mjs"
+      "name": "flow \u00b7 workflow audience \u2192 hydrated CRM actions",
+      "file": "tests/integration/workflow-code-flow.test.mjs"
     },
     {
       "name": "flow \u00b7 account audience page model",
       "file": "tests/unit/pageEngineAccount.test.mjs"
     },
     {
-      "name": "flow \u00b7 campaign code import validation",
-      "file": "tests/unit/campaignImport.test.mjs"
+      "name": "flow \u00b7 workflow code import validation",
+      "file": "tests/unit/workflowImport.test.mjs"
     },
     {
-      "name": "flow \u00b7 campaign run policy controls",
-      "file": "tests/unit/campaignRunPolicy.test.mjs"
+      "name": "flow \u00b7 workflow run policy controls",
+      "file": "tests/unit/workflowRunPolicy.test.mjs"
     },
     {
-      "name": "flow \u00b7 campaign template evaluation",
-      "file": "tests/unit/campaignTemplateEvaluation.test.mjs"
+      "name": "flow \u00b7 workflow template evaluation",
+      "file": "tests/unit/workflowTemplateEvaluation.test.mjs"
     },
     {
       "name": "flow \u00b7 background helper dispatch adapter",
@@ -575,6 +575,14 @@
     {
       "name": "guard \u00b7 remote settings policy",
       "file": "tests/unit/remoteSettingsPolicy.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 extension/backend settings registry parity",
+      "file": "tests/unit/settingsRegistryParity.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 workflow and Custom Pages settings migration",
+      "file": "tests/unit/settingsMigrations.test.mjs"
     },
     {
       "name": "guard \u00b7 contact import",

@@ -1,7 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/actions.js — the delegation layer.
+   workflow/actions.js — the delegation layer.
 
-   Campaign steps don't re-implement send/log/task logic; they CALL
+   Workflow steps don't re-implement send/log/task logic; they CALL
    the headless APIs we already built. This module maps a step's kind
    to the right delegated action and normalizes the result to one
    shape: { ok, transport?, detail?, error? }.
@@ -198,11 +198,11 @@ async function runCustom(step, ctx, { dryRun }) {
 /**
  * Run a single step's delegated action for one contact.
  *
- * @param step      the campaign step
+ * @param step      the workflow step
  * @param template  the resolved template OBJECT for this run (the engine
  *                  looks it up from the right store by the rolled
  *                  pickStepTemplate().templateId)
- * @param ctx       per-contact context (see campaign/context.js): {
+ * @param ctx       per-contact context (see workflow/context.js): {
  *                    contact, html, contactId, employeeId, phone,
  *                    contactName, accountId, emailConfig, signature,
  *                    fromLocalPart, dispatch }

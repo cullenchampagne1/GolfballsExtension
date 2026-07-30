@@ -1,14 +1,14 @@
 /* ───────────────────────────────────────────────────────────────
    crmTasks.js — complete a contact's open CRM tasks.
 
-   Used by the Campaign Manager's "Complete all open tasks" /
+   Used by the Workflow Manager's "Complete all open tasks" /
    "Complete latest open task" step modes. Reuses the same endpoints
    the Task List modal uses:
      • Page=349        — the rendered task list (rows id="taskrow_<id>")
      • Task/Get.ajax   — the task's current payload
      • Task/Update.ajax — write it back with taskStatusID = 3 (complete)
 
-   Runs in the content-script realm (the campaign surface mounts on the
+   Runs in the content-script realm (the workflow surface mounts on the
    CRM domain), so `fetch(..., { credentials:'include' })` carries the
    shared session cookies.
 ─────────────────────────────────────────────────────────────── */
@@ -96,7 +96,7 @@ function taskPriority(value) {
 /**
  * Update approved mutable fields on one existing CRM task. The current task is
  * fetched first and round-tripped so fields the action did not touch survive.
- * Campaigns and custom actions share this writer through the common executor.
+ * Workflows and custom actions share this writer through the common executor.
  */
 export async function updateTaskById(id, fields = {}) {
   const safeId = numericId(id, 'task ID');

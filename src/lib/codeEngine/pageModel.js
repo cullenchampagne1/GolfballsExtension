@@ -2,7 +2,7 @@
    codeEngine/pageModel — one page.* contract for every code surface.
 
    The page engine extracts a rich record model (orders, items, activities,
-   proofs, stats, account, ids, and more). Campaigns and Action Shelf custom
+   proofs, stats, account, ids, and more). Workflows and Action Shelf custom
    actions both consume that same model, with three controlled overlays:
      • `contact` is the writable primary-record view,
      • `contacts` is the current execution audience,

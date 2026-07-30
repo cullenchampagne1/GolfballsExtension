@@ -4,7 +4,7 @@
    The custom-action editor runs in the Manage window, where there is no live
    CRM page. To let a rep see their blocks light up (dry) while writing, we
    feed simulateProgram a realistic sample `page` shaped like the one the
-   campaign engine builds live ({ contact, contacts, count, tasks }). At real
+   workflow engine builds live ({ contact, contacts, count, tasks }). At real
    run time the shelf replaces this with runEngine(document) of the live page.
 
    Pure data — no DOM, storage, or chrome.

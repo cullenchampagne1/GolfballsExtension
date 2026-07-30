@@ -6,7 +6,7 @@ import {
 } from '../../lib/codeEngine/blockView.js';
 
 /* ───────────────────────────────────────────────────────────────
-   BlocksView — the run UI for code-authored campaigns.
+   BlocksView — the run UI for code-authored workflows.
 
    Same shape and animation as the old step timeline: sending an email
    is a step, creating a task is a step, if/else are branches that fan

@@ -26,7 +26,7 @@ export function StartPage() {
       <h1 className="title">Everything the extension does, shown live.</h1>
       <p className="lede">
         This is the operator's manual for the Golfballs.com Chrome extension — the toolkit that layers
-        email templates, charging, CRM lookups, tasks, proofs, a full product catalog, and campaign
+        email templates, charging, CRM lookups, tasks, proofs, a full product catalog, and workflow
         tools on top of the admin site. Nothing about the CRM itself changes: the extension watches
         which page you're on and offers the right tools for it.
       </p>
@@ -99,7 +99,7 @@ export function StartPage() {
         <li><strong>Find people</strong> — CRM Search (<span className="kbd">Ctrl+K</span>), Query Builder, New Contact (<span className="kbd">Ctrl+Q</span>), Phone Finder.</li>
         <li><strong>On-page helpers</strong> — Email/Chat Viewer, Image Viewer &amp; logo extraction, 3D Product Viewer, Margin Calculator (<span className="kbd">Ctrl+M</span>), Copy Order IDs, Signifyd glow.</li>
         <li><strong>Catalog &amp; proposals</strong> — Gift Catalog, item customization, gift sets, custom items, supplier import, promo codes, proposal emails.</li>
-        <li><strong>Campaigns</strong> — Quick Send bulk email and the multi-step Campaign Manager with dry-run.</li>
+        <li><strong>Workflows</strong> — Quick Send bulk email and the multi-step Workflow Manager with dry-run.</li>
         <li><strong>Configuration</strong> — feature toggles, themes, keyboard shortcuts, per-surface UI scale, shared settings templates, Power Automate.</li>
       </ul>
 

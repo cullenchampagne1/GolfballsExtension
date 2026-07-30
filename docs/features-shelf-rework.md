@@ -72,7 +72,7 @@ chips stay in sync.
 ### C. Custom actions (future slot, scaffolded now)
 A `+ New custom action` card in the shelf section. A custom action =
 `{ id, label, icon, pages[], code }` stored in `featureConfig.customActions[]`.
-The editor reuses the campaign **code engine** (`src/lib/codeEngine/*` —
+The editor reuses the workflow **code engine** (`src/lib/codeEngine/*` —
 CodeAutomationPanel/BlocksView/executor) to author a block that runs against
 `page.*`/`actions.*`; the shelf registers it via
 `actionRegistry.register({ id, label, icon, handler: run(code) })`. Ship the

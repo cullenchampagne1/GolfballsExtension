@@ -1,5 +1,5 @@
 /**
- * Code-first campaign flow: compact CRM Search/Task List records are hydrated
+ * Code-first workflow flow: compact CRM Search/Task List records are hydrated
  * one at a time, then real helper adapters execute in trace order.
  */
 import { describe, it } from 'node:test';
@@ -7,19 +7,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  campaignPageFromContext,
-  hydrateCampaignContact,
-  resolveCampaignRecordIds,
-} from '../../src/lib/campaign/codeContext.js';
-import { runCodeCampaign } from '../../src/lib/campaign/codeRunner.js';
+  workflowPageFromContext,
+  hydrateWorkflowContact,
+  resolveWorkflowRecordIds,
+} from '../../src/lib/workflow/codeContext.js';
+import { runCodeWorkflow } from '../../src/lib/workflow/codeRunner.js';
 import { makeExecutor } from '../../src/lib/codeEngine/executor.js';
 import { shapeLivePage } from '../../src/lib/codeEngine/liveActionRun.js';
 import { makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-const RECONCILIATION_CAMPAIGN = readFileSync(
-  new URL('../../docs/examples/task-reconciliation-campaign.js', import.meta.url),
+const RECONCILIATION_WORKFLOW = readFileSync(
+  new URL('../../docs/examples/task-reconciliation-workflow.js', import.meta.url),
   'utf8',
 );
 const RECONCILIATION_ACTION = readFileSync(
@@ -32,7 +32,7 @@ const QUARTERLY_REACH_OUT_ACTION = readFileSync(
 );
 
 /* ── Shared helpers for reconciliation expectations ──────────────
-   These restate the campaign's DOCUMENTED rules (not its code) so the
+   These restate the workflow's DOCUMENTED rules (not its code) so the
    fixtures stay correct on any run date. */
 const atNoonDay = (offset) => {
   const date = new Date();
@@ -153,7 +153,7 @@ function contextFor(contact) {
   };
 }
 
-describe('campaign code flow', () => {
+describe('workflow code flow', () => {
   it('preserves hydrated account/order data and resolves an account writer contact', async () => {
     const context = {
       contact: {
@@ -177,7 +177,7 @@ describe('campaign code flow', () => {
       },
     };
 
-    const page = campaignPageFromContext(context, [context.contact]);
+    const page = workflowPageFromContext(context, [context.contact]);
     assert.equal(page.account.name, 'Northwind Golf');
     assert.equal(page.orders.length, 2);
     assert.equal(page.items[0].name, 'Venture Towel');
@@ -187,7 +187,7 @@ describe('campaign code flow', () => {
     assert.equal(page.tasks.open[0].id, '9');
 
     assert.deepEqual(
-      resolveCampaignRecordIds(
+      resolveWorkflowRecordIds(
         { accountId: '902', contactUrl: 'https://crm.test/Default.aspx?Page=271&AccountID=902' },
         context.data,
       ),
@@ -195,7 +195,7 @@ describe('campaign code flow', () => {
     );
   });
 
-  it('gives an Action Shelf custom action the same live order data as a campaign', async () => {
+  it('gives an Action Shelf custom action the same live order data as a workflow', async () => {
     const page = shapeLivePage({
       data: {
         ids: { contact: '771', account: '902' },
@@ -228,7 +228,7 @@ describe('campaign code flow', () => {
 
     assert.equal(page.orders.length, 2);
     assert.equal(page.items[0].quantity, 2);
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
     });
 
@@ -354,10 +354,10 @@ describe('campaign code flow', () => {
 
   it('ships the contact-page action with a byte-identical reconciliation body', () => {
     const marker = '/* ── Config';
-    const campaignBody = RECONCILIATION_CAMPAIGN.slice(RECONCILIATION_CAMPAIGN.indexOf(marker));
+    const workflowBody = RECONCILIATION_WORKFLOW.slice(RECONCILIATION_WORKFLOW.indexOf(marker));
     const actionBody = RECONCILIATION_ACTION.slice(RECONCILIATION_ACTION.indexOf(marker));
-    assert.ok(campaignBody.length > 1000, 'the campaign body marker exists');
-    assert.equal(actionBody, campaignBody, 'the action file body must not drift from the campaign body');
+    assert.ok(workflowBody.length > 1000, 'the workflow body marker exists');
+    assert.equal(actionBody, workflowBody, 'the action file body must not drift from the workflow body');
   });
 
   it('initiates a brand-new record from its own page through the action surface', async () => {
@@ -465,7 +465,7 @@ describe('campaign code flow', () => {
     });
     const createWrites = [];
     const updateWrites = [];
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: makeExecutor({
         ctx: { contactId: '202', contactName: 'Grace Buyer', employeeId: '7' },
@@ -552,7 +552,7 @@ describe('campaign code flow', () => {
     const createWrites = [];
     const updateWrites = [];
     const completeWrites = [];
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: makeExecutor({
         ctx: { contactId: '101', contactName: 'Ada Buyer', employeeId: '7' },
@@ -657,7 +657,7 @@ describe('campaign code flow', () => {
       },
     });
     const writes = [];
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -695,7 +695,7 @@ describe('campaign code flow', () => {
     assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 1 created, 0 retired/);
   });
 
-  it('edits Task List rows through the same executor used by campaigns', async () => {
+  it('edits Task List rows through the same executor used by workflows', async () => {
     const atNoon = (offset) => {
       const date = new Date();
       date.setHours(12, 0, 0, 0);
@@ -764,7 +764,7 @@ describe('campaign code flow', () => {
     );
   });
 
-  it('maintains quarterly coverage in the main campaign even without orders', async () => {
+  it('maintains quarterly coverage in the main workflow even without orders', async () => {
     const now = new Date();
     now.setHours(12, 0, 0, 0);
     const existing = new Date(
@@ -793,7 +793,7 @@ describe('campaign code flow', () => {
       },
     });
     const writes = [];
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -830,23 +830,23 @@ describe('campaign code flow', () => {
       const c = page.contact;
       const created = await actions.createTask({
         subject: "QA " + c.contactName,
-        body: "Campaign integration test",
+        body: "Workflow integration test",
         priority: "low",
         daysOut: 0
       });
       await actions.completeTask({ id: created.taskId });
       await actions.addNote({
-        subject: "Campaign QA",
+        subject: "Workflow QA",
         body: "Verified " + c.contactName
       });
       await page.tasks.open[0].complete();
-      c.jobTitle = "Campaign verified";
+      c.jobTitle = "Workflow verified";
       await c.commit();
       return c.contactId;
     `;
 
-    const output = await runCodeCampaign({
-      campaign: {
+    const output = await runCodeWorkflow({
+      workflow: {
         automation: code,
         audienceOrder: 'valueDesc',
         paceDelay: 0,
@@ -859,7 +859,7 @@ describe('campaign code flow', () => {
       audience,
       prepareContact: async (contact, ordered) => {
         preparedIds.push(contact.contactId);
-        return hydrateCampaignContact(contact, ordered, {
+        return hydrateWorkflowContact(contact, ordered, {
           buildContext: async () => contextFor(contact),
         });
       },
@@ -905,12 +905,12 @@ describe('campaign code flow', () => {
       ['2', 'complete', 'new-2'],
       ['2', 'note', 'Verified Contact 2', '5550002'],
       ['2', 'complete', 'old-2'],
-      ['2', 'edit', '2', 'Campaign verified'],
+      ['2', 'edit', '2', 'Workflow verified'],
       ['1', 'create', 'QA Contact 1', '1'],
       ['1', 'complete', 'new-1'],
       ['1', 'note', 'Verified Contact 1', '5550001'],
       ['1', 'complete', 'old-1'],
-      ['1', 'edit', '1', 'Campaign verified'],
+      ['1', 'edit', '1', 'Workflow verified'],
     ]);
     assert.equal(output.effects, 10);
     assert.deepEqual(output.results.map((row) => row.result), ['2', '1']);
@@ -926,7 +926,7 @@ describe('campaign code flow', () => {
       contactName: 'Avery Buyer',
       contactUrl: 'https://crm.test/Default.aspx?Page=240&customerID=771',
     };
-    return campaignPageFromContext({
+    return workflowPageFromContext({
       contact: sourceContact,
       contactId: '771',
       contactName: 'Avery Buyer',
@@ -999,7 +999,7 @@ describe('campaign code flow', () => {
     assert.equal(page.orders.length, 7);
 
     const writes = [];
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -1116,7 +1116,7 @@ describe('campaign code flow', () => {
       },
       async commitEdits() { return { ok: true }; },
     });
-    const first = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const first = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: executorFor(writes),
     });
@@ -1167,7 +1167,7 @@ describe('campaign code flow', () => {
       contactName: 'Avery Buyer',
       contactUrl: 'https://crm.test/Default.aspx?Page=240&customerID=771',
     };
-    const convergedPage = campaignPageFromContext({
+    const convergedPage = workflowPageFromContext({
       contact: sourceContact,
       contactId: '771',
       contactName: 'Avery Buyer',
@@ -1188,7 +1188,7 @@ describe('campaign code flow', () => {
     }, [sourceContact]);
 
     const secondWrites = [];
-    const second = await simulateProgram(RECONCILIATION_CAMPAIGN, convergedPage, {
+    const second = await simulateProgram(RECONCILIATION_WORKFLOW, convergedPage, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: executorFor(secondWrites),
     });
@@ -1198,7 +1198,7 @@ describe('campaign code flow', () => {
     assert.match(String(second.result), /quarterly: 0 created, 0 rescheduled/);
   });
 
-  it('keeps the newest source year per month and skips a different campaign within 20 days', async () => {
+  it('keeps the newest source year per month and skips a different workflow within 20 days', async () => {
     const now = new Date();
     const retainedMonth = (now.getMonth() + 3) % 12;
     const competingMonth = (retainedMonth + 1) % 12;
@@ -1248,7 +1248,7 @@ describe('campaign code flow', () => {
       },
     });
     const writes = [];
-    const result = await simulateProgram(RECONCILIATION_CAMPAIGN, page, {
+    const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
       executor: {
         async run(name, input) {
@@ -1270,7 +1270,7 @@ describe('campaign code flow', () => {
     );
     assert.ok(
       priorTasks.every((task) => !task.subject.includes(`[${monthNames[competingMonth]}]`)),
-      'the lower-ranked adjacent campaign should not create any tasks',
+      'the lower-ranked adjacent workflow should not create any tasks',
     );
     // The bracket year is the follow-up cycle year: the next occurrence of the
     // retained month (three months ahead of "now", so next year when wrapped).
@@ -1289,10 +1289,10 @@ describe('campaign code flow', () => {
     assert.match(priorTasks[0].body, /#new-month-2/);
     assert.doesNotMatch(priorTasks[0].body, /#old-month/);
     assert.match(result.result, /skipped 1 older same-month source period\(s\)/);
-    assert.match(result.result, /skipped 1 overlapping anniversary campaign\(s\)/);
+    assert.match(result.result, /skipped 1 overlapping anniversary workflow\(s\)/);
   });
 
-  it('does not count function-entry animation events as campaign actions', async () => {
+  it('does not count function-entry animation events as workflow actions', async () => {
     const audience = [
       { contactId: '1', contactName: 'One', contactUrl: 'https://crm.test/?customerID=1', _key: '1' },
     ];
@@ -1303,8 +1303,8 @@ describe('campaign code flow', () => {
       await queue("one");
       await queue("two");
     `;
-    const output = await runCodeCampaign({
-      campaign: {
+    const output = await runCodeWorkflow({
+      workflow: {
         automation: code,
         paceDelay: 0,
         paceJitter: 0,
@@ -1312,7 +1312,7 @@ describe('campaign code flow', () => {
       },
       audience,
       dryRun: true,
-      prepareContact: async (contact, ordered) => hydrateCampaignContact(contact, ordered, {
+      prepareContact: async (contact, ordered) => hydrateWorkflowContact(contact, ordered, {
         buildContext: async () => contextFor(contact),
       }),
       executeProgram: async ({ prepared, beforeEffect, onEffect }) => simulateProgram(
@@ -1344,15 +1344,15 @@ describe('campaign code flow', () => {
       await actions.createTask({ subject: "two" });
       await actions.createTask({ subject: "three" });
     `;
-    const output = await runCodeCampaign({
-      campaign: {
+    const output = await runCodeWorkflow({
+      workflow: {
         automation: code,
         sendCap: 2,
         suppressDoNotContact: true,
       },
       audience,
       dryRun: false,
-      prepareContact: async (contact, ordered) => hydrateCampaignContact(contact, ordered, {
+      prepareContact: async (contact, ordered) => hydrateWorkflowContact(contact, ordered, {
         buildContext: async () => ({
           ...contextFor(contact),
           doNotContact: contact.contactId === '1',

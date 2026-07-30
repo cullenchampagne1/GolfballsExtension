@@ -1,6 +1,6 @@
 /**
  * templateLint — missing saved-template dependencies surface as author-time
- * problems, so a shared campaign referencing an email the recipient doesn't
+ * problems, so a shared workflow referencing an email the recipient doesn't
  * have shows the issue in the editor (not only at run time).
  */
 import { describe, it } from 'node:test';

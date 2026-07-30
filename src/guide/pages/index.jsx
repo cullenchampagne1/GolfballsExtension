@@ -8,7 +8,7 @@ import { ThemesPage, ShortcutsPage } from './config.jsx';
 import { ChargePage, ProofPage, MarginPage, OrderExtrasPage } from './ordertools.jsx';
 import { EmailViewerPage, ImageViewerPage, Viewer3DPage } from './viewers.jsx';
 import { CatalogPage, ProposalsPage } from './catalog.jsx';
-import { QuickSendPage, CampaignsPage } from './campaigns.jsx';
+import { QuickSendPage, WorkflowManagerPage } from './workflows.jsx';
 import { TroubleshootingPage, FaqPage, PowerUserPage, WhatsNewPage } from './reference.jsx';
 import { ManualPage, WorkflowsPage } from './reference-content.jsx';
 import { NotificationsPage } from './notifications.jsx';
@@ -45,7 +45,7 @@ export const PAGES = {
   catalog: CatalogPage,
   proposals: ProposalsPage,
   quicksend: QuickSendPage,
-  campaigns: CampaignsPage,
+  'workflow-manager': WorkflowManagerPage,
   manual: ManualPage,
   troubleshooting: TroubleshootingPage,
   faq: FaqPage,

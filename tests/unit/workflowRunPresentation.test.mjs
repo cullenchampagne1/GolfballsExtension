@@ -7,9 +7,9 @@ import {
   buildRunPipeline,
   displayRunPipeline,
   finishRunRow,
-} from '../../src/lib/campaign/runPresentation.js';
+} from '../../src/lib/workflow/runPresentation.js';
 
-describe('campaign run presentation · source steps and repeats', () => {
+describe('workflow run presentation · source steps and repeats', () => {
   it('keeps function actions visible but excludes function-local returns', () => {
     const { blocks } = translateProgram(`
       async function createThree() {

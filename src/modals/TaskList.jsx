@@ -38,8 +38,8 @@ import {
      • Fixed-height FloatingPanel (1000×640)
      • Header → Toolbar (search + filters + refresh)
      • Selection summary slides in AT THE TOP when rows are checked,
-       hosting the Campaign dropdown + Run Campaign (matches CRM's
-       "Run campaign / Email selected / Export CSV" pattern)
+       hosting the Workflow dropdown + Run Workflow (matches CRM's
+       "Run workflow / Email selected / Export CSV" pattern)
      • Sticky-header sortable table
      • Footer (always visible) for the row-level Quick Task + Open
        Tabs bulk actions
@@ -793,14 +793,14 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     return { done, failed };
   }, [selected, patchTaskLocal, toast]);
 
-  const onRunCampaign = () => {
-    // Hand the current task selection off to the Campaign Manager, which
+  const onRunWorkflow = () => {
+    // Hand the current task selection off to the Workflow Manager, which
     // owns the editor, the run engine, and the audience run view.
     if (!selectedContacts.length) { toast?.info?.('Select tasks first', { placement: 'top-center' }); return; }
-    if (typeof window.__gbOpenCampaignManager === 'function') {
-      window.__gbOpenCampaignManager(selectedContacts);
+    if (typeof window.__gbOpenWorkflowManager === 'function') {
+      window.__gbOpenWorkflowManager(selectedContacts);
     } else {
-      toast?.info?.('Campaign manager unavailable here', { duration: 2400, placement: 'top-center' });
+      toast?.info?.('Workflow manager unavailable here', { duration: 2400, placement: 'top-center' });
     }
   };
 
@@ -865,7 +865,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   /* Selected-task → contact tuples for the Email Runner side panel.
      Tasks built from a real CRM scrape carry contactUrl
      (Page=240&customerID=…). We extract the customerID to use as the
-     contactId for the campaign manager. Mock tasks ship with an empty
+     contactId for the workflow manager. Mock tasks ship with an empty
      contactUrl, so in useMock we synthesise a `mock://…` placeholder
      — EmailRunner's mock dispatchBg returns canned HTML regardless of
      the URL, so the loop runs and the rep sees the per-row animation. */
@@ -877,7 +877,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         contactId,
         contactName: t.contact || '',
         contactUrl:  t.contactUrl || (useMock ? `mock://contact/${t.id}` : ''),
-        // Carry a value so the Campaign Manager's audience total + "Highest
+        // Carry a value so the Workflow Manager's audience total + "Highest
         // value" ordering work from a task selection too. Task rows have no
         // revenue field, so this is 0 unless one rides along.
         value:       Number(t.value ?? t.revenue) || 0,
@@ -982,7 +982,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       </AnimatePresence>
 
       {/* Selection summary — slides in at the TOP when rows are checked.
-          Matches CRMSearch's pattern. Hosts the campaign workflow so the
+          Matches CRMSearch's pattern. Hosts the workflow action so the
           user doesn't have to scroll past the table to act on selections. */}
       <AnimatePresence initial={false}>
         {hasSelection && (
@@ -1009,8 +1009,8 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
                 size="sm"
                 variant="ghost"
                 icon={<MegaphoneIcon />}
-                onClick={onRunCampaign}
-              >Run campaign</Btn>
+                onClick={onRunWorkflow}
+              >Run workflow</Btn>
               <Btn
                 size="sm"
                 variant="ghost"
@@ -1714,7 +1714,7 @@ function tintFg(tone) {
 }
 
 /* Same checkbox shape as CRMSearch's, kept inline so the modal stays
-   self-contained. When we add the per-row campaign-run spinner this is
+   self-contained. When we add the per-row workflow-run spinner this is
    the slot it'll occupy. */
 function Checkbox({ checked, onChange }) {
   return (

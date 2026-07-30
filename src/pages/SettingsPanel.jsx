@@ -1407,8 +1407,8 @@ export function SettingsPanel({ remotePolicy }) {
     window.__gbToast?.success('Developer settings reset to defaults');
   }
 
-  /* The UI manages one switch per scope. Storage remains an array of page ids
-     so the classic page engine keeps its stable, backward-compatible shape. */
+  /* The UI manages the one all-pages control. Storage remains an array of
+     page ids so the classic page engine keeps its stable runtime shape. */
   function toggleCustomPageScope(section) {
     const enabled = (customPages[section.id] || []).length > 0;
     const next = {
@@ -1662,7 +1662,7 @@ export function SettingsPanel({ remotePolicy }) {
 
       <ProductStoresSection />
 
-      {/* Custom Pages — one switch per registered scope. The page engine still
+      {/* Custom Pages — one switch for every registered page. The page engine still
           consumes page-id arrays internally, preserving its stable contract. */}
       {(!remotePolicy.hiddenCustomPages || remotePolicy.adminBypass) && CUSTOM_PAGE_SECTIONS.some((section) => (
         remotePolicy.adminBypass || !remotePolicy.hiddenCustomPageScopes[section.id]
@@ -1670,7 +1670,7 @@ export function SettingsPanel({ remotePolicy }) {
       <section>
         <SectionLabel>Custom Pages</SectionLabel>
         <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: -4, marginBottom: 10, lineHeight: 1.5 }}>
-          Enable the extension's custom interface by page scope. Disabled scopes use the original site.
+          Use the extension interface on every supported custom page. Turn it off to use the original site pages.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {CUSTOM_PAGE_SECTIONS
@@ -1680,7 +1680,7 @@ export function SettingsPanel({ remotePolicy }) {
               key={section.id}
               icon={<I.cog />}
               name={section.label}
-              desc={`Use the custom extension UI for supported ${section.label} pages.`}
+              desc="Control every registered custom page from one setting."
               on={(customPages[section.id] || []).length > 0}
               onChange={() => toggleCustomPageScope(section)}
             />

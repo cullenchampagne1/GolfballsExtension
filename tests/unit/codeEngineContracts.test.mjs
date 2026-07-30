@@ -133,8 +133,8 @@ describe('contracts · input validation (template OR custom object)', () => {
     assert.equal(validateContractInput('addNote', { body: 'Reviewed account' }).ok, true);
     assert.equal(validateContractInput('addNote', {}).ok, false);
     assert.equal(
-      describeContract('addNote', { subject: 'Campaign QA' }),
-      'Add activity note “Campaign QA”',
+      describeContract('addNote', { subject: 'Workflow QA' }),
+      'Add activity note “Workflow QA”',
     );
   });
 

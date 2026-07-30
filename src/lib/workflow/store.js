@@ -1,17 +1,15 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/store.js — load / save campaign definitions.
+   workflow/store.js — load / save workflow definitions.
 
-   Campaigns persist under chrome.storage.local['campaigns']. This is
-   the SAME key the legacy vanilla editor (src/vanilla/modals/campaign-
-   editor.js) used, so on load we normalize each record into the new
-   React shape — which doubles as a migration off the legacy form
-   (step.type → step.kind, step.splits → step.templates, flat
-   conditions[] + conditionLogic → a matchEngine grouped tree).
+   Workflows persist under chrome.storage.local['workflows']. The previous
+   feature called these records campaigns and stored them under `campaigns`.
+   loadWorkflows performs a one-time move to the workflow key, removes the
+   legacy key, and normalizes every record into the current React shape.
 
    New shape:
-     campaign = {
+     workflow = {
        id, name, status: 'Draft'|'Active'|'Paused',
-       paceDelay,  // seconds between sends (campaign-wide)
+       paceDelay,  // seconds between sends (workflow-wide)
        paceJitter, // ± seconds of jitter
        steps: Step[],
        lastSaved,  // ISO string | null
@@ -31,7 +29,8 @@
 
 import { emptyTree, isGroupedTree } from '../matchEngine.js';
 
-export const STORAGE_KEY = 'campaigns';
+export const STORAGE_KEY = 'workflows';
+export const LEGACY_STORAGE_KEY = 'campaigns';
 
 const hasChromeStorage = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
@@ -42,7 +41,7 @@ export function uid(p = 'id') { return `${p}-${Math.random().toString(36).slice(
 
 /* Legacy step.type → new step.kind. The legacy editor had delay /
    create_task / complete_task; we collapse the task variants to 'task'
-   and drop standalone delays (pacing is campaign-wide now). */
+   and drop standalone delays (pacing is workflow-wide now). */
 /* Branch is a FLAG (step.branch), not a kind — a branch is just an
    email/call/task that also stops the flow + gates its children. Legacy
    'branch' steps collapse to an email with the flag set. */
@@ -137,11 +136,11 @@ function normalizeStep(raw) {
   };
 }
 
-export function normalizeCampaign(raw) {
-  if (!raw || typeof raw !== 'object') return newCampaign();
+export function normalizeWorkflow(raw) {
+  if (!raw || typeof raw !== 'object') return newWorkflow();
   return {
-    id: raw.id || uid('cmp'),
-    name: raw.name || 'Untitled campaign',
+    id: raw.id || uid('wf'),
+    name: raw.name || 'Untitled workflow',
     status: ['Draft', 'Active', 'Paused'].includes(raw.status) ? raw.status : 'Draft',
     paceDelay: Number.isFinite(raw.paceDelay) ? raw.paceDelay
       : Number.isFinite(raw.delayBase) ? raw.delayBase : 12,
@@ -160,9 +159,9 @@ export function normalizeCampaign(raw) {
   };
 }
 
-export function newCampaign(name = 'Untitled campaign') {
+export function newWorkflow(name = 'Untitled workflow') {
   return {
-    id: uid('cmp'),
+    id: uid('wf'),
     name,
     status: 'Draft',
     paceDelay: 12,
@@ -179,15 +178,28 @@ export function newCampaign(name = 'Untitled campaign') {
   };
 }
 
-/* Load + normalize every saved campaign. Never rejects — returns [] on
+/* Load + normalize every saved workflow. Never rejects — returns [] on
    any failure or outside an extension context. */
-export function loadCampaigns() {
+export function loadWorkflows() {
   return new Promise((resolve) => {
     if (!hasChromeStorage()) { resolve([]); return; }
     try {
-      chrome.storage.local.get(STORAGE_KEY, (out) => {
-        const raw = out && Array.isArray(out[STORAGE_KEY]) ? out[STORAGE_KEY] : [];
-        resolve(raw.map(normalizeCampaign));
+      chrome.storage.local.get([STORAGE_KEY, LEGACY_STORAGE_KEY], (out) => {
+        const hasCurrent = Array.isArray(out?.[STORAGE_KEY]);
+        const legacy = Array.isArray(out?.[LEGACY_STORAGE_KEY]) ? out[LEGACY_STORAGE_KEY] : [];
+        const list = (hasCurrent ? out[STORAGE_KEY] : legacy).map(normalizeWorkflow);
+
+        if (!hasCurrent && legacy.length) {
+          chrome.storage.local.set({ [STORAGE_KEY]: list }, () => {
+            chrome.storage.local.remove(LEGACY_STORAGE_KEY, () => resolve(list));
+          });
+          return;
+        }
+        if (Object.hasOwn(out || {}, LEGACY_STORAGE_KEY)) {
+          chrome.storage.local.remove(LEGACY_STORAGE_KEY, () => resolve(list));
+          return;
+        }
+        resolve(list);
       });
     } catch { resolve([]); }
   });
@@ -196,52 +208,56 @@ export function loadCampaigns() {
 function writeAll(list) {
   return new Promise((resolve) => {
     if (!hasChromeStorage()) { resolve(list); return; }
-    try { chrome.storage.local.set({ [STORAGE_KEY]: list }, () => resolve(list)); }
+    try {
+      chrome.storage.local.set({ [STORAGE_KEY]: list }, () => {
+        chrome.storage.local.remove(LEGACY_STORAGE_KEY, () => resolve(list));
+      });
+    }
     catch { resolve(list); }
   });
 }
 
-/* Upsert one campaign (stamps lastSaved) and persist the whole list. */
-export async function saveCampaign(campaign) {
-  const stamped = { ...normalizeCampaign(campaign), lastSaved: new Date().toISOString() };
-  const list = await loadCampaigns();
+/* Upsert one workflow (stamps lastSaved) and persist the whole list. */
+export async function saveWorkflow(workflow) {
+  const stamped = { ...normalizeWorkflow(workflow), lastSaved: new Date().toISOString() };
+  const list = await loadWorkflows();
   const i = list.findIndex((c) => c.id === stamped.id);
   const next = i >= 0
     ? list.map((c) => (c.id === stamped.id ? stamped : c))
     : [stamped, ...list];
   await writeAll(next);
-  return { campaign: stamped, list: next };
+  return { workflow: stamped, list: next };
 }
 
-/* Create or update a campaign's CODE by name — the write hook an assistant
-   uses to author campaigns live. Matches an existing campaign case-
+/* Create or update a workflow's CODE by name — the write hook an assistant
+   uses to author workflows live. Matches an existing workflow case-
    insensitively by name (or creates one), sets its `automation`, and
-   persists. Returns the saved campaign. */
-export async function writeCampaignCode({ name, automation }) {
-  const list = await loadCampaigns();
+   persists. Returns the saved workflow. */
+export async function writeWorkflowCode({ name, automation }) {
+  const list = await loadWorkflows();
   const wanted = String(name || '').trim();
   const existing = wanted ? list.find((c) => (c.name || '').trim().toLowerCase() === wanted.toLowerCase()) : null;
-  const base = existing || newCampaign(wanted || 'Untitled campaign');
-  const next = normalizeCampaign({ ...base, name: wanted || base.name, automation: String(automation || '') });
-  const { campaign } = await saveCampaign(next);
-  return campaign;
+  const base = existing || newWorkflow(wanted || 'Untitled workflow');
+  const next = normalizeWorkflow({ ...base, name: wanted || base.name, automation: String(automation || '') });
+  const { workflow } = await saveWorkflow(next);
+  return workflow;
 }
 
-export async function removeCampaign(id) {
-  const list = await loadCampaigns();
+export async function removeWorkflow(id) {
+  const list = await loadWorkflows();
   const next = list.filter((c) => c.id !== id);
   await writeAll(next);
   return next;
 }
 
-/* Subscribe to cross-tab campaign changes. No-op cleanup outside an
+/* Subscribe to cross-tab workflow changes. No-op cleanup outside an
    extension context. */
-export function subscribeCampaigns(handler) {
+export function subscribeWorkflows(handler) {
   if (!hasChromeStorage() || !chrome.storage?.onChanged?.addListener) return () => {};
   const onCh = (changes, area) => {
     if (area === 'local' && changes[STORAGE_KEY]) {
       const v = changes[STORAGE_KEY].newValue;
-      handler(Array.isArray(v) ? v.map(normalizeCampaign) : []);
+      handler(Array.isArray(v) ? v.map(normalizeWorkflow) : []);
     }
   };
   chrome.storage.onChanged.addListener(onCh);

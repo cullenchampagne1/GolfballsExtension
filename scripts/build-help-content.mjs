@@ -148,6 +148,7 @@ const DEV_GROUP_LABELS = {
   quickTask: 'Quick Task',
   textPreview: 'Text Preview',
   giftCatalog: 'Gift Catalog',
+  workflowManager: 'Workflow Manager',
   email: 'Email',
 };
 

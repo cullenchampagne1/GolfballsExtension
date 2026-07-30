@@ -270,7 +270,7 @@ const FAQ_GROUPS = [
       { q: 'What’s the difference between the Watch List and Quick Tasks?', a: 'Watch List is your private local to-do list; nothing reaches the CRM. Quick Task creates a real CRM task attached to the contact, visible to the team.', link: ['#crm', 'CRM tools'] },
       { q: 'Are 3D previews accurate enough to send to customers?', a: 'Yes — decorations render through the same production services the website uses, and exports use a fixed pose so every shot frames identically.' },
       { q: 'Why does the Gift Catalog take a few seconds sometimes?', a: 'It’s re-indexing the full site catalog — happens when the local cache (24 h) expires. Subsequent opens are instant.' },
-      { q: 'Will a campaign email people twice if I run it again?', a: 'A campaign processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first.' },
+      { q: 'Will a workflow email people twice if I run it again?', a: 'A workflow processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first.' },
     ],
   },
 ];
@@ -324,8 +324,8 @@ export function FaqPage() {
       <div className="docnote brand" style={{ marginTop: 28 }}>
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Running a campaign? Define the audience first</div>
-          <p style={{ margin: 0 }}>Re-running a campaign on the same selection sends again — there’s no built-in dedupe across runs. Build the audience with a <a href="#crm">saved query</a>, verify it visually in the results, and dry-run before the real blast.</p>
+          <div className="dn-t">Running a workflow? Define the audience first</div>
+          <p style={{ margin: 0 }}>Re-running a workflow on the same selection sends again — there’s no built-in dedupe across runs. Build the audience with a <a href="#crm">saved query</a>, verify it visually in the results, and dry-run before the real blast.</p>
         </div>
       </div>
     </div>
@@ -429,8 +429,8 @@ export function PowerUserPage() {
       <div className="docnote warn">
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Code runs per-contact in campaigns</div>
-          <p style={{ margin: 0 }}>A code variable runs once for every contact in a bulk send or campaign audience. An expression that fetches pages adds those seconds <em>per recipient</em> — keep them lean, and prefer Schema variables when a plain field will do.</p>
+          <div className="dn-t">Code runs per-contact in workflows</div>
+          <p style={{ margin: 0 }}>A code variable runs once for every contact in a bulk send or workflow audience. An expression that fetches pages adds those seconds <em>per recipient</em> — keep them lean, and prefer Schema variables when a plain field will do.</p>
         </div>
       </div>
 
@@ -495,7 +495,7 @@ const RELEASES = [
     summary: 'The Operator’s Guide goes live, plus template-variation naming and proposal polish.',
     highlights: [
       { icon: 'bolt', text: 'Operator’s Guide: hand-built feature walkthroughs joined the extension, with interactive sample-data screens and a searchable manual.', link: ['#start', 'Getting Started'] },
-      { icon: 'edit', text: 'Template editor: the initial email becomes a named “Variation 1” block; rename variations inline and the custom names are honored in the picker, runner, and campaigns.', link: ['#templates', 'Email Templates'] },
+      { icon: 'edit', text: 'Template editor: the initial email becomes a named “Variation 1” block; rename variations inline and the custom names are honored in the picker, runner, and workflows.', link: ['#templates', 'Email Templates'] },
       { icon: 'mail', text: 'The Classic proposal email now matches the website-generated layout exactly.' },
       { icon: 'card', text: 'Proposal reliability: free-quantity promo lines no longer drop from saved proposals, and carts no longer come back empty under concurrent load.' },
       { icon: 'search', text: 'New Proposal Debug tool: intercept and compare proposal and email submits in a draggable panel.', link: ['#power', 'Power User'] },

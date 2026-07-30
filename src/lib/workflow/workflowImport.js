@@ -1,23 +1,23 @@
 /* ───────────────────────────────────────────────────────────────────────────
-   campaignImport — validate + normalize code-first campaign JSON and merge it
-   into chrome.storage.local.campaigns.
+   workflowImport — validate + normalize code-first workflow JSON and merge it
+   into chrome.storage.local.workflows.
 
-   The paste-import dialog (Campaign Manager sidebar) accepts:
-     • a single campaign object,
-     • an array of campaigns,
-     • or a wrapper { campaigns: [...] }.
-   Shape contract documented in docs/llm-campaign-toolset.md — the toolset file
+   The paste-import dialog (Workflow Manager sidebar) accepts:
+     • a single workflow object,
+     • an array of workflows,
+     • or a wrapper { workflows: [...] }.
+   Shape contract documented in docs/llm-workflow-toolset.md — the toolset file
    handed to a model so it can author these blobs. Every import gets a FRESH
-   campaign id (no collisions / no accidental overwrite); unknown fields are
+   workflow id (no collisions / no accidental overwrite); unknown fields are
    dropped so a sloppy blob can't poison storage.
 
    `automation` is the executable source of truth. Legacy `steps[]` are still
    normalized when they ride alongside code so old metadata survives, but a
    steps-only blob is rejected instead of importing an empty, un-runnable
-   campaign into the code-first editor.
+   workflow into the code-first editor.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { uid, saveCampaign } from './store.js';
+import { uid, saveWorkflow } from './store.js';
 import { isGroupedTree, emptyTree } from '../matchEngine.js';
 import { loadCallTemplates } from '../callLog.js';
 import { loadTaskTemplates } from '../quickTask.js';
@@ -80,12 +80,12 @@ function normalizeStep(raw, index, warn) {
   return out;
 }
 
-/* One campaign → canonical shape with a FRESH id, or throws with a useful
+/* One workflow → canonical shape with a FRESH id, or throws with a useful
    message. Collects non-fatal issues into `warnings`. */
-export function normalizeImportedCampaign(raw, index = 0) {
-  if (!raw || typeof raw !== 'object') throw new Error(`Campaign #${index + 1} is not an object`);
+export function normalizeImportedWorkflow(raw, index = 0) {
+  if (!raw || typeof raw !== 'object') throw new Error(`Workflow #${index + 1} is not an object`);
   const name = String(raw.name || '').trim();
-  if (!name) throw new Error(`Campaign #${index + 1} is missing "name"`);
+  if (!name) throw new Error(`Workflow #${index + 1} is missing "name"`);
   const rawSteps = Array.isArray(raw.steps) ? raw.steps : [];
 
   const warnings = [];
@@ -96,15 +96,15 @@ export function normalizeImportedCampaign(raw, index = 0) {
     : (typeof raw.code === 'string' ? raw.code : '');
   if (!automation.trim()) {
     throw new Error(
-      `Campaign #${index + 1} (“${name}”) is missing executable "automation" JavaScript. Legacy steps-only campaigns cannot run in the code-first Campaign Manager.`,
+      `Workflow #${index + 1} (“${name}”) is missing executable "automation" JavaScript. Legacy steps-only workflows cannot run in the code-first Workflow Manager.`,
     );
   }
   const parsedAutomation = translateProgram(automation);
   if (parsedAutomation.errors.length) {
-    throw new Error(`Campaign #${index + 1} (“${name}”) has invalid automation JavaScript.`);
+    throw new Error(`Workflow #${index + 1} (“${name}”) has invalid automation JavaScript.`);
   }
 
-  // parentId integrity — a child must point at a real step in this campaign.
+  // parentId integrity — a child must point at a real step in this workflow.
   const ids = new Set(steps.map((s) => s.id));
   for (const s of steps) {
     if (s.parentId && !ids.has(s.parentId)) {
@@ -113,8 +113,8 @@ export function normalizeImportedCampaign(raw, index = 0) {
     }
   }
 
-  const campaign = {
-    id: uid('cmp'),               // always fresh — never overwrite an existing one
+  const workflow = {
+    id: uid('wf'),                // always fresh — never overwrite an existing one
     name,
     status: VALID_STATUS.includes(raw.status) ? raw.status : 'Draft',
     paceDelay: clampInt(raw.paceDelay, 0, 600, 12),
@@ -128,20 +128,20 @@ export function normalizeImportedCampaign(raw, index = 0) {
     automation,
     lastSaved: null,
   };
-  return { campaign, warnings };
+  return { workflow, warnings };
 }
 
-/* Parse a pasted blob (single campaign / array / {campaigns:[…]}) → array of
-   { campaign, warnings }. Throws with a readable message on any problem. */
-export function parseCampaignBlob(text) {
+/* Parse a pasted blob (single workflow / array / {workflows:[…]}) → array of
+   { workflow, warnings }. Throws with a readable message on any problem. */
+export function parseWorkflowBlob(text) {
   let obj;
   try { obj = JSON.parse(text); }
   catch (e) { throw new Error('Not valid JSON — ' + e.message); }
   const list = Array.isArray(obj) ? obj
-    : Array.isArray(obj && obj.campaigns) ? obj.campaigns
+    : Array.isArray(obj && obj.workflows) ? obj.workflows
     : [obj];
-  if (!list.length) throw new Error('No campaigns found in the JSON');
-  return list.map((c, i) => normalizeImportedCampaign(c, i));
+  if (!list.length) throw new Error('No workflows found in the JSON');
+  return list.map((c, i) => normalizeImportedWorkflow(c, i));
 }
 
 /* Resolve a step's `_templateName` against the live template stores, in place.
@@ -172,20 +172,20 @@ function loadEmailTemplates() {
   });
 }
 
-/* Merge normalized campaigns into storage (fresh ids, never overwrites).
+/* Merge normalized workflows into storage (fresh ids, never overwrites).
    Resolves saved-template references by name first. Returns
    { count, list, unresolved } where `unresolved` lists template names that
    didn't match any saved template. */
-export async function importCampaigns(parsed) {
+export async function importWorkflows(parsed) {
   const items = Array.isArray(parsed) ? parsed : [parsed];
   const [email, call, task] = await Promise.all([loadEmailTemplates(), loadCallTemplates(), loadTaskTemplates()]);
   const unresolved = [];
-  for (const { campaign } of items) {
-    unresolved.push(...resolveTemplateNames(campaign.steps, { email, call, task }));
+  for (const { workflow } of items) {
+    unresolved.push(...resolveTemplateNames(workflow.steps, { email, call, task }));
   }
   let list = [];
-  for (const { campaign } of items) {
-    ({ list } = await saveCampaign(campaign));
+  for (const { workflow } of items) {
+    ({ list } = await saveWorkflow(workflow));
   }
   return { count: items.length, list, unresolved };
 }

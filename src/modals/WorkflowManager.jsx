@@ -10,14 +10,14 @@ import { buildCodeSpec } from '../lib/codeEngine/spec.js';
 import { codeIdsFor } from '../lib/codeEngine/userBinding.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
-  loadCampaigns, saveCampaign, removeCampaign, newCampaign, subscribeCampaigns, writeCampaignCode,
-} from '../lib/campaign/store.js';
+  loadWorkflows, saveWorkflow, removeWorkflow, newWorkflow, subscribeWorkflows, writeWorkflowCode,
+} from '../lib/workflow/store.js';
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
-import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
-import { hydrateCampaignContact } from '../lib/campaign/codeContext.js';
-import { runCodeCampaign } from '../lib/campaign/codeRunner.js';
-import { evaluateCampaignTemplate } from '../lib/campaign/templateEvaluation.js';
+import { parseWorkflowBlob, importWorkflows } from '../lib/workflow/workflowImport.js';
+import { hydrateWorkflowContact } from '../lib/workflow/codeContext.js';
+import { runCodeWorkflow } from '../lib/workflow/codeRunner.js';
+import { evaluateWorkflowTemplate } from '../lib/workflow/templateEvaluation.js';
 import { translateProgram, flattenBlocks } from '../lib/codeEngine/translate.js';
 import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
@@ -33,50 +33,50 @@ import { crmUpdateContact } from '../lib/crm-detail-shared.jsx';
 import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
-  CAMPAIGN_MANAGER_HEIGHT,
-  CAMPAIGN_MANAGER_WIDTH,
-  fitCampaignManagerScale,
-  normalizeCampaignManagerScale,
-} from '../lib/campaign/presentation.js';
+  WORKFLOW_MANAGER_HEIGHT,
+  WORKFLOW_MANAGER_WIDTH,
+  fitWorkflowManagerScale,
+  normalizeWorkflowManagerScale,
+} from '../lib/workflow/presentation.js';
 import {
   advanceRunRow,
   buildRunPipeline,
   displayRunPipeline,
   finishRunRow,
-} from '../lib/campaign/runPresentation.js';
+} from '../lib/workflow/runPresentation.js';
 
 /* ───────────────────────────────────────────────────────────────
-   CampaignManager — code-first campaign editor.
+   WorkflowManager — code-first workflow editor.
 
    One authoring surface: a library sidebar + the CodeAutomationPanel,
-   where a campaign is plain JS written against `page.*` (the audience
+   where a workflow is plain JS written against `page.*` (the audience
    model) and `actions.*` (the callable action library), projected live
-   into blocks and runnable as a no-side-effect Simulate. Campaigns
-   persist via lib/campaign/store.js (`automation` = the code source).
+   into blocks and runnable as a no-side-effect Simulate. Workflows
+   persist via lib/workflow/store.js (`automation` = the code source).
    The manual step timeline was retired in favor of pure code.
 ─────────────────────────────────────────────────────────────── */
 
-const CMP_STYLE_ID = '__gb-campaign-mgr-css';
-function ensureCampaignStyles() {
-  if (typeof document === 'undefined' || document.getElementById(CMP_STYLE_ID)) return;
+const WORKFLOW_STYLE_ID = '__gb-workflow-mgr-css';
+function ensureWorkflowStyles() {
+  if (typeof document === 'undefined' || document.getElementById(WORKFLOW_STYLE_ID)) return;
   const s = document.createElement('style');
-  s.id = CMP_STYLE_ID;
+  s.id = WORKFLOW_STYLE_ID;
   // Hover-reveal the sidebar delete + the run-view animations. The `code/pre`
   // reset neutralizes the HOST CRM page's global code/pre styling (this modal
   // mounts into document.body, not a shadow root), which was leaking a bright
   // background + border + block display onto every <code> in the blocks/docs.
   s.textContent = `
-    .gb-cmp-row .gb-cmp-del { opacity: 0; transition: opacity .12s ease; }
-    .gb-cmp-row:hover .gb-cmp-del { opacity: 1; }
-    .gb-cmp-scope code, .gb-cmp-scope kbd, .gb-cmp-scope samp {
+    .gb-workflow-row .gb-workflow-del { opacity: 0; transition: opacity .12s ease; }
+    .gb-workflow-row:hover .gb-workflow-del { opacity: 1; }
+    .gb-workflow-scope code, .gb-workflow-scope kbd, .gb-workflow-scope samp {
       background: transparent !important; border: 0 !important; box-shadow: none !important;
       padding: 0 !important; margin: 0 !important; border-radius: 0 !important;
       display: inline !important; white-space: inherit; vertical-align: baseline !important;
       font-family: var(--gb-font-mono, ui-monospace, monospace) !important;
     }
-    @keyframes cm-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
-    @keyframes cm-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 6px transparent; } }
-    @keyframes cm-repeat-hit {
+    @keyframes workflow-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
+    @keyframes workflow-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 6px transparent; } }
+    @keyframes workflow-repeat-hit {
       0%   { opacity: .95; transform: scale(.7); box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); }
       55%  { opacity: .2; transform: scale(2.05); box-shadow: 0 0 0 5px var(--gb-brand-tint-soft); }
       100% { opacity: 0; transform: scale(2.35); box-shadow: 0 0 0 8px transparent; }
@@ -86,7 +86,7 @@ function ensureCampaignStyles() {
 }
 
 /* ── Sidebar ── */
-function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete, onImport }) {
+function WorkflowSidebar({ library, currentId, onSelect, onNew, onDelete, onImport }) {
   const [q, setQ] = useState('');
   const [confirmId, setConfirmId] = useState(null);   // row pending delete-confirm
   const filtered = library.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
@@ -100,17 +100,17 @@ function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete, onImpo
       <div style={{ padding: '14px 14px 10px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.megaphone size={14} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Campaigns</div>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Workflows</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{library.length} total</div>
         </div>
-        <IconBtn size="sm" variant="ghost" icon={<I.download />} title="Import campaign (paste AI JSON)" onClick={onImport} />
+        <IconBtn size="sm" variant="ghost" icon={<I.download />} title="Import workflow (paste AI JSON)" onClick={onImport} />
         <IconBtn size="sm" variant="secondary" icon={<I.plus />} onClick={onNew} />
       </div>
       <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
-        <Input value={q} placeholder="Search campaigns…" leading={<I.search size={13} />} onChange={(v) => setQ(v)} />
+        <Input value={q} placeholder="Search workflows…" leading={<I.search size={13} />} onChange={(v) => setQ(v)} />
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 16px' }}>
-        {groups.length === 0 && <div style={{ padding: '24px 12px', textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>No campaigns yet.</div>}
+        {groups.length === 0 && <div style={{ padding: '24px 12px', textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>No workflows yet.</div>}
         {groups.map((g) => (
           <div key={g.key} style={{ marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 4px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, color: 'var(--gb-text-muted)' }}>
@@ -120,7 +120,7 @@ function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete, onImpo
               const cur = row.id === currentId;
               const confirming = confirmId === row.id;
               return (
-                <div key={row.id} className="gb-cmp-row" onClick={() => onSelect(row.id)} style={{ position: 'relative', display: 'grid', gridTemplateColumns: '14px 1fr auto', gap: 9, alignItems: 'center', padding: '8px 10px', background: cur ? 'var(--gb-brand-tint-soft)' : 'transparent', border: '1px solid ' + (cur ? 'var(--gb-brand-tint-border)' : 'transparent'), borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', marginBottom: 2 }}>
+                <div key={row.id} className="gb-workflow-row" onClick={() => onSelect(row.id)} style={{ position: 'relative', display: 'grid', gridTemplateColumns: '14px 1fr auto', gap: 9, alignItems: 'center', padding: '8px 10px', background: cur ? 'var(--gb-brand-tint-soft)' : 'transparent', border: '1px solid ' + (cur ? 'var(--gb-brand-tint-border)' : 'transparent'), borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', marginBottom: 2 }}>
                   <div style={{ display: 'flex', justifyContent: 'center' }}><Dot tone={row.status === 'Active' ? 'brand' : row.status === 'Paused' ? 'warning' : 'muted'} glow={row.status === 'Active'} /></div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: cur ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name}</div>
@@ -134,7 +134,7 @@ function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete, onImpo
                       <IconBtn size="xs" variant="ghost" icon={<I.close />} title="Cancel" onClick={() => setConfirmId(null)} />
                     </div>
                   ) : (
-                    <IconBtn className="gb-cmp-del" size="xs" variant="ghost" icon={<I.trash />} title="Delete campaign"
+                    <IconBtn className="gb-workflow-del" size="xs" variant="ghost" icon={<I.trash />} title="Delete workflow"
                       onClick={(e) => { e.stopPropagation(); setConfirmId(row.id); }} />
                   )}
                 </div>
@@ -156,7 +156,7 @@ function fmtMoney(n) {
   return `$${Math.round(v)}`;
 }
 
-function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
+function TopBar({ workflow, onChange, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
   const simBusy = sim.status === 'running' || sim.status === 'replaying';
   const building = sim.status === 'running';
   const contactOptions = audience.map((c, i) => ({ id: c._key, label: c.contactName || c.name || c.contactId || `Contact ${i + 1}` }));
@@ -165,8 +165,8 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, au
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
         <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.megaphone size={17} /></div>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Campaign Manager</div>
-          <input value={campaign.name} onChange={(e) => onChange({ ...campaign, name: e.target.value })}
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Workflow Manager</div>
+          <input value={workflow.name} onChange={(e) => onChange({ ...workflow, name: e.target.value })}
             style={{ marginTop: 2, width: '100%', height: 24, background: 'transparent', border: 'none', outline: 'none', padding: 0, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 16, fontWeight: 800, letterSpacing: -.3 }} />
         </div>
       </div>
@@ -199,30 +199,30 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, au
       <PillTag on={dryRun} onClick={() => onDryRunChange(!dryRun)}>
         <Dot tone={dryRun ? 'warning' : 'muted'} /> Dry run
       </PillTag>
-      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={simBusy}>{dryRun ? 'Dry run' : 'Run campaign'}</Btn>
+      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={simBusy}>{dryRun ? 'Dry run' : 'Run workflow'}</Btn>
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" icon={<I.close />} onClick={onClose} />
     </div>
   );
 }
 
-/* ── Import campaigns — paste an AI-generated JSON blob ──────────
-   Shape contract lives in docs/llm-campaign-toolset.md. Validates executable
+/* ── Import workflows — paste an AI-generated JSON blob ──────────
+   Shape contract lives in docs/llm-workflow-toolset.md. Validates executable
    automation live as you paste; Import appends with fresh ids and never
-   overwrites an existing campaign. */
-function ImportCampaignsModal({ onClose, onDone }) {
+   overwrites an existing workflow. */
+function ImportWorkflowsModal({ onClose, onDone }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const parsed = useMemo(() => {
     const t = text.trim();
     if (!t) return null;
-    try { return { ok: true, items: parseCampaignBlob(t) }; }
+    try { return { ok: true, items: parseWorkflowBlob(t) }; }
     catch (e) { return { ok: false, error: e.message }; }
   }, [text]);
   const doImport = async () => {
     if (!parsed || !parsed.ok || busy) return;
     setBusy(true);
-    try { onDone(await importCampaigns(parsed.items)); }
+    try { onDone(await importWorkflows(parsed.items)); }
     catch (e) { onDone({ error: e.message }); }
   };
   return (
@@ -232,8 +232,8 @@ function ImportCampaignsModal({ onClose, onDone }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.download size={14} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import campaign</div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Paste an AI-generated JSON blob — single campaign, array, or {'{ campaigns: […] }'} · spec in docs/llm-campaign-toolset.md</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import workflow</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Paste an AI-generated JSON blob — single workflow, array, or {'{ workflows: […] }'} · spec in docs/llm-workflow-toolset.md</div>
           </div>
           <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
         </div>
@@ -242,7 +242,7 @@ function ImportCampaignsModal({ onClose, onDone }) {
             autoFocus
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder='Paste the campaign JSON here…'
+            placeholder='Paste the workflow JSON here…'
             spellCheck={false}
             style={{ width: '100%', boxSizing: 'border-box', height: 240, resize: 'vertical', padding: 10,
               background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
@@ -252,9 +252,9 @@ function ImportCampaignsModal({ onClose, onDone }) {
             parsed.ok ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>
-                  {parsed.items.length} campaign{parsed.items.length === 1 ? '' : 's'} ready to import
+                  {parsed.items.length} workflow{parsed.items.length === 1 ? '' : 's'} ready to import
                 </div>
-                {parsed.items.map(({ campaign: c, warnings }, i) => {
+                {parsed.items.map(({ workflow: c, warnings }, i) => {
                   const imported = translateProgram(c.automation || '');
                   const flat = flattenBlocks(imported.blocks);
                   const actions = flat.filter((block) => (
@@ -318,7 +318,7 @@ function makeContactExecutor(context, runDeps, dispatch) {
         createTask: 'task',
         logCall: 'call',
       };
-      return evaluateCampaignTemplate({
+      return evaluateWorkflowTemplate({
         ...input,
         kind: input.kind || kinds[contract] || input.kind,
       }, c);
@@ -346,9 +346,9 @@ function makeContactExecutor(context, runDeps, dispatch) {
   });
 }
 
-function prepareCampaignContact(contact, audience, runDeps = {}) {
+function prepareWorkflowContact(contact, audience, runDeps = {}) {
   const emailConfig = runDeps.emailConfig || {};
-  return hydrateCampaignContact(contact, audience, {
+  return hydrateWorkflowContact(contact, audience, {
     dispatch: dispatchBackgroundMessage,
     rep: { employeeId: runDeps.employeeId || '' },
     emailConfig,
@@ -371,7 +371,7 @@ function useCodeRunner() {
   const start = async (args) => {
     lastArgsRef.current = args;
     const {
-      campaign,
+      workflow,
       code,
       audience,
       user,
@@ -404,8 +404,8 @@ function useCodeRunner() {
       isStopped: () => controlRef.current.stopped,
     };
     try {
-      const output = await runCodeCampaign({
-        campaign,
+      const output = await runCodeWorkflow({
+        workflow,
         audience,
         dryRun,
         control,
@@ -413,7 +413,7 @@ function useCodeRunner() {
         executeProgram: async ({
           contact, prepared, beforeEffect, onEffect,
         }) => {
-          const evaluateRef = (ref) => evaluateCampaignTemplate(ref, prepared.context);
+          const evaluateRef = (ref) => evaluateWorkflowTemplate(ref, prepared.context);
           return simulateProgram(code, prepared.page, {
             run: makeSandboxRunner({
               exec: runInSandbox,
@@ -531,7 +531,7 @@ function RunPipeline({ pipeline, row }) {
                   position: 'absolute', inset: -1.5, borderRadius: '50%',
                   border: '1.5px solid var(--gb-brand-label)',
                   pointerEvents: 'none',
-                  animation: 'cm-repeat-hit .48s ease-out both',
+                  animation: 'workflow-repeat-hit .48s ease-out both',
                 }} />
               )}
               {step.runs > 1 && (
@@ -552,7 +552,7 @@ function RunPipeline({ pipeline, row }) {
   );
 }
 
-function AudienceRunView({ campaign, audience, pipeline, runner, dryRun, onExit }) {
+function AudienceRunView({ workflow, audience, pipeline, runner, dryRun, onExit }) {
   const { rows, progress, paused, complete, running, pause, resume, again } = runner;
   const exit = () => { runner.stop(); onExit?.(); };
   const counts = useMemo(() => {
@@ -574,11 +574,11 @@ function AudienceRunView({ campaign, audience, pipeline, runner, dryRun, onExit 
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: .3 }}
       style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
       <div style={{ padding: '14px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: (running && !paused) ? 'cm-running 1.8s ease-in-out infinite' : 'none' }}><I.send size={15} /></div>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: (running && !paused) ? 'workflow-running 1.8s ease-in-out infinite' : 'none' }}><I.send size={15} /></div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{dryRun ? 'Dry-run · no CRM changes' : 'Running campaign'}</div>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{dryRun ? 'Dry-run · no CRM changes' : 'Running workflow'}</div>
           <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--gb-text-primary)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{campaign.name}</span>
+            <span>{workflow.name}</span>
             {paused && <Tag tone="warning" size="xs">Paused</Tag>}
             {complete && <Tag tone="brand" size="xs">Complete</Tag>}
             {dryRun && <Tag tone="neutral" size="xs">DRY RUN</Tag>}
@@ -603,7 +603,7 @@ function AudienceRunView({ campaign, audience, pipeline, runner, dryRun, onExit 
               : <Btn size="sm" variant="tinted" status="warning" icon={<I.pause />} onClick={pause}>Pause</Btn>}
           {complete && (
             <Btn size="sm" variant="ghost" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={exit}>
-              Back to campaigns
+              Back to workflows
             </Btn>
           )}
           {!complete && <Btn size="sm" variant="ghost" icon={<I.close />} onClick={exit}>Stop &amp; edit</Btn>}
@@ -644,8 +644,8 @@ function AudienceRunView({ campaign, audience, pipeline, runner, dryRun, onExit 
 }
 
 /* ── Stats strip (footer) — code program summary + Save ── */
-function StatsStrip({ program, campaign, dirty, onSave }) {
-  const ratePerMin = Math.round(60 / Math.max(campaign.paceDelay || 12, 1));
+function StatsStrip({ program, workflow, dirty, onSave }) {
+  const ratePerMin = Math.round(60 / Math.max(workflow.paceDelay || 12, 1));
   const isValid = program.errors.length === 0 && program.stepCount > 0;
   const Cell = ({ icon, k, v, sub, tone = 'neutral' }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 10px', flexShrink: 0 }}>
@@ -662,7 +662,7 @@ function StatsStrip({ program, campaign, dirty, onSave }) {
   const Divider = () => <div style={{ width: 1, height: 32, background: 'var(--gb-border-subtle)', flexShrink: 0 }} />;
   return (
     <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minHeight: 56 }}>
-      <Cell icon={<I.zap />} tone="brand" k="Pacing" v={`~${ratePerMin}/min`} sub={`${campaign.paceDelay || 12}s`} />
+      <Cell icon={<I.zap />} tone="brand" k="Pacing" v={`~${ratePerMin}/min`} sub={`${workflow.paceDelay || 12}s`} />
       <Divider />
       <Cell icon={<I.send />} k="Steps" v={program.stepCount} />
       <Divider />
@@ -671,31 +671,31 @@ function StatsStrip({ program, campaign, dirty, onSave }) {
       <Cell icon={isValid ? <I.check /> : <I.alert />} tone={isValid ? 'success' : 'warning'} k={isValid ? 'Valid' : 'Issues'} v={isValid ? 'OK' : (program.errors.length || 'empty')} />
       <Divider />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 6 }}>
-        <Btn variant="primary" size="sm" icon={<I.check />} onClick={onSave} disabled={!dirty}>{dirty ? 'Save campaign' : 'Saved'}</Btn>
+        <Btn variant="primary" size="sm" icon={<I.check />} onClick={onSave} disabled={!dirty}>{dirty ? 'Save workflow' : 'Saved'}</Btn>
       </div>
     </div>
   );
 }
 
-/* ── Campaign settings (right sidebar in Blocks view) — the original
+/* ── Workflow settings (right sidebar in Blocks view) — the original
    pacing / delivery / order controls. ── */
-function CampaignSettings({ campaign, onChange }) {
-  const upd = (patch) => onChange({ ...campaign, ...patch });
-  const ratePerMin = Math.round(60 / Math.max(campaign.paceDelay || 12, 1));
-  const paceLo = Math.max(1, (campaign.paceDelay || 0) - (campaign.paceJitter || 0));
-  const paceHi = (campaign.paceDelay || 0) + (campaign.paceJitter || 0);
+function WorkflowSettings({ workflow, onChange }) {
+  const upd = (patch) => onChange({ ...workflow, ...patch });
+  const ratePerMin = Math.round(60 / Math.max(workflow.paceDelay || 12, 1));
+  const paceLo = Math.max(1, (workflow.paceDelay || 0) - (workflow.paceJitter || 0));
+  const paceHi = (workflow.paceDelay || 0) + (workflow.paceJitter || 0);
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Campaign settings</span>
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Workflow settings</span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div>
           <SectionLabel>Identity</SectionLabel>
-          <Field label="Campaign name" hint="Shown in the campaign library and run history">
+          <Field label="Workflow name" hint="Shown in the workflow library and run history">
             <Input
-              value={campaign.name || ''}
-              placeholder="Campaign name"
+              value={workflow.name || ''}
+              placeholder="Workflow name"
               leading={<I.megaphone size={13} />}
               onChange={(name) => upd({ name })}
             />
@@ -705,7 +705,7 @@ function CampaignSettings({ campaign, onChange }) {
           <SectionLabel>Status</SectionLabel>
           <div style={{ display: 'flex', gap: 5 }}>
             {['Draft', 'Active', 'Paused'].map((s) => (
-              <PillTag key={s} on={campaign.status === s} onClick={() => upd({ status: s })}>
+              <PillTag key={s} on={workflow.status === s} onClick={() => upd({ status: s })}>
                 <Dot tone={s === 'Active' ? 'brand' : s === 'Paused' ? 'warning' : 'muted'} glow={s === 'Active'} /> {s}
               </PillTag>
             ))}
@@ -725,21 +725,21 @@ function CampaignSettings({ campaign, onChange }) {
         <div>
           <SectionLabel>Delivery</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
-            <Checkbox checked={campaign.suppressDoNotContact !== false} label="Skip “do not contact”" hint="Name or email contains the phrase (any case)" onChange={(v) => upd({ suppressDoNotContact: v })} />
-            <Checkbox checked={campaign.suppressBounced !== false} label="Skip bounced contacts" hint="Contacts with a CRM bounce code" onChange={(v) => upd({ suppressBounced: v })} />
-            <Checkbox checked={campaign.suppressMailerRemoved !== false} label="Skip mailer-removed contacts" hint="Opted out of mailings" onChange={(v) => upd({ suppressMailerRemoved: v })} />
+            <Checkbox checked={workflow.suppressDoNotContact !== false} label="Skip “do not contact”" hint="Name or email contains the phrase (any case)" onChange={(v) => upd({ suppressDoNotContact: v })} />
+            <Checkbox checked={workflow.suppressBounced !== false} label="Skip bounced contacts" hint="Contacts with a CRM bounce code" onChange={(v) => upd({ suppressBounced: v })} />
+            <Checkbox checked={workflow.suppressMailerRemoved !== false} label="Skip mailer-removed contacts" hint="Opted out of mailings" onChange={(v) => upd({ suppressMailerRemoved: v })} />
           </div>
           <div style={{ height: 12 }} />
           <Field label="Audience order" hint="The order contacts are worked through this run">
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
               {[['list', 'As selected'], ['valueDesc', 'Highest value'], ['shuffle', 'Shuffle']].map(([id, label]) => (
-                <PillTag key={id} on={(campaign.audienceOrder || 'list') === id} onClick={() => upd({ audienceOrder: id })}>{label}</PillTag>
+                <PillTag key={id} on={(workflow.audienceOrder || 'list') === id} onClick={() => upd({ audienceOrder: id })}>{label}</PillTag>
               ))}
             </div>
           </Field>
           <div style={{ height: 12 }} />
-          <Field label={<span>Send cap <span style={{ color: 'var(--gb-text-muted)', fontWeight: 500 }}>· {campaign.sendCap ? `${campaign.sendCap} per run` : 'no cap'}</span></span>} hint="Stop the run after this many actions — 0 = unlimited">
-            <Input value={String(campaign.sendCap || 0)} mono onChange={(v) => upd({ sendCap: Math.max(0, parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) })} />
+          <Field label={<span>Send cap <span style={{ color: 'var(--gb-text-muted)', fontWeight: 500 }}>· {workflow.sendCap ? `${workflow.sendCap} per run` : 'no cap'}</span></span>} hint="Stop the run after this many actions — 0 = unlimited">
+            <Input value={String(workflow.sendCap || 0)} mono onChange={(v) => upd({ sendCap: Math.max(0, parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) })} />
           </Field>
         </div>
       </div>
@@ -751,7 +751,7 @@ function CampaignSettings({ campaign, onChange }) {
 function ConfirmRunModal({ plan, summary, audience, onConfirm, onCancel }) {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="gb-cmp-scope" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
+    <div className="gb-workflow-scope" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ width: 460, maxWidth: '92vw', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
@@ -780,14 +780,14 @@ function ConfirmRunModal({ plan, summary, audience, onConfirm, onCancel }) {
   );
 }
 
-export function CampaignManager({ onClose, contacts = [] }) {
-  ensureCampaignStyles();
+export function WorkflowManager({ onClose, contacts = [] }) {
+  ensureWorkflowStyles();
   const toast = useToast();
   // Modal zoom is a dev setting (mirrors the Gifting Catalog), live-updating
   // from Settings without a reload. The final scale also fits the full editor
   // into the current CSS viewport, which compensates for per-site browser zoom.
   const [devSettings] = useDevSettings();
-  const preferredScale = normalizeCampaignManagerScale(devSettings['campaignManager.scale']);
+  const preferredScale = normalizeWorkflowManagerScale(devSettings['workflowManager.scale']);
   const [viewport, setViewport] = useState(() => ({
     width: typeof window === 'undefined' ? 0 : window.innerWidth,
     height: typeof window === 'undefined' ? 0 : window.innerHeight,
@@ -805,13 +805,13 @@ export function CampaignManager({ onClose, contacts = [] }) {
       window.visualViewport?.removeEventListener('resize', read);
     };
   }, []);
-  const scale = fitCampaignManagerScale(preferredScale, viewport.width, viewport.height);
+  const scale = fitWorkflowManagerScale(preferredScale, viewport.width, viewport.height);
   // Drive an exit animation: requestClose flips `open` false, the
   // AnimatePresence plays the fade/scale-out, then onExitComplete unmounts.
   const [open, setOpen] = useState(true);
   const requestClose = () => setOpen(false);
   const [library, setLibrary] = useState([]);
-  const [campaign, setCampaign] = useState(() => newCampaign('Untitled campaign'));
+  const [workflow, setWorkflow] = useState(() => newWorkflow('Untitled workflow'));
   const [dirty, setDirty] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   // Which audience member the code simulation runs against (page.contact).
@@ -821,29 +821,29 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
 
   // Import result from the paste dialog: refresh the library, open the first
-  // imported campaign, and surface anything the importer couldn't resolve.
+  // imported workflow, and surface anything the importer couldn't resolve.
   const onImported = (r) => {
     setImportOpen(false);
     if (!r || r.error) { toast?.error?.('Import failed — ' + (r?.error || 'unknown')); return; }
     setLibrary(r.list);
     const first = r.list[0];
-    if (first) { setCampaign(first); setDirty(false); }
+    if (first) { setWorkflow(first); setDirty(false); }
     if (r.unresolved?.length) {
       toast?.warning?.(`Imported ${r.count} — ${r.unresolved.length} template${r.unresolved.length === 1 ? '' : 's'} need picking in the editor`, { duration: 5000 });
     } else {
-      toast?.success?.(`Imported ${r.count} campaign${r.count === 1 ? '' : 's'}`);
+      toast?.success?.(`Imported ${r.count} workflow${r.count === 1 ? '' : 's'}`);
     }
   };
 
-  // Load campaigns once + stay subscribed to store changes.
+  // Load workflows once + stay subscribed to store changes.
   useEffect(() => {
     let alive = true;
-    loadCampaigns().then((list) => {
+    loadWorkflows().then((list) => {
       if (!alive) return;
       setLibrary(list);
-      if (list.length) setCampaign(list[0]);
+      if (list.length) setWorkflow(list[0]);
     });
-    const unsub = subscribeCampaigns((list) => { if (alive) setLibrary(list); });
+    const unsub = subscribeWorkflows((list) => { if (alive) setLibrary(list); });
     return () => { alive = false; unsub(); };
   }, []);
 
@@ -899,32 +899,32 @@ export function CampaignManager({ onClose, contacts = [] }) {
     return () => { alive = false; };
   }, []);
 
-  const patchCampaign = (next) => { setCampaign(next); setDirty(true); };
+  const patchWorkflow = (next) => { setWorkflow(next); setDirty(true); };
 
-  const selectCampaign = (id) => {
+  const selectWorkflow = (id) => {
     const c = library.find((x) => x.id === id);
-    if (c) { setCampaign(c); setDirty(false); }
+    if (c) { setWorkflow(c); setDirty(false); }
   };
-  const createCampaign = () => {
-    setCampaign(newCampaign('Untitled campaign')); setDirty(true);
+  const createWorkflow = () => {
+    setWorkflow(newWorkflow('Untitled workflow')); setDirty(true);
   };
-  const deleteCampaign = (id) => {
+  const deleteWorkflow = (id) => {
     const removed = library.find((c) => c.id === id);
-    removeCampaign(id).then((list) => {
+    removeWorkflow(id).then((list) => {
       setLibrary(list);
-      // If we deleted the open campaign, fall back to the first remaining
+      // If we deleted the open workflow, fall back to the first remaining
       // one (or a fresh untitled draft if the library is now empty).
-      if (campaign.id === id) {
-        setCampaign(list[0] || newCampaign('Untitled campaign')); setDirty(!list.length);
+      if (workflow.id === id) {
+        setWorkflow(list[0] || newWorkflow('Untitled workflow')); setDirty(!list.length);
       }
-      toast?.success?.(`Deleted “${removed?.name || 'campaign'}”`);
-    }).catch(() => toast?.error?.('Couldn’t delete campaign'));
+      toast?.success?.(`Deleted “${removed?.name || 'workflow'}”`);
+    }).catch(() => toast?.error?.('Couldn’t delete workflow'));
   };
   const save = () => {
-    saveCampaign(campaign).then(({ campaign: saved, list }) => {
-      setLibrary(list); setCampaign(saved); setDirty(false);
+    saveWorkflow(workflow).then(({ workflow: saved, list }) => {
+      setLibrary(list); setWorkflow(saved); setDirty(false);
       toast?.success?.(`Saved “${saved.name}”`);
-    }).catch(() => toast?.error?.('Couldn’t save campaign'));
+    }).catch(() => toast?.error?.('Couldn’t save workflow'));
   };
 
   const audienceKeyed = useMemo(() => contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` })), [contacts]);
@@ -933,12 +933,12 @@ export function CampaignManager({ onClose, contacts = [] }) {
     if (!audienceKeyed.length) { setSimContactKey(null); return; }
     setSimContactKey((k) => (audienceKeyed.some((c) => c._key === k) ? k : audienceKeyed[0]._key));
   }, [audienceKeyed]);
-  const setAutomation = (src) => patchCampaign({ ...campaign, automation: src });
+  const setAutomation = (src) => patchWorkflow({ ...workflow, automation: src });
   const audienceValue = useMemo(() => contacts.reduce((s, c) => s + (Number(c.value) || 0), 0), [contacts]);
 
   // Translate the code once — feeds the blocks view + the stats footer.
   const program = useMemo(() => {
-    const { blocks, errors } = translateProgram(campaign.automation || '');
+    const { blocks, errors } = translateProgram(workflow.automation || '');
     const flat = flattenBlocks(blocks);
     const effectKinds = new Set(['action', 'complete', 'edit']);
     // Steps = every evaluated reference, CRM effect, and final return.
@@ -957,7 +957,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
       pipeline,
       blockCount: flat.length,
     };
-  }, [campaign.automation]);
+  }, [workflow.automation]);
 
   const [view, setView] = useState('code');
   const [dryRun, setDryRun] = useState(true);
@@ -978,21 +978,21 @@ export function CampaignManager({ onClose, contacts = [] }) {
   }), [userData, templatesLoaded]);
   const runner = useCodeRunner();
 
-  // Expose the code API to an assistant so it can author/edit campaigns:
-  //   window.__gbCampaignCodeSpec()  → the machine-readable spec (bindings,
+  // Expose the code API to an assistant so it can author/edit workflows:
+  //   window.__gbWorkflowCodeSpec()  → the machine-readable spec (bindings,
   //     every action + params + gate, page fields, rules, saved templates)
-  //   window.__gbWriteCampaign({name, code}) → create/update a campaign by
+  //   window.__gbWriteWorkflow({name, code}) → create/update a workflow by
   //     name and open it here. Only live while the manager is mounted.
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    window.__gbCampaignCodeSpec = () => buildCodeSpec(bindings);
-    window.__gbWriteCampaign = async ({ name, code }) => {
-      const saved = await writeCampaignCode({ name, automation: code });
-      const list = await loadCampaigns();
-      setLibrary(list); setCampaign(saved); setDirty(false); setView('code');
+    window.__gbWorkflowCodeSpec = () => buildCodeSpec(bindings);
+    window.__gbWriteWorkflow = async ({ name, code }) => {
+      const saved = await writeWorkflowCode({ name, automation: code });
+      const list = await loadWorkflows();
+      setLibrary(list); setWorkflow(saved); setDirty(false); setView('code');
       return { ok: true, id: saved.id, name: saved.name };
     };
-    return () => { delete window.__gbCampaignCodeSpec; delete window.__gbWriteCampaign; };
+    return () => { delete window.__gbWorkflowCodeSpec; delete window.__gbWriteWorkflow; };
   }, [bindings]); // eslint-disable-line react-hooks/exhaustive-deps
   // Single-contact simulation that animates the blocks (top-bar Simulate).
   const [sim, setSim] = useState({ status: 'idle', trace: [], replayIdx: -1, done: false, result: null, contactName: '' });
@@ -1012,9 +1012,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
     setSim({ status: 'running', trace: [], replayIdx: -1, done: false, result: null, contactName: contact?.contactName || contact?.name || '(contact)' });
     let res;
     try {
-      const prepared = await prepareCampaignContact(contact, audienceKeyed);
-      const evaluateRef = (ref) => evaluateCampaignTemplate(ref, prepared.context);
-      res = await simulateProgram(campaign.automation || '', prepared.page, {
+      const prepared = await prepareWorkflowContact(contact, audienceKeyed);
+      const evaluateRef = (ref) => evaluateWorkflowTemplate(ref, prepared.context);
+      res = await simulateProgram(workflow.automation || '', prepared.page, {
         run: makeSandboxRunner({
           exec: runInSandbox,
           doc: prepared.context?.doc,
@@ -1057,13 +1057,13 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const beginDryRun = () => {
     resetSim(); setRunMode(true);
     runner.start({
-      campaign,
-      code: campaign.automation || '',
+      workflow,
+      code: workflow.automation || '',
       audience: audienceKeyed,
       user: userData,
       dryRun: true,
       pipeline: program.pipeline,
-      prepareContact: (contact, ordered) => prepareCampaignContact(contact, ordered),
+      prepareContact: (contact, ordered) => prepareWorkflowContact(contact, ordered),
     });
   };
 
@@ -1072,13 +1072,13 @@ export function CampaignManager({ onClose, contacts = [] }) {
     const rd = await buildRunDeps();
     resetSim(); setRunMode(true);
     runner.start({
-      campaign,
-      code: campaign.automation || '',
+      workflow,
+      code: workflow.automation || '',
       audience: audienceKeyed,
       user: userData,
       dryRun: false,
       pipeline: program.pipeline,
-      prepareContact: (contact, ordered) => prepareCampaignContact(contact, ordered, rd),
+      prepareContact: (contact, ordered) => prepareWorkflowContact(contact, ordered, rd),
       makeExec: (_contact, prepared) => makeContactExecutor(
         prepared.context,
         rd,
@@ -1096,9 +1096,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
     let preview;
     try {
       const contact = audienceKeyed[0] || {};
-      const prepared = await prepareCampaignContact(contact, audienceKeyed);
-      const evaluateRef = (ref) => evaluateCampaignTemplate(ref, prepared.context);
-      preview = await simulateProgram(campaign.automation || '', prepared.page, {
+      const prepared = await prepareWorkflowContact(contact, audienceKeyed);
+      const evaluateRef = (ref) => evaluateWorkflowTemplate(ref, prepared.context);
+      preview = await simulateProgram(workflow.automation || '', prepared.page, {
         run: makeSandboxRunner({
           exec: runInSandbox,
           doc: prepared.context?.doc,
@@ -1116,7 +1116,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
   return (
     <AnimatePresence onExitComplete={onClose}>
     {open && (
-    <motion.div key="cm-backdrop"
+    <motion.div key="workflow-backdrop"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
       style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 'var(--gb-z-max)' }}>
       {/* The shared ModalShell (non-draggable card) keeps chrome + the
@@ -1125,9 +1125,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
           root deliberately opts out of the shared Modals scale. The wrapper
           (initial=false ⇒ no entrance, ModalShell owns the bounce-in) plays
           the scale/fade exit on close. */}
-      <motion.div className="gb-cmp-scope" initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
-      <ModalShell width={CAMPAIGN_MANAGER_WIDTH} height={CAMPAIGN_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
-        <TopBar campaign={campaign} onChange={patchCampaign} sim={sim}
+      <motion.div className="gb-workflow-scope" initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
+      <ModalShell width={WORKFLOW_MANAGER_WIDTH} height={WORKFLOW_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
+        <TopBar workflow={workflow} onChange={patchWorkflow} sim={sim}
           onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
@@ -1135,7 +1135,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         <AnimatePresence mode="wait" initial={false}>
         {runMode ? (
           <AudienceRunView key="run"
-            campaign={campaign}
+            workflow={workflow}
             audience={audienceKeyed}
             pipeline={program.pipeline}
             runner={runner}
@@ -1146,15 +1146,15 @@ export function CampaignManager({ onClose, contacts = [] }) {
         <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
           style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
+          <WorkflowSidebar library={library} currentId={workflow.id} onSelect={selectWorkflow} onNew={createWorkflow} onDelete={deleteWorkflow} onImport={() => setImportOpen(true)} />
           <CodeAutomationPanel
-            value={campaign.automation || ''} onChange={setAutomation}
+            value={workflow.automation || ''} onChange={setAutomation}
             blocks={program.blocks} errors={program.errors} blockCount={program.blockCount}
             view={view} onView={setView} onContext={setDocToken} bindings={bindings}
             trace={shownTrace} runningId={runningId} done={sim.status === 'done'} result={sim.status === 'done' ? sim.result : null}
             error={sim.status === 'done' ? sim.error : null} simStatus={sim.status} />
           {/* Contextual right sidebar: live docs while coding (narrow), the
-              campaign settings while on the blocks (wider so nothing squishes). */}
+              workflow settings while on the blocks (wider so nothing squishes). */}
           <div style={{ width: view === 'code' ? 288 : 348, flexShrink: 0, borderLeft: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', position: 'relative', minHeight: 0, transition: 'width .18s ease' }}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={view === 'code' ? 'docs' : 'settings'}
@@ -1162,18 +1162,18 @@ export function CampaignManager({ onClose, contacts = [] }) {
                 style={{ position: 'absolute', inset: 0, minHeight: 0 }}>
                 {view === 'code'
                   ? <CodeDocsSidebar doc={activeDoc} />
-                  : <CampaignSettings campaign={campaign} onChange={patchCampaign} />}
+                  : <WorkflowSettings workflow={workflow} onChange={patchWorkflow} />}
               </motion.div>
             </AnimatePresence>
           </div>
         </div>
-        <StatsStrip program={program} campaign={campaign} dirty={dirty} onSave={save} />
+        <StatsStrip program={program} workflow={workflow} dirty={dirty} onSave={save} />
         </motion.div>
         )}
         </AnimatePresence>
       </ModalShell>
       </motion.div>
-      {importOpen && <ImportCampaignsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
+      {importOpen && <ImportWorkflowsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
       {confirmRun && <ConfirmRunModal plan={confirmRun.plan} summary={confirmRun.summary} audience={audienceKeyed.length} onConfirm={beginRealRun} onCancel={() => setConfirmRun(null)} />}
     </motion.div>
     )}
@@ -1181,4 +1181,4 @@ export function CampaignManager({ onClose, contacts = [] }) {
   );
 }
 
-export default CampaignManager;
+export default WorkflowManager;

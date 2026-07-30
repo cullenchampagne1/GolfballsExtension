@@ -1,8 +1,8 @@
 /* Shared source/body bounds for every code-engine execution surface.
  *
- * Campaign programs are wrapped with the sandbox recorder before execution,
+ * Workflow programs are wrapped with the sandbox recorder before execution,
  * which adds roughly 3–4 KiB to the saved source. The old 8 KiB body cap
- * therefore rejected otherwise valid ~5 KiB campaigns. A 64 KiB ceiling keeps
+ * therefore rejected otherwise valid ~5 KiB workflows. A 64 KiB ceiling keeps
  * the paste-bomb guard while leaving enough room for real multi-function
  * automations and their instrumentation.
  */

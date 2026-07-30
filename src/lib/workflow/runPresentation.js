@@ -1,4 +1,4 @@
-/* Pure run-screen projection for code campaigns.
+/* Pure run-screen projection for code workflows.
  *
  * A source action inside a loop has one stable block id but can execute many
  * times. The run UI therefore models a pipeline of source blocks plus per-row
@@ -44,7 +44,7 @@ function staticLabel(block, contract) {
 /**
  * Ordered source-level steps shown before execution. Effects nested inside a
  * function remain part of the pipeline; function-local returns do not, because
- * they are implementation detail rather than the campaign's final result.
+ * they are implementation detail rather than the workflow's final result.
  */
 export function buildRunPipeline(blocks = []) {
   const out = [];

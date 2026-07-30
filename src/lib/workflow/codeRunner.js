@@ -1,5 +1,5 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/codeRunner — policy-complete audience runner for code campaigns.
+   workflow/codeRunner — policy-complete audience runner for code workflows.
 
    The UI owns React state; this module owns execution semantics. Each selected
    record is hydrated before its program runs, then the existing code engine
@@ -7,10 +7,10 @@
 ─────────────────────────────────────────────────────────────── */
 
 import {
-  campaignActionCap,
-  campaignPaceMs,
-  campaignSuppressionReason,
-  orderCampaignAudience,
+  workflowActionCap,
+  workflowPaceMs,
+  workflowSuppressionReason,
+  orderWorkflowAudience,
 } from './runPolicy.js';
 
 const noop = () => {};
@@ -37,8 +37,8 @@ async function pauseAwareDelay(ms, control = {}) {
  *   prepareContact(contact, orderedAudience) -> { context, page }
  *   executeProgram({ contact, prepared, beforeEffect, onEffect }) -> result
  */
-export async function runCodeCampaign({
-  campaign,
+export async function runCodeWorkflow({
+  workflow,
   audience,
   prepareContact,
   executeProgram,
@@ -48,12 +48,12 @@ export async function runCodeCampaign({
   random = Math.random,
   delay = pauseAwareDelay,
 } = {}) {
-  if (typeof prepareContact !== 'function') throw new Error('Campaign runner needs prepareContact');
-  if (typeof executeProgram !== 'function') throw new Error('Campaign runner needs executeProgram');
+  if (typeof prepareContact !== 'function') throw new Error('Workflow runner needs prepareContact');
+  if (typeof executeProgram !== 'function') throw new Error('Workflow runner needs executeProgram');
 
-  const ordered = orderCampaignAudience(audience, campaign?.audienceOrder, random);
+  const ordered = orderWorkflowAudience(audience, workflow?.audienceOrder, random);
   const total = ordered.length;
-  const cap = campaignActionCap(campaign);
+  const cap = workflowActionCap(workflow);
   const results = [];
   let effectCount = 0;
   let attemptedEffect = false;
@@ -108,7 +108,7 @@ export async function runCodeCampaign({
       continue;
     }
 
-    const suppressReason = campaignSuppressionReason(campaign, prepared.context);
+    const suppressReason = workflowSuppressionReason(workflow, prepared.context);
     if (suppressReason) {
       const summary = {
         contact,
@@ -126,11 +126,11 @@ export async function runCodeCampaign({
 
     const beforeEffect = async () => {
       if (cap && effectCount >= cap) {
-        return { allow: false, reason: 'Campaign action cap reached' };
+        return { allow: false, reason: 'Workflow action cap reached' };
       }
       if (!dryRun && attemptedEffect) {
-        const waited = await delay(campaignPaceMs(campaign, random), control);
-        if (!waited) return { allow: false, reason: 'Campaign stopped' };
+        const waited = await delay(workflowPaceMs(workflow, random), control);
+        if (!waited) return { allow: false, reason: 'Workflow stopped' };
       }
       attemptedEffect = true;
       return { allow: true };
@@ -146,7 +146,7 @@ export async function runCodeCampaign({
         });
       } catch {
         // Presentation/telemetry must never turn a successful CRM effect into
-        // a failed campaign. The trace remains the execution authority.
+        // a failed workflow. The trace remains the execution authority.
       }
     };
 

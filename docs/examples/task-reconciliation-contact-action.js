@@ -1,10 +1,10 @@
 // Full task reconciliation — single-record Custom Action.
 //
-// The SAME reconciliation the task-reconciliation-campaign.js campaign runs
+// The SAME reconciliation the task-reconciliation-workflow.js workflow runs
 // per audience record, packaged for one contact or account page — e.g. to
 // initiate a brand-new account right from its page, or to re-check a single
 // record after editing its tasks. The body below (from the Config marker) is
-// IDENTICAL to the campaign file; a test enforces the two stay byte-identical.
+// IDENTICAL to the workflow file; a test enforces the two stay byte-identical.
 //
 // Custom Action setup (Actions → New action):
 //   Runs on: Contact            ← the contact-page shelf
@@ -20,7 +20,7 @@
 // through the ordinary confirmation screen. On a page that is not a CRM
 // record (nothing extractable) the action skips instead of writing.
 //
-// What one run converges the record to — see the campaign file for the full
+// What one run converges the record to — see the workflow file for the full
 // rules: anniversary cycles edited in place (legacy "Prior Year …" renamed,
 // live = due − 14, in-flight cycles preserved), promotion tasks live TODAY
 // (config below), Q1–Q4 reach-outs placed and re-mediated at the middle of
@@ -282,7 +282,7 @@ for (const entry of orders) {
 }
 
 // Keep only each month's newest source year so one calendar month can never
-// produce competing anniversary campaigns.
+// produce competing anniversary workflows.
 const mostRecentGroupByMonth = new Map();
 for (const group of grouped.values()) {
   const current = mostRecentGroupByMonth.get(group.month);
@@ -345,7 +345,7 @@ function chooseCycle(anniversary) {
   return { cycleYear, ...buildCycle(anniversary, cycleYear) };
 }
 
-const rankedCampaigns = anniversaries
+const rankedWorkflows = anniversaries
   .map((anniversary) => ({
     key: `${anniversary.sourceYear}-${anniversary.month}`,
     anniversary,
@@ -357,41 +357,41 @@ const rankedCampaigns = anniversaries
     || b.anniversary.month - a.anniversary.month
   ));
 
-// Newer source evidence wins: reject a lower-ranked campaign when any of its
-// tasks lands within 20 days of an accepted campaign's task. One campaign's
+// Newer source evidence wins: reject a lower-ranked workflow when any of its
+// tasks lands within 20 days of an accepted workflow's task. One workflow's
 // own four tasks are exempt from this guard.
-const scheduledCampaigns = [];
+const scheduledWorkflows = [];
 const scheduledTaskDates = [];
-const skippedCampaigns = [];
-for (const campaign of rankedCampaigns) {
-  const conflict = campaign.tasks.some((candidateTask) => (
+const skippedWorkflows = [];
+for (const workflow of rankedWorkflows) {
+  const conflict = workflow.tasks.some((candidateTask) => (
     scheduledTaskDates.some((scheduledTask) => (
-      scheduledTask.campaignKey !== campaign.key
+      scheduledTask.workflowKey !== workflow.key
       && Math.abs(
         calendarDayNumber(candidateTask.date) - calendarDayNumber(scheduledTask.date)
       ) <= 20
     ))
   ));
-  if (conflict) { skippedCampaigns.push(campaign); continue; }
-  scheduledCampaigns.push(campaign);
-  for (const task of campaign.tasks) {
-    scheduledTaskDates.push({ campaignKey: campaign.key, date: task.date });
+  if (conflict) { skippedWorkflows.push(workflow); continue; }
+  scheduledWorkflows.push(workflow);
+  for (const task of workflow.tasks) {
+    scheduledTaskDates.push({ workflowKey: workflow.key, date: task.date });
   }
 }
-scheduledCampaigns.sort((a, b) => (
+scheduledWorkflows.sort((a, b) => (
   calendarDayNumber(a.tasks[0].date) - calendarDayNumber(b.tasks[0].date)
 ));
 
 /* The flat desired anniversary task list, chronological. */
 const desiredAnniversary = [];
-for (const campaign of scheduledCampaigns) {
-  const { anniversary, anniversaryDate, cycleYear } = campaign;
+for (const workflow of scheduledWorkflows) {
+  const { anniversary, anniversaryDate, cycleYear } = workflow;
   const sourceOrders = anniversary.orders
     .slice()
     .sort((a, b) => a.date - b.date)
     .map(({ order, date }) => describeOrder(order, date))
     .join("\n");
-  for (const task of campaign.tasks) {
+  for (const task of workflow.tasks) {
     desiredAnniversary.push({
       kind: task.kind,
       date: task.date,
@@ -495,7 +495,7 @@ for (const desired of desiredAnniversary) {
 }
 
 // Open anniversary tasks with no slot left (older duplicates, or tasks from a
-// skipped overlapping campaign) are retired. Only when this record produced
+// skipped overlapping workflow) are retired. Only when this record produced
 // desired slots at all — with no dated orders we cannot rebuild, so we leave
 // everything untouched.
 const retiredTasks = new Set();
@@ -539,7 +539,7 @@ for (const wanted of PROMO_TASKS) {
     subject: wanted.subject,
     body: [
       `Promotion follow-up coverage for ${recordName}.`,
-      "Created by the reconciliation campaign because no open or completed",
+      "Created by the reconciliation workflow because no open or completed",
       "task carried this subject.",
     ].join("\n"),
     priority: "med",
@@ -773,5 +773,5 @@ return [
     + `${quarterlyCovered} covered, ${quarterlyRetired} duplicate(s) retired`,
   `brand: ${brandEdited} edited, ${brandUnchanged} unchanged, ${brandCreated} created, ${brandRetired} retired`,
   `skipped ${grouped.size - anniversaries.length} older same-month source period(s)`,
-  `skipped ${skippedCampaigns.length} overlapping anniversary campaign(s)`
+  `skipped ${skippedWorkflows.length} overlapping anniversary workflow(s)`
 ].join("; ");

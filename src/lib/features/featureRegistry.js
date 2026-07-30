@@ -76,7 +76,7 @@ const SURFACES = {
   copyIdsEnabled:     ctx([{ id: 'gb-copy-order-ids', label: 'Copy order IDs', icon: 'copy' }], ['order-index']),
   calendarEnabled:    ctx([{ id: 'gb-order-dates', label: 'Order dates', icon: 'cog' }], ['order']),
 
-  // Campaign Manager is only ever opened from CRM Search / Tasks (its contact
+  // Workflow Manager is only ever opened from CRM Search / Tasks (its contact
   // set), never as a standalone launcher → toggle-only (NO_SURFACES).
 };
 

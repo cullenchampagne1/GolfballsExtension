@@ -56,10 +56,10 @@ Help & Training (editor.html → "Help" sidebar tab)
 │   │   ├── Mockup Composer                 (recolor + grass-scene render)
 │   │   ├── 3D Product Viewer
 │   │   └── Submit Proof
-│   └── Campaigns
+│   └── Workflows
 │       ├── Bulk Email from a Selection     (EmailRunner from Task List / CRM Search)
-│       ├── Campaign Manager                (multi-step, conditions, pacing, dry-run)
-│       └── Campaign Conditions & Signals
+│       ├── Workflow Manager                (multi-step, conditions, pacing, dry-run)
+│       └── Workflow Conditions & Signals
 │
 ├── Settings Reference                      (generated from inventory.settings + featureFlags)
 │   ├── Theme & Appearance                  (4 variants, custom colors, per-surface UI scales)
@@ -81,7 +81,7 @@ Help & Training (editor.html → "Help" sidebar tab)
 │   │   ├── Set order approval & commitment dates
 │   │   └── Extract a logo and submit a proof
 │   └── Advanced
-│       ├── Run a multi-step campaign
+│       ├── Run a multi-step workflow
 │       ├── Import supplier products
 │       ├── Build advanced searches with Query Builder
 │       └── Share your team's configuration with presets
@@ -150,9 +150,9 @@ Every article, its audience tiers, and search keywords. **Bold** articles ship w
 | 33 | Mockup Composer | Art & Proofs | I | recolor, mockup, grass, render |
 | 34 | 3D Product Viewer | Art & Proofs | I | 3d, ball, rotate, preview, gift box |
 | 35 | **Submit Proof** | Art & Proofs | B/I | proof, artist, submit, art approval |
-| 36 | **Bulk Email from a Selection** | Campaigns | I | bulk, blast, run campaign, selected |
-| 37 | **Campaign Manager** | Campaigns | A | campaign, steps, conditions, pacing, dry run |
-| 38 | Campaign Conditions & Signals | Campaigns | A | condition, signal, rule, and or |
+| 36 | **Bulk Email from a Selection** | Workflows | I | bulk, blast, run workflow, selected |
+| 37 | **Workflow Manager** | Workflows | A | workflow, steps, conditions, pacing, dry run |
+| 38 | Workflow Conditions & Signals | Workflows | A | condition, signal, rule, and or |
 | 39 | Theme & Appearance | Settings Reference | B | theme, dark, light, color, scale, zoom |
 | 40 | Feature Toggles | Settings Reference | B | enable, disable, toggle, flag |
 | 41 | Keyboard Shortcuts (settings) | Settings Reference | B | rebind, change shortcut |
@@ -232,12 +232,15 @@ Tutorials are data, not prose pages: each is an array of steps rendered by `Tuto
 4. Submit. *Expect:* success toast; the call is in the CRM activity log. *Note:* toasts appear only on errors elsewhere; this flow confirms explicitly.
 5. Open **Quick Task** → pick a template → due date accepts `+1d`, `+1w`, or `mm/dd/yy` → submit. *Expect:* task attached to the contact.
 
-### 3.5 Run a bulk campaign
+### 3.5 Run a bulk workflow
 
-1. **Ctrl+K** → search or apply a saved query → tick rows. *Cue:* selection summary bar appears with a Campaign dropdown.
-2. Click **Run Campaign** → Campaign Runner opens. Pick a template → **Preview** one recipient. *Expect:* variables resolved per-contact.
-3. **Send All.** *Expect:* per-recipient progress bar; each contact opens in a background tab, resolves, sends, closes, with randomized pacing. *Warning:* keep Chrome open until done. *Mistake:* PA off → every send opens an Outlook window (by design fallback).
-4. For multi-step sequences (email → wait → conditional task), use **Campaign Manager**: add steps, set grouped AND/OR conditions, pacing + jitter, then **dry-run** to simulate with zero side effects before running live.
+1. **Ctrl+K** → search or apply a saved query → tick rows. *Cue:* the selection summary bar appears with workflow actions.
+2. Click **Run Workflow** → Workflow Manager opens with the selected rows loaded as its audience.
+3. Choose or create a workflow → add steps (email → task → conditional email) → set grouped AND/OR conditions + pacing → save.
+4. **Simulate** one selected contact and inspect its conditions, routing, resolved templates, and planned actions.
+5. Enable **Dry run** → process the full audience with zero sends/writes. Disable it and click **Run workflow** only after the trace is correct.
+
+For a one-step bulk email, use **Email selected** instead. That opens the separate **Quick Send** panel with its template picker, weighted splits, randomized pacing, and per-recipient progress.
 
 ### 3.6 Set order approval & commitment dates
 
@@ -344,7 +347,7 @@ All components live in `src/pages/help/` and compose existing `src/ui` primitive
 
 **Returning users** — when stored `lastSeenVersion` ≠ manifest version: a dismissible `Callout tone=brand` atop Help + popup linking to What's New, listing only the diff.
 
-**Advanced users** — "Power User Corner" is in the nav (not hidden), plus a "Going faster" checklist: rebind shortcuts, learn the `/` composer, save a Query Builder query, create a preset, try a dry-run campaign, meet code variables.
+**Advanced users** — "Power User Corner" is in the nav (not hidden), plus a "Going faster" checklist: rebind shortcuts, learn the `/` composer, save a Query Builder query, create a preset, try a dry-run workflow, meet code variables.
 
 ---
 
@@ -377,7 +380,7 @@ Found while auditing — these are gaps in the *product's* self-explanation that
 | 4. Onboarding + contextual help | `OnboardingFlow`, first-run trigger, `lastSeenVersion` What's-New, "?" buttons in modal headers (one line per modal) | src/pages/help/, src/modals/* | 1 d |
 | 5. Polish | Settings reference filters, deep links from popup/shelf, coverage CI check (every flag/setting/modal in inventory must appear in ≥1 article — fail build otherwise) | scripts/ | 1 d |
 
-Build integration: no new manifest entries needed — Help lives inside the existing editor bundle. Remember the campaign-manager OOM precedent: if the editor bundle grows, build with `--max-old-space-size=8192`.
+Build integration: no new manifest entries needed — Help lives inside the existing editor bundle. Remember the workflow-manager OOM precedent: if the editor bundle grows, build with `--max-old-space-size=8192`.
 
 ---
 
@@ -395,6 +398,6 @@ Build integration: no new manifest entries needed — Help lives inside the exis
 | External integrations | 7 | Power Automate, icustomize, Dynamics, supplier, geocoding, storefront, and CRM services covered where user-visible | 100% of user-facing |
 | Hidden/advanced | 10 items | Power User Corner (5 articles) | 100% |
 
-**Known exclusions (deliberate):** internal message-handler API (developer docs, not user docs — lives in inventory.json), QuickTask return-to-popup (unwired), activity-log campaign signals marked `ready:false` in code.
+**Known exclusions (deliberate):** internal message-handler API (developer docs, not user docs — lives in inventory.json), QuickTask return-to-popup (unwired), activity-log workflow signals marked `ready:false` in code.
 
 **Top recommended product improvements** (from §8): first-run sender-identity prompt, Power Automate fallback callout, shelf-discovery tooltip, Signifyd legend, composer keyboard hint row.

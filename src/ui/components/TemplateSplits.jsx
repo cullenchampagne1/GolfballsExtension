@@ -13,7 +13,7 @@ import { I } from '../icons.jsx';
 
    Reused by:
      • EmailRunner — fixed variation rows (renderLabel = text).
-     • Campaign StepInspector — each row is a template picker, with
+     • Workflow StepInspector — each row is a template picker, with
        add/remove (renderLabel = a <TemplatePicker/>, onAdd/onRemove set).
 
    Controlled: pass `items` ([{ id, label? }]) + `weights` ({ [id]: n })

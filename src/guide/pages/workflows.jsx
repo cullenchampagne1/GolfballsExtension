@@ -4,21 +4,21 @@ import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import { LiveStage } from '../lib/stage.jsx';
 
 /* ───────────────────────────────────────────────────────────────
-   campaigns.jsx — the Campaigns section of the Operator's Guide.
+   workflows.jsx — the Workflows section of the Operator's Guide.
 
    Two hand-built, visually-faithful pages:
      • QuickSendPage   — the Quick Send / Bulk Email runner. Leads
        with a LiveStage walkthrough (Tour / Play / Try) over a scaled
        Quick Send setup view, then deep TourBox sections rebuilding
        each phase's controls.
-     • CampaignsPage   — the Campaign Manager. Faithful MiniFrame
+     • WorkflowManagerPage — the Workflow Manager. Faithful MiniFrame
        reproductions of the step timeline, the step inspector, the
        conditions builder, and the live audience run view (the real
-       CampaignManager carries heavy state, so we reproduce it here).
+       WorkflowManager carries heavy state, so we reproduce it here).
 
    Copy is rewritten from the verified help articles
-   (bulk-email-selection, campaign-manager, campaign-conditions);
-   visuals trace EmailRunner.jsx + CampaignManager.jsx tokens.
+   (bulk-email-selection, workflow-manager, workflow-conditions);
+   visuals trace EmailRunner.jsx + WorkflowManager.jsx tokens.
 ─────────────────────────────────────────────────────────────── */
 
 /* shared tokens lifted from the real modals so the snippets match. */
@@ -234,7 +234,7 @@ const QS_STEPS = [
 export function QuickSendPage() {
   return (
     <div className="prose">
-      <div className="eyebrow">Campaigns</div>
+      <div className="eyebrow">Workflows</div>
       <h1 className="title">Quick Send (Bulk Email)</h1>
       <p className="lede">
         Tick rows in <a href="#tasks">Task List</a> or <a href="#crm">CRM Search</a> and the selection bar
@@ -311,7 +311,7 @@ export function QuickSendPage() {
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Keep Chrome open — and turn Power Automate on first</div>
-          <p style={{ margin: 0 }}>Leave the tab open until the ring completes. With <strong>Power Automate off</strong>, every send opens a separate <strong>Outlook window</strong> instead of sending in the background — fine for a handful, unworkable for a real blast. Enable it before any bulk run. For a precisely targeted audience, build it in the <a href="#crm-query">Query Builder</a> first, or step up to the <a href="#campaigns">Campaign Manager</a> for multi-step sequences.</p>
+          <p style={{ margin: 0 }}>Leave the tab open until the ring completes. With <strong>Power Automate off</strong>, every send opens a separate <strong>Outlook window</strong> instead of sending in the background — fine for a handful, unworkable for a real blast. Enable it before any bulk run. For a precisely targeted audience, build it in the <a href="#crm-query">Query Builder</a> first, or step up to the <a href="#workflow-manager">Workflow Manager</a> for multi-step sequences.</p>
         </div>
       </div>
     </div>
@@ -319,7 +319,7 @@ export function QuickSendPage() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   CAMPAIGN MANAGER
+   WORKFLOW MANAGER
 ════════════════════════════════════════════════════════════════ */
 
 /* ── A single timeline step card (faithful to StepCard) ── */
@@ -354,7 +354,7 @@ function StepNode({ idx, kind, label, summary, branch, group, indent, cond, chil
       {childStop && (
         <div style={{ padding: '0 12px 10px 50px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', background: 'var(--gb-warning-tint-medium)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-pill)', color: 'var(--gb-warning-fg)', fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>
-            <Dot tone="warning" size={5} /> Stops campaign
+            <Dot tone="warning" size={5} /> Stops workflow
           </span>
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Main path resumes if branch didn't fire ↓</span>
         </div>
@@ -376,7 +376,7 @@ function Connector({ tone, hookRight, hookLeft, height = 28 }) {
 }
 function TimelineSnippet() {
   return (
-    <MiniFrame width={420} label="campaign manager · flow timeline" pad>
+    <MiniFrame width={420} label="workflow manager · flow timeline" pad>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
         <I.flow size={15} style={{ color: 'var(--gb-brand-label)' }} />
         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--gb-text-primary)' }}>Flow</div>
@@ -400,7 +400,7 @@ function InspectorSnippet() {
   const [kind, setKind] = useState('email');
   const [branch, setBranch] = useState(false);
   return (
-    <MiniFrame width={420} label="campaign manager · step inspector" pad>
+    <MiniFrame width={420} label="workflow manager · step inspector" pad>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: branch ? 'var(--gb-warning-tint-medium)' : STEP_META[kind].bg, border: '1px solid var(--gb-border-default)', color: branch ? 'var(--gb-warning-fg)' : STEP_META[kind].fg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.createElement(branch ? I.branch : STEP_META[kind].icon, { size: 15 })}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -422,7 +422,7 @@ function InspectorSnippet() {
       <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
         <div style={{ paddingRight: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Branch step</div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Stops the campaign after firing; child steps run only if it fires.</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Stops the workflow after firing; child steps run only if it fires.</div>
         </div>
         <Switch on={branch} tone="warning" onChange={setBranch} />
       </div>
@@ -435,7 +435,7 @@ function InspectorSnippet() {
   );
 }
 
-/* ── Conditions builder (grouped AND/OR over campaign signals) ── */
+/* ── Conditions builder (grouped AND/OR over workflow signals) ── */
 const SIGNAL_OPTS = ['Order count', 'Days since last order', 'Lifetime spend ($)', 'Has ordered brand', 'Order item contains'];
 function CondRow({ source, field, op, value }) {
   const srcTone = { Signal: 'brand', Schema: 'info', Code: 'warning' }[source] || 'neutral';
@@ -451,7 +451,7 @@ function CondRow({ source, field, op, value }) {
 function ConditionsSnippet() {
   const [sig, setSig] = useState('Lifetime spend ($)');
   return (
-    <MiniFrame width={420} label="campaign manager · conditions" pad>
+    <MiniFrame width={420} label="workflow manager · conditions" pad>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <I.target size={13} style={{ color: 'var(--gb-warning-fg)' }} />
         <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Run conditions</span>
@@ -516,12 +516,12 @@ const RUN_ROWS = [
 ];
 function RunViewSnippet() {
   return (
-    <MiniFrame width={620} label="campaign manager · run view" pad={false}>
+    <MiniFrame width={620} label="workflow manager · run view" pad={false}>
       <div style={{ background: 'var(--gb-surface-canvas)' }}>
         <div style={{ padding: '12px 16px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.send size={14} /></div>
           <div>
-            <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Running campaign</div>
+            <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Running workflow</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)' }}>Spring win-back</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
@@ -569,23 +569,23 @@ const RUN_STATUSES = [
   ['Running', 'Currently being worked through its steps.'],
   ['Done', 'Finished — at least one step ran and sent.'],
   ['Skipped', 'No step\'s conditions matched, so nothing fired for them.'],
-  ['Branch · stop', 'A branch fired, so the campaign deliberately stopped here.'],
+  ['Branch · stop', 'A branch fired, so the workflow deliberately stopped here.'],
   ['Suppressed', 'Excluded by a suppression rule (do-not-contact / bounced / mailer-removed).'],
   ['Failed', 'A step errored — worth a look and a retry.'],
 ];
 const RUN_MODES = [
   ['Simulate', 'Animates the flow step by step in the timeline (pulsing badges, tracing connectors) so you can sanity-check routing without an audience.'],
   ['Dry run', 'The full run against the real audience with “Dry-run · nothing is sent” across the top — every step reports “Would email…” with zero sends and zero CRM writes.'],
-  ['Run campaign', 'The real send: the live audience table with per-contact status badges, plus Pause / Resume / Stop & edit.'],
+  ['Run workflow', 'The real send: the live audience table with per-contact status badges, plus Pause / Resume / Stop & edit.'],
 ];
 
-export function CampaignsPage() {
+export function WorkflowManagerPage() {
   return (
     <div className="prose">
-      <div className="eyebrow">Campaigns</div>
-      <h1 className="title">Campaign Manager</h1>
+      <div className="eyebrow">Workflows</div>
+      <h1 className="title">Workflow Manager</h1>
       <p className="lede">
-        Where <a href="#quicksend">Quick Send</a> fires one email at everyone, the Campaign Manager builds a
+        Where <a href="#quicksend">Quick Send</a> fires one email at everyone, the Workflow Manager builds a
         <strong> multi-step flow</strong> — Email, Call, Task, and Custom steps, with conditional <strong>branches</strong>
         and mutually-exclusive <strong>groups</strong> — then runs it across a selected audience, routing each contact
         through whichever steps their data says they should get. Below: the timeline, the inspector, the conditions
@@ -596,19 +596,19 @@ export function CampaignsPage() {
         <p>Steps run <strong>top to bottom</strong>, numbered 1, 2, 3…, joined by connector lines. Each card shows its type icon, label, a template-or-code summary, and a conditions preview (<em>“if FIELD OP”</em>). Copy and trash icons duplicate or delete; click a card to edit it in the inspector. <strong>Add step</strong> appends a new one.</p>
         <p>The snippet shows the two routing devices in action:</p>
         <ul>
-          <li>Step 2 is a <strong>branch</strong> (amber <Tag tone="warning" size="xs">BRANCH</Tag>): if its condition passes it fires and the campaign <strong>stops</strong> for that contact. Its child, <strong>2a</strong>, indents underneath and runs only when the branch fired — hence the “Stops campaign” chip and the “main path resumes if branch didn't fire” note.</li>
+          <li>Step 2 is a <strong>branch</strong> (amber <Tag tone="warning" size="xs">BRANCH</Tag>): if its condition passes it fires and the workflow <strong>stops</strong> for that contact. Its child, <strong>2a</strong>, indents underneath and runs only when the branch fired — hence the “Stops workflow” chip and the “main path resumes if branch didn't fire” note.</li>
           <li>Step 3 carries a <strong>group</strong> label (<code>touch</code>): steps sharing a group name are mutually exclusive — only the first whose conditions pass runs.</li>
         </ul>
       </TourBox>
 
       <TourBox n={2} eyebrow="The right column" title="The step inspector" live={<InspectorSnippet />} flip wide>
-        <p>Click any step to open its inspector. At the top, rename it. Then the four <strong>step types</strong> — Email, Call, Task, Custom — switch what the step does (each reveals its own config below). The <strong>Branch step</strong> switch is a flag on <em>any</em> type: flip it on and the step becomes conditional and campaign-stopping when it fires.</p>
+        <p>Click any step to open its inspector. At the top, rename it. Then the four <strong>step types</strong> — Email, Call, Task, Custom — switch what the step does (each reveals its own config below). The <strong>Branch step</strong> switch is a flag on <em>any</em> type: flip it on and the step becomes conditional and workflow-stopping when it fires.</p>
         <ul>
           <li><strong>Group label</strong> — type a shared name to make sibling steps mutually exclusive (only the first matching one runs).</li>
           <li><strong>Branch membership</strong> (shown when an earlier branch exists) — assign a step to “Main path” or under a branch, which indents it as 1a / 1b.</li>
           <li><strong>Variation split</strong> — for an Email step whose template has variations, the same weighted sliders as Quick Send appear.</li>
         </ul>
-        <p>Click empty timeline space (deselect) and the inspector instead edits <strong>campaign defaults</strong>: name, Draft/Active/Paused status, the pacing range, suppressions, audience order, and a send cap.</p>
+        <p>Click empty timeline space (deselect) and the inspector instead edits <strong>workflow defaults</strong>: name, Draft/Active/Paused status, the pacing range, suppressions, audience order, and a send cap.</p>
       </TourBox>
 
       <TourBox n={3} eyebrow="On every step" title="The conditions builder" live={<ConditionsSnippet />} wide>
@@ -654,14 +654,14 @@ export function CampaignsPage() {
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Bring your own audience</div>
-          <p style={{ margin: 0 }}>The Campaign Manager doesn't pick contacts — you do. Build a precise list in <a href="#crm">CRM Search</a> / <a href="#crm-query">Query Builder</a> or <a href="#tasks">Task List</a>, select the rows, and choose <strong>Run campaign</strong>; those contacts become the audience. The audience count shows in the top bar.</p>
+          <p style={{ margin: 0 }}>The Workflow Manager doesn't pick contacts — you do. Build a precise list in <a href="#crm">CRM Search</a> / <a href="#crm-query">Query Builder</a> or <a href="#tasks">Task List</a>, select the rows, and choose <strong>Run workflow</strong>; those contacts become the audience. The audience count shows in the top bar.</p>
         </div>
       </div>
 
       <div className="docnote brand">
         <span className="dn-ico"><I.check size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Dry-run every campaign before going live</div>
+          <div className="dn-t">Dry-run every workflow before going live</div>
           <p style={{ margin: 0 }}>The <strong>Dry run</strong> toggle runs the whole flow against the real audience with zero sends and zero CRM writes — every step reports “Would email…”. Read a handful of per-contact results to confirm the routing is doing what you meant. It's the cheapest QA you'll ever do. One caveat: email/call-<em>history</em> signals (replied, days since last call…) are visible in the editor but <strong>not yet active</strong> — don't build branches around them yet.</p>
         </div>
       </div>

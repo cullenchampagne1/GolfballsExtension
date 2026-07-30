@@ -1,17 +1,16 @@
 {
-  "section": "Core Features / Campaigns",
+  "section": "Core Features / Workflows",
   "articles": [
     {
       "slug": "bulk-email-selection",
       "title": "Quick Send (Bulk Email)",
       "icon": "megaphone",
       "tiers": ["intermediate"],
-      "keywords": ["bulk", "blast", "quick send", "run campaign", "selected", "mass email", "delay", "pacing", "variation weights"],
+      "keywords": ["bulk", "blast", "quick send", "email selected", "mass email", "delay", "pacing", "variation weights"],
       "summary": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
-      "feature": "campaigns",
-      "flag": "campaignManagerEnabled",
+      "feature": "workflows",
+      "flag": null,
       "covers": ["email-runner"],
-      "tutorial": "run-campaign",
       "body": {
         "intermediate": [
           { "type": "p", "text": "Tick rows in Task List or CRM Search and the selection bar offers 'Email selected'. The Quick Send panel docks bottom-right with a big progress ring and three phases:" },
@@ -24,22 +23,22 @@
           { "type": "callout", "kind": "warning", "text": "Keep Chrome open until the ring completes. And with Power Automate off, every send opens an Outlook window instead — enable it before any real bulk run." }
         ]
       },
-      "related": ["campaign-manager", "how-email-sending-works", "crm-search", "task-list"]
+      "related": ["workflow-manager", "how-email-sending-works", "crm-search", "task-list"]
     },
     {
-      "slug": "campaign-manager",
-      "title": "Campaign Manager",
+      "slug": "workflow-manager",
+      "title": "Workflow Manager",
       "icon": "flow",
       "tiers": ["advanced"],
-      "keywords": ["campaign", "steps", "branch", "conditions", "pacing", "dry run", "sequence", "automation", "simulate", "send cap"],
+      "keywords": ["workflow", "steps", "branch", "conditions", "pacing", "dry run", "sequence", "automation", "simulate", "send cap"],
       "summary": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
-      "feature": "campaigns",
-      "flag": "campaignManagerEnabled",
-      "covers": ["campaign-manager"],
-      "tutorial": "run-campaign",
+      "feature": "workflows",
+      "flag": "workflowManagerEnabled",
+      "covers": ["workflow-manager"],
+      "tutorial": "run-workflow",
       "body": {
         "advanced": [
-          { "type": "p", "text": "Campaign Manager is a full-page editor in three columns: the campaign list (grouped Active / Drafts / Paused, with status dots and search), the flow timeline in the middle, and the inspector on the right. A stats strip along the bottom shows pacing, step count, gates, and validity, plus the Save campaign button." },
+          { "type": "p", "text": "Workflow Manager is a full-page editor in three columns: the workflow list (grouped Active / Drafts / Paused, with status dots and search), the flow timeline in the middle, and the inspector on the right. A stats strip along the bottom shows pacing, step count, gates, and validity, plus the Save workflow button." },
           { "type": "heading", "text": "Steps and the timeline" },
           { "type": "p", "text": "Steps run top to bottom, numbered 1, 2, 3…, joined by connector lines. Each step card shows its type icon, label, template or code summary, and a conditions preview ('if FIELD OP +N more'). Copy and trash icons duplicate/delete; click a card to edit it in the inspector." },
           { "type": "table", "headers": ["Step type", "Configuration"], "rows": [
@@ -50,11 +49,11 @@
           ] },
           { "type": "heading", "text": "Branches and groups" },
           { "type": "list", "items": [
-            "Branch step — flip the Branch toggle and the step becomes conditional: if its conditions pass, it fires and the campaign STOPS for that contact; if not, it's skipped and the main path continues. Child steps (assigned via 'Branch membership' in the inspector) indent under it as 1a, 1b… and only run when the branch fired.",
+            "Branch step — flip the Branch toggle and the step becomes conditional: if its conditions pass, it fires and the workflow STOPS for that contact; if not, it's skipped and the main path continues. Child steps (assigned via 'Branch membership' in the inspector) indent under it as 1a, 1b… and only run when the branch fired.",
             "Group label — steps sharing a group name are mutually exclusive: only the first whose conditions pass runs. Use it for 'send exactly one of these three pitches'.",
-            "Conditions — the same grouped AND/OR builder as everywhere else, over campaign signals: order count, days since last order, lifetime spend, has-ordered-brand, order-item-contains — plus schema fields and code expressions. (Email/call-history signals are visible but not yet active.)"
+            "Conditions — the same grouped AND/OR builder as everywhere else, over workflow signals: order count, days since last order, lifetime spend, has-ordered-brand, order-item-contains — plus schema fields and code expressions. (Email/call-history signals are visible but not yet active.)"
           ] },
-          { "type": "heading", "text": "Campaign defaults (click empty space to edit)" },
+          { "type": "heading", "text": "Workflow defaults (click empty space to edit)" },
           { "type": "table", "headers": ["Setting", "Detail"], "rows": [
             ["Status", "Draft / Active / Paused pills"],
             ["Pacing", "Delay-between-sends range slider (1–90s); shown as '~R sends per minute · runs only while the tab is open'"],
@@ -68,20 +67,20 @@
             "Dry run — the toggle next to Run. The full run executes against the real audience with 'Dry-run · nothing is sent' across the top: every step reports 'Would email…' / 'Would log call…' with zero sends and zero CRM writes.",
             "Run view — a live audience table: each contact's row shows their pipeline dots, current step, and a status badge (Queued / Running / Done / Skipped / Branch · stop / Suppressed / Failed), with Pause / Resume / Stop & edit controls and a progress bar."
           ] },
-          { "type": "callout", "kind": "bestPractice", "text": "Dry-run every campaign before going live, and read at least a handful of per-contact results — it is the cheapest QA you will ever do." }
+          { "type": "callout", "kind": "bestPractice", "text": "Dry-run every workflow before going live, and read at least a handful of per-contact results — it is the cheapest QA you will ever do." }
         ]
       },
-      "related": ["campaign-conditions", "bulk-email-selection", "query-builder", "code-variables"]
+      "related": ["workflow-conditions", "bulk-email-selection", "query-builder", "code-variables"]
     },
     {
-      "slug": "campaign-conditions",
-      "title": "Campaign Conditions & Signals",
+      "slug": "workflow-conditions",
+      "title": "Workflow Conditions & Signals",
       "icon": "branch",
       "tiers": ["advanced"],
       "keywords": ["condition", "signal", "rule", "and or", "criteria", "order count", "days since"],
       "summary": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
-      "feature": "campaigns",
-      "flag": "campaignManagerEnabled",
+      "feature": "workflows",
+      "flag": "workflowManagerEnabled",
       "covers": [],
       "body": {
         "advanced": [
@@ -91,10 +90,10 @@
             ["Schema", "Any contact/account field path — contact.email, account.id, orders[any].total with array quantifiers"],
             ["Code", "A JavaScript expression evaluated per contact in the sandbox — anything the other two can't express"]
           ] },
-          { "type": "callout", "kind": "info", "text": "Email/call-history signals (replied, days since last call, sent count…) exist in the editor but are marked not-ready — they'll activate in a future release. Don't build campaigns around them yet." }
+          { "type": "callout", "kind": "info", "text": "Email/call-history signals (replied, days since last call, sent count…) exist in the editor but are marked not-ready — they'll activate in a future release. Don't build workflows around them yet." }
         ]
       },
-      "related": ["campaign-manager", "code-variables", "query-builder"]
+      "related": ["workflow-manager", "code-variables", "query-builder"]
     }
   ]
 }

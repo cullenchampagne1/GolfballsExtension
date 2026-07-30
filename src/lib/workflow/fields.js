@@ -1,10 +1,10 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/fields.js — the campaign condition field catalog.
+   workflow/fields.js — the workflow condition field catalog.
 
    A step's run conditions are a matchEngine grouped tree. Each
    condition's `source` tells the resolver how to read its subject:
 
-     'signal' → a CRM-derived campaign signal (this catalog). The
+     'signal' → a CRM-derived workflow signal (this catalog). The
                 stateless engine recomputes these from the contact's
                 live CRM page every run, so a gate like
                   sent.subject contains "E2"  AND  replied = 0
@@ -47,7 +47,7 @@ export const SIGNAL_FIELDS = [
 
 export const SIGNAL_BY_ID = Object.fromEntries(SIGNAL_FIELDS.map((f) => [f.id, f]));
 
-/* The condition `source` values the campaign picker offers. */
+/* The condition `source` values the workflow picker offers. */
 export const CONDITION_SOURCES = [
   { id: 'signal', label: 'CRM signal' },
   { id: 'schema', label: 'Contact / account field' },

@@ -1,15 +1,15 @@
 # Custom Actions — authoring plan
 
-Let a rep write a small script (the same code-blocks engine campaigns use) and
+Let a rep write a small script (the same code-blocks engine workflows use) and
 have it appear as an **Action Shelf** item (and optionally a popup button). The
 canonical example: *"create a script that makes 5 tasks"* → it shows up in the
 action menu on contact pages; clicking it runs the script against the live page
-(behind the same confirm gate campaigns use).
+(behind the same confirm gate workflows use).
 
 This mirrors the existing **template pages**: a sidebar-listed sub-page in the
 Manage window whose *body* is the Code/Blocks editor instead of a rich-text box,
 plus **title / description / icon** inputs and a **page-type** selector chosen up
-front (which scopes what `page.*` exposes, exactly like campaigns).
+front (which scopes what `page.*` exposes, exactly like workflows).
 
 ---
 
@@ -23,9 +23,9 @@ front (which scopes what `page.*` exposes, exactly like campaigns).
 **Code engine** (`src/lib/codeEngine/*` + `src/ui/components/CodeAutomationPanel.jsx`, `BlocksView.jsx`, `CodeDocsSidebar.jsx`, `CodeVarEditor.jsx`):
 - `CodeAutomationPanel` is a **controlled display** — the parent owns code + sim state and feeds it `value/onChange`, `blocks/errors/blockCount` (from `translateProgram(source)`), `view/onView`, `onContext`, `bindings`, and the sim outputs `trace/runningId/done/result/error/simStatus`. It renders the Code⇆Blocks switch and cross-fades `CodeVarEditor`↔`BlocksView`.
 - `simulateProgram(source, page, { run, user, executor })` → `{ ok, trace, calls, error, result }`. Dry when `executor` is null; performs real writes when an executor is passed. Browser realm = `makeSandboxRunner({ exec: runInSandbox })` (opaque-origin iframe — works in the Manage window with **no CRM page present**).
-- `page` preserves the full schema extracted by `runEngine(document)` — including orders, items, activities, proofs, stats, account, ids, and future registered fields. Campaigns and live custom actions share one page-model shaper; only `contact`, `contacts`, and `tasks` receive execution-control overlays. Authoring uses a representative sample fixture per page type. `page.tasks.open[i].complete()`, direct approved task-field assignment, and `page.contact.field = v` all use grouped, confirm-gated writes.
+- `page` preserves the full schema extracted by `runEngine(document)` — including orders, items, activities, proofs, stats, account, ids, and future registered fields. Workflows and live custom actions share one page-model shaper; only `contact`, `contacts`, and `tasks` receive execution-control overlays. Authoring uses a representative sample fixture per page type. `page.tasks.open[i].complete()`, direct approved task-field assignment, and `page.contact.field = v` all use grouped, confirm-gated writes.
 - Contracts (all **confirm**-gated today): `sendEmail`, `createTask`, `logCall`, `completeTask`, `updateTask`, `editContact`. `APPROVED_CONTACT_FIELDS` and `APPROVED_TASK_FIELDS` are explicit allowlists. A custom action reuses the same `makeExecutor(deps)` and inherits these gates.
-- **No raw-DOM page context exists today.** Page types are fixed to order/contact/account/opportunity. A read-only DOM escape hatch (`h.dom/h.domAll/h.domText/h.doc`) exists in `page-engine/code-runtime.js` but is NOT on the campaign `page` surface — we'd wire a `page.dom` for the "custom" type.
+- **No raw-DOM page context exists today.** Page types are fixed to order/contact/account/opportunity. A read-only DOM escape hatch (`h.dom/h.domAll/h.domText/h.doc`) exists in `page-engine/code-runtime.js` but is NOT on the workflow `page` surface — we'd wire a `page.dom` for the "custom" type.
 
 ---
 
@@ -76,7 +76,7 @@ The **Settings `+`** simply calls `window.newAction()` (and fix the current icon
 
 ## 4. The authoring sub-page (`src/pages/CustomActionEditor.jsx`)
 
-Layout, top → bottom (centered `.ed-form` column like TemplateEditor, but the body fills like the campaign editor):
+Layout, top → bottom (centered `.ed-form` column like TemplateEditor, but the body fills like the workflow editor):
 
 1. **Header** — reuse `EditorHeader`: chosen icon tile · `name` · `pageType` badge · enable switch · **Delete**.
 2. **Meta row** — `Field`s:
@@ -84,8 +84,8 @@ Layout, top → bottom (centered `.ed-form` column like TemplateEditor, but the 
    - **Description** (`Input`/`Textarea`, one line) → becomes the shelf action's hint.
    - **Icon** (new `IconPicker` — a compact grid of curated `I` glyphs; stores the icon key).
    - **Page type** (`Segmented`: Order · Contact · Account · Custom). Changing it: (a) sets the sample fixture + `page.*` scope, (b) sets the CodeVarEditor `typeId`, (c) resets the default `pages` for the shelf (`contact`→`['contact']`, `custom`→`['*']`).
-3. **Body** — `CodeAutomationPanel` (Code⇆Blocks), filling to the bottom, with a **contextual right sidebar** = `CodeDocsSidebar` (Code) — same as campaigns. Source is auto-saved (debounced) via `window.__gbSaveAction(build())`.
-4. **Test toolbar** (trimmed campaign `TopBar`): a **"Simulate"** button that runs `simulateProgram(source, samplePage, { run: makeSandboxRunner({exec: runInSandbox}), user })` **dry** and lights up the blocks/trace — no writes, no live page needed. (No audience/real-run here; the real run happens from the shelf.) A page-type-appropriate **sample fixture** drives it.
+3. **Body** — `CodeAutomationPanel` (Code⇆Blocks), filling to the bottom, with a **contextual right sidebar** = `CodeDocsSidebar` (Code) — same as workflows. Source is auto-saved (debounced) via `window.__gbSaveAction(build())`.
+4. **Test toolbar** (trimmed workflow `TopBar`): a **"Simulate"** button that runs `simulateProgram(source, samplePage, { run: makeSandboxRunner({exec: runInSandbox}), user })` **dry** and lights up the blocks/trace — no writes, no live page needed. (No audience/real-run here; the real run happens from the shelf.) A page-type-appropriate **sample fixture** drives it.
 
 Sample fixtures (`src/lib/codeEngine/samplePages.js`): representative `{ contact, tasks, … }` per page type so blocks render and helpers resolve during authoring.
 
@@ -93,7 +93,7 @@ Sample fixtures (`src/lib/codeEngine/samplePages.js`): representative `{ contact
 
 ## 5. Page-type scoping + the "custom" mode
 
-- **order / contact / account** → `page.*` scoped to that type (same object the campaign engine builds). At authoring time it's the sample fixture; at **run** time it's `runEngine(document)` of the live page. Default shelf `pages` = that type.
+- **order / contact / account** → `page.*` scoped to that type (same object the workflow engine builds). At authoring time it's the sample fixture; at **run** time it's `runEngine(document)` of the live page. Default shelf `pages` = that type.
 - **custom** → runs on **any page** with `page.*` (where available) + the gated `actions.*` library. Default shelf `pages` = `['*']`.
   - **Raw DOM access is DEFERRED (architectural).** Scripts execute inside an opaque-origin sandbox iframe (read-only, isolated) so they cannot query the live CRM DOM at run time — even a live run records intent in the sandbox and replays writes content-side. Giving a custom action real `page.dom(...)` access would require running it **content-side, outside the sandbox** (arbitrary code with page + network access) — a security-posture change held for an explicit decision. Until then "custom" = any-page + `actions.*`/`page.*`.
 
@@ -118,8 +118,8 @@ Task List rows are available as both `page.entryPoint.data.tasks` and the
 convenience collection `page.tasks.items`. Assigning `subject`, `description`
 (`body` alias), `liveDate`, `dueDate`, `categoryId`, or `priority` directly on
 a row stages one grouped task update. Snake-case aliases are accepted. The
-same proxy is installed on campaign `page.tasks.open` / `done`, so code can
-move between custom actions and campaigns without changing its task logic.
+same proxy is installed on workflow `page.tasks.open` / `done`, so code can
+move between custom actions and workflows without changing its task logic.
 See `docs/examples/task-list-live-date-action.js` for a complete bulk date
 action.
 
@@ -138,7 +138,7 @@ into the CRM task template.
 - **`runCustomAction(rec)`** (the gated, money-touching part):
   1. Freshly extract `runEngine(document)` and shape it through the shared full-schema page model.
   2. Dry preview: `simulateProgram(rec.source, page, { run: makeSandboxRunner({exec: runInSandbox}), user })` → `planRun(trace)`.
-  3. If it has effects → show a **confirm** (reuse the campaign `ConfirmRunModal` / a lightweight page-mounted confirm) summarizing e.g. "Will create 5 tasks."
+  3. If it has effects → show a **confirm** (reuse the workflow `ConfirmRunModal` / a lightweight page-mounted confirm) summarizing e.g. "Will create 5 tasks."
   4. On confirm → `simulateProgram(rec.source, page, { …, executor: makeExecutor(liveDeps) })` where `liveDeps` = the real writers (`emailSender.sendEmail`, `submitQuickTask`, `submitCallLog`, `completeTaskById`, `updateTaskById`, `crmUpdateContact`) + `ctx` ids from the page — the exact wiring `makeContactExecutor` already does.
 - **Popup**: actions with `showInPopup` join the popup Tools list; the button launches via the existing `GB_RUN_SHELF_ACTION` bridge (already built), which runs the registered handler on the tab.
 
@@ -163,6 +163,6 @@ Build the source, `npm run build`, keep the suite green, and commit per phase.
 
 1. **Editor home:** Manage-window sub-page + a new sidebar **"Actions" tab** (mirrors templates), with the Settings table `+`/rows as the other entry. OK?
 2. **"Custom" mode = read-only DOM** (`page.dom`) + gated `actions.*` writes (recommended, safe). Or do you want true raw read+write DOM behind a hard gate?
-3. **Execution:** one click → **confirm dialog** for any remote/money effect (reuse the campaign confirm), then run. OK?
+3. **Execution:** one click → **confirm dialog** for any remote/money effect (reuse the workflow confirm), then run. OK?
 4. **Scope config** lives on the action record (`pages/showInShelf/showInPopup`), edited in the Settings table + the row's editor. OK?
 5. **Icon set:** a curated subset of the existing `I` glyphs. OK, or do you want image/emoji icons too?

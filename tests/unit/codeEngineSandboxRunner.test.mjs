@@ -36,7 +36,7 @@ describe('sandboxRunner · body shape', () => {
     assert.ok(/return\b/.test(body));
   });
 
-  it('allows multi-function campaign bodies while retaining a shared paste-bomb cap', () => {
+  it('allows multi-function workflow bodies while retaining a shared paste-bomb cap', () => {
     const oldLimitPlusOne = 'x'.repeat(8193);
     assert.equal(codeBodyLengthError(oldLimitPlusOne), null);
     assert.equal(codeBodyLengthError('x'.repeat(MAX_CODE_BODY_LENGTH)), null);

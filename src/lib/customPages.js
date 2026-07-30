@@ -1,21 +1,20 @@
 /* ───────────────────────────────────────────────────────────────
    customPages.js — registry of internal site pages the extension can
-   override with a custom UI. Each section has a stable id (used as
-   the storage key) plus a list of pages keyed by stable id.
+   override with a custom UI. The one generic Custom Pages switch owns
+   every registered custom page, regardless of the host product area.
 
    Storage shape:
      chrome.storage.local.customPages = {
-       crm: ['dashboard', 'search', …],
-       // other sections later
+       all: ['dashboard', 'search', …],
      }
 ─────────────────────────────────────────────────────────────── */
 
 export const CUSTOM_PAGE_SECTIONS = [
   {
-    id: 'crm',
-    label: 'CRM',
-    /* CRM admin sidebar items, captured from the Contact Details
-       design handoff. Order matches the live sidebar. */
+    id: 'all',
+    label: 'Custom Pages',
+    /* Every registered takeover. This remains one switch as pages expand
+       beyond the current CRM admin set. */
     items: [
       { id: 'dashboard',           label: 'Dashboard' },
       { id: 'search',              label: 'Search' },
@@ -39,11 +38,26 @@ export const CUSTOM_PAGE_SECTIONS = [
 ];
 
 export const STORAGE_KEY = 'customPages';
+const LEGACY_SCOPE_ID = 'crm';
 
 export function emptyCustomPages() {
   const out = {};
   for (const s of CUSTOM_PAGE_SECTIONS) out[s.id] = [];
   return out;
+}
+
+/** Collapse old per-product scope data into the one all-pages control. */
+export function normalizeStoredCustomPages(value) {
+  const saved = value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : {};
+  const section = CUSTOM_PAGE_SECTIONS[0];
+  const current = Array.isArray(saved[section.id]) ? saved[section.id] : null;
+  const legacy = Array.isArray(saved[LEGACY_SCOPE_ID]) ? saved[LEGACY_SCOPE_ID] : [];
+  const enabled = (current || legacy).length > 0;
+  const pages = { [section.id]: enabled ? section.items.map((item) => item.id) : [] };
+  const changed = JSON.stringify(saved) !== JSON.stringify(pages);
+  return { pages, changed };
 }
 
 export function loadCustomPages() {
@@ -53,13 +67,14 @@ export function loadCustomPages() {
       return;
     }
     chrome.storage.local.get(STORAGE_KEY, (d) => {
-      const saved = d[STORAGE_KEY] || {};
-      resolve({ ...emptyCustomPages(), ...saved });
+      const { pages, changed } = normalizeStoredCustomPages(d[STORAGE_KEY]);
+      if (changed) chrome.storage.local.set({ [STORAGE_KEY]: pages });
+      resolve(pages);
     });
   });
 }
 
 export function saveCustomPages(pages) {
   if (typeof chrome === 'undefined' || !chrome.storage) return;
-  chrome.storage.local.set({ [STORAGE_KEY]: pages });
+  chrome.storage.local.set({ [STORAGE_KEY]: normalizeStoredCustomPages(pages).pages });
 }

@@ -76,7 +76,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
     def test_action_targets_come_only_from_live_registries(self):
         routes = set(self.descriptor["guide_routes"])
         self.assertIn("#manual/margin-calculator", routes)
-        self.assertIn("#workflows/run-campaign", routes)
+        self.assertIn("#workflows/run-workflow", routes)
         self.assertIn("crmSearch", self.descriptor["shortcut_targets"])
         margin = self.by_id["registry:devSetting:marginCalc.minAllowedMargin"]
         self.assertEqual(margin["setting_keys"], ["marginCalc.minAllowedMargin"])
@@ -169,12 +169,12 @@ class HelpAgentCorpusTests(unittest.TestCase):
             self.assertEqual(
                 margin[0]["id"], "registry:devSetting:marginCalc.minAllowedMargin"
             )
-            campaign = manager.retrieve(
-                self.descriptor["id"], "How do I safely send a bulk campaign?",
+            workflow = manager.retrieve(
+                self.descriptor["id"], "How do I safely send a bulk workflow?",
                 edition="admin", limit=5,
             )
             self.assertIn(
-                "guide:tutorial:run-campaign", {row["id"] for row in campaign}
+                "guide:tutorial:run-workflow", {row["id"] for row in workflow}
             )
             email_preview = manager.retrieve(
                 self.descriptor["id"],

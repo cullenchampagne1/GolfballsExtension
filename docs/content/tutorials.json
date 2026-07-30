@@ -108,20 +108,20 @@
       "related": ["image-viewer", "submit-proof", "mockup-composer"]
     },
     {
-      "id": "run-campaign",
-      "title": "Run a bulk campaign",
+      "id": "run-workflow",
+      "title": "Run a bulk workflow",
       "tier": "advanced",
       "estMinutes": 8,
-      "prerequisites": ["campaignManagerEnabled is on", "Power Automate strongly recommended for real sends"],
+      "prerequisites": ["workflowManagerEnabled is on", "Power Automate strongly recommended for real sends"],
       "steps": [
-        { "action": "Press Ctrl+K, search or apply a saved query, and tick the rows you want.", "expected": "A selection summary bar appears with campaign actions.", "visualCue": "Summary bar above the results.", "tip": "Build the audience as a saved query first (Query Builder) so you can verify and reuse it." },
-        { "action": "Click Run Campaign.", "expected": "The Campaign Runner opens over your selection.", "visualCue": "" },
-        { "action": "Pick a template and Preview one recipient.", "expected": "Variables resolve against that contact's real data.", "visualCue": "Preview pane.", "commonMistake": "Skipping preview — one bad variable repeats across the whole list." },
-        { "action": "Click Send All and watch the progress bar.", "expected": "Each contact opens in a background tab, resolves, sends, closes — with randomized pacing. Failures collect for retry.", "visualCue": "Per-recipient progress list.", "warning": "Keep Chrome open until it finishes. With Power Automate off, every send opens an Outlook window instead." },
-        { "action": "For multi-step sequences, open Campaign Manager: add steps (email → task → conditional email), set grouped AND/OR conditions and pacing.", "expected": "The campaign saves as a draft you can run against any audience.", "visualCue": "Step editor with condition cards." },
-        { "action": "Dry-run the campaign before going live.", "expected": "Full simulation per contact — conditions, routing, resolved templates — with zero emails sent and zero CRM writes.", "visualCue": "Dry-run toggle.", "tip": "Read the simulation for at least a handful of contacts; it's the cheapest QA you'll ever do." }
+        { "action": "Press Ctrl+K, search or apply a saved query, and tick the rows you want.", "expected": "A selection summary bar appears with workflow actions.", "visualCue": "Summary bar above the results.", "tip": "Build the audience as a saved query first (Query Builder) so you can verify and reuse it." },
+        { "action": "Click Run Workflow.", "expected": "Workflow Manager opens with the selected rows loaded as the audience.", "visualCue": "Audience count in the top bar." },
+        { "action": "Choose a saved workflow or create one, then add and configure its steps.", "expected": "The timeline shows each email, task, call, or custom step in execution order.", "visualCue": "Step cards in the center timeline.", "commonMistake": "Use Email selected—not Run Workflow—when you only want the separate Quick Send bulk-email panel." },
+        { "action": "Click Simulate and inspect at least one selected contact.", "expected": "The trace shows conditions, routing, resolved templates, and planned actions without CRM writes.", "visualCue": "Simulation trace in Workflow Manager." },
+        { "action": "Turn on Dry run and click Dry run.", "expected": "The full selected audience is processed with zero emails sent and zero CRM writes.", "visualCue": "Dry run status and audience progress.", "tip": "Review several contacts before a live pass; it is the cheapest QA available." },
+        { "action": "Turn Dry run off and click Run workflow.", "expected": "The workflow runs once for each selected account or contact, with live progress and pause/resume controls.", "visualCue": "Workflow run progress.", "warning": "Keep Chrome open until the run completes." }
       ],
-      "related": ["bulk-email-selection", "campaign-manager", "query-builder"]
+      "related": ["bulk-email-selection", "workflow-manager", "query-builder"]
     },
     {
       "id": "import-supplier",
@@ -173,9 +173,9 @@
         { "action": "Press Ctrl+K, then click the filter button.", "expected": "The Query Builder opens.", "visualCue": "Filter icon next to the search bar." },
         { "action": "Add conditions: pick a field, an operator, a value. Group them with AND/OR.", "expected": "Example: state is TX AND (order count > 5 OR YTD > 2000).", "visualCue": "Condition rows with group brackets." },
         { "action": "Click Apply.", "expected": "Results update to the matching contacts/accounts.", "visualCue": "" },
-        { "action": "Click Save and name the query.", "expected": "It appears in your saved queries for one-click reuse — and as a campaign audience.", "visualCue": "Saved queries list.", "tip": "Verify the audience visually here before ever pointing a campaign at it." }
+        { "action": "Click Save and name the query.", "expected": "It appears in your saved queries for one-click reuse — and as a workflow audience.", "visualCue": "Saved queries list.", "tip": "Verify the audience visually here before ever pointing a workflow at it." }
       ],
-      "related": ["query-builder", "crm-search", "run-campaign"]
+      "related": ["query-builder", "crm-search", "run-workflow"]
     },
     {
       "id": "handle-customer-reply",
@@ -228,7 +228,7 @@
       "steps": [
         { "action": "Open CRM Search with Ctrl/Cmd+K, then expand the Actions Shelf.", "expected": "CRM Search's modal-specific actions join the shelf.", "visualCue": "Run last query and Scan for recent orders." },
         { "action": "Choose Scan for recent orders.", "expected": "The saved My Clients audience is searched for orders since the prior scan; the first run covers seven days.", "visualCue": "Progress and result count appear in CRM Search.", "commonMistake": "A differently named query is not used. Save it as exactly My Clients." },
-        { "action": "Inspect the results before selecting, exporting, emailing, or starting a campaign.", "expected": "Only the records you intentionally select move into a bulk action.", "visualCue": "Selection summary appears after checking rows." },
+        { "action": "Inspect the results before selecting, exporting, emailing, or starting a workflow.", "expected": "Only the records you intentionally select move into a bulk action.", "visualCue": "Selection summary appears after checking rows." },
         { "action": "Run the scan again on a later day.", "expected": "It continues from the successful local watermark instead of repeating the original seven-day window.", "visualCue": "Advanced recovery: __gbScan.status() inspects the clock; __gbScan.reset() clears it." }
       ],
       "related": ["recent-orders-scan", "crm-search", "query-builder"]

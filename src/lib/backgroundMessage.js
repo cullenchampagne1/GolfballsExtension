@@ -34,7 +34,7 @@ export function sendBackgroundMessage(action, payload = {}) {
 
 /**
  * Adapter for older helpers that accept one `{ action, ...payload }` object.
- * The campaign context/email helpers use this dispatcher shape, while the
+ * The workflow context/email helpers use this dispatcher shape, while the
  * canonical boundary above intentionally uses `(action, payload)`.
  */
 export function dispatchBackgroundMessage(message = {}) {

@@ -2351,7 +2351,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  // ── Keepalive ping — prevents service worker from going idle during campaign delays ──
+  // ── Keepalive ping — prevents service worker from going idle during workflow delays ──
   if (msg.action === 'ping') {
     sendResponse({ ok: true });
     return true;

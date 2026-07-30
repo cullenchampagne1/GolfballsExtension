@@ -1,5 +1,5 @@
 /**
- * Account-page extraction primitives used by account campaign hydration.
+ * Account-page extraction primitives used by account workflow hydration.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';

@@ -31,7 +31,7 @@ export const FEATURE_DEFAULTS = {
   quickTaskEnabled:         true,   // Quick Task modal + shelf action
   crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
   textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
-  campaignManagerEnabled:   true,   // React Campaign Manager surface (replaces the legacy vanilla editor)
+  workflowManagerEnabled:   true,   // Single-pass account Workflow Manager
   notificationsEnabled:        true,   // targeted messages + completion alerts
 };
 // NOTE: the 3D golfball viewer is part of the Image Viewer (it renders inside
@@ -64,7 +64,7 @@ export const FEATURE_FLAGS = [
   { key: 'orderEditEnabled',      section: 'Email & Templates', name: 'Order Edit',        desc: 'Order Edit button in the email popup.',                               icon: 'edit' },
   { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Click email rows in Case Email History to open the full thread.',     icon: 'mail' },
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
-  { key: 'campaignManagerEnabled', section: 'Email & Templates', name: 'Campaign Manager', desc: 'Multi-step campaign automation (from CRM Search / Tasks).',            icon: 'megaphone' },
+  { key: 'workflowManagerEnabled', section: 'Workflows', name: 'Workflow Manager', desc: 'Run one reusable set of steps for each selected account or contact.', icon: 'megaphone' },
   { key: 'notificationsEnabled', section: 'Tools', name: 'Notifications', desc: 'Receive targeted messages and completion alerts in the toolbar notification center.', icon: 'alert' },
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
@@ -87,22 +87,43 @@ export const FEATURE_FLAGS = [
   { key: 'actionsShelfEnabled', section: 'Tools', name: 'Quick Actions Shelf',  desc: 'Floating bottom-right quick-actions shelf (Shift×2).', icon: 'bolt' },
 ];
 
+const LEGACY_WORKFLOW_FLAG = 'campaignManagerEnabled';
+
+/** Canonicalize stored flags without mutating the storage result. */
+export function normalizeStoredFlags(value) {
+  const flags = value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...value }
+    : {};
+  let changed = false;
+  if (!Object.hasOwn(flags, 'workflowManagerEnabled')
+      && typeof flags[LEGACY_WORKFLOW_FLAG] === 'boolean') {
+    flags.workflowManagerEnabled = flags[LEGACY_WORKFLOW_FLAG];
+    changed = true;
+  }
+  if (Object.hasOwn(flags, LEGACY_WORKFLOW_FLAG)) {
+    delete flags[LEGACY_WORKFLOW_FLAG];
+    changed = true;
+  }
+  for (const key of [
+    'powerAutomateUrl', 'directSendUrl', 'replyWithTemplateEnabled',
+    'directSendEnabled', 'developerMode', 'crmQueryBuilderEnabled',
+  ]) {
+    if (Object.hasOwn(flags, key)) {
+      delete flags[key];
+      changed = true;
+    }
+  }
+  return { flags, changed };
+}
+
 /** Read saved flags merged over the defaults. Migrates legacy key names. */
 export function loadFlags() {
   return new Promise((resolve) => {
     try {
       chrome.storage.local.get('featureFlags', (d) => {
-        const saved = d.featureFlags || {};
-        // Bearer-style URLs migrate through credentials.js. Do not broadcast
-        // or return them as feature flags.
-        delete saved.powerAutomateUrl;
-        delete saved.directSendUrl;
-        // Strip phased-out keys so they do not bloat storage.
-        delete saved.replyWithTemplateEnabled;
-        delete saved.directSendEnabled;
-        delete saved.developerMode;
-        delete saved.crmQueryBuilderEnabled;   // retired — was for an old DOM-injected button
-        resolve({ ...FEATURE_DEFAULTS, ...saved });
+        const { flags, changed } = normalizeStoredFlags(d.featureFlags);
+        if (changed) chrome.storage.local.set({ featureFlags: flags });
+        resolve({ ...FEATURE_DEFAULTS, ...flags });
       });
     } catch {
       resolve({ ...FEATURE_DEFAULTS });
@@ -113,9 +134,7 @@ export function loadFlags() {
 /** Persist flags and broadcast them to open golfballs.com tabs. */
 export function saveFlags(flags) {
   try {
-    const safeFlags = { ...flags };
-    delete safeFlags.powerAutomateUrl;
-    delete safeFlags.directSendUrl;
+    const { flags: safeFlags } = normalizeStoredFlags(flags);
     chrome.storage.local.set({ featureFlags: safeFlags });
     chrome.tabs.query({ url: ['https://www.golfballs.com/*', 'https://api.golfballs.com/*'] }, (tabs) => {
       (tabs || []).forEach((t) => {

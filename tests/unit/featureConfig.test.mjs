@@ -41,8 +41,8 @@ describe('featureRegistry · surfaces', () => {
     assert.deepEqual(phone.surfaces.shelf.pages, ['contact']);
   });
 
-  it('demotes Campaign Manager to a toggle (opened only from CRM Search / Tasks)', () => {
-    const cm = featureByKey('campaignManagerEnabled');
+  it('demotes Workflow Manager to a toggle (opened only from CRM Search / Tasks)', () => {
+    const cm = featureByKey('workflowManagerEnabled');
     assert.equal(cm.surfaces.popup, false);
     assert.equal(cm.surfaces.shelf, null);
   });

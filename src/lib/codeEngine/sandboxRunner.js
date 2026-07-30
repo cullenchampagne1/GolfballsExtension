@@ -73,7 +73,7 @@ export function buildTraceBody(instrumentedCode) {
     '};',
     // Page control (mirror of simulate.js): grouped contact/task edits and
     // completion intents. Modal entry-point task arrays use the same proxy as
-    // campaign page.tasks.open/done.
+    // workflow page.tasks.open/done.
     'const __approved = (ctx && ctx.approvedFields) || [];',
     'const __approvedTask = (ctx && ctx.approvedTaskFields) || {};',
     'const __taskEdits = Object.create(null);',

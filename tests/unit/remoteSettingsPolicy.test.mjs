@@ -22,8 +22,16 @@ before(async () => {
   const policySource = await readFile(new URL('lib/remote-settings-policy.js', root), 'utf8');
 
   stored = {
-    featureFlags: { copyIdsEnabled: false, personalUnknownFlag: true },
-    devSettings: { 'numberDisplay.durationMs': 777, 'email.localPart': 'local.user' },
+    featureFlags: {
+      copyIdsEnabled: false,
+      personalUnknownFlag: true,
+      campaignManagerEnabled: false,
+    },
+    devSettings: {
+      'numberDisplay.durationMs': 777,
+      'email.localPart': 'local.user',
+      'campaignManager.scale': 0.75,
+    },
     customPages: { crm: ['contact_details'] },
   };
   alarms = [];
@@ -82,8 +90,10 @@ before(async () => {
     },
   };
   configuration.features.copyIdsEnabled = { value: false, hidden: true, managed: true };
+  configuration.features.workflowManagerEnabled = { value: true, hidden: false, managed: false };
   configuration.developer_settings['numberDisplay.durationMs'] = { value: 400, hidden: true, managed: true };
-  configuration.custom_pages.scopes.crm = { value: true, hidden: true, managed: true };
+  configuration.developer_settings['workflowManager.scale'] = { value: 1.2, hidden: false, managed: false };
+  configuration.custom_pages.scopes.all = { value: true, hidden: true, managed: true };
 
   let payload = { schema_version: 1, admin_bypass: false, revision: 'a'.repeat(64), configuration };
   setPayload = (next) => { payload = next; };
@@ -97,12 +107,19 @@ describe('remote settings policy', () => {
     assert.equal(stored.featureFlags.copyIdsEnabled, false);
     assert.equal(stored.devSettings['numberDisplay.durationMs'], 400);
     assert.equal(stored.devSettings['email.localPart'], 'local.user', 'unmanaged identity must stay local');
+    assert.equal(stored.featureFlags.workflowManagerEnabled, false, 'renamed unmanaged flag keeps its local value');
+    assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'renamed unmanaged setting keeps its local value');
+    assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);
+    assert.equal(Object.hasOwn(stored.devSettings, 'campaignManager.scale'), false);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
-    assert.equal(stored.gbRemoteSettingsPolicy.hiddenCustomPageScopes.crm, true);
-    assert.deepEqual(Array.from(stored.customPages.crm), registry.customPageScopes.crm.pageIds);
+    assert.equal(stored.gbRemoteSettingsPolicy.hiddenCustomPageScopes.all, true);
+    assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds);
+    assert.equal(Object.hasOwn(stored.customPages, 'crm'), false);
     assert.equal(Object.hasOwn(stored, 'secret_settings'), false);
     assert.equal(stored.gbRemoteSettingsBackup.featureFlags.copyIdsEnabled, false);
+    assert.equal(stored.gbRemoteSettingsBackup.featureFlags.workflowManagerEnabled, false);
+    assert.equal(Object.hasOwn(stored.gbRemoteSettingsBackup.featureFlags, 'campaignManagerEnabled'), false);
     assert.ok(alarms.some(({ options }) => options.periodInMinutes === 1));
   });
 
@@ -111,7 +128,7 @@ describe('remote settings policy', () => {
     configuration.custom_pages.hidden = true;
     setPayload({ schema_version: 1, admin_bypass: false, revision: 'c'.repeat(64), configuration });
     await context.GBRemoteSettingsPolicy.sync();
-    assert.deepEqual(Array.from(stored.customPages.crm), [], 'global custom-pages disable wins over enabled scopes');
+    assert.deepEqual(Array.from(stored.customPages.all), [], 'global custom-pages disable wins over enabled scopes');
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenCustomPages, true);
   });
 
@@ -120,7 +137,9 @@ describe('remote settings policy', () => {
     await context.GBRemoteSettingsPolicy.sync();
     assert.equal(stored.featureFlags.copyIdsEnabled, false);
     assert.equal(stored.devSettings['numberDisplay.durationMs'], 777, 'admin bypass restores pre-policy values');
-    assert.deepEqual(stored.customPages.crm, ['contact_details'], 'admin bypass restores pre-policy scope choices');
+    assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds, 'admin bypass restores the canonical all-pages choice');
+    assert.equal(stored.featureFlags.workflowManagerEnabled, false);
+    assert.equal(stored.devSettings['workflowManager.scale'], 0.75);
     assert.equal(stored.gbRemoteSettingsPolicy.adminBypass, true);
     assert.equal(Object.hasOwn(stored, 'gbRemoteSettingsBackup'), false);
   });

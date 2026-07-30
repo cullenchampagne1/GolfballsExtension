@@ -2,7 +2,7 @@
    customActions — user-authored shelf actions.
 
    A rep writes a small script in the code-blocks engine (the same one
-   campaigns use) and it becomes an Action Shelf item (and optionally a
+   workflows use) and it becomes an Action Shelf item (and optionally a
    popup button). Each record carries its own surface config (pages /
    showInShelf / showInPopup) — that's why custom actions live in the
    Settings "Custom Actions" table while built-in features live in their

@@ -1,7 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/engine.js — the paced, condition-gated run engine.
+   workflow/engine.js — the paced, condition-gated run engine.
 
-   Walks the audience one contact at a time (campaign-wide pacing so a
+   Walks the audience one contact at a time (workflow-wide pacing so a
    blast stays human). For each contact it builds a live context and
    walks the steps in order:
 
@@ -24,10 +24,10 @@ import { evalTree } from '../matchEngine.js';
 import { buildContactContext } from './context.js';
 import { runStepAction } from './actions.js';
 import {
-  campaignActionCap,
-  campaignPaceMs,
-  campaignSuppressionReason,
-  orderCampaignAudience,
+  workflowActionCap,
+  workflowPaceMs,
+  workflowSuppressionReason,
+  orderWorkflowAudience,
 } from './runPolicy.js';
 
 const noop = () => {};
@@ -52,9 +52,9 @@ async function waitWhilePaused(control) {
 }
 
 /**
- * Run a campaign against an audience.
+ * Run a workflow against an audience.
  *
- * @param opts.campaign   { steps, paceDelay, paceJitter, ... }
+ * @param opts.workflow   { steps, paceDelay, paceJitter, ... }
  * @param opts.audience   contact[] (each: { contactUrl, contactId?, name?, email? })
  * @param opts.lookupTemplate (storeKind:'email'|'call'|'task', templateId) => templateObj|null
  * @param opts.deps       { rep, emailConfig, signature, fromLocalPart, dispatch, dryRun?, signalScrapers? }
@@ -62,8 +62,8 @@ async function waitWhilePaused(control) {
  * @param opts.on         { contactStart, stepResult, contactDone, progress, complete }
  * @returns {Promise<{ stopped:boolean, results: object[] }>}
  */
-export async function runCampaign({ campaign, audience, lookupTemplate, deps = {}, control = {}, on = {} }) {
-  const steps = Array.isArray(campaign?.steps) ? campaign.steps : [];
+export async function runWorkflow({ workflow, audience, lookupTemplate, deps = {}, control = {}, on = {} }) {
+  const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
   const onContactStart = on.contactStart || noop;
   const onStepResult = on.stepResult || noop;
   const onContactDone = on.contactDone || noop;
@@ -74,8 +74,8 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
   // can supply a context without a live CRM fetch; defaults to the real one.
   const makeContext = deps.buildContext || buildContactContext;
 
-  const ordered = orderCampaignAudience(audience, campaign?.audienceOrder);
-  const sendCap = campaignActionCap(campaign);
+  const ordered = orderWorkflowAudience(audience, workflow?.audienceOrder);
+  const sendCap = workflowActionCap(workflow);
   const results = [];
   const total = ordered.length;
   let prevDidWork = false; // pace only between contacts that actually ran a step
@@ -91,7 +91,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
     // Pace between contacts that actually ran a step (dry-run paces too so
     // the run view's cascade stays watchable as a preview).
     if (i > 0 && prevDidWork) {
-      const r = await sleep(campaignPaceMs(campaign), control);
+      const r = await sleep(workflowPaceMs(workflow), control);
       if (r === 'stopped') break;
     }
 
@@ -103,7 +103,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
 
     // Suppression — skip the whole contact (bounced / mailer-removed) before
     // any step runs.
-    const suppressReason = campaignSuppressionReason(campaign, ctx);
+    const suppressReason = workflowSuppressionReason(workflow, ctx);
     if (suppressReason) {
       const summary = { contact, contactId: ctx.contactId, ran: 0, skipped: 0, failed: 0, suppressed: true, suppressReason, stoppedAtBranch: false, error: ctx.error, steps: [] };
       results.push(summary);

@@ -1,8 +1,8 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/templateEvaluation — evaluate a saved code-template reference
+   workflow/templateEvaluation — evaluate a saved code-template reference
    against one hydrated audience record.
 
-   Campaign code runs in an isolated iframe, so saved references cross that
+   Workflow code runs in an isolated iframe, so saved references cross that
    boundary as data. This adapter uses the same variable resolver and renderer
    as Email Runner before handing a plain outbound object back to the sandbox.
 ─────────────────────────────────────────────────────────────── */
@@ -44,7 +44,7 @@ async function resolveAgainstContext(context, vars, toField, resolveVariables) {
  * createTask / logCall. Email variables and recipient selection are resolved
  * from the exact same fetched contact document used to build page.contact.
  */
-export async function evaluateCampaignTemplate(
+export async function evaluateWorkflowTemplate(
   reference,
   context,
   { resolveVariables } = {},

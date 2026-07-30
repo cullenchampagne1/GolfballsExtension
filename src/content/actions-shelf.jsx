@@ -734,7 +734,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
 
   /* Standalone "always-available" launchers (CRM Search, Task List, Gifting,
      Mockup Studio, Image Viewer, Watchlist, Notifications, New Contact,
-     Campaigns, Margin Calc) are now generated from the registry and gated by
+     Workflows, Margin Calc) are now generated from the registry and gated by
      featureConfig per page — see syncStandaloneActions(), driven from
      syncContext(). Feature-flag + surface-config changes both re-run it. */
   loadFlags().then((f) => {

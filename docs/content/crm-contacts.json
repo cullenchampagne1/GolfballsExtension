@@ -7,7 +7,7 @@
       "icon": "search",
       "tiers": ["beginner", "intermediate", "advanced"],
       "keywords": ["search", "ctrl k", "find contact", "account", "lookup", "customer", "index", "typeahead"],
-      "summary": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
+      "summary": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for workflows.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "shortcut": "Ctrl+K",
@@ -21,9 +21,9 @@
           { "type": "heading", "text": "The local index" },
           { "type": "p", "text": "The index is what makes repeat name searches instant. After a server search, an 'Index all N' / 'Index these N' button stores normalized names plus encrypted CRM details. Encryption keys are created automatically on the device, so there is no setup or server call. Only the highest-ranked visible results are decrypted. A Clear index button removes the encrypted cache; Enter always remains available for live server search." },
           { "type": "heading", "text": "Selections and bulk actions" },
-          { "type": "p", "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input." },
+          { "type": "p", "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run workflow, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input." },
           { "type": "heading", "text": "Importing Excel or CSV lists" },
-          { "type": "p", "text": "Import list accepts .xlsx or .csv rows with contact_id or account_id plus either account_name, a full name, or first_name/last_name. Email is optional: when it is blank, Email selected and campaign runs open the matching CRM page and let the page engine resolve the recipient and template variables. Non-empty malformed email values are rejected instead of silently used." }
+          { "type": "p", "text": "Import list accepts .xlsx or .csv rows with contact_id or account_id plus either account_name, a full name, or first_name/last_name. Email is optional: when it is blank, Email selected and workflow runs open the matching CRM page and let the page engine resolve the recipient and template variables. Non-empty malformed email values are rejected instead of silently used." }
         ],
         "advanced": [
           { "type": "p", "text": "The Query Builder button adds structured filters; active filters render as removable tags above the results. See the Query Builder article for the full field and operator catalog." }
@@ -46,13 +46,13 @@
         "intermediate": [
           { "type": "p", "text": "While CRM Search is open, the Actions Shelf registers two modal-specific actions. Run last query repeats the most recently applied CRM search. Scan for recent orders runs a saved client audience against the time since your last scan." },
           { "type": "callout", "kind": "warning", "text": "The scan requires a saved Query Builder query named exactly 'My Clients'. If it is missing, the action tells you to create it instead of silently substituting another audience." },
-          { "type": "p", "text": "On the first run, the scan covers the previous seven days. After a successful run it stores a local watermark under gbScanRecentOrders_lastRun; later runs continue from that point. Results load into CRM Search where you can inspect, select, export, email, or launch a campaign." }
+          { "type": "p", "text": "On the first run, the scan covers the previous seven days. After a successful run it stores a local watermark under gbScanRecentOrders_lastRun; later runs continue from that point. Results load into CRM Search where you can inspect, select, export, email, or launch a workflow." }
         ],
         "advanced": [
           { "type": "p", "text": "Use __gbScan.status() in the page console to inspect the local scan clock and __gbScan.reset() to clear it so the next scan covers seven days again. The saved query remains the audience source either way." }
         ]
       },
-      "related": ["crm-search", "query-builder", "campaign-manager"]
+      "related": ["crm-search", "query-builder", "workflow-manager"]
     },
     {
       "slug": "query-builder",
@@ -89,10 +89,10 @@
             ["Number", "= ≠ > ≥ < ≤ · between · is set · is not set"],
             ["Date", "more than … ago · less than … ago · within next … · before/after date · after/before today · is set / is not set (relative ops take a number + days/weeks/months/years)"]
           ] },
-          { "type": "p", "text": "Two live previews update as you build: HUMAN (the query in plain English, e.g. 'Email contains \"sale\" AND Order count > 5') and FQ (the compiled Solr filter) — both copyable. Name the query and Save to keep it; saved queries can be promoted (bolt icon) into the quick-presets list for one-click reuse, and they double as campaign audiences." }
+          { "type": "p", "text": "Two live previews update as you build: HUMAN (the query in plain English, e.g. 'Email contains \"sale\" AND Order count > 5') and FQ (the compiled Solr filter) — both copyable. Name the query and Save to keep it; saved queries can be promoted (bolt icon) into the quick-presets list for one-click reuse, and they double as workflow audiences." }
         ]
       },
-      "related": ["crm-search", "campaign-manager"]
+      "related": ["crm-search", "workflow-manager"]
     },
     {
       "slug": "new-contact",
@@ -163,7 +163,7 @@
         ],
         "intermediate": [
           { "type": "heading", "text": "Bulk actions" },
-          { "type": "p", "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run campaign, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task." },
+          { "type": "p", "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run workflow, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task." },
           { "type": "heading", "text": "The task popover" },
           { "type": "p", "text": "Acting on a task (or a bulk selection) opens a compact popover with three panes:" },
           { "type": "list", "items": [

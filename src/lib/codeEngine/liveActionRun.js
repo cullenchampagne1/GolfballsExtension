@@ -4,7 +4,7 @@
    A custom action authored in the editor runs, from the Action Shelf, on
    whatever CRM page the rep is on. This shapes the live page-engine output
    into the `page` model the code engine expects, and builds the real,
-   confirm-gated executor from the same proven writer libs the campaign
+   confirm-gated executor from the same proven writer libs the workflow
    runner uses.
 
    shapeLivePage is pure (unit-tested). makeLiveExecutor dynamic-imports the
@@ -34,7 +34,7 @@ export function ctxFromPage(page) {
 }
 
 /** Build the real, gated executor for a live custom-action run. Mirrors the
- *  campaign runner's makeContactExecutor, but resolves its own email config +
+ *  workflow runner's makeContactExecutor, but resolves its own email config +
  *  employee id and pulls the contact ctx from the live page. */
 export async function makeLiveExecutor(page) {
   const [

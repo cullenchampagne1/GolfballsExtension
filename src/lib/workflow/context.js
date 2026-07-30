@@ -1,12 +1,12 @@
 /* ───────────────────────────────────────────────────────────────
-   campaign/context.js — per-contact context for the stateless engine.
+   workflow/context.js — per-contact context for the stateless engine.
 
    For each audience contact we fetch the contact's CRM page ONCE,
    parse it, run the page engine for schema (contact / account /
-   orders / items), derive the campaign "signals" used by conditions,
+   orders / items), derive the workflow "signals" used by conditions,
    and hand back a `getValue(condition)` resolver in the exact shape
    matchEngine.evalTree expects. Because everything is recomputed from
-   the live page every run, the campaign needs no stored per-contact
+   the live page every run, the workflow needs no stored per-contact
    position — a follow-up step's gate ("sent E2 and no reply") IS the
    memory.
 
@@ -22,7 +22,7 @@
 
 import { runEngine, resolvePath, evaluateCode } from '../page-engine/index.js';
 import { SIGNAL_BY_ID } from './fields.js';
-import { resolveCampaignRecordIds } from './codeContext.js';
+import { resolveWorkflowRecordIds } from './codeContext.js';
 
 function parseDoc(html) {
   try { return new DOMParser().parseFromString(String(html || ''), 'text/html'); }
@@ -36,7 +36,7 @@ function daysSince(dateVal) {
   return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
-/* Derive campaign signals from the parsed page + page-engine data.
+/* Derive workflow signals from the parsed page + page-engine data.
    Order signals come straight off the contact schema; email/call
    history is left null (best-effort) until scrapers are wired. */
 function deriveSignals(doc, data) {
@@ -62,7 +62,7 @@ function deriveSignals(doc, data) {
     'order.brand': itemBlob,
     'order.keyword': itemBlob,
     // Email / call history — NOT SUPPORTED: the contact activity log isn't
-    // scraped, so these signals are always null. Campaign conditions that
+    // scraped, so these signals are always null. Workflow conditions that
     // reference them therefore never match (they fail safe, not error).
     'sent.subject': null,
     'sent.daysAgo': null,
@@ -114,7 +114,7 @@ export async function buildContactContext(contact, deps = {}) {
   const bounceCode = (stats.lastBounceCode || resolvePath(doc, 'stats.lastBounceCode') || '').toString().trim();
   const mailerRemoved = !!parseInt(stats.mailerRemoved ?? resolvePath(doc, 'stats.mailerRemoved'), 10);
 
-  const recordIds = resolveCampaignRecordIds(contact, data);
+  const recordIds = resolveWorkflowRecordIds(contact, data);
   const contactId = recordIds.contactId;
   const phone = (resolvePath(doc, 'contact.phone') || '').toString().replace(/\D/g, '');
   const first = (contact.imported ? contact.firstName : resolvePath(doc, 'contact.firstName'))

@@ -17,7 +17,7 @@ import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } 
 import { FULL_HEIGHT_LIST_PAGE_CSS, nextProgressiveResultCount } from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
-  crmRowToCampaignContact,
+  crmRowToWorkflowContact,
   crmRowToEmailContact,
   selectedCrmRows,
   toggleCrmSelection,
@@ -125,7 +125,7 @@ function SelectionBox({ checked, onChange, title }) {
   );
 }
 
-function SelectionActionRail({ count, total, onCampaign, onEmail, onExport }) {
+function SelectionActionRail({ count, total, onWorkflow, onEmail, onExport }) {
   return (
     <div style={{
       display: 'grid',
@@ -153,7 +153,7 @@ function SelectionActionRail({ count, total, onCampaign, onEmail, onExport }) {
               {' '}of {total} result{total === 1 ? '' : 's'}
             </span>
             <div style={{ flex: 1 }} />
-            <Btn size="sm" variant="ghost" icon={<I.target />} onClick={onCampaign}>Run campaign</Btn>
+            <Btn size="sm" variant="ghost" icon={<I.target />} onClick={onWorkflow}>Run workflow</Btn>
             <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail}>Email selected</Btn>
             <Btn size="sm" variant="ghost" icon={<I.download />} onClick={onExport}>Export CSV</Btn>
           </div>
@@ -537,18 +537,18 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     io.observe(el);
     return () => io.disconnect();
   }, [renderCount, rows.length, numFound, fetchMore]);
-  const openCampaign = useCallback(() => {
+  const openWorkflow = useCallback(() => {
     const audience = selectedResults
-      .map((row) => crmRowToCampaignContact(row, recUrl(row)))
+      .map((row) => crmRowToWorkflowContact(row, recUrl(row)))
       .filter((contact) => contact.contactUrl || contact.email);
     if (!audience.length) {
       gbToast('Select contacts or accounts first', 'info');
       return;
     }
-    if (typeof window.__gbOpenCampaignManager === 'function') {
-      window.__gbOpenCampaignManager(audience);
+    if (typeof window.__gbOpenWorkflowManager === 'function') {
+      window.__gbOpenWorkflowManager(audience);
     } else {
-      gbToast('Campaign manager is unavailable here', 'error');
+      gbToast('Workflow manager is unavailable here', 'error');
     }
   }, [selectedResults]);
   const exportSelection = useCallback(() => {
@@ -630,7 +630,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
               <SelectionActionRail
                 count={selectedResults.length}
                 total={rows.length}
-                onCampaign={openCampaign}
+                onWorkflow={openWorkflow}
                 onEmail={(event) => {
                   setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
                   setEmailRunnerOpen(true);

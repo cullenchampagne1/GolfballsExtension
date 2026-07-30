@@ -179,17 +179,17 @@
           ]
         },
         {
-          "title": "Campaigns",
+          "title": "Workflows",
           "icon": "megaphone",
           "items": [
             {
               "article": "bulk-email-selection"
             },
             {
-              "article": "campaign-manager"
+              "article": "workflow-manager"
             },
             {
-              "article": "campaign-conditions"
+              "article": "workflow-conditions"
             }
           ]
         }
@@ -279,7 +279,7 @@
           "title": "Advanced",
           "items": [
             {
-              "tutorial": "run-campaign"
+              "tutorial": "run-workflow"
             },
             {
               "tutorial": "import-supplier"

@@ -1,5 +1,5 @@
 /**
- * user.* binding — the rep's saved emails/tasks/calls exposed to campaign code.
+ * user.* binding — the rep's saved emails/tasks/calls exposed to workflow code.
  *
  * Pins that buildUserBinding gives arrays + name/id lookups, that a program can
  * drop a saved email straight into actions.sendEmail (recording it as a

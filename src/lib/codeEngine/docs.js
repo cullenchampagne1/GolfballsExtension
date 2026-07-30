@@ -41,7 +41,7 @@ function actionDoc(c) {
 
 const STATIC = {
   overview: {
-    title: 'Campaign code',
+    title: 'Workflow code',
     kind: 'topic',
     summary: 'Write plain JS. Each action is a step; if/else are branches. The body runs once per hydrated audience record and the blocks light up as it goes.',
     rows: [
@@ -69,7 +69,7 @@ const STATIC = {
       ['contact.value', 'handed-off value ($), if any'],
       ['contact.contactId', 'CRM id'],
       ['page.contact.field = …', 'edit a field (approved fields, grouped write)'],
-      ['page.tasks.items', 'Task List rows, or open + done on a campaign record'],
+      ['page.tasks.items', 'Task List rows, or open + done on a workflow record'],
       ['task.liveDate / dueDate = …', 'edit dates (live_date / due_date aliases work too)'],
       ['task.subject / description = …', 'edit task copy; body aliases description'],
       ['task.categoryId / priority = …', 'edit category or priority'],
