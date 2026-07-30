@@ -321,6 +321,22 @@ description refreshes only when another field changed (the page schema cannot
 read descriptions back), and a category is only corrected when its label is
 visible and wrong. That is what makes an immediate re-run write nothing.
 
+### Single-record Custom Action variant
+
+The paste-ready action at
+[`docs/examples/task-reconciliation-contact-action.js`](examples/task-reconciliation-contact-action.js)
+carries the SAME body (an integration test keeps the two byte-identical) for
+running the reconciliation on one contact or account page from the Action
+Shelf — e.g. initiating a brand-new account right from its page. Create a
+Custom Action with **Runs on: Contact** and no entry point; author a second
+copy with **Runs on: Account** for account pages. Live runs read the page
+through the page engine — `page.orders` and `page.tasks.open`/`done`,
+including tasks whose live date is in the future — and account pages resolve
+their representative contact as the task writer. On a page with no readable
+CRM record the action returns "Skipped" without writing. When editing the
+rules, change the campaign file and copy the body across (the sync test fails
+otherwise).
+
 ## Task List quarterly reach-out custom action
 
 The paste-ready action at

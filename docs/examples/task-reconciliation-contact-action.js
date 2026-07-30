@@ -1,49 +1,31 @@
-// Full task reconciliation — Campaign Manager automation.
+// Full task reconciliation — single-record Custom Action.
 //
-// ONE campaign that both initiates and reconciles every task flow this desk
-// owns. Run it against any CONTACT or ACCOUNT audience, as often as needed:
-// each record converges to the same consistent state. Existing tasks are
-// EDITED in place (never completed-and-remade), missing tasks are created,
-// and a second run straight after a first performs zero writes.
+// The SAME reconciliation the task-reconciliation-campaign.js campaign runs
+// per audience record, packaged for one contact or account page — e.g. to
+// initiate a brand-new account right from its page, or to re-check a single
+// record after editing its tasks. The body below (from the Config marker) is
+// IDENTICAL to the campaign file; a test enforces the two stay byte-identical.
 //
-// Flows owned (every other task is read-only context — it counts as a
-// scheduled touch and as quarter coverage but is never edited):
+// Custom Action setup (Actions → New action):
+//   Runs on: Contact            ← the contact-page shelf
+//   Entry point: (leave empty)
+// Author a second copy with "Runs on: Account" to offer it on account pages
+// too — account pages expose the same page.tasks / page.orders model, with
+// the account's representative contact as the task writer.
 //
-//   • Order Anniversary Follow Up cycles — four tasks per retained
-//     anniversary month (#1 three weeks before, #2 two weeks before, Call one
-//     week before, #3 the Monday before), category Order History Special,
-//     live date two weeks before due. Legacy "Prior Year …" subjects are
-//     renamed in place. An in-flight cycle (first task passed but evidence of
-//     the cycle exists and it is not over) is preserved: overdue open tasks
-//     keep their dates and get naming/category fixes only. A cycle with no
-//     evidence whose first task passed — or one that is fully over — rolls to
-//     next year. A completed task within two weeks of a desired slot counts
-//     as fulfilled and is never recreated.
+// While on a contact (or account) page, the action appears in the Action
+// Shelf. The live run reads the page through the page engine — page.orders,
+// page.tasks.open / page.tasks.done (including tasks whose live date is in
+// the future, which the Task List pull cannot show) — and every write goes
+// through the ordinary confirmation screen. On a page that is not a CRM
+// record (nothing extractable) the action skips instead of writing.
 //
-//   • Promotion tasks (config below) — after a run every open promotion task
-//     is LIVE TODAY (live dates in the future, or unreadable, are set to
-//     today; already-live ones are left alone). Missing subjects from
-//     PROMO_TASKS are created (CRM initializes their live date to today);
-//     an open or completed task with the subject counts as covered.
-//
-//   • Q1–Q4 Reach Out Opportunity coverage across the rolling four quarters —
-//     any other dated task covers its quarter. An uncovered quarter gets one
-//     reach-out placed at the MIDDLE OF THE GAP between the surrounding
-//     touches: up to the next scheduled task when one lands in the following
-//     quarter, otherwise up to the start of the following quarter. Existing
-//     quarterly tasks are re-mediated to the same rule (legacy arbitrary
-//     dates get fixed), duplicate quarterly tasks for one slot are retired,
-//     and live dates sit two weeks before due, category Workflow Task.
-//
-//   • Brand tier tasks ("<Brand> Customer - Tier N", due 12/17/2030) — the
-//     tier is recomputed from the order count (1 order = Tier 3, 2–3 =
-//     Tier 2, 4+ = Tier 1) and the existing task is edited when the tier
-//     moved; missing brand tasks are created; duplicates are retired.
-//
-// The body below (from the Config marker) is IDENTICAL to
-// task-reconciliation-contact-action.js — the single-page Action Shelf
-// variant. A test enforces the two bodies stay byte-identical; edit here
-// and copy the body across (or vice versa).
+// What one run converges the record to — see the campaign file for the full
+// rules: anniversary cycles edited in place (legacy "Prior Year …" renamed,
+// live = due − 14, in-flight cycles preserved), promotion tasks live TODAY
+// (config below), Q1–Q4 reach-outs placed and re-mediated at the middle of
+// the gap between surrounding touches, brand tier tasks re-tiered in place.
+// Running it twice in a row performs zero writes.
 
 /* ── Config ─────────────────────────────────────────────────── */
 

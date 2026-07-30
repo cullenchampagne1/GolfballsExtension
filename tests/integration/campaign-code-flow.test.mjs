@@ -22,6 +22,10 @@ const RECONCILIATION_CAMPAIGN = readFileSync(
   new URL('../../docs/examples/task-reconciliation-campaign.js', import.meta.url),
   'utf8',
 );
+const RECONCILIATION_ACTION = readFileSync(
+  new URL('../../docs/examples/task-reconciliation-contact-action.js', import.meta.url),
+  'utf8',
+);
 const QUARTERLY_REACH_OUT_ACTION = readFileSync(
   new URL('../../docs/examples/quarterly-reach-out-task-list-action.js', import.meta.url),
   'utf8',
@@ -346,6 +350,96 @@ describe('campaign code flow', () => {
     assert.match(String(result.result), /Updated 1 existing live date\(s\)/);
     assert.match(String(result.result), /renamed 1 anniversary task\(s\)/);
     assert.match(String(result.result), /Created 6 quarterly reach-out task\(s\)/);
+  });
+
+  it('ships the contact-page action with a byte-identical reconciliation body', () => {
+    const marker = '/* ── Config';
+    const campaignBody = RECONCILIATION_CAMPAIGN.slice(RECONCILIATION_CAMPAIGN.indexOf(marker));
+    const actionBody = RECONCILIATION_ACTION.slice(RECONCILIATION_ACTION.indexOf(marker));
+    assert.ok(campaignBody.length > 1000, 'the campaign body marker exists');
+    assert.equal(actionBody, campaignBody, 'the action file body must not drift from the campaign body');
+  });
+
+  it('initiates a brand-new record from its own page through the action surface', async () => {
+    // A fresh account: a contact id and nothing else — no orders, no tasks.
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '909', account: '' },
+        contact: { id: '909', contactId: '909', contactName: 'New Account Buyer' },
+        orders: [],
+        tasks: { open: [], done: [] },
+      },
+    });
+    const createWrites = [];
+    const updateWrites = [];
+    const result = await simulateProgram(RECONCILIATION_ACTION, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: makeExecutor({
+        ctx: { contactId: '909', contactName: 'New Account Buyer', employeeId: '7' },
+        submitQuickTask: async ({ template, context }) => {
+          createWrites.push({ template, context });
+          return { ok: true, taskId: `new-${createWrites.length}` };
+        },
+        updateTaskById: async (id, fields) => {
+          updateWrites.push({ id, fields });
+          return { ok: true };
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+
+    // Both promotion tasks are created (live today by CRM initialization).
+    assert.deepEqual(
+      createWrites.slice(0, 2).map((write) => [write.template.subject, write.template.daysOut]),
+      [
+        ['#1 Srixon Promotion Campaign Follow Up', 0],
+        ['#2 Srixon Promotion Campaign Follow Up', 7],
+      ],
+    );
+    assert.ok(createWrites.every((write) => write.context.contactId === '909'));
+
+    // Quarterly coverage initiates around the promotion touches at the
+    // documented gap midpoints.
+    const busy = [dayNumOf(atNoonDay(0)), dayNumOf(atNoonDay(7))];
+    const expected = [];
+    for (let offset = 0; offset < 4; offset += 1) {
+      const slot = rollingSlotOf(offset);
+      const key = `${slot.year}-Q${slot.quarter}`;
+      const covered = busy.some((day) => {
+        const date = dateOfDayNum(day);
+        return `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}` === key;
+      });
+      if (covered) continue;
+      const mid = gapMidpointOf(offset, busy);
+      busy.push(mid);
+      expected.push([`Q${slot.quarter} Reach Out Opportunity`, mid - dayNumOf(atNoonDay(0))]);
+    }
+    assert.deepEqual(
+      createWrites.slice(2).map((write) => [write.template.subject, write.template.daysOut]),
+      expected,
+    );
+    assert.equal(updateWrites.length, expected.length, 'each quarterly create receives its live date');
+    assert.match(String(result.result), /promotion: 0 revived to live today, 0 already live, 2 created/);
+    assert.match(String(result.result), /Anniversary: 0 edited, 0 unchanged, 0 created/);
+    assert.match(String(result.result), /brand: 0 edited, 0 unchanged, 0 created/);
+  });
+
+  it('skips a page that is not a readable CRM record', async () => {
+    const page = shapeLivePage({ data: {} });
+    const writes = [];
+    const result = await simulateProgram(RECONCILIATION_ACTION, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: {
+        async run(name, input) {
+          writes.push([name, input]);
+          return { ok: true, taskId: 'never' };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(writes, []);
+    assert.match(String(result.result), /^Skipped — no CRM record readable on this page/);
   });
 
   it('makes every promotion task live today and treats completed ones as covered', async () => {
