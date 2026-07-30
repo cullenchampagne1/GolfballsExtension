@@ -31,6 +31,8 @@ before(async () => {
     devSettings: {
       'numberDisplay.durationMs': 777,
       'email.localPart': 'local.user',
+      'pageEngine.indexingEnabled': true,
+      'pageEngine.accountId': 'owner-77',
       'campaignManager.scale': 0.75,
     },
     customPages: { crm: ['contact_details'] },
@@ -79,7 +81,7 @@ before(async () => {
       value: rule.default, hidden: false, managed: true,
     }])),
     developer_settings: Object.fromEntries(Object.entries(registry.developerSettings).map(([key, rule]) => [key, {
-      value: rule.default, hidden: false, managed: key !== 'email.localPart',
+      value: rule.default, hidden: false, managed: rule.managedDefault !== false,
     }])),
     custom_pages: {
       value: true,
@@ -108,6 +110,8 @@ describe('remote settings policy', () => {
     assert.equal(stored.featureFlags.copyIdsEnabled, false);
     assert.equal(stored.devSettings['numberDisplay.durationMs'], 400);
     assert.equal(stored.devSettings['email.localPart'], 'local.user', 'unmanaged identity must stay local');
+    assert.equal(stored.devSettings['pageEngine.indexingEnabled'], true, 'indexing opt-in must stay local');
+    assert.equal(stored.devSettings['pageEngine.accountId'], 'owner-77', 'index owner must stay local');
     assert.equal(stored.featureFlags.workflowManagerEnabled, false, 'renamed unmanaged flag keeps its local value');
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'renamed unmanaged setting keeps its local value');
     assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);

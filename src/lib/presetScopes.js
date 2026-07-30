@@ -104,6 +104,11 @@ export const SETTINGS_TEMPLATE_FILE_VERSION = 1;
 const EXTENSION_STATE_FILE_KIND = 'golfballs-extension-state';
 
 const ALL_KEYS = [...new Set(PRESET_SCOPES.flatMap((s) => s.keys))];
+const INSTALLATION_LOCAL_DEV_SETTING_KEYS = Object.freeze([
+  'email.localPart',
+  'pageEngine.indexingEnabled',
+  'pageEngine.accountId',
+]);
 
 function withoutCredentials(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
@@ -111,6 +116,13 @@ function withoutCredentials(value) {
   delete safe.powerAutomateUrl;
   delete safe.directSendUrl;
   delete safe.addressAutocompleteKey;
+  return safe;
+}
+
+function withoutInstallationLocalDevSettings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const safe = { ...value };
+  for (const key of INSTALLATION_LOCAL_DEV_SETTING_KEYS) delete safe[key];
   return safe;
 }
 
@@ -147,7 +159,9 @@ function scopesFromStorageData(data, wanted = PRESET_SCOPES) {
         filteredCount = subset.length;
         bag[k] = subset;
       } else {
-        bag[k] = k === 'featureFlags' ? withoutCredentials(data[k]) : data[k];
+        bag[k] = k === 'featureFlags'
+          ? withoutCredentials(data[k])
+          : (k === 'devSettings' ? withoutInstallationLocalDevSettings(data[k]) : data[k]);
       }
     }
     // For a filtered scope, only include it when its primary array has items
@@ -193,7 +207,18 @@ export async function applyScopes(scopes) {
       // do per-key writes so unrelated keys in storage stay intact.
       for (const k of def.keys) {
         if (incoming[k] !== undefined) {
-          writes[k] = k === 'featureFlags' ? withoutCredentials(incoming[k]) : incoming[k];
+          if (k === 'featureFlags') {
+            writes[k] = withoutCredentials(incoming[k]);
+          } else if (k === 'devSettings') {
+            const current = (await readKeys('devSettings')).devSettings || {};
+            const next = withoutInstallationLocalDevSettings(incoming[k]) || {};
+            writes[k] = { ...next };
+            for (const localKey of INSTALLATION_LOCAL_DEV_SETTING_KEYS) {
+              if (Object.hasOwn(current, localKey)) writes[k][localKey] = current[localKey];
+            }
+          } else {
+            writes[k] = incoming[k];
+          }
         }
       }
       continue;
@@ -282,6 +307,14 @@ export function normalizePreset(p) {
     scopes['settings-preferences'] = {
       ...scopes['settings-preferences'],
       featureFlags: withoutCredentials(scopes['settings-preferences'].featureFlags),
+    };
+  }
+  if (scopes['settings-preferences']?.devSettings) {
+    scopes['settings-preferences'] = {
+      ...scopes['settings-preferences'],
+      devSettings: withoutInstallationLocalDevSettings(
+        scopes['settings-preferences'].devSettings,
+      ),
     };
   }
 

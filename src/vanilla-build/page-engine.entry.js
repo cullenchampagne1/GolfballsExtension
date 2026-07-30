@@ -25,6 +25,10 @@ import {
   tokenizePath,
   describeHelpers,
   detectSchema,
+  getEngineIndexConfig,
+  queryEngineIndex,
+  getEngineIndexStats,
+  clearEngineIndex,
 } from '../lib/page-engine/index.js';
 
 import { contactSchema, accountSchema, opportunitySchema } from '../lib/page-schemas/contact.js';
@@ -67,6 +71,15 @@ const api = Object.freeze({
   listSchemas,
   getSchemaById,
 
+  /* Durable, owner-gated local cache. Writes happen automatically on
+     extraction; these are the internal query/maintenance boundaries for
+     future features. */
+  engineIndex: Object.freeze({
+    query: queryEngineIndex,
+    stats: getEngineIndexStats,
+    clear: clearEngineIndex,
+  }),
+
   /* Grouped AND/OR rule matching (matchEngine). evalTree(tree,
      getValue) evaluates a rule tree against a caller-supplied value
      resolver; the rest let the matcher split var-free vs var-driven
@@ -92,4 +105,21 @@ if (typeof window !== 'undefined') {
   // Allow re-bundling without a hard reload — replace on hot
   // reload but only when the API surface has actually changed.
   window.__gbPageEngine = api;
+
+  /* Live CRM pages enter the same extraction/index path as parsed background
+     documents. Wait for the page load event so server-rendered portlets and
+     their dependent resources have settled before the engine memoizes them.
+     With indexing disabled (the default), this adds no extraction work. */
+  const indexLoadedPage = () => {
+    getEngineIndexConfig()
+      .then((config) => {
+        if (config.enabled && config.accountId) {
+          clearCache(document);
+          runEngine(document);
+        }
+      })
+      .catch(() => {});
+  };
+  if (document.readyState === 'complete') queueMicrotask(indexLoadedPage);
+  else window.addEventListener('load', indexLoadedPage, { once: true });
 }

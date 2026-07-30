@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  applyScopes,
   buildSettingsTemplateFile,
   gatherScopes,
   parseSettingsTemplateFile,
@@ -112,6 +113,53 @@ describe('sharing fallback · preset scopes', () => {
     const exportedKeys = Object.values(gathered).flatMap((bag) => Object.keys(bag));
     assert.deepEqual([...new Set(exportedKeys)].sort(), [...EXPECTED_CONFIGURATION_KEYS].sort());
     assert.equal(JSON.stringify(gathered).includes('must-not-export'), false);
+  });
+
+  it('keeps Page Engine indexing and owner identity installation-local', async () => {
+    const storageState = {
+      devSettings: {
+        'numberDisplay.durationMs': 400,
+        'email.localPart': 'private-mailbox',
+        'pageEngine.indexingEnabled': true,
+        'pageEngine.accountId': 'private-owner-77',
+      },
+    };
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            callback(Object.fromEntries(
+              (Array.isArray(keys) ? keys : [keys])
+                .filter((key) => key in storageState)
+                .map((key) => [key, storageState[key]]),
+            ));
+          },
+          set(value, callback) { Object.assign(storageState, value); callback?.(); },
+        },
+      },
+    };
+
+    const gathered = await gatherScopes(['settings-preferences']);
+    assert.deepEqual(gathered['settings-preferences'].devSettings, {
+      'numberDisplay.durationMs': 400,
+    });
+    assert.equal(JSON.stringify(gathered).includes('private-owner-77'), false);
+
+    await applyScopes({
+      'settings-preferences': {
+        devSettings: {
+          'numberDisplay.durationMs': 900,
+          'pageEngine.indexingEnabled': false,
+          'pageEngine.accountId': 'imported-owner-must-not-win',
+        },
+      },
+    });
+    assert.deepEqual(storageState.devSettings, {
+      'numberDisplay.durationMs': 900,
+      'email.localPart': 'private-mailbox',
+      'pageEngine.indexingEnabled': true,
+      'pageEngine.accountId': 'private-owner-77',
+    });
   });
 });
 

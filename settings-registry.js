@@ -176,6 +176,18 @@
       "label": "Proposal Debug: intercept submit requests",
       "managedDefault": true
     },
+    "pageEngine.indexingEnabled": {
+      "type": "bool",
+      "default": false,
+      "label": "Engine Indexing",
+      "managedDefault": false
+    },
+    "pageEngine.accountId": {
+      "type": "string",
+      "default": "",
+      "label": "Engine Account Id",
+      "managedDefault": false
+    },
     "golfballViewer.showDebugHud": {
       "type": "bool",
       "default": false,

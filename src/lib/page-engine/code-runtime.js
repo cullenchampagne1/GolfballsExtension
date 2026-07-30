@@ -55,8 +55,7 @@ import {
   coalesce, titleCase, parseNumber, parseDate, normalizePhone,
 } from './transforms.js';
 import { loadCatalog } from '../giftCatalog.js';
-import { extract } from './extract.js';
-import { detectSchema } from '../page-schemas/registry.js';
+import { runEngine } from './runner.js';
 import { codeBodyLengthError } from './code-limits.js';
 
 /* Async path only — server calls route through the background worker,
@@ -343,15 +342,18 @@ function buildHelpers() {
        const { data } = await h.parse(await h.fetchText(order.href));
        data.order.items  // real skus, real quantities
      No order-specific URL or schema knowledge lives in the engine. */
-  const parse = async (html) => {
+  const parse = async (html, sourceUrl = '') => {
     if (typeof html !== 'string' || !html) return { schemaId: null, data: {} };
     const hit = _parseCache.get(html);
     if (hit) return hit;
     if (typeof DOMParser === 'undefined') throw new Error('DOMParser unavailable in this context');
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const schema = detectSchema(doc);
-    const result = schema ? extract(schema, doc) : null;
-    const out = { schemaId: (result && result.schemaId) || (schema && schema.id) || null, data: (result && result.data) || {} };
+    try { if (doc.body && sourceUrl) doc.body.dataset.gbSourceUrl = String(sourceUrl); } catch {}
+    const result = runEngine(doc, { sourceUrl });
+    const out = {
+      schemaId: (result && result.schemaId) || null,
+      data: (result && result.data) || {},
+    };
     if (_parseCache.size > 8) _parseCache.clear();   // tiny cap — order pages are big strings
     _parseCache.set(html, out);
     return out;

@@ -23,6 +23,11 @@ const adminKeys = new Set(ADMIN_ONLY.configKeys || []);
 const keep = (key) => !adminKeys.has(key);
 const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((row) => [row.key, row]));
 const defaults = defaultDevSettings();
+const installationLocalKeys = new Set([
+  'email.localPart',
+  'pageEngine.indexingEnabled',
+  'pageEngine.accountId',
+]);
 
 describe('settings registry · extension/backend parity', () => {
   it('matches every extension feature flag and its current label/default', () => {
@@ -52,7 +57,7 @@ describe('settings registry · extension/backend parity', () => {
       assert.equal(actual.type, row.type, row.key);
       assert.equal(actual.default, defaults[row.key], row.key);
       assert.equal(actual.label, row.label, row.key);
-      assert.equal(actual.managedDefault, row.key !== 'email.localPart', row.key);
+      assert.equal(actual.managedDefault, !installationLocalKeys.has(row.key), row.key);
       if (row.min !== undefined) assert.equal(actual.min, row.min, row.key);
       if (row.max !== undefined) assert.equal(actual.max, row.max, row.key);
       if (row.options) {

@@ -30,7 +30,11 @@ const keep = (key) => !ADMIN_CONFIG.has(key);
 // Installation-local dev settings: a shared server policy never forces or hides
 // these — each stays a per-install choice. email.localPart guards sender
 // identity and is never replaced by a shared policy value.
-const INSTALLATION_LOCAL_KEYS = new Set(['email.localPart']);
+const INSTALLATION_LOCAL_KEYS = new Set([
+  'email.localPart',
+  'pageEngine.indexingEnabled',
+  'pageEngine.accountId',
+]);
 
 const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((item) => [item.key, item]));
 const featureDefaultEntries = Object.entries(FEATURE_DEFAULTS).filter(([key]) => keep(key));

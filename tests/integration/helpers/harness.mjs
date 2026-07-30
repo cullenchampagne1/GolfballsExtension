@@ -162,54 +162,142 @@ export function loadInstallationAuth({ stored = {}, fetchImpl } = {}) {
   return { ...parts, context, client: context.GBInstallationAuth };
 }
 
-/** In-memory IndexedDB double (same shape as tests/unit/crmIndexEncryption.test.mjs). */
+/** In-memory, database-aware IndexedDB double.
+ * It supports the object stores and exact-value indexes used by both encrypted
+ * local indexes while keeping each database isolated like real IndexedDB. */
 export function makeFakeIndexedDb() {
-  const records = new Map();
-  const keys = new Map();
-  const stores = new Map();
+  const databases = new Map();
+
   function requestResult(value) {
     const request = {};
     queueMicrotask(() => { request.result = value; request.onsuccess?.(); });
     return request;
   }
-  function makeStore(name) {
-    const values = name === 'keys' ? keys : records;
-    const keyField = name === 'keys' ? 'id' : 'storageKey';
+
+  function makeStoreMeta(keyPath) {
+    return { keyPath, values: new Map(), indexes: new Map() };
+  }
+
+  function clone(value) {
+    return value === undefined ? undefined : structuredClone(value);
+  }
+
+  function makeStore(meta) {
     return {
-      createIndex() {},
-      put(value) { values.set(value[keyField], structuredClone(value)); },
-      get(key) { return requestResult(values.has(key) ? structuredClone(values.get(key)) : undefined); },
-      getAll() { return requestResult([...values.values()].map((value) => structuredClone(value))); },
-      delete(key) { values.delete(key); },
-      clear() { values.clear(); },
+      createIndex(name, keyPath, options = {}) {
+        meta.indexes.set(name, { keyPath, ...options });
+      },
+      index(name) {
+        const index = meta.indexes.get(name);
+        if (!index) throw new Error(`Unknown fake IndexedDB index: ${name}`);
+        return {
+          getAll(query) {
+            const values = [...meta.values.values()].filter((value) => {
+              const indexed = value[index.keyPath];
+              return index.multiEntry && Array.isArray(indexed)
+                ? indexed.includes(query)
+                : indexed === query;
+            });
+            return requestResult(values.map(clone));
+          },
+        };
+      },
+      put(value) {
+        meta.values.set(value[meta.keyPath], clone(value));
+        return requestResult(value[meta.keyPath]);
+      },
+      get(key) {
+        return requestResult(meta.values.has(key) ? clone(meta.values.get(key)) : undefined);
+      },
+      getAll() {
+        return requestResult([...meta.values.values()].map(clone));
+      },
+      delete(key) {
+        meta.values.delete(key);
+        return requestResult(undefined);
+      },
+      clear() {
+        meta.values.clear();
+        return requestResult(undefined);
+      },
     };
   }
-  const db = {
-    objectStoreNames: { contains: (name) => stores.has(name) },
-    createObjectStore(name) {
-      const store = makeStore(name);
-      stores.set(name, store);
-      return store;
-    },
-    transaction(name) {
-      const tx = { objectStore: (storeName) => stores.get(storeName || name), oncomplete: null, onerror: null, error: null };
-      setTimeout(() => tx.oncomplete?.(), 0);
-      return tx;
-    },
-  };
+
+  function makeDatabase(name) {
+    const stores = new Map();
+    const db = {
+      name,
+      version: 0,
+      objectStoreNames: { contains: (storeName) => stores.has(storeName) },
+      createObjectStore(storeName, options = {}) {
+        const meta = makeStoreMeta(options.keyPath);
+        stores.set(storeName, meta);
+        return makeStore(meta);
+      },
+      transaction(names) {
+        const selected = new Set(Array.isArray(names) ? names : [names]);
+        const tx = {
+          oncomplete: null,
+          onerror: null,
+          onabort: null,
+          error: null,
+          objectStore(storeName) {
+            if (!selected.has(storeName)) throw new Error(`Store is outside transaction: ${storeName}`);
+            const meta = stores.get(storeName);
+            if (!meta) throw new Error(`Unknown fake IndexedDB store: ${storeName}`);
+            return makeStore(meta);
+          },
+        };
+        setTimeout(() => tx.oncomplete?.(), 0);
+        return tx;
+      },
+      _stores: stores,
+    };
+    return db;
+  }
+
+  function values(dbName, storeName) {
+    return databases.get(dbName)?._stores.get(storeName)?.values || new Map();
+  }
+
   const indexedDB = {
-    open() {
+    open(name, version = 1) {
       const request = {};
-      queueMicrotask(() => { request.result = db; request.onupgradeneeded?.(); request.onsuccess?.(); });
+      queueMicrotask(() => {
+        let db = databases.get(name);
+        const oldVersion = db?.version || 0;
+        if (!db) {
+          db = makeDatabase(name);
+          databases.set(name, db);
+        }
+        request.result = db;
+        if (version > oldVersion) {
+          db.version = version;
+          request.onupgradeneeded?.({ oldVersion, newVersion: version });
+        }
+        request.onsuccess?.();
+      });
       return request;
     },
-    deleteDatabase() {
+    deleteDatabase(name) {
       const request = {};
-      queueMicrotask(() => request.onsuccess?.());
+      queueMicrotask(() => {
+        databases.delete(name);
+        request.onsuccess?.();
+      });
       return request;
     },
   };
-  return { indexedDB, records, keys };
+  return {
+    indexedDB,
+    databases,
+    store: values,
+    get records() { return values('gb-crm-index-secure', 'records'); },
+    get keys() { return values('gb-crm-index-secure', 'keys'); },
+    get pageEntities() { return values('gb-page-engine-index-secure', 'entities'); },
+    get pageFields() { return values('gb-page-engine-index-secure', 'fields'); },
+    get pageKeys() { return values('gb-page-engine-index-secure', 'keys'); },
+  };
 }
 
 /**

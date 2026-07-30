@@ -1101,6 +1101,20 @@
         "label": "Email account host (From local-part; required for Power Automate sends)"
       },
       {
+        "key": "pageEngine.indexingEnabled",
+        "type": "boolean",
+        "default": false,
+        "label": "Engine Indexing",
+        "policy": "installation-local; never enabled by shared policy or settings templates"
+      },
+      {
+        "key": "pageEngine.accountId",
+        "type": "string",
+        "default": "",
+        "label": "Engine Account Id",
+        "policy": "installation-local exact sales-rep/account-owner id"
+      },
+      {
         "key": "marginCalc.minAllowedMargin",
         "type": "number",
         "default": 30,
@@ -1571,6 +1585,21 @@
       "contains": "plaintext contact/account names and AES-GCM encrypted CRM rows"
     },
     {
+      "key": "gb-page-engine-index-secure / keys",
+      "area": "extension IndexedDB",
+      "contains": "locally generated non-extractable AES-GCM and HMAC CryptoKey objects"
+    },
+    {
+      "key": "gb-page-engine-index-secure / entities",
+      "area": "extension IndexedDB",
+      "contains": "owner-partitioned AES-GCM encrypted Page Engine snapshots keyed by HMAC-blinded entity identity"
+    },
+    {
+      "key": "gb-page-engine-index-secure / fields",
+      "area": "extension IndexedDB",
+      "contains": "relational scalar rows with HMAC-blinded paths, exact values, text terms, and sortable numeric/date values"
+    },
+    {
       "key": "gb-crm-index",
       "area": "legacy page IndexedDB",
       "contains": "retired plaintext CRM index; deleted automatically on first secure-index operation"
@@ -1586,6 +1615,11 @@
         "devSettings",
         "keyboardShortcuts",
         "customPages"
+      ],
+      "excludedDevSettings": [
+        "email.localPart",
+        "pageEngine.indexingEnabled",
+        "pageEngine.accountId"
       ],
       "merge": "overwrite"
     },
@@ -1900,6 +1934,11 @@
       "name": "CRM index capture",
       "trigger": "index action after CRM search",
       "what": "Encrypts complete CRM rows in worker-owned IndexedDB while retaining names for ranked local search."
+    },
+    {
+      "name": "Page Engine index capture",
+      "trigger": "supported live page load or Page Engine extraction of a fetched/parsed page while Engine Indexing is enabled",
+      "what": "Validates the configured owner in the worker, then upserts an encrypted entity snapshot plus opaque relational field rows for fast exact, text, range, existence, array, and ordered queries."
     },
     {
       "name": "Installation notification outbox",

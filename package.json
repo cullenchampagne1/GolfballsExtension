@@ -525,6 +525,10 @@
       "file": "tests/unit/pageEngineAccount.test.mjs"
     },
     {
+      "name": "flow \u00b7 Page Engine relational index model",
+      "file": "tests/unit/pageEngineIndexModel.test.mjs"
+    },
+    {
       "name": "flow \u00b7 workflow code import validation",
       "file": "tests/unit/workflowImport.test.mjs"
     },
@@ -543,6 +547,10 @@
     {
       "name": "flow \u00b7 encrypted crm index roundtrip",
       "file": "tests/integration/crm-index-roundtrip.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 encrypted Page Engine index roundtrip",
+      "file": "tests/integration/page-engine-index-roundtrip.test.mjs"
     },
     {
       "name": "flow \u00b7 chrome update channel chain",

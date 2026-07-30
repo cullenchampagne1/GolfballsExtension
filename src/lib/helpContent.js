@@ -4625,7 +4625,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
-            "text": "Workflows"
+            "text": "Tools"
           },
           {
             "type": "table",
@@ -4639,26 +4639,7 @@ export const HELP_CONTENT = {
                 "Workflow Manager",
                 "On",
                 "Run one reusable set of steps for each selected account or contact."
-              ]
-            ],
-            "meta": {
-              "flagKeys": [
-                "workflowManagerEnabled"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "Tools"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Feature",
-              "Default",
-              "What it controls"
-            ],
-            "rows": [
+              ],
               [
                 "Notifications",
                 "On",
@@ -4687,6 +4668,7 @@ export const HELP_CONTENT = {
             ],
             "meta": {
               "flagKeys": [
+                "workflowManagerEnabled",
                 "notificationsEnabled",
                 "imagePreviewEnabled",
                 "giftCatalogEnabled",
@@ -5193,6 +5175,42 @@ export const HELP_CONTENT = {
             "meta": {
               "settingKeys": [
                 "proposalDebug.enabled"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "Page Engine"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Engine Indexing",
+                "bool",
+                "Off",
+                "",
+                "Build an encrypted local Page Engine index whenever an owned account, contact, opportunity, or order is extracted. Off by default; no snapshots are written while off."
+              ],
+              [
+                "Engine Account Id",
+                "string",
+                "(empty)",
+                "",
+                "Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "pageEngine.indexingEnabled",
+                "pageEngine.accountId"
               ]
             }
           },
@@ -9361,7 +9379,7 @@ export const HELP_CONTENT = {
       "title": "Workflow Manager",
       "keywords": [
         "workflowManagerEnabled",
-        "Workflows"
+        "Tools"
       ],
       "description": "Run one reusable set of steps for each selected account or contact.",
       "article": "feature-toggles",
@@ -9621,6 +9639,26 @@ export const HELP_CONTENT = {
         "proposalDebug.enabled"
       ],
       "description": "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:pageEngine.indexingEnabled",
+      "category": "Settings",
+      "title": "Engine Indexing",
+      "keywords": [
+        "pageEngine.indexingEnabled"
+      ],
+      "description": "Build an encrypted local Page Engine index whenever an owned account, contact, opportunity, or order is extracted. Off by default; no snapshots are written while off.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:pageEngine.accountId",
+      "category": "Settings",
+      "title": "Engine Account Id",
+      "keywords": [
+        "pageEngine.accountId"
+      ],
+      "description": "Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID.",
       "article": "developer-settings"
     },
     {

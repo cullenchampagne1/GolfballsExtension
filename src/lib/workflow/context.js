@@ -24,8 +24,12 @@ import { runEngine, resolvePath, evaluateCode } from '../page-engine/index.js';
 import { SIGNAL_BY_ID } from './fields.js';
 import { resolveWorkflowRecordIds } from './codeContext.js';
 
-function parseDoc(html) {
-  try { return new DOMParser().parseFromString(String(html || ''), 'text/html'); }
+function parseDoc(html, sourceUrl = '') {
+  try {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    if (doc.body && sourceUrl) doc.body.dataset.gbSourceUrl = String(sourceUrl);
+    return doc;
+  }
   catch { return null; }
 }
 
@@ -99,8 +103,8 @@ export async function buildContactContext(contact, deps = {}) {
     } catch (e) { error = e?.message || 'fetch threw'; }
   }
 
-  const doc = html ? parseDoc(html) : null;
-  const data = doc ? (runEngine(doc)?.data || {}) : {};
+  const doc = html ? parseDoc(html, contact.contactUrl) : null;
+  const data = doc ? (runEngine(doc, { sourceUrl: contact.contactUrl })?.data || {}) : {};
   const signals = doc ? deriveSignals(doc, data) : {};
 
   // Let callers override / extend signal computation (e.g. wire real

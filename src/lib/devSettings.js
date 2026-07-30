@@ -90,6 +90,21 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'pageEngine.indexingEnabled',
+    label:   'Engine Indexing',
+    desc:    'Build an encrypted local Page Engine index whenever an owned account, contact, opportunity, or order is extracted. Off by default; no snapshots are written while off.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'pageEngine.accountId',
+    label:   'Engine Account Id',
+    desc:    'Exact sales-rep/account-owner ID used to admit Page Engine snapshots into the local index. An exact owner name is also accepted for older pages that expose no numeric owner ID.',
+    type:    'string',
+    default: '',
+    placeholder: 'Sales rep ID',
+  },
+  {
     key:     'golfballViewer.showDebugHud',
     label:   'Golfball viewer: camera debug HUD',
     desc:    'Overlay the 3D viewer with a live camera-position / orbit-angle readout plus a copy button. Use it to dial in a default camera framing.',

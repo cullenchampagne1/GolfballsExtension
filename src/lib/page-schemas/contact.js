@@ -69,6 +69,11 @@ const FIELDS = {
         label: 'Account ID',
         extract: { sel: '#AccountID', attr: 'value' },
       },
+      opportunity: {
+        type: 'string',
+        label: 'Opportunity ID',
+        extract: { sel: '#opportunityId', attr: 'value' },
+      },
       /* Tasks modal carries #tbContactID (capital D) on the contact
          page — different node from #tbContactId. We expose it for
          debugging when they drift; null on the account page since
@@ -304,6 +309,11 @@ const FIELDS = {
         type: 'string',
         label: 'Sales rep',
         extract: { sel: '#ddlSalesRepId', attr: 'selectedText' },
+      },
+      salesRepId: {
+        type: 'string',
+        label: 'Sales rep ID',
+        extract: { sel: '#ddlSalesRepId', attr: 'value' },
       },
       userType: {
         type: 'string',

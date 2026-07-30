@@ -45,6 +45,7 @@ export const orderSchema = {
         status:           { type: 'string', label: 'Order status',     extract: { fn: 'orderStatusText' } },
         orderDate:        { type: 'string', label: 'Order date',       extract: { fn: 'orderDateText' } },
         salesRep:         { type: 'string', label: 'Sales rep',        extract: { sel: '#ctl00_customSalesReps', attr: 'selectedText' } },
+        salesRepId:       { type: 'string', label: 'Sales rep ID',     extract: { sel: '#ctl00_customSalesReps', attr: 'value' } },
         requiresApproval: { type: 'string', label: 'Requires approval from', extract: { sel: '#ctl00_ddlRequiresApproval', attr: 'selectedText' } },
         paymentLink:      { type: 'string', label: 'Payment link',     extract: { fn: 'orderPaymentLink' } },
         tags:             { type: 'string', label: 'Applied tags',     extract: { fn: 'orderTags' } },

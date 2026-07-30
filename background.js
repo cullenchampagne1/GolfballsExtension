@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
@@ -1265,6 +1265,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       body: JSON.stringify({ request_id: requestId, kind, title, description, context }),
     }).then((payload) => sendResponse({ ok: true, ticket: payload?.ticket, created: payload?.created === true }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to submit support ticket' }));
+    return true;
+  }
+
+  // ── Owner-gated encrypted Page Engine index ─────────────────────────────
+  if (msg.action === 'pageEngineIndexPut') {
+    GBPageEngineIndex.indexSnapshot(msg.snapshot)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to update Page Engine index' }));
+    return true;
+  }
+  if (msg.action === 'pageEngineIndexQuery') {
+    GBPageEngineIndex.query(msg.query)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to query Page Engine index' }));
+    return true;
+  }
+  if (msg.action === 'pageEngineIndexStats') {
+    GBPageEngineIndex.stats()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to read Page Engine index status' }));
+    return true;
+  }
+  if (msg.action === 'pageEngineIndexClear') {
+    GBPageEngineIndex.clear()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to clear Page Engine index' }));
     return true;
   }
 

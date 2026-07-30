@@ -29,34 +29,13 @@ import { resolve, listPaths, toDisplayString, existsAt, tokenizePath } from './r
 import { runCode, runCodeSync, compile, compileAsync, describeHelpers } from './code-runtime.js';
 import { runInSandbox } from './sandbox-bridge.js';
 import { detectSchema } from '../page-schemas/registry.js';
-
-/** Per-doc memoization. Key: Document. Value:
- *      { schemaId, data, errors, warnings }   (or null if no
- *      schema matched). */
-const docCache = new WeakMap();
-
-/** Detect + extract + cache. Returns the same object on repeated
- *  calls for the same Document. `null` returned when no schema
- *  matches — callers should fall back to legacy resolution. */
-export function runEngine(doc) {
-  if (!doc || typeof doc.querySelector !== 'function') return null;
-  if (docCache.has(doc)) return docCache.get(doc);
-  const schema = detectSchema(doc);
-  if (!schema) {
-    docCache.set(doc, null);
-    return null;
-  }
-  const result = extract(schema, doc);
-  docCache.set(doc, result);
-  return result;
-}
-
-/** Re-extract on demand — clears the doc's cached result so the
- *  next runEngine() rebuilds it. Use after a DOM mutation that
- *  changed schema-touched data. */
-export function clearCache(doc) {
-  if (doc) docCache.delete(doc);
-}
+import { runEngine, clearCache } from './runner.js';
+import {
+  getEngineIndexConfig,
+  queryEngineIndex,
+  getEngineIndexStats,
+  clearEngineIndex,
+} from './index-client.js';
 
 /** Convenience: detect → extract → resolve a single path. Returns
  *  the value (raw, not stringified) or defaultV. Caller decides
@@ -93,6 +72,8 @@ export function evaluateCodeSync(doc, body, vars = {}) {
    and editor UI need. */
 export {
   extract,
+  runEngine,
+  clearCache,
   resolve,
   listPaths,
   toDisplayString,
@@ -104,4 +85,8 @@ export {
   compileAsync,
   describeHelpers,
   detectSchema,
+  getEngineIndexConfig,
+  queryEngineIndex,
+  getEngineIndexStats,
+  clearEngineIndex,
 };

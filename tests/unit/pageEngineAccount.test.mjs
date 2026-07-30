@@ -5,12 +5,18 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
+import { extract } from '../../src/lib/page-engine/extract.js';
 import {
   firstAccountContactField,
   accountOrderRows,
   accountOrdersSummary,
   taskOwner,
 } from '../../src/lib/page-engine/helpers.js';
+import {
+  accountSchema,
+  opportunitySchema,
+} from '../../src/lib/page-schemas/contact.js';
+import { orderSchema } from '../../src/lib/page-schemas/order.js';
 
 function accountDocument(href = '/Default.aspx?Page=240&customerID=771') {
   return new JSDOM(`
@@ -131,5 +137,43 @@ describe('shared detail pages · task owner extraction', () => {
       </table>
     `).window.document;
     assert.equal(taskOwner(labeled, '43'), 'Taylor Reed');
+  });
+});
+
+describe('Page Engine ownership and stable ids', () => {
+  it('extracts the configured sales-rep id from account-shaped CRM pages', () => {
+    const doc = new JSDOM(`
+      <input id="AccountID" value="902">
+      <select id="ddlSalesRepId">
+        <option value="12">Other Rep</option>
+        <option value="77" selected>Cullen Champagne</option>
+      </select>
+    `).window.document;
+    const result = extract(accountSchema, doc);
+    assert.equal(result.data.ids.account, '902');
+    assert.equal(result.data.account.salesRep, 'Cullen Champagne');
+    assert.equal(result.data.account.salesRepId, '77');
+  });
+
+  it('extracts the opportunity id required for stable opportunity upserts', () => {
+    const doc = new JSDOM(`
+      <input id="opportunityId" value="28042">
+      <input id="AccountID" value="902">
+      <select id="ddlSalesRepId"><option value="77" selected>Cullen Champagne</option></select>
+    `).window.document;
+    const result = extract(opportunitySchema, doc);
+    assert.equal(result.data.ids.opportunity, '28042');
+    assert.equal(result.data.account.salesRepId, '77');
+  });
+
+  it('extracts the configured sales-rep id from order pages', () => {
+    const doc = new JSDOM(`
+      <select id="ctl00_customSalesReps">
+        <option value="77" selected>Cullen Champagne</option>
+      </select>
+    `).window.document;
+    const result = extract(orderSchema, doc);
+    assert.equal(result.data.order.salesRep, 'Cullen Champagne');
+    assert.equal(result.data.order.salesRepId, '77');
   });
 });

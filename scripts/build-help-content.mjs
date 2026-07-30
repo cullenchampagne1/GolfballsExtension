@@ -133,6 +133,7 @@ const DEV_GROUP_LABELS = {
   textPreview: 'Text Preview',
   giftCatalog: 'Gift Catalog',
   workflowManager: 'Workflow Manager',
+  pageEngine: 'Page Engine',
   email: 'Email',
 };
 
