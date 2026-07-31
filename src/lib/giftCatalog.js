@@ -66,36 +66,49 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v6'; // bumped: stable-pagination sort (recovers products the non-unique sort skipped) + brand "<X>and<Y>" promo recognition; a v5 cache predates both, so force a one-time re-index
+const CACHE_KEY = 'gbGiftCatalogCache_v7'; // bumped: suppress stale brand "<X>and<Y>" promo tags on Clearance/PriorGen products (Z-Star 8 buy-12-get-4/6 was a discontinued-product false promo); a v6 cache still holds the wrong promo, so force a one-time re-index
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 const round2 = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
 
-/* Promo codes ride on tag_ss (e.g. "EVERY12GETS6", "BUY12GET4FREE").
-   Surface the first recognized one as a readable deal label so the
-   product reads as on-sale.
+/* Promo codes ride on tag_ss. Surface the first recognized ACTIVE promo as a
+   readable deal label so the product reads as on-sale.
 
-   IMPORTANT: eligibility is NOT limited to products carrying the generic
-   "BUY…GET…FREE" tag. Many products carry only a BRAND-SPECIFIC eligibility
-   tag — e.g. Srixon's `srixon12and4` (on the Z-Star 8, which has NO
-   BUY12GET4FREE tag), `srixon12and6`, Blue Cypress `bluecypress2and1`, or a
-   bare `12and4`. The icustomize promotion engine decides eligibility from the
-   CART (product + qty), not the tag, and resolves these to the BUY{X}GET{Y}FREE
-   code — confirmed in the live cart: Z-Star 8 (P00WSY, srixon12and4) + 12 dz →
-   promoCode BUY12GET4FREE, eligible. So a "<brand?><X>and<Y>" tag surfaces the
-   same buy-X-get-Y promo under the BUY{X}GET{Y}FREE code the engine accepts. */
+   Two classes of promo tag, which behave very differently over time:
+
+   1. Generic, managed tags — "BUY12GET4FREE", "EVERY12GETS6". These are
+      added/removed as a promotion starts/ends, so their presence means the
+      promo is live. Always honored.
+
+   2. Brand/bare eligibility tags — "srixon12and4", "srixon12and6",
+      "MizunoRBMax2and1", "bluecypress2and1", bare "12and4". These are
+      PERMANENT: golfballs bulk-imported them from the old catalog and never
+      removes them, so they LINGER on discontinued products long after the
+      promo ended. Verified against the live site: the Srixon Z-Star 8
+      (P00WSY / P00WT0) still carries `srixon12and4` / `srixon12and6` yet is
+      tagged `Clearance` + `PriorGen` and the product page shows NO promo — the
+      brand tag there is described "Bulk imported from old catalog". Meanwhile
+      the CURRENT Blue Cypress balls carry `bluecypress2and1` on 2025/2026
+      products with no generic tag and ARE actively promoted.
+
+   So a brand/bare "<X>and<Y>" tag is trusted ONLY on a currently-stocked
+   product — one NOT tagged `Clearance`/`PriorGen`. That suppresses the stale
+   Z-Star-8 buy-12-get-4/6 while keeping live Blue Cypress / current Srixon
+   promos. Generic tags are honored regardless. */
 function parsePromo(tags) {
   if (!Array.isArray(tags)) return null;
+  const discontinued = tags.some((t) => /^(Clearance|PriorGen)$/i.test(String(t)));
   for (const t of tags) {
     const s = String(t);
     let m = /^BUY(\d+)GET(\d+)FREE$/i.exec(s);
     if (m) return { code: s.toUpperCase(), label: `Buy ${m[1]} get ${m[2]} free` };
     m = /^EVERY(\d+)GETS?(\d+)$/i.exec(s);
     if (m) return { code: s.toUpperCase(), label: `Buy ${m[1]} get ${m[2]} free` };
-    // Brand-specific "…<X>and<Y>" eligibility tag (srixon12and4, 12and4, …).
+    // Brand/bare "…<X>and<Y>" eligibility tag — permanent bulk-import cruft, so
+    // only meaningful while the product is still current (not clearance).
     m = /(?:^|[^0-9])(\d+)and(\d+)$/i.exec(s);
-    if (m) return { code: `BUY${m[1]}GET${m[2]}FREE`, label: `Buy ${m[1]} get ${m[2]} free` };
+    if (m && !discontinued) return { code: `BUY${m[1]}GET${m[2]}FREE`, label: `Buy ${m[1]} get ${m[2]} free` };
   }
   return null;
 }
