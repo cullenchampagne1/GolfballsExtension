@@ -633,6 +633,10 @@
       "file": "tests/unit/giftCatalogSeed.test.mjs"
     },
     {
+      "name": "catalog \u00b7 full pagination (no dropped products)",
+      "file": "tests/unit/giftCatalogPagination.test.mjs"
+    },
+    {
       "name": "catalog \u00b7 shareable proposal stores",
       "file": "tests/unit/proposalStore.test.mjs"
     },

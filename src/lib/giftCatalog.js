@@ -66,7 +66,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v7'; // bumped: suppress stale brand "<X>and<Y>" promo tags on Clearance/PriorGen products (Z-Star 8 buy-12-get-4/6 was a discontinued-product false promo); a v6 cache still holds the wrong promo, so force a one-time re-index
+const CACHE_KEY = 'gbGiftCatalogCache_v8'; // bumped: pagination stride fix — the old start+=PAGE_ROWS(500) stride over a 200-capped page dropped ~60% of the catalog (3,553→~1,378), and that truncated set got cached as "complete"; v7 and earlier caches hold the partial list, so force a one-time full re-index
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -403,7 +403,12 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
       const p = normalizeDoc(d);
       if (p && p.id && !seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
     }
-    start += PAGE_ROWS;
+    // Advance by the number of docs the service ACTUALLY returned, never by a
+    // constant PAGE_ROWS — if the gateway hands back fewer rows than requested
+    // (an older build capped it at 200), a fixed +PAGE_ROWS stride steps over
+    // the un-returned rows and silently drops most of the catalog. Advancing by
+    // the real page size makes the offset walk contiguous regardless of cap.
+    start += page.docs.length;
     if (typeof onProgress === 'function') {
       try { onProgress({ loaded: out.length, total: expected || 0 }); } catch { /* non-fatal */ }
     }

@@ -1897,7 +1897,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'fetchGiftCatalog' && msg.searchTerm) {
     const searchTerm = String(msg.searchTerm).trim();
     const start = Math.max(0, Math.min(100_000, Math.trunc(Number(msg.start) || 0)));
-    const rows = Math.max(1, Math.min(200, Math.trunc(Number(msg.rows) || 60)));
+    // Cap MUST be >= the client's PAGE_ROWS (giftCatalog.js paginates by 500).
+    // The old 200 cap, combined with the client's start += 500 stride, made the
+    // pull sample only the first 200 of every 500-doc window — silently dropping
+    // ~60% of the catalog (3,553 → ~1,378). The gateway honors rows=500.
+    const rows = Math.max(1, Math.min(500, Math.trunc(Number(msg.rows) || 60)));
     if (!searchTerm || searchTerm.length > 300) {
       sendResponse({ ok: false, error: 'Invalid catalog search', docs: [], numFound: 0 });
       return true;
