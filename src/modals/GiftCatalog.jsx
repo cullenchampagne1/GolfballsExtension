@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { loadScales } from '../lib/scales.js';
 import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail, createProposalStore, importProposalStore, buildProposalStoreFile, importProposalStoreFile } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
@@ -1844,7 +1844,7 @@ function GalleryNotice({ icon, title, message }) {
 
 function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail,
   title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, notice, error, onRefresh, emptyTitle, emptyText, subtitleOf,
-  selectedIds, onToggleSelect, onOpenMulti, onClearSelection }) {
+  selectedIds, onToggleSelect, onOpenMulti, onClearSelection, headerAction }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1891,6 +1891,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>{title}</div>
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitleText || <>Click any card to view its margin breakdown &amp; order items{items.length ? ' · or load / copy a draft' : ''}</>}</div>
         </div>
+        {headerAction}
         {onRefresh && <IconBtn size="md" title="Refresh" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={onRefresh} />}
       </div>
       <div ref={scrollRef} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
@@ -2507,12 +2508,19 @@ function RepoImportModal({ onClose, onImported }) {
   );
 }
 
-/* Product-store transfer lives inside the Custom Items view instead of hiding
-   the catalog behind another modal. A link is the convenient path; the same
-   versioned JSON envelope is always available and becomes the automatic
-   fallback when the backend cannot create a link. */
-function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, onShared }) {
-  const [name, setName] = useState('My custom item store');
+/* Store transfer (share via revocable backend link, or a durable versioned JSON
+   file) lives inside the owning view instead of hiding the catalog behind
+   another modal. Parametrized by `api` (create / importLink / importFile /
+   buildFile) and `labels` so the SAME panel serves custom items and saved
+   proposals — the two share the identical workflow and backend endpoint. */
+function StoreTransferPanel({ mode, items, onMode, onClose, onImported, onShared, api, labels = {} }) {
+  const L = {
+    defaultName: 'My store', title: 'Move items',
+    subtitle: 'Share with a revocable link or a durable JSON file.',
+    linkPlaceholder: 'Paste a store link…', filenameBase: 'golfballs-store',
+    ...labels,
+  };
+  const [name, setName] = useState(L.defaultName);
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState(null);
@@ -2522,13 +2530,13 @@ function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, on
   const count = items.length;
 
   const safeFilename = (value) => {
-    const base = String(value || 'golfballs-product-store').trim().toLowerCase()
+    const base = String(value || L.filenameBase).trim().toLowerCase()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
-    return `${base || 'golfballs-product-store'}.json`;
+    return `${base || L.filenameBase}.json`;
   };
   const downloadFile = () => {
     try {
-      const file = buildProductStoreFile(name, items);
+      const file = api.buildFile(name, items);
       const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
@@ -2546,12 +2554,12 @@ function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, on
     if (!name.trim() || !count || busy) return;
     setBusy(true);
     try {
-      const store = await createProductStore(name, items);
+      const store = await api.create(name, items);
       setCreated(store);
       onShared?.();
     } catch (error) {
       if (downloadFile()) {
-        toast?.success?.('Server unavailable — downloaded a JSON product store instead');
+        toast?.success?.('Server unavailable — downloaded a JSON store instead');
         onShared?.();
       } else {
         toast?.error?.(error?.message || 'Could not create the product store');
@@ -2573,11 +2581,11 @@ function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, on
     if (!link.trim() || busy) return;
     setBusy(true);
     try {
-      const result = await importProductStore(link);
+      const result = await api.importLink(link);
       onImported?.(result);
       setLink('');
     } catch (error) {
-      toast?.error?.(error?.message || 'Could not import the product store');
+      toast?.error?.(error?.message || 'Could not import the store');
     } finally {
       setBusy(false);
     }
@@ -2588,10 +2596,10 @@ function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, on
     if (!file || busy) return;
     setBusy(true);
     try {
-      const result = await importProductStoreFile(await file.text());
+      const result = await api.importFile(await file.text());
       onImported?.(result);
     } catch (error) {
-      toast?.error?.(error?.message || 'Could not import the JSON product store');
+      toast?.error?.(error?.message || 'Could not import the JSON store');
     } finally {
       setBusy(false);
     }
@@ -2607,8 +2615,8 @@ function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, on
             {mode === 'share' ? <I.link size={15} /> : <I.download size={15} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 750, color: 'var(--gb-text-primary)' }}>Move custom items</div>
-            <div style={{ marginTop: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Share with a revocable link or a durable JSON file.</div>
+            <div style={{ fontSize: 12.5, fontWeight: 750, color: 'var(--gb-text-primary)' }}>{L.title}</div>
+            <div style={{ marginTop: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{L.subtitle}</div>
           </div>
           <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
             {[['share', 'Share'], ['import', 'Import']].map(([id, label]) => (
@@ -2647,7 +2655,7 @@ function CustomItemsTransferPanel({ mode, items, onMode, onClose, onImported, on
               style={{ padding: 12, display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) auto', gap: 10, alignItems: 'end' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <label style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Shared store link</label>
-                <Input size="sm" value={link} onChange={setLink} placeholder="Paste a product-store link…" onKeyDown={(event) => { if (event.key === 'Enter') importLink(); }} />
+                <Input size="sm" value={link} onChange={setLink} placeholder={L.linkPlaceholder} onKeyDown={(event) => { if (event.key === 'Enter') importLink(); }} />
               </div>
               <div style={{ display: 'flex', gap: 7 }}>
                 <input ref={fileRef} type="file" accept=".json,application/json" onChange={importFile} style={{ display: 'none' }} />
@@ -2749,7 +2757,9 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
       </div>
       <AnimatePresence initial={false}>
         {transfer && (
-          <CustomItemsTransferPanel key="custom-items-transfer" mode={transfer.mode} items={transfer.items}
+          <StoreTransferPanel key="custom-items-transfer" mode={transfer.mode} items={transfer.items}
+            api={{ create: createProductStore, importLink: importProductStore, importFile: importProductStoreFile, buildFile: buildProductStoreFile }}
+            labels={{ defaultName: 'My custom item store', title: 'Move custom items', subtitle: 'Share with a revocable link or a durable JSON file.', linkPlaceholder: 'Paste a product-store link…', filenameBase: 'golfballs-product-store' }}
             onMode={(mode) => setTransfer((current) => ({ mode, items: current?.items || [] }))}
             onClose={() => setTransfer(null)} onImported={onTransferImported}
             onShared={() => { if (selectMode) exitSelect(); }} />
@@ -3171,6 +3181,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   useEffect(() => { if (view !== 'proposals' && view !== 'current') setDetail(null); setSelProps([]); }, [view]);  // close breakdown + clear multi-select on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const [loadedId, setLoadedId] = useState(null);
+  // Share/import saved proposals via the backend (same workflow as custom
+  // items). null = panel closed; { mode: 'share' | 'import' } = open.
+  const [savedTransfer, setSavedTransfer] = useState(null);
   // Current Proposals — live, pulled from the CRM for the account in context.
   // Lazy: fetched the first time the view opens (and re-fetchable).
   const [currentProposals, setCurrentProposals] = useState([]);
@@ -3794,10 +3807,26 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <AnimatePresence mode="wait" initial={false}>
           {view === 'proposals' ? (
             <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <AnimatePresence initial={false}>
+              {savedTransfer && (
+                <StoreTransferPanel key="proposal-transfer" mode={savedTransfer.mode} items={savedProposals}
+                  api={{ create: createProposalStore, importLink: importProposalStore, importFile: importProposalStoreFile, buildFile: buildProposalStoreFile }}
+                  labels={{ defaultName: 'My proposal set', title: 'Share saved proposals', subtitle: 'Share with a revocable link or a durable JSON file.', linkPlaceholder: 'Paste a proposal-store link…', filenameBase: 'golfballs-proposal-store' }}
+                  onMode={(mode) => setSavedTransfer({ mode })}
+                  onClose={() => setSavedTransfer(null)}
+                  onImported={(res) => { toast?.success?.(`Imported ${res.added} new + ${res.updated} updated${res.name ? ` from ${res.name}` : ''}`, { duration: 4000 }); setSavedTransfer(null); }}
+                  onShared={() => {}} />
+              )}
+            </AnimatePresence>
             <SavedGallery items={savedProposals} loadedId={loadedId}
               current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount}
               onEmail={(entry) => openProposalEmail(linesFromSaved(entry, rid), entry.name)}
+              headerAction={(
+                <IconBtn size="md" title="Share or import saved proposals"
+                  icon={<I.link />}
+                  onClick={() => setSavedTransfer((cur) => (cur ? null : { mode: savedProposals.length ? 'share' : 'import' }))} />
+              )}
               selectedIds={selPropIds} onToggleSelect={toggleSelProp} onClearSelection={() => setSelProps([])}
               onOpenMulti={() => { if (selProps.length) setDetail({ kind: 'multi', items: selProps }); }} />
           </motion.div>

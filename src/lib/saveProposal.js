@@ -664,6 +664,152 @@ export async function updateSavedProposal(entry) {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
+   Proposal stores — share saved proposals through the backend exactly like the
+   custom-items "product stores". A store is a named bag of saved-proposal
+   entries hosted on the backend behind an opaque, revocable link (the same
+   /product-stores endpoint the custom-items share uses — proposal entries are
+   just its JSON items), plus a durable versioned JSON file as an offline
+   fallback. Importing merges entries into the local gbSavedProposals library.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+export const PROPOSAL_STORE_FILE_KIND = 'golfballs-proposal-store';
+export const PROPOSAL_STORE_FILE_VERSION = 1;
+export const PROPOSAL_STORE_MAX_ENTRIES = 500;
+const PROPOSAL_STORE_FILE_MAX_BYTES = 4 * 1024 * 1024;
+
+const _clip = (value, max) => String(value == null ? '' : value).slice(0, max);
+
+/* A proposal entry is recognizable by its `lines` array — used to reject a
+   product store (or any other bag) pasted into the proposal importer. */
+function _isProposalEntry(entry) {
+  return !!entry && typeof entry === 'object' && !Array.isArray(entry) && Array.isArray(entry.lines);
+}
+
+/* Allowlist a saved-proposal entry to the exact shape saveProposalDraft stores,
+   so a shared/imported store can never smuggle unexpected fields. */
+export function normalizeProposalEntry(entry = {}) {
+  const e = entry && typeof entry === 'object' ? entry : {};
+  const lines = Array.isArray(e.lines) ? e.lines : [];
+  return {
+    id: _clip(e.id, 64) || ('prop-' + _rid()),
+    name: _clip(e.name, 120).trim() || 'Untitled draft',
+    date: _clip(e.date, 20) || new Date().toISOString().slice(0, 10),
+    promotion: (e.promotion && e.promotion.promo) ? e.promotion : null,
+    lines: lines.map((l) => ({
+      product: (l && l.product) || null,
+      decoration: (l && l.decoration) || null,
+      variant: (l && l.variant) || null,
+      free: !!(l && l.free),
+      freeValue: (l && l.freeValue != null) ? l.freeValue : null,
+      splits: Array.isArray(l && l.splits)
+        ? l.splits.map((s) => ({ qty: Number(s && s.qty) || 0, price: Number(s && s.price) || 0 }))
+        : [],
+    })),
+  };
+}
+
+/* Merge imported entries into the local library, deduped by id: an existing id
+   updates in place; a new id prepends (newest first). Returns { added, updated }. */
+async function _mergeSavedProposals(entries) {
+  const clean = (entries || []).map(normalizeProposalEntry);
+  const list = await loadSavedProposals();
+  const existing = new Set(list.map((p) => p.id));
+  const updates = new Map();
+  let added = 0;
+  let updated = 0;
+  for (const entry of clean) {
+    if (existing.has(entry.id)) { updates.set(entry.id, entry); updated += 1; }
+    else { added += 1; }
+  }
+  const fresh = clean.filter((entry) => !existing.has(entry.id));
+  const kept = list.map((p) => updates.get(p.id) || p);
+  await _writeSaved([...fresh, ...kept]);
+  return { added, updated };
+}
+
+/* Create a backend-hosted, revocable store from saved-proposal entries. Returns
+   the backend store { id, name, url, item_count, … } — surface `url` as the
+   shareable link. Mirrors customItems.createProductStore. */
+export async function createProposalStore(name, entries) {
+  const items = (entries || []).map(normalizeProposalEntry);
+  if (!items.length) throw new Error('Select at least one saved proposal');
+  if (items.length > PROPOSAL_STORE_MAX_ENTRIES) {
+    throw new Error(`A proposal store holds at most ${PROPOSAL_STORE_MAX_ENTRIES.toLocaleString('en-US')} proposals`);
+  }
+  const res = await sendBackgroundMessage('productStoreCreate', { name: (name || '').trim(), items });
+  if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to create the proposal store');
+  return res.store;
+}
+
+/* Import a shared proposal store (link or id) → merge into gbSavedProposals.
+   Rejects a link whose items aren't proposals. Returns { added, updated, name }. */
+export async function importProposalStore(linkOrId) {
+  const res = await sendBackgroundMessage('productStoreFetch', { url: linkOrId });
+  if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to load the proposal store');
+  const store = res.store || {};
+  const entries = (Array.isArray(store.items) ? store.items : []).filter(_isProposalEntry);
+  if (!entries.length) throw new Error('That link is not a proposal store');
+  const result = await _mergeSavedProposals(entries);
+  return { ...result, name: store.name || '' };
+}
+
+/* Build the durable, server-independent equivalent of a proposal-store link —
+   a versioned envelope, matching buildProductStoreFile. */
+export function buildProposalStoreFile(name, entries) {
+  const safeName = _clip(name, 120).trim();
+  if (!safeName) throw new Error('A proposal store name is required');
+  const items = (entries || []).map(normalizeProposalEntry);
+  if (!items.length) throw new Error('Select at least one saved proposal');
+  if (items.length > PROPOSAL_STORE_MAX_ENTRIES) {
+    throw new Error(`A proposal store holds at most ${PROPOSAL_STORE_MAX_ENTRIES.toLocaleString('en-US')} proposals`);
+  }
+  return {
+    schemaVersion: PROPOSAL_STORE_FILE_VERSION,
+    kind: PROPOSAL_STORE_FILE_KIND,
+    name: safeName,
+    createdAt: new Date().toISOString(),
+    items,
+  };
+}
+
+/* Parse only the documented, versioned envelope — raw arrays and backend
+   responses are rejected so future migrations stay explicit. */
+export function parseProposalStoreFile(text) {
+  const source = String(text || '');
+  if (new TextEncoder().encode(source).byteLength > PROPOSAL_STORE_FILE_MAX_BYTES) {
+    throw new Error('Proposal store files must be 4 MB or smaller');
+  }
+  let raw;
+  try { raw = JSON.parse(source); }
+  catch (error) { throw new Error(`Not valid JSON — ${error.message}`); }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.kind !== PROPOSAL_STORE_FILE_KIND) {
+    throw new Error('This is not a versioned Golfballs proposal store file');
+  }
+  if (raw.schemaVersion !== PROPOSAL_STORE_FILE_VERSION) {
+    throw new Error('This proposal store file version is not supported');
+  }
+  const name = _clip(raw.name, 120).trim();
+  if (!name) throw new Error('The proposal store file is missing its name');
+  const items = (Array.isArray(raw.items) ? raw.items : []).filter(_isProposalEntry).map(normalizeProposalEntry);
+  if (!items.length) throw new Error('The proposal store file has no proposals');
+  return {
+    schemaVersion: PROPOSAL_STORE_FILE_VERSION,
+    kind: PROPOSAL_STORE_FILE_KIND,
+    name,
+    createdAt: _clip(raw.createdAt, 40),
+    items,
+    transport: 'json',
+  };
+}
+
+/* Import a JSON proposal store into the same local library as link imports. */
+export async function importProposalStoreFile(text) {
+  const store = parseProposalStoreFile(text);
+  const result = await _mergeSavedProposals(store.items);
+  return { ...result, name: store.name, transport: 'json' };
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
    Working proposal — the rep's live, unsaved draft. Persisted to its own key so
    it survives closing the catalog, navigating, and restarting the browser. It is
    only wiped when the rep clears it manually (Clear → setProposal([]) → []).

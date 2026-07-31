@@ -629,6 +629,10 @@
       "file": "tests/unit/giftCatalogPromo.test.mjs"
     },
     {
+      "name": "catalog \u00b7 shareable proposal stores",
+      "file": "tests/unit/proposalStore.test.mjs"
+    },
+    {
       "name": "remote \u00b7 update-channel integrity",
       "file": "tests/integration/remoteIntegrity.test.mjs"
     },
