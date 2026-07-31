@@ -15,6 +15,7 @@ import { QuickTask } from './QuickTask.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
+import { liveDateOnPush } from '../lib/crmTasks.js';
 import {
   TASK_LIST_ROW_HEIGHT,
   taskListVirtualWindow,
@@ -268,12 +269,23 @@ async function apiPushTaskDate(id, daysOut) {
   // month/day next year), not 365 days, so leap years don't drift it.
   if (Number(daysOut) === 365) d.setFullYear(d.getFullYear() + 1);
   else d.setDate(d.getDate() + daysOut);
-  await updateTaskWith(t, { DueDate: fmtMDY(d) });
-  return fmtMDY(d);
+  const dueStr = fmtMDY(d);
+  await updateTaskWith(t, dueOverrides(dueStr));
+  return dueStr;
 }
 async function apiSetTaskDate(id, dueDateStr) {
   const t = await fetchTaskRaw(id);
-  await updateTaskWith(t, { DueDate: dueDateStr });
+  await updateTaskWith(t, dueOverrides(dueDateStr));
+}
+/* When a push moves the due date more than 2 weeks out, keep the live date 2
+   weeks ahead of it (LiveDate = DueDate − 14d) so the task re-indexes onto the
+   list at the right time. A near-term due (≤ 2 weeks) leaves the live date
+   alone — liveDateOnPush returns null there. */
+function dueOverrides(dueStr) {
+  const overrides = { DueDate: dueStr };
+  const live = liveDateOnPush(dueStr);
+  if (live) overrides.LiveDate = live;
+  return overrides;
 }
 /* Fetches the task's contactID so we can attach a freshly-created
    task to the same contact as the source row — submitQuickTask reads

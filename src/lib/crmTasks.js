@@ -18,6 +18,71 @@ import { API } from './constants.js';
 const BASE = API.CRM;
 const TASKS_ENDPOINT = `${BASE}/golfballs/adminnew/Default.aspx?Page=349`;
 
+/* ── Task date rule ──────────────────────────────────────────────
+   A task's Live Date sits exactly LIVE_LEAD_DAYS (2 weeks) before its
+   Due Date — the reach-out goes "live" two weeks before it's due, which
+   is how it gets indexed onto the Task List pull. These pure helpers
+   centralize the math so every surface (the Task List quick actions and
+   the custom-page task rows) pushes dates identically. */
+export const LIVE_LEAD_DAYS = 14;
+const MS_DAY = 86_400_000;
+
+/* Parse a CRM date (m/d/yyyy or ISO yyyy-mm-dd[…]) or a Date into a local
+   Date pinned to noon (avoids TZ/DST off-by-one). Returns null when the
+   value can't be parsed. */
+export function parseTaskDate(value) {
+  let d;
+  if (value instanceof Date) {
+    d = value;
+  } else {
+    const raw = String(value ?? '').trim();
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+    const mdy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (iso) d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), 12);
+    else if (mdy) d = new Date(Number(mdy[3]), Number(mdy[1]) - 1, Number(mdy[2]), 12);
+    else d = new Date(raw);
+  }
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
+}
+
+/* Format a Date as the CRM's zero-padded m/d/yyyy (matches TaskList.fmtMDY). */
+export function taskMDY(date) {
+  return [
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+    date.getFullYear(),
+  ].join('/');
+}
+
+/* Due date one calendar year out from `from` (default today) — same month/day
+   next year, NOT +365 days, so leap years don't drift it. Returns m/d/yyyy. */
+export function pushDueOneYear(from = new Date()) {
+  const d = parseTaskDate(from) || parseTaskDate(new Date());
+  d.setFullYear(d.getFullYear() + 1);
+  return taskMDY(d);
+}
+
+/* The live date for a given due date: LIVE_LEAD_DAYS before it. m/d/yyyy, or
+   null when the due date can't be parsed. */
+export function liveDateForDue(dueValue) {
+  const due = parseTaskDate(dueValue);
+  if (!due) return null;
+  return taskMDY(new Date(due.getTime() - LIVE_LEAD_DAYS * MS_DAY));
+}
+
+/* The live date to apply when a task's due date is (re)set by a push. Only
+   tracks the due date once it lands MORE than 2 weeks out; for a near-term due
+   (≤ LIVE_LEAD_DAYS from today) it returns null so the caller leaves the
+   existing live date alone — a live date in the past would be meaningless. */
+export function liveDateOnPush(dueValue, { today = new Date() } = {}) {
+  const due = parseTaskDate(dueValue);
+  if (!due) return null;
+  const now = parseTaskDate(today) || parseTaskDate(new Date());
+  if ((due.getTime() - now.getTime()) <= LIVE_LEAD_DAYS * MS_DAY) return null;
+  return taskMDY(new Date(due.getTime() - LIVE_LEAD_DAYS * MS_DAY));
+}
+
 function numericId(value, label) {
   const id = String(value == null ? '' : value).trim();
   if (!/^\d{1,12}$/.test(id) || Number(id) <= 0) throw new Error(`Invalid ${label}`);

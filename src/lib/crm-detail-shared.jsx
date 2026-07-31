@@ -15,7 +15,7 @@ import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
 import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
-import { completeTaskById } from './crmTasks.js';
+import { completeTaskById, pushDueOneYear, liveDateForDue } from './crmTasks.js';
 import { buildAccountPayload, accountUpdateUrl, checkAccountResponse } from './accountUpdate.js';
 import { CONTACT_COUNTRY_OPTS, CONTACT_USER_TYPE_OPTS, mergeContactCustomData } from './crmContact.js';
 import { opportunityStageTone, paginateCustomPageRows } from './customPageLayout.js';
@@ -1412,6 +1412,26 @@ export function OpenTaskRow({ t }) {
       })), 660);
     } catch (e) { setState('idle'); gbToast('Could not complete task', 'error'); }
   };
+  /* Push the due date out a full year and drop the live date to 2 weeks before
+     the new due (LiveDate = DueDate − 14d) so the reach-out re-indexes onto the
+     list at the right time. One click; no modal. */
+  const pushYear = async () => {
+    if (!t.id || state !== 'idle') return;
+    setState('busy');
+    try {
+      const DueDate = pushDueOneYear();
+      const LiveDate = liveDateForDue(DueDate);
+      await crmUpdateTaskFull(t.id, { DueDate, LiveDate });
+      patch((D) => ({
+        ...D,
+        openTasks: (D.openTasks || []).map((x) => (
+          x.id === t.id ? { ...x, dueDate: DueDate, liveDate: LiveDate } : x
+        )),
+      }));
+      setState('idle');
+      gbToast('Pushed out a year · live date 2 weeks before', 'success');
+    } catch (e) { setState('idle'); gbToast('Could not push task', 'error'); }
+  };
   const done = state === 'done' || state === 'leaving';
   const leaving = state === 'leaving';
   const priorityTone = priTone(t.priority);
@@ -1445,7 +1465,10 @@ export function OpenTaskRow({ t }) {
       <Td align="right" mono muted>{fmtDate(t.liveDate)}</Td>
       <Td align="right" mono><span style={{ color: dueColor }}>{fmtDate(t.dueDate)}</span></Td>
       <Td align="right">
-        <IconBtn ghost size="xs" icon={<I.edit />} title="Edit task" disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)} />
+        <div style={{ display: 'inline-flex', gap: 2 }}>
+          <IconBtn ghost size="xs" icon={<I.clock />} title="Push due date out 1 year (live date 2 weeks before)" disabled={state !== 'idle'} onClick={pushYear} />
+          <IconBtn ghost size="xs" icon={<I.edit />} title="Edit task" disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)} />
+        </div>
       </Td>
     </tr>
   );
