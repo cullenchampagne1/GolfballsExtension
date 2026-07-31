@@ -12,23 +12,10 @@ import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { ProposalEmailComposer } from '../modals/ProposalEmail.jsx';
 import { buildEmailSourceFromCartIds } from '../lib/proposalEmailSource.js';
+import { extractOpportunityProposals, proposalTextStyle } from '../lib/opportunityProposals.js';
 import { MarginBreakdown } from '../ui/components/MarginBreakdown.jsx';
 import { Btn, Card, ContactPill, DASH, DataCtx, DetailErrorBoundary, Dot, EmailsPanel, I, KV, LazySection, ScrollArea, SectionTitle, Spinner, StatCardGrid, Tag, Td, Th, fmt$, fullName, goUrl, tableStyle, trStyle, txt, useD } from '../lib/detail-shared.jsx';
 import { BackChip, Breadcrumb, DetailPageFrame, HeroShell, ModalCtx, OPP_STAGES, OpportunityModal, PatchCtx, TasksPanel, TopBar, crmGetOpportunity, gbToast, hostInputValue, hostSelectLabel, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
-
-/* Proposals live in the host DOM as checkboxes whose ONCHANGE is
-   ProposalCheckToggle(this, '<cartId>', '<name>', '<expiration>', '<newSite>'). */
-function extractProposals(doc) {
-  const out = [];
-  try {
-    (doc || document).querySelectorAll('[onchange*="ProposalCheckToggle"], [onclick*="ProposalCheckToggle"]').forEach((el) => {
-      const oc = el.getAttribute('onchange') || el.getAttribute('onclick') || '';
-      const m = /ProposalCheckToggle\(\s*this\s*,\s*'((?:\\.|[^'])*)'\s*,\s*'((?:\\.|[^'])*)'\s*,\s*'((?:\\.|[^'])*)'\s*,\s*([^)]*)\)/.exec(oc);
-      if (m) out.push({ cartId: m[1], name: (m[2] || '').replace(/\\'/g, "'").trim(), expiration: m[3], newSite: /true/i.test(m[4]) });
-    });
-  } catch (e) {}
-  return out;
-}
 
 /* ════════════════════════════════════════════════════════════
    OPPORTUNITY — header / stats / info (scalars fetched via
@@ -172,12 +159,12 @@ function OppInfoCard() {
 function ProposalsSection({ initialProposals = null }) {
   const { opp } = useOpp();
   const D = useD();
-  const [proposals, setProposals] = useState(() => initialProposals || extractProposals(document));
+  const [proposals, setProposals] = useState(() => initialProposals || extractOpportunityProposals(document));
   useEffect(() => {
     if (initialProposals) return undefined;
     if (proposals.length) return undefined;   // retry briefly if rows render late
     let n = 0;
-    const t = setInterval(() => { const p = extractProposals(document); if (p.length) { setProposals(p); clearInterval(t); } else if (++n > 8) clearInterval(t); }, 500);
+    const t = setInterval(() => { const p = extractOpportunityProposals(document); if (p.length) { setProposals(p); clearInterval(t); } else if (++n > 8) clearInterval(t); }, 500);
     return () => clearInterval(t);
   }, [initialProposals]);
   const [selected, setSelected] = useState([]);
@@ -214,18 +201,19 @@ function ProposalsSection({ initialProposals = null }) {
                 <tbody>
                   {proposals.map((p) => {
                     const on = selected.includes(p.cartId);
+                    const deletedStyle = proposalTextStyle(p);
                     return (
-                      <tr key={p.cartId} style={{ ...trStyle, background: on ? 'var(--gb-brand-tint-soft)' : 'transparent', cursor: 'pointer', transition: 'background var(--gb-anim)' }} onClick={() => toggle(p.cartId)}>
+                      <tr key={p.cartId} title={p.deleted ? 'Deleted proposal' : undefined} style={{ ...trStyle, background: on ? 'var(--gb-brand-tint-soft)' : 'transparent', cursor: 'pointer', transition: 'background var(--gb-anim)' }} onClick={() => toggle(p.cartId)}>
                         <Td><span style={{ width: 16, height: 16, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--gb-brand-label)' : 'transparent', border: '1.5px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), color: 'var(--gb-surface-deep)' }}>{on && <I.check size={10} />}</span></Td>
-                        <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 600 }}>{p.name}</span></Td>
+                        <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 600, ...(deletedStyle || {}) }}>{p.name}</span></Td>
                         <Td>
                           {(() => { const url = `https://www.golfballs.com/cart?proposalMode=true&opportunityID=${opp.id}&cartID=${p.cartId}`; return (
                             <a href={url} title={url} onClick={(e) => { e.stopPropagation(); e.preventDefault(); goUrl(url); }}
-                              style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-brand-label)', textDecoration: 'none', wordBreak: 'break-all', lineHeight: 1.4 }}>{url}</a>
+                              style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-brand-label)', textDecoration: 'none', wordBreak: 'break-all', lineHeight: 1.4, ...(deletedStyle || {}) }}>{url}</a>
                           ); })()}
                         </Td>
-                        <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{p.expiration}</span></Td>
-                        <Td align="center">{p.newSite ? <Tag tone="info" size="xs">New</Tag> : <Tag tone="neutral" size="xs">Legacy</Tag>}</Td>
+                        <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600, ...(deletedStyle || {}) }}>{p.expiration}</span></Td>
+                        <Td align="center">{p.newSite ? <Tag tone="info" size="xs" style={deletedStyle || undefined}>New</Tag> : <Tag tone="neutral" size="xs" style={deletedStyle || undefined}>Legacy</Tag>}</Td>
                       </tr>
                     );
                   })}

@@ -145,6 +145,10 @@
       "file": "tests/unit/customPagesStore.test.mjs"
     },
     {
+      "name": "crm \u00b7 opportunity deleted-proposal presentation",
+      "file": "tests/unit/opportunityProposals.test.mjs"
+    },
+    {
       "name": "ui \u00b7 custom pages lab fixtures and store",
       "file": "tests/unit/customPagesLab.test.mjs"
     },

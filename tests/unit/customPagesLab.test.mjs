@@ -52,6 +52,7 @@ describe('custom pages lab', () => {
     assert.equal(opportunity.stage, 'Proposed');
     assert.ok(opportunity.description.length > 80);
     assert.equal(proposals.length, 4);
+    assert.equal(proposals.filter((proposal) => proposal.deleted).length, 1);
     assert.equal(buildProposalFixtures('empty').length, 0);
   });
 

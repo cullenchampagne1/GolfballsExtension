@@ -299,7 +299,7 @@ export function buildProposalFixtures(mode = 'populated') {
   return [
     { cartId: 'CART-92841', name: 'Tournament essentials · good / better / best', expiration: '09/18/2026', newSite: true },
     { cartId: 'CART-92867', name: 'Executive gifting package with a deliberately long proposal name', expiration: '09/25/2026', newSite: true },
-    { cartId: 'CART-91704', name: 'Prior-year restock comparison', expiration: '08/30/2026', newSite: false },
+    { cartId: 'CART-91704', name: 'Prior-year restock comparison', expiration: '08/30/2026', newSite: false, deleted: true },
     { cartId: 'CART-93002', name: 'Apparel and embroidered accessories', expiration: '10/02/2026', newSite: true },
   ];
 }
