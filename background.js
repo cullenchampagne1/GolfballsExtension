@@ -1910,15 +1910,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       solrQuery: {
         queryType: 'select',
         start,
-        // `sort_default_i` is heavily NON-unique (hundreds of products share a
-        // value — e.g. 22 tie at 10), and Solr deep pagination (start/rows) over
-        // a non-unique sort is unstable: tied docs shuffle between page windows,
-        // so some are returned twice and OTHERS ARE SKIPPED. Over a ~3,100-doc
-        // full-catalog pull that silently drops a chunk of products (the
-        // "missing towels" report). Append the uniqueKey `id` as a tiebreaker so
-        // the ordering is total and every product is returned exactly once.
+        // Sort MUST match the site's own request verbatim — the icustomize
+        // solr-refinement gateway 502s on a compound sort (and `id` is not a
+        // sortable field there). `sort_default_i` is non-unique, so deep
+        // pagination CAN shift tied docs between windows; the paginator
+        // compensates for that below (over-fetch past numFound until every
+        // unique product is seen) instead of relying on a sort tiebreaker.
         rows: String(rows),
-        sort: 'sort_default_i desc, id asc',
+        sort: 'sort_default_i desc',
         searchTerm,
         facetRequest: GIFT_FACET_REQUEST,
         facetQueries: GIFT_FACET_QUERIES,

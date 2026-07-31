@@ -361,30 +361,51 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
     return cached.products;
   }
 
-  // One paginated pull of the full catalog query, to the live numFound.
+  // One paginated pull of the full catalog query, to the live numFound. A page
+  // is RETRIED on error (the icustomize gateway 502s intermittently) — the old
+  // loop broke on the first failed page, which truncated the catalog to
+  // everything fetched so far AND cached that partial set, silently dropping
+  // every product after the failure point. We now only cache a COMPLETE pull.
   const out = [];
   const seenIds = new Set();
+  const MAX_PAGE_RETRIES = 4;
   let start = 0;
   let lastError = null;
+  let expected = 0;         // numFound reported by the service
+  let complete = false;
   while (start < MAX_PRODUCTS) {
-    const { docs, numFound, error } = await fetchPage(MAIN_QUERY, start, PAGE_ROWS);
-    if (error) lastError = error;
-    if (!docs.length) break;
-    for (const d of docs) {
+    let page = { docs: [], numFound: 0, error: 'not attempted' };
+    for (let attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt += 1) {
+      page = await fetchPage(MAIN_QUERY, start, PAGE_ROWS);
+      if (!page.error) break;
+      lastError = page.error;
+      if (attempt < MAX_PAGE_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+      }
+    }
+    if (page.error) break;                      // page failed every retry — incomplete pull
+    if (page.numFound) expected = page.numFound;
+    if (!page.docs.length) { complete = true; break; }   // genuine end of results
+    for (const d of page.docs) {
       const p = normalizeDoc(d);
       if (p && p.id && !seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
     }
     start += PAGE_ROWS;
     if (typeof onProgress === 'function') {
-      try { onProgress({ loaded: out.length, total: numFound || 0 }); } catch { /* non-fatal */ }
+      try { onProgress({ loaded: out.length, total: expected || 0 }); } catch { /* non-fatal */ }
     }
-    if (numFound && start >= numFound) break;
+    if (expected && start >= expected) { complete = true; break; }
   }
-  if (out.length) { setCache({ ts: Date.now(), products: out }); return out; }
-  // A MANUAL refresh (force) that pulls nothing must NOT silently fall back to
-  // the old cache / bundled seed — that's exactly the "I refreshed but still see
-  // old pricing" trap. Surface it so the caller can tell the user. First open
-  // (no force) still degrades gracefully to cache/seed.
-  if (force) throw new Error(lastError || 'No products returned from the catalog service');
-  return (cached && cached.products) || GIFT_CATALOG_SEED;
+  // Only a COMPLETE pull replaces the cache — a run cut short by errors must not
+  // overwrite good data with a truncated catalog (missing every product after
+  // the failure). A MANUAL refresh that couldn't complete surfaces the error so
+  // the caller keeps previous data instead of quietly showing a partial list.
+  if (complete && out.length) { setCache({ ts: Date.now(), products: out }); return out; }
+  if (force) {
+    throw new Error(lastError
+      ? `Catalog service error (${lastError}) — please try again`
+      : 'The catalog service returned no products');
+  }
+  if (cached && Array.isArray(cached.products) && cached.products.length) return cached.products;
+  return out.length ? out : GIFT_CATALOG_SEED;   // best-effort first paint; not cached (incomplete)
 }
