@@ -778,10 +778,10 @@ function SavedNavRow({ label, icon, count, active, onClick }) {
 
 function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, dock, view, onSetView, savedCount, customCount, currentCount }) {
   return (
-    <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
+    <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: '5px 12px 12px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '0 10px 3px', flexShrink: 0 }}>Browse</div>
       {/* Capped, scrollable list with a soft fade at the top/bottom edges. */}
-      <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '14px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
+      <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 14px), transparent 100%)' }}>
         {/* No "All Items" row — the catalog defaults to the full golfballs.com
             set, and a plain search spans everything. Pick a department to browse
             one (click it again to clear); /category scopes a search. ── */}
@@ -789,7 +789,7 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, 
             the /Commissionable filter to scope to commissionable products. ── */}
         {depts.length > 0 && (
           <>
-            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '10px 11px 4px', flexShrink: 0 }}>Departments</div>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '2px 11px 4px', flexShrink: 0 }}>Departments</div>
             {depts.map((d) => (
               <CatRow key={'dept:' + d} glyph={d} label={catalogSidebarLabel(d)} count={deptCounts[d] || 0}
                 active={view === 'catalog' && sel === 'dept:' + d} onClick={() => onSelect('dept:' + d)} />
@@ -797,9 +797,8 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, 
           </>
         )}
 
-        {/* Custom items — rep-defined, deliberately kept OUT of "All Items".
-            Sits at the foot of Departments behind a thin divider. */}
-        <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '8px 11px', flexShrink: 0 }} />
+        {/* Custom items — rep-defined products. Rendered inline right after the
+            departments (no divider) so it reads as just another category. */}
         <SavedNavRow label="Custom Items" icon={<I.sparkle size={14} />} count={customCount}
           active={view === 'custom'} onClick={() => onSetView('custom')} />
 
