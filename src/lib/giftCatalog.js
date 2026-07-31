@@ -14,7 +14,7 @@
    and is the fallback when the live fetch fails.
 ─────────────────────────────────────────────────────────────── */
 
-import seed from './giftCatalogSeed.json';
+import seed from './giftCatalogSeed.json' with { type: 'json' };
 import { loadDevSettings } from './devSettings.js';
 import { decodeEntities } from './htmlEntities.js';
 
@@ -66,7 +66,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v5'; // bumped: normalizeDoc now carries urlPath (the commission "_1" slug); a v4 cache predates it, so force a one-time re-index
+const CACHE_KEY = 'gbGiftCatalogCache_v6'; // bumped: stable-pagination sort (recovers products the non-unique sort skipped) + brand "<X>and<Y>" promo recognition; a v5 cache predates both, so force a one-time re-index
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -74,15 +74,28 @@ const round2 = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
 
 /* Promo codes ride on tag_ss (e.g. "EVERY12GETS6", "BUY12GET4FREE").
    Surface the first recognized one as a readable deal label so the
-   product reads as on-sale. */
+   product reads as on-sale.
+
+   IMPORTANT: eligibility is NOT limited to products carrying the generic
+   "BUY…GET…FREE" tag. Many products carry only a BRAND-SPECIFIC eligibility
+   tag — e.g. Srixon's `srixon12and4` (on the Z-Star 8, which has NO
+   BUY12GET4FREE tag), `srixon12and6`, Blue Cypress `bluecypress2and1`, or a
+   bare `12and4`. The icustomize promotion engine decides eligibility from the
+   CART (product + qty), not the tag, and resolves these to the BUY{X}GET{Y}FREE
+   code — confirmed in the live cart: Z-Star 8 (P00WSY, srixon12and4) + 12 dz →
+   promoCode BUY12GET4FREE, eligible. So a "<brand?><X>and<Y>" tag surfaces the
+   same buy-X-get-Y promo under the BUY{X}GET{Y}FREE code the engine accepts. */
 function parsePromo(tags) {
   if (!Array.isArray(tags)) return null;
   for (const t of tags) {
     const s = String(t);
     let m = /^BUY(\d+)GET(\d+)FREE$/i.exec(s);
-    if (m) return { code: s, label: `Buy ${m[1]} get ${m[2]} free` };
+    if (m) return { code: s.toUpperCase(), label: `Buy ${m[1]} get ${m[2]} free` };
     m = /^EVERY(\d+)GETS?(\d+)$/i.exec(s);
-    if (m) return { code: s, label: `Buy ${m[1]} get ${m[2]} free` };
+    if (m) return { code: s.toUpperCase(), label: `Buy ${m[1]} get ${m[2]} free` };
+    // Brand-specific "…<X>and<Y>" eligibility tag (srixon12and4, 12and4, …).
+    m = /(?:^|[^0-9])(\d+)and(\d+)$/i.exec(s);
+    if (m) return { code: `BUY${m[1]}GET${m[2]}FREE`, label: `Buy ${m[1]} get ${m[2]} free` };
   }
   return null;
 }
@@ -307,7 +320,7 @@ function setCache(payload) {
  *  rebuild truly clears stale data instead of falling back to the old cache. */
 export function clearCatalogCache() {
   return new Promise((resolve) => {
-    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3'], resolve); }
+    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5'], resolve); }
     catch { resolve(); }
   });
 }
