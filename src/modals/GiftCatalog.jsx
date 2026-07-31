@@ -35,6 +35,7 @@ import {
   computeMasonry,
   catalogRowHeight,
   CARD_METRICS,
+  catalogGridResetKey,
 } from '../lib/catalogPresentation.js';
 
 /* The boxed gift-set preview for a line (sleeve render with the ball's print +
@@ -3723,12 +3724,23 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const GRID_CHUNK = 48;
   const gridScrollRef = useRef(null);
   const [visibleCount, setVisibleCount] = useState(GRID_INITIAL);
-  // Reset the window (and scroll to top) whenever the result set changes —
-  // a new filter/search/sort/catalog shouldn't inherit the old scroll depth.
+  /* Reset the window (and scroll to top) when the user changes what they're
+     looking at — a new filter/search/sort/catalog shouldn't inherit the old
+     scroll depth.
+     Keyed on the CRITERIA, not on the `results` array identity: `results` is
+     rebuilt (line `r = [...r]`) whenever any input memo re-runs, and favoriting
+     re-runs them because `favoriteSet` is a fresh Set on every toggle. Watching
+     the array meant starring a card in a department/favorites view snapped the
+     grid back to the top and collapsed the window to 60. Un-starring inside the
+     Favorites view still just drops that card in place, which is what you
+     want. */
+  const gridResetKey = useMemo(() => catalogGridResetKey({
+    sel, query, sort, special, searchingAll, brands: selBrands,
+  }), [sel, query, sort, special, searchingAll, selBrands]);
   useEffect(() => {
     setVisibleCount(GRID_INITIAL);
     if (gridScrollRef.current) gridScrollRef.current.scrollTop = 0;
-  }, [results]);
+  }, [gridResetKey, catalog]);
   const onGridScroll = (e) => {
     const el = e.currentTarget;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800) {

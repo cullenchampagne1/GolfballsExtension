@@ -106,6 +106,22 @@ export function catalogRowHeight(compact = false) {
     + CARD_SAFETY;
 }
 
+/* Identity of "what the user is looking at" in the product grid.
+ *
+ * The grid resets its render window and scrolls to top when this changes. It
+ * deliberately covers only the BROWSING CRITERIA — never the result array or
+ * anything favourite-related: `results` is rebuilt on every dependent memo run,
+ * and favoriting produces a fresh Set each toggle, so keying the reset on the
+ * array made starring a card in a department view snap the grid back to the top.
+ */
+export function catalogGridResetKey({
+  sel = 'all', query = '', sort = '', special = null,
+  searchingAll = false, brands = [],
+} = {}) {
+  const list = Array.from(brands || []).map((b) => String(b)).sort();
+  return JSON.stringify([sel, query, sort, special, !!searchingAll, list]);
+}
+
 export function normalizeCatalogScale(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return CATALOG_SCALE_DEFAULT;

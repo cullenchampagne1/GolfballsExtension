@@ -14,7 +14,7 @@ import {
   MASONRY_ASSUMED_HEIGHT, MASONRY_COL_MIN, MASONRY_GAP,
   computeMasonry, normalizeCatalogScale,
   CATALOG_SCALE_DEFAULT, CATALOG_SCALE_MAX, CATALOG_SCALE_MIN,
-  catalogRowHeight, CARD_METRICS, CARD_BORDER, CARD_SAFETY,
+  catalogRowHeight, CARD_METRICS, CARD_BORDER, CARD_SAFETY, catalogGridResetKey,
 } from '../../src/lib/catalogPresentation.js';
 
 const items = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }));
@@ -218,5 +218,41 @@ describe('catalog product-grid row height', () => {
 
   it('defaults to the comfortable row height', () => {
     assert.equal(catalogRowHeight(), catalogRowHeight(false));
+  });
+});
+
+/* ── Grid reset key ───────────────────────────────────────────────────────────
+   The product grid resets its render window and jumps to the top when this key
+   changes. Favoriting a card rebuilds the `results` array (fresh Set → memos
+   re-run → `[...r]`), so keying the reset on the array made starring a card
+   below the fold teleport the scroll position back to the top. The key must
+   track only the browsing criteria. */
+describe('catalog grid reset key', () => {
+  const base = { sel: 'dept:Accessories', query: '', sort: 'popular', special: null, searchingAll: false, brands: [] };
+
+  it('is unchanged by favoriting (the scroll-teleport bug)', () => {
+    // Same criteria, different favourites/results — the key must not move.
+    assert.equal(catalogGridResetKey(base), catalogGridResetKey({ ...base }));
+  });
+
+  it('is stable across Set identity and brand ordering', () => {
+    const a = catalogGridResetKey({ ...base, brands: new Set(['Titleist', 'Srixon']) });
+    const b = catalogGridResetKey({ ...base, brands: new Set(['Srixon', 'Titleist']) });
+    assert.equal(a, b, 'a re-created Set with the same brands must not reset the grid');
+  });
+
+  it('changes when the user actually changes what they are browsing', () => {
+    const start = catalogGridResetKey(base);
+    assert.notEqual(catalogGridResetKey({ ...base, sel: 'all' }), start);
+    assert.notEqual(catalogGridResetKey({ ...base, query: 'towel' }), start);
+    assert.notEqual(catalogGridResetKey({ ...base, sort: 'priceLow' }), start);
+    assert.notEqual(catalogGridResetKey({ ...base, special: 'sale' }), start);
+    assert.notEqual(catalogGridResetKey({ ...base, searchingAll: true }), start);
+    assert.notEqual(catalogGridResetKey({ ...base, brands: ['Srixon'] }), start);
+  });
+
+  it('tolerates being called with nothing', () => {
+    assert.equal(typeof catalogGridResetKey(), 'string');
+    assert.equal(catalogGridResetKey(), catalogGridResetKey({}));
   });
 });
