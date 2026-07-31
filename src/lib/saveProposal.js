@@ -150,7 +150,10 @@ export async function buildProposalLines(proposal) {
     for (const split of (line.splits || [])) {
       items.push(assembleLine({
         product: raw,
-        pricing: { price: split.price, breaks: lineBreaks },
+        // `override` carries a hand-edited price straight through to ItemPrice —
+        // without it assembleLine re-derives the list ladder and the rep's quoted
+        // price silently reverts to the catalog price on save.
+        pricing: { price: split.price, breaks: lineBreaks, override: !!split.priceEdited },
         decoration,
         selection,
         qty: split.qty,
@@ -701,8 +704,15 @@ export function normalizeProposalEntry(entry = {}) {
       variant: (l && l.variant) || null,
       free: !!(l && l.free),
       freeValue: (l && l.freeValue != null) ? l.freeValue : null,
+      // priceEdited must round-trip: it marks a hand-quoted price, which both the
+      // auto-reprice effect and the cart serializer honor as an override. Dropping
+      // it here made a reloaded/shared draft silently revert to list price.
       splits: Array.isArray(l && l.splits)
-        ? l.splits.map((s) => ({ qty: Number(s && s.qty) || 0, price: Number(s && s.price) || 0 }))
+        ? l.splits.map((s) => ({
+          qty: Number(s && s.qty) || 0,
+          price: Number(s && s.price) || 0,
+          ...(s && s.priceEdited ? { priceEdited: true } : {}),
+        }))
         : [],
     })),
   };
@@ -855,7 +865,11 @@ export function linesFromSaved(entry, ridFn) {
     variant: l.variant || undefined,
     free: !!l.free,
     freeValue: l.freeValue != null ? l.freeValue : undefined,
-    splits: (l.splits || []).map((s) => ({ id: mk(), qty: s.qty, price: s.price })),
+    // Keep priceEdited so a loaded draft's hand-quoted prices survive: it stops
+    // the auto-reprice effect from resetting them AND flags the cart override.
+    splits: (l.splits || []).map((s) => ({
+      id: mk(), qty: s.qty, price: s.price, ...(s.priceEdited ? { priceEdited: true } : {}),
+    })),
   }));
   // Re-link each free giveaway to the paid line that earned it (same product) so
   // the email's Separated-theme grouping survives a reload. Stored ids are

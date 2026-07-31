@@ -15,7 +15,7 @@ import {
   ballPreviewUrl, giftSetPreviewUrl, monogramPreviewUrl, teePreviewUrl,
   buildBallDynamicImage, priceAtQ, lineTotal,
   promoDiscount, freeLinesFromPromo,
-  buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody,
+  buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine,
   parseGetCart, buildCustomItemLine, buildAsCartContents,
 } from '../../src/lib/cartSerializer.js';
 
@@ -395,5 +395,73 @@ describe('buildAsCartContents', () => {
       sku: 'https://www.golfballs.com/product/titleist-pro-v1_1?itemGUID=guid-1',
     }]);
     assert.equal(typeof out.timestamp, 'number');
+  });
+});
+
+/* ── Hand-edited price overrides ──────────────────────────────────────────────
+   assembleLine normally recomputes each line's price from the product's live fee
+   ladders (so an untouched line never trips the site's "the price has changed"
+   prompt). But a proposal quotes NEGOTIATED pricing: when the rep hand-edits a
+   split's price the modal marks it `priceEdited`, saveProposal passes
+   `pricing.override`, and that price must reach the cart verbatim. Before this,
+   `computed` won unconditionally and every edited price silently reverted to
+   list price on save. */
+describe('assembleLine · price override', () => {
+  // A product WITH a fee ladder — so the recompute path is live and would
+  // otherwise overwrite the quoted price.
+  const PRODUCT = {
+    ShortCode: 'P0117H',
+    Name: 'Z-Star Diamond 3 Golf Balls',
+    NameFormat: 'Z-Star Diamond 3 Golf Balls',
+    Brand: { Name: 'Srixon' },
+    ProductChild: [{ ShortCode: 'C001', productChildID: 1, PropertyValueProduct: [] }],
+    ProductModification: [],
+    itemFee_priceBreakHeader: {
+      priceBreakHeaderID: 7857,
+      PriceBreak: [{ Quantity: 1, Price: 64.99, Cost: 0 }, { Quantity: 12, Price: 61.99, Cost: 0 }],
+    },
+  };
+
+  it('sends the hand-edited price verbatim when override is set', () => {
+    const line = assembleLine({
+      product: PRODUCT,
+      pricing: { price: 57.99, breaks: [{ q: 1, p: 64.99 }], override: true },
+      qty: 16,
+    });
+    assert.equal(line.ItemPrice, 57.99, 'quoted price must survive to ItemPrice');
+    assert.deepEqual(line.ItemPriceBreak.PriceBreak, [{ Quantity: 1, Price: 57.99, Cost: 0 }],
+      'the ladder must be flat at the quoted price so every qty prices the same');
+    assert.equal(line.totalQty, 16);
+    // lineTotal reflects the quote, not list price.
+    assert.equal(lineTotal(line), 57.99 * 16);
+  });
+
+  it('rounds an override to cents', () => {
+    const line = assembleLine({
+      product: PRODUCT, pricing: { price: 57.9949, override: true }, qty: 1,
+    });
+    assert.equal(line.ItemPrice, 57.99);
+  });
+
+  it('does NOT flatten the ladder when nothing was hand-edited', () => {
+    // Without an override the multi-tier ladder survives (the override path is
+    // what collapses it to a single quoted break) — so an untouched line still
+    // carries its real qty breaks.
+    const line = assembleLine({
+      product: PRODUCT,
+      pricing: { price: 57.99, breaks: [{ q: 1, p: 64.99 }, { q: 12, p: 61.99 }] },
+      qty: 16,
+    });
+    assert.deepEqual(line.ItemPriceBreak.PriceBreak, [
+      { Quantity: 1, Price: 64.99, Cost: 0 },
+      { Quantity: 12, Price: 61.99, Cost: 0 },
+    ]);
+  });
+
+  it('ignores an override with no price', () => {
+    const line = assembleLine({
+      product: PRODUCT, pricing: { breaks: [{ q: 1, p: 64.99 }], override: true }, qty: 1,
+    });
+    assert.ok(line.ItemPrice != null);
   });
 });

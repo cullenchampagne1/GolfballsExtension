@@ -781,10 +781,21 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
       brand: (product.Brand && product.Brand.Name) || '',
     }),
   }) : null;
-  const breaks = giftBreaks ? giftBreaks
+  /* A hand-edited price is an OVERRIDE and must win over the recomputed ladder.
+     The live-ladder recompute above exists to avoid the site's "the price has
+     changed" prompt on an untouched line — but a proposal's whole purpose is to
+     quote negotiated pricing, so when the rep types a price we send exactly that
+     (flat at every qty, like a custom item) instead of silently restoring list
+     price. Setup fees still come from the computed ladder: the override is the
+     per-unit price, not the one-time decoration setup. */
+  const overridePrice = pricing.override && pricing.price != null ? round2(pricing.price) : null;
+  const breaks = overridePrice != null ? [{ q: 1, p: overridePrice }]
+    : giftBreaks ? giftBreaks
     : computed ? computed.breaks
     : ((pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }]);
-  const unit = (computed || giftBreaks) ? atQ(breaks, qty) : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
+  const unit = overridePrice != null ? overridePrice
+    : (computed || giftBreaks) ? atQ(breaks, qty)
+    : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
   const setupBreaks = giftSet ? null : ((computed && computed.setupBreaks) || null);
   const setupUnit = setupBreaks ? atQ(setupBreaks, qty) : 0;
   const childList = bundleBlock ? [child, bundleBlock.kitChild] : [child];
