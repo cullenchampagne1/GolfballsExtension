@@ -503,7 +503,7 @@ function InventoryPanel({ sku }) {
     return () => { alive = false; };
   }, [sku]);
   const COLS = [['available', 'Avail'], ['onHand', 'OnHand'], ['alloc', 'Alloc'], ['onOrder', 'OnOrdr']];
-  const numCell = (v, k) => <td key={k} style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, color: 'var(--gb-text-secondary)', borderTop: '1px solid var(--gb-border-subtle)' }}>{(v || 0).toLocaleString('en-US')}</td>;
+  const numCell = (v, k) => <td key={k} style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>{(v || 0).toLocaleString('en-US')}</td>;
   return (
     <div style={{ marginTop: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -538,7 +538,10 @@ function InventoryPanel({ sku }) {
             </thead>
             <tbody>
               {data.rows.map((r, i) => (
-                <tr key={i} title={[r.itemNumber, r.description].filter(Boolean).join(' — ')}>
+                // Zebra striping — every other row gets a faint fill so the
+                // variant rows read as distinct lines instead of one grey block.
+                <tr key={i} title={[r.itemNumber, r.description].filter(Boolean).join(' — ')}
+                  style={{ background: i % 2 === 1 ? 'var(--gb-fill-faint)' : 'transparent' }}>
                   {COLS.map(([k]) => numCell(r[k], k))}
                 </tr>
               ))}
