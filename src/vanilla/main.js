@@ -68,17 +68,29 @@ function __gbAccessAllowed(st, now) {
   __gbActionRuntime?.registerHandler?.(
     'open_contact',
     'content',
-    (_payload, context) => {
+    (payload, context) => {
+      // Fast path: the background poller already resolved this contact's admin
+      // URL (email → CRM index / Solr, at poll time) — jump straight to it.
       const url = String(context.notification?.localActionUrl || '');
-      if (!/^https:\/\/api\.golfballs\.com\/golfballs\/adminnew\//i.test(url)) {
-        window.__gbToast?.info?.(
-          'No matching contact is available on this device yet',
-          { duration: 4000 },
-        );
-        return false;
+      if (/^https:\/\/api\.golfballs\.com\/golfballs\/adminnew\//i.test(url)) {
+        window.location.assign(url);
+        return true;
       }
-      window.location.assign(url);
-      return true;
+      // Fallback: no pre-resolved URL (the worker's index was empty or it had
+      // no credentialed golfballs session at poll time). Don't dead-end — run
+      // the search live at CLICK time, in this credentialed content context,
+      // by opening CRM Search pre-filled with the sender's email. It auto-runs
+      // the Solr query so the matching contact is one click away.
+      const email = String(payload?.target || '').trim();
+      if (email && typeof window.__gbShowCrmSearchModal === 'function') {
+        window.__gbShowCrmSearchModal({ query: email, type: 'contact' });
+        return true;
+      }
+      window.__gbToast?.info?.(
+        'No matching contact is available on this device yet',
+        { duration: 4000 },
+      );
+      return false;
     },
   );
   __gbActionRuntime?.registerHandler?.(

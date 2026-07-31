@@ -62,6 +62,28 @@ describe('extension action language', () => {
     assert.equal(contact.value, 'message-12');
   });
 
+  it('understands the email-relay open_contact wire shape verbatim', () => {
+    // The exact envelope revstack-email-relay emits for an incoming reply
+    // (email_relay_service._enqueue_extension_notification): a { label, payload }
+    // wrapper whose payload is a JSON string. If normalize ever stops unwrapping
+    // this, canExecute() fails and the notification shows "not available on this
+    // page" before any contact search runs.
+    const action = normalizeActionPayload({
+      label: 'Open contact',
+      payload: JSON.stringify({
+        version: 1,
+        command: 'open_contact',
+        target: 'jane.customer@example.com',
+        value: 'AAMkAGI2-power-automate-id',
+        options: [],
+      }),
+    });
+    assert.equal(action.command, 'open_contact');
+    assert.equal(action.target, 'jane.customer@example.com'); // the sender email → click-time search query
+    assert.equal(action.value, 'AAMkAGI2-power-automate-id');
+    assert.equal(action.label, 'Open contact');
+  });
+
   it('rejects unknown commands, extra fields, and misleading wrappers', () => {
     assert.throws(
       () => normalizeActionPayload({
