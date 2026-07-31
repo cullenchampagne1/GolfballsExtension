@@ -33,6 +33,8 @@ import {
   normalizeCatalogScale,
   CATALOG_SCALE_DEFAULT,
   computeMasonry,
+  catalogRowHeight,
+  CARD_METRICS,
 } from '../lib/catalogPresentation.js';
 
 /* The boxed gift-set preview for a line (sleeve render with the ball's print +
@@ -422,7 +424,11 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
         {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>
       <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        {/* Fixed integer height, like the title box: the brand/rating row's
+            natural height comes from font metrics (9.5px text vs a 10px Rating)
+            which differ per platform/DPI, and any fraction here mis-rounds under
+            the mount's `zoom`. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: compact ? CARD_METRICS.compact.brand : CARD_METRICS.normal.brand, flexShrink: 0 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.brand}</span>
             {p.repoTag && (
@@ -439,7 +445,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
             grid row — identical, so rows can't overlap. */}
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: compact ? 32 : 34, flexShrink: 0 }}>{p.title}</div>
         {p.sku && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, height: compact ? CARD_METRICS.compact.sku : CARD_METRICS.normal.sku, flexShrink: 0 }}>
             <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>
             <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
           </div>
@@ -2779,7 +2785,11 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           </div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
+            {/* gridAutoRows pins every row to an exact integer height. Under the
+                mount root's CSS `zoom`, content-sized tracks pick up fractional
+                heights that mis-round, so a card renders a hair taller than its
+                track and the next row creeps up into it. */}
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gridAutoRows: `${catalogRowHeight(compact)}px`, gap: compact ? 10 : 12 }}>
               {shown.map((ci, idx) => {
                 const p = customItemToProduct(ci);
                 const picked = sel.has(ci.id);
@@ -3871,7 +3881,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 </div>
               ) : (
                 <>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
+                {/* gridAutoRows pins every row to an exact integer height. Under the
+                mount root's CSS `zoom`, content-sized tracks pick up fractional
+                heights that mis-round, so a card renders a hair taller than its
+                track and the next row creeps up into it. */}
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gridAutoRows: `${catalogRowHeight(compact)}px`, gap: compact ? 10 : 12 }}>
                   {/* Small sets animate per-card; large sets render a windowed
                       slice (grown on scroll by onGridScroll) so the DOM never
                       holds all ~3,100 cards and the open animation stays smooth. */}

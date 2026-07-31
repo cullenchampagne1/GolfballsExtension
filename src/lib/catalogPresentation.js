@@ -62,6 +62,50 @@ export function computeMasonry(items, width, heights) {
   };
 }
 
+/* Product-grid card geometry.
+ *
+ * The catalog mount root carries a real CSS `zoom` (scales.js), under which any
+ * FRACTIONAL layout height mis-rounds: a card ends up a hair taller than the
+ * grid track that CSS sized from its own content, and the next row creeps up
+ * into it. Content-sized rows therefore can't be trusted here — every row has
+ * to be an exact integer the card is then pinned to (cards render at
+ * height:100% + overflow:hidden, so they fill the track exactly and can never
+ * bleed past it).
+ *
+ * Each part below is an integer, and the variable rows (brand/rating, SKU) are
+ * RESERVED whether or not the product has them, so every card in every column
+ * is byte-identical in height. Keep these in sync with ProductCard's styles.
+ */
+export const CARD_METRICS = Object.freeze({
+  compact: Object.freeze({
+    pad: 9, image: 132, contentTop: 8, gap: 4, brand: 14, title: 32, sku: 13, price: 32,
+  }),
+  normal: Object.freeze({
+    pad: 11, image: 156, contentTop: 10, gap: 5, brand: 15, title: 34, sku: 14, price: 36,
+  }),
+});
+export const CARD_BORDER = 2;      // 1px top + 1px bottom
+/* Text rows are measured from font metrics, which differ slightly by platform,
+   DPI and zoom level — the reason this only ever bit on SOME displays. The
+   track must never be SHORTER than the card's content (cards clip at
+   overflow:hidden), so carry a couple of px of headroom; the card's flex
+   spacer absorbs it, keeping the price row bottom-aligned. */
+export const CARD_SAFETY = 4;
+
+/** Exact integer height of one product-grid row for the given density. */
+export function catalogRowHeight(compact = false) {
+  const m = compact ? CARD_METRICS.compact : CARD_METRICS.normal;
+  return CARD_BORDER
+    + m.pad * 2                    // card padding, top + bottom
+    + m.image                      // fixed image box
+    + m.contentTop                 // content block's padding-top
+    + m.brand + m.gap              // brand / rating row
+    + m.title + m.gap              // fixed 2-line title
+    + m.sku + m.gap                // SKU row (reserved even when absent)
+    + m.price                      // price + Add button row
+    + CARD_SAFETY;
+}
+
 export function normalizeCatalogScale(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return CATALOG_SCALE_DEFAULT;
