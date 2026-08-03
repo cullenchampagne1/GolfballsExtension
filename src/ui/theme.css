@@ -496,10 +496,15 @@
    extension form controls. We render our own ring via box-shadow
    (--gb-focus-ring) on the styled wrappers, so the native outline is
    redundant + off-brand. Scoped to extension mount roots
-   ([data-gb-scale] — set on every modal host, popup, editor, shelf)
+   ([data-gb-scale] or the scale-independent [data-gb-ui-root])
    so the host CRM page's own inputs are never touched. Buttons keep
    their outline for keyboard accessibility.
 ════════════════════════════════════════════════════════════ */
+[data-gb-ui-root] input:focus,     [data-gb-ui-root] input:focus-visible,
+[data-gb-ui-root] textarea:focus,  [data-gb-ui-root] textarea:focus-visible,
+[data-gb-ui-root] select:focus,    [data-gb-ui-root] select:focus-visible,
+[data-gb-ui-root] [contenteditable]:focus,
+[data-gb-ui-root] [contenteditable]:focus-visible,
 [data-gb-scale] input:focus,        [data-gb-scale] input:focus-visible,
 [data-gb-scale] textarea:focus,     [data-gb-scale] textarea:focus-visible,
 [data-gb-scale] select:focus,       [data-gb-scale] select:focus-visible,
@@ -516,13 +521,15 @@
    line-height inherit in — which makes cards with height:100% + padding
    overflow their grid track (rows overlap) and inflates text. Pin both
    on extension mount roots so the UI renders identically on any host.
-   Scoped to [data-gb-scale] (modal hosts, popup, editor, shelf) so the
-   host page's own elements are never touched.
+   [data-gb-ui-root] keeps that armor on self-scaled surfaces which opt out
+   of [data-gb-scale] (notably the gift catalog); otherwise height:100%
+   cards become track height + padding + border and overlap the next row.
 ════════════════════════════════════════════════════════════ */
+[data-gb-ui-root], [data-gb-ui-root] *, [data-gb-ui-root] *::before, [data-gb-ui-root] *::after,
 [data-gb-scale], [data-gb-scale] *, [data-gb-scale] *::before, [data-gb-scale] *::after {
   box-sizing: border-box;
 }
-[data-gb-scale] { line-height: normal; }
+[data-gb-ui-root], [data-gb-scale] { line-height: normal; }
 
 /* ════════════════════════════════════════════════════════════
    Toast entry keyframes — needed by the notification_handoff
@@ -560,13 +567,13 @@
 /* ════════════════════════════════════════════════════════════
    Default font for ALL extension UI.
    The design font (Geist / --gb-font-sans) becomes the inherited
-   default on every extension mount root. [data-gb-scale] wraps every
+   default on every extension mount root. The root attributes wrap every
    content-script overlay (modals, popovers, editor, playground,
-   toasts) — it is the extension's OWN container, never the host
+   toasts) — they mark the extension's OWN container, never the host
    <html> (data-theme lives there), so this never restyles
    golfballs.com. Components that set their own fontFamily still win;
    everything else now inherits Geist instead of the host page font.
 ════════════════════════════════════════════════════════════ */
-[data-gb-scale] {
+[data-gb-ui-root], [data-gb-scale] {
   font-family: var(--gb-font-sans);
 }

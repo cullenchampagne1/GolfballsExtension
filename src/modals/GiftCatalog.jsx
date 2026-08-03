@@ -34,8 +34,10 @@ import {
   CATALOG_SCALE_DEFAULT,
   computeMasonry,
   catalogRowHeight,
+  catalogGridItemStyle,
   CARD_METRICS,
   catalogGridResetKey,
+  STORE_TRANSFER_PANEL_MOTION,
 } from '../lib/catalogPresentation.js';
 
 /* The boxed gift-set preview for a line (sleeve render with the ball's print +
@@ -323,13 +325,10 @@ function SortSelect({ value, onChange }) {
 
 function ProductImage({ src, alt, pad = 16, radius = 'var(--gb-r-md)', h }) {
   const [loaded, setLoaded] = useState(false);
-  // Image-box height. The product grid passes a FIXED pixel height (`h`):
-  // under the modals CSS `zoom` (scales.js applies real `zoom` to the mount
-  // root), a percentage/aspect-derived height mis-rounds, so cards render
-  // taller than their grid track and the next row overlaps. A fixed px height
-  // scales predictably under `zoom`, keeping every card — and every row — the
-  // same height. (No `h` → square via padding-ratio, for the detail panel's
-  // single image where there's no grid to creep.)
+  // The product grid passes a FIXED pixel height (`h`) so every card has the
+  // same intrinsic geometry regardless of image aspect ratio or host-page font
+  // and scale behavior. No `h` means square-via-padding for the detail view,
+  // where the image is not part of a repeated grid track.
   const box = h ? { height: h } : { height: 0, paddingBottom: '100%' };
   return (
     <div style={{ position: 'relative', width: '100%', ...box, background: '#f4f4f1', borderRadius: radius, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
@@ -385,14 +384,16 @@ function AddButton({ inProposal, compact, onAdd }) {
 
 function ProductCard({ p, compact, showRating, active, inProposal, favorite = false, onToggleFavorite, onAdd, onClick }) {
   const [hover, setHover] = useState(false);
+  const metrics = compact ? CARD_METRICS.compact : CARD_METRICS.normal;
   const dealBadge = catalogDealBadge(p);
   const ring = active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : '';
   return (
     <div onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)', height: '100%',
+        display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)',
+        height: '100%', minHeight: 0, maxHeight: '100%', boxSizing: 'border-box',
         border: '1px solid ' + (active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
-        borderRadius: 'var(--gb-r-lg)', padding: compact ? 9 : 11,
+        borderRadius: 'var(--gb-r-lg)', padding: metrics.pad,
         // Clip any sub-pixel content overflow inside the card so it can't bleed
         // into the row below under fractional zoom (browser/OS scale).
         overflow: 'hidden',
@@ -401,7 +402,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
         transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}>
       <div style={{ position: 'relative' }}>
-        <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} h={compact ? 132 : 156} />
+        <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} h={metrics.image} />
         {dealBadge && (
           <span title={dealBadge.label} style={{ position: 'absolute', top: 7, left: 7, zIndex: 2, display: 'inline-flex', alignItems: 'center', minHeight: 22, maxWidth: onToggleFavorite ? 'calc(100% - 48px)' : 'calc(100% - 14px)', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: dealBadge.kind === 'promo' ? .3 : .5, textTransform: 'uppercase', color: '#fff', background: dealBadge.kind === 'promo' ? 'var(--gb-success-solid, #2e9e5b)' : 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 3px rgba(0,0,0,.14)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {dealBadge.label}
@@ -424,12 +425,11 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
         )}
         {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>
-      <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
+      <div style={{ paddingTop: metrics.contentTop, display: 'flex', flexDirection: 'column', gap: metrics.gap, flex: 1, minHeight: 0 }}>
         {/* Fixed integer height, like the title box: the brand/rating row's
             natural height comes from font metrics (9.5px text vs a 10px Rating)
-            which differ per platform/DPI, and any fraction here mis-rounds under
-            the mount's `zoom`. */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: compact ? CARD_METRICS.compact.brand : CARD_METRICS.normal.brand, flexShrink: 0 }}>
+            which differ per platform/DPI and can destabilize repeated tracks. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: metrics.brand, flexShrink: 0 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.brand}</span>
             {p.repoTag && (
@@ -444,15 +444,16 @@ function ProductCard({ p, compact, showRating, active, inProposal, favorite = fa
             those fractional row heights accumulate and the next row creeps up
             into this one. A fixed integer height makes every card — and every
             grid row — identical, so rows can't overlap. */}
-        <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: compact ? 32 : 34, flexShrink: 0 }}>{p.title}</div>
-        {p.sku && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, height: compact ? CARD_METRICS.compact.sku : CARD_METRICS.normal.sku, flexShrink: 0 }}>
-            <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>
-            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
-          </div>
-        )}
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
+        <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: metrics.title, flexShrink: 0 }}>{p.title}</div>
+        {/* Keep the SKU slot even when empty. Conditional removal changes both
+            the row height and the number of flex gaps, defeating the fixed
+            grid-track contract for mixed product data. */}
+        <div aria-hidden={!p.sku} style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, height: metrics.sku, flexShrink: 0, visibility: p.sku ? 'visible' : 'hidden' }}>
+          <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>
+          <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku || ''}</span>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, height: metrics.price, flexShrink: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
               {/* Any logo-capable product headlines the custom-logo "from"
@@ -2615,9 +2616,12 @@ function StoreTransferPanel({ mode, items, onMode, onClose, onImported, onShared
   };
 
   return (
-    <motion.div initial={{ height: 0, opacity: 0, y: -8 }} animate={{ height: 'auto', opacity: 1, y: 0 }}
-      exit={{ height: 0, opacity: 0, y: -8 }} transition={{ type: 'spring', stiffness: 420, damping: 36 }}
-      style={{ flexShrink: 0, overflow: 'hidden', borderBottom: '1px solid var(--gb-border-subtle)', background: 'linear-gradient(135deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 42%, var(--gb-fill-inverse-strong))' }}>
+    <motion.div {...STORE_TRANSFER_PANEL_MOTION}
+      style={{ display: 'grid', flexShrink: 0, overflow: 'hidden', borderBottom: '1px solid var(--gb-border-subtle)', background: 'linear-gradient(135deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 42%, var(--gb-fill-inverse-strong))' }}>
+      {/* The min-height:0 child is what lets the outer 0fr track truly
+          collapse. Unlike height:auto spring measurement, this expansion has
+          no transient value larger than the panel's intrinsic height. */}
+      <div style={{ minHeight: 0, overflow: 'hidden' }}>
       <div style={{ margin: '12px 16px 14px', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', background: 'color-mix(in srgb, var(--gb-surface-modal) 92%, transparent)', boxShadow: '0 8px 24px -18px rgba(0,0,0,.42)', overflow: 'hidden' }}>
         <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <div style={{ width: 29, height: 29, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)' }}>
@@ -2674,6 +2678,7 @@ function StoreTransferPanel({ mode, items, onMode, onClose, onImported, onShared
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
       </div>
     </motion.div>
   );
@@ -2786,16 +2791,15 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           </div>
         ) : (
           <>
-            {/* gridAutoRows pins every row to an exact integer height. Under the
-                mount root's CSS `zoom`, content-sized tracks pick up fractional
-                heights that mis-round, so a card renders a hair taller than its
-                track and the next row creeps up into it. */}
+            {/* The row and each card wrapper share one exact integer height, so
+                host CSS and automatic grid-item min sizes cannot push a card
+                into the next track. */}
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gridAutoRows: `${catalogRowHeight(compact)}px`, gap: compact ? 10 : 12 }}>
               {shown.map((ci, idx) => {
                 const p = customItemToProduct(ci);
                 const picked = sel.has(ci.id);
                 return (
-                  <div key={ci.id} style={{ position: 'relative', borderRadius: 'var(--gb-r-lg)', outline: picked ? '2px solid var(--gb-brand-label)' : 'none', outlineOffset: 2 }}>
+                  <div key={ci.id} style={{ ...catalogGridItemStyle(compact), position: 'relative', borderRadius: 'var(--gb-r-lg)', outline: picked ? '2px solid var(--gb-brand-label)' : 'none', outlineOffset: 2 }}>
                     <ProductCard p={p} compact={compact} showRating={false}
                       inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={(e) => onCardClick(ci, idx, e)} />
                     {/* Select-mode check — a rounded square (not a circle), filled when picked. */}
@@ -3893,10 +3897,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 </div>
               ) : (
                 <>
-                {/* gridAutoRows pins every row to an exact integer height. Under the
-                mount root's CSS `zoom`, content-sized tracks pick up fractional
-                heights that mis-round, so a card renders a hair taller than its
-                track and the next row creeps up into it. */}
+                {/* The row and each card wrapper share one exact integer height,
+                    so host CSS and automatic grid-item min sizes cannot push a
+                    card into the next track. */}
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gridAutoRows: `${catalogRowHeight(compact)}px`, gap: compact ? 10 : 12 }}>
                   {/* Small sets animate per-card; large sets render a windowed
                       slice (grown on scroll by onGridScroll) so the DOM never
@@ -3904,7 +3907,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   {animateCards ? (
                     <AnimatePresence>
                       {shown.map((p) => (
-                        <motion.div key={p.id} initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .95 }} transition={{ duration: .17, ease: [0.32, 0.72, 0, 1] }}>
+                        <motion.div key={p.id} initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .95 }} transition={{ duration: .17, ease: [0.32, 0.72, 0, 1] }} style={catalogGridItemStyle(compact)}>
                           <ProductCard p={p} compact={compact} showRating={showRating}
                             active={selected && selected.id === p.id} inProposal={inProposal(p.id)}
                             favorite={favoriteSet.has(String(p.id))} onToggleFavorite={toggleFavorite}
@@ -3914,10 +3917,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     </AnimatePresence>
                   ) : (
                     shown.map((p) => (
-                      <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
-                        active={selected && selected.id === p.id} inProposal={inProposal(p.id)}
-                        favorite={favoriteSet.has(String(p.id))} onToggleFavorite={toggleFavorite}
-                        onAdd={addToProposal} onClick={() => setSelected(p)} />
+                      <div key={p.id} style={catalogGridItemStyle(compact)}>
+                        <ProductCard p={p} compact={compact} showRating={showRating}
+                          active={selected && selected.id === p.id} inProposal={inProposal(p.id)}
+                          favorite={favoriteSet.has(String(p.id))} onToggleFavorite={toggleFavorite}
+                          onAdd={addToProposal} onClick={() => setSelected(p)} />
+                      </div>
                     ))
                   )}
                 </div>

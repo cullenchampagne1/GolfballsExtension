@@ -10,12 +10,17 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   MASONRY_ASSUMED_HEIGHT, MASONRY_COL_MIN, MASONRY_GAP,
   computeMasonry, normalizeCatalogScale,
   CATALOG_SCALE_DEFAULT, CATALOG_SCALE_MAX, CATALOG_SCALE_MIN,
-  catalogRowHeight, CARD_METRICS, CARD_BORDER, CARD_SAFETY, catalogGridResetKey,
+  catalogRowHeight, catalogGridItemStyle,
+  CARD_METRICS, CARD_BORDER, CARD_SAFETY, CARD_STACK_GAPS,
+  catalogGridResetKey, STORE_TRANSFER_PANEL_MOTION,
 } from '../../src/lib/catalogPresentation.js';
+
+const themeCss = readFileSync(new URL('../../src/ui/theme.css', import.meta.url), 'utf8');
 
 const items = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }));
 
@@ -179,12 +184,10 @@ describe('catalog scale · composing the two sliders', () => {
 });
 
 /* ── Product-grid row height ──────────────────────────────────────────────────
-   The catalog mount root carries a real CSS `zoom`, under which fractional
-   layout heights mis-round: a card ends up a hair taller than the content-sized
-   track and the next row creeps up into it (reported as overlapping rows, and
-   only on SOME displays because font metrics differ by platform/DPI). The grid
-   therefore pins every track to catalogRowHeight(), so the row height must be
-   an exact integer and must never be smaller than the card's own parts. */
+   Host styles, fractional paint scaling, and a grid item's automatic min-size
+   must never let a product card escape its track. The grid therefore pins every
+   track and every wrapper to catalogRowHeight(), while the extension-owned
+   mount root enforces border-box sizing independently of shared modal zoom. */
 describe('catalog product-grid row height', () => {
   for (const compact of [false, true]) {
     const label = compact ? 'compact' : 'comfortable';
@@ -200,7 +203,7 @@ describe('catalog product-grid row height', () => {
       // Sum of the parts a card always occupies — the track must cover it or
       // the card (overflow:hidden) clips its own price row.
       const parts = CARD_BORDER + m.pad * 2 + m.image + m.contentTop
-        + m.brand + m.title + m.sku + m.gap * 3 + m.price;
+        + m.brand + m.title + m.sku + m.gap * CARD_STACK_GAPS + m.price;
       assert.equal(catalogRowHeight(compact), parts + CARD_SAFETY);
       assert.ok(catalogRowHeight(compact) >= parts, 'track must never be shorter than the card');
     });
@@ -218,6 +221,39 @@ describe('catalog product-grid row height', () => {
 
   it('defaults to the comfortable row height', () => {
     assert.equal(catalogRowHeight(), catalogRowHeight(false));
+  });
+
+  it('hard-bounds every wrapper to its assigned grid track', () => {
+    for (const compact of [false, true]) {
+      const style = catalogGridItemStyle(compact);
+      assert.equal(style.height, catalogRowHeight(compact));
+      assert.equal(style.maxHeight, catalogRowHeight(compact));
+      assert.equal(style.minHeight, 0, 'automatic grid-item min-height must not escape the track');
+      assert.equal(style.boxSizing, 'border-box');
+    }
+  });
+
+  it('keeps border-box armor when the catalog opts out of shared modal zoom', () => {
+    assert.match(themeCss, /\[data-gb-ui-root\] \*/);
+    assert.match(themeCss, /\[data-gb-ui-root\][^{}]*\{\s*box-sizing:\s*border-box;/s);
+  });
+});
+
+describe('catalog store-transfer panel motion', () => {
+  it('expands through a bounded grid track without animating auto height', () => {
+    assert.equal(STORE_TRANSFER_PANEL_MOTION.initial.gridTemplateRows, '0fr');
+    assert.equal(STORE_TRANSFER_PANEL_MOTION.animate.gridTemplateRows, '1fr');
+    assert.equal(STORE_TRANSFER_PANEL_MOTION.exit.gridTemplateRows, '0fr');
+    for (const phase of ['initial', 'animate', 'exit']) {
+      assert.equal('height' in STORE_TRANSFER_PANEL_MOTION[phase], false,
+        `${phase} must never ask Motion to measure height:auto`);
+    }
+  });
+
+  it('uses a finite tween that cannot spring past intrinsic height', () => {
+    assert.equal(STORE_TRANSFER_PANEL_MOTION.transition.type, undefined);
+    assert.ok(STORE_TRANSFER_PANEL_MOTION.transition.duration > 0);
+    assert.ok(STORE_TRANSFER_PANEL_MOTION.transition.duration <= 0.3);
   });
 });
 

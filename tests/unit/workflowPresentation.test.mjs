@@ -38,12 +38,15 @@ describe('Workflow Manager presentation scale', () => {
     assert.equal(normalizeWorkflowManagerScale('not-a-number'), WORKFLOW_MANAGER_SCALE_DEFAULT);
   });
 
-  it('lets a self-scaled surface opt out of the shared modal root scale', () => {
+  it('lets a self-scaled surface opt out of zoom without losing host-CSS isolation', () => {
     const host = fakeHost();
     applyFloatingHostScale(host);
+    assert.equal(host.attributes.get('data-gb-ui-root'), '');
     assert.equal(host.attributes.get('data-gb-scale'), 'modals');
 
     applyFloatingHostScale(host, null);
+    assert.equal(host.attributes.get('data-gb-ui-root'), '',
+      'scale opt-out must keep the extension-owned style boundary');
     assert.equal(host.attributes.has('data-gb-scale'), false);
   });
 

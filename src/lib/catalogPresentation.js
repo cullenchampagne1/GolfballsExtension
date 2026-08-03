@@ -13,6 +13,19 @@ export const CATALOG_ACCOUNT_CONTEXT_NOTICE = Object.freeze({
   message: 'Open the catalog from a Golfballs.com CRM account or opportunity page to view its active proposals.',
 });
 
+/* The custom-item and saved-proposal transfer views share this expansion
+ * contract. Interpolating `height: 0` -> `height: auto` with a spring asks
+ * Motion to repeatedly re-measure dynamic nested content; a spring can then
+ * overshoot that measurement and briefly make the panel extremely tall.
+ * A 0fr -> 1fr grid track expands to intrinsic height without measuring an
+ * `auto` endpoint, while the bounded tween cannot overshoot. */
+export const STORE_TRANSFER_PANEL_MOTION = Object.freeze({
+  initial: Object.freeze({ gridTemplateRows: '0fr', opacity: 0, y: -6 }),
+  animate: Object.freeze({ gridTemplateRows: '1fr', opacity: 1, y: 0 }),
+  exit: Object.freeze({ gridTemplateRows: '0fr', opacity: 0, y: -6 }),
+  transition: Object.freeze({ duration: 0.2, ease: Object.freeze([0.32, 0.72, 0, 1]) }),
+});
+
 /* Masonry geometry for the saved-proposal galleries.
  *
  * Cards are absolutely positioned from JS-measured heights, so unlike a CSS
@@ -64,13 +77,11 @@ export function computeMasonry(items, width, heights) {
 
 /* Product-grid card geometry.
  *
- * The catalog mount root carries a real CSS `zoom` (scales.js), under which any
- * FRACTIONAL layout height mis-rounds: a card ends up a hair taller than the
- * grid track that CSS sized from its own content, and the next row creeps up
- * into it. Content-sized rows therefore can't be trusted here — every row has
- * to be an exact integer the card is then pinned to (cards render at
- * height:100% + overflow:hidden, so they fill the track exactly and can never
- * bleed past it).
+ * The catalog is transformed as one large surface and lives inside arbitrary
+ * host-page CSS. Content-sized grid tracks are therefore too fragile: font
+ * metrics can be fractional, and a host content-box rule turns height:100%
+ * into 100% PLUS padding/border. Every track and its wrapper are instead pinned
+ * to the same integer height, while ProductCard clips its own contents.
  *
  * Each part below is an integer, and the variable rows (brand/rating, SKU) are
  * RESERVED whether or not the product has them, so every card in every column
@@ -85,6 +96,7 @@ export const CARD_METRICS = Object.freeze({
   }),
 });
 export const CARD_BORDER = 2;      // 1px top + 1px bottom
+export const CARD_STACK_GAPS = 4;  // brand, title, SKU, spacer, price = 4 gaps
 /* Text rows are measured from font metrics, which differ slightly by platform,
    DPI and zoom level — the reason this only ever bit on SOME displays. The
    track must never be SHORTER than the card's content (cards clip at
@@ -99,11 +111,26 @@ export function catalogRowHeight(compact = false) {
     + m.pad * 2                    // card padding, top + bottom
     + m.image                      // fixed image box
     + m.contentTop                 // content block's padding-top
-    + m.brand + m.gap              // brand / rating row
-    + m.title + m.gap              // fixed 2-line title
-    + m.sku + m.gap                // SKU row (reserved even when absent)
+    + m.brand                      // brand / rating row
+    + m.title                      // fixed 2-line title
+    + m.sku                        // SKU row (reserved even when absent)
+    + m.gap * CARD_STACK_GAPS      // gaps include the flexible spacer
     + m.price                      // price + Add button row
     + CARD_SAFETY;
+}
+
+/** A hard grid-area boundary for every product-card wrapper. Grid items have
+ *  an automatic min-height based on their contents; without minHeight:0, an
+ *  animated wrapper can exceed a fixed track even when its child says 100%. */
+export function catalogGridItemStyle(compact = false) {
+  const height = catalogRowHeight(compact);
+  return {
+    height,
+    minHeight: 0,
+    maxHeight: height,
+    minWidth: 0,
+    boxSizing: 'border-box',
+  };
 }
 
 /* Identity of "what the user is looking at" in the product grid.
