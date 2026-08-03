@@ -13,7 +13,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
-import { crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters } from '../lib/crmSolrSearch.js';
+import {
+  crmSolrQuery, SOLR_ROWS, SOLR_FACETS, SOLR_DATE_FACETS, facetFilters,
+  mergeSolrDocs, nextSolrStart,
+} from '../lib/crmSolrSearch.js';
 import { FULL_HEIGHT_LIST_PAGE_CSS, nextProgressiveResultCount } from '../lib/customPageLayout.js';
 import {
   buildCrmSelectionCsv,
@@ -368,11 +371,20 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [facets, setFacets] = useState(initialSearch?.facets || null);
   const selRef = useRef(selected);
   selRef.current = selected;
-  const [rows, setRows] = useState(() => (initialSearch?.docs || []).slice(0, SOLR_ROWS));
+  const [rows, setRows] = useState(() => mergeSolrDocs([], initialSearch?.docs || []));
   const [renderCount, setRenderCount] = useState(() => Math.min(24, initialSearch?.docs?.length || 0));
   const [selectedRows, setSelectedRows] = useState(() => new Set());
   const selectionAnchorRef = useRef(null);
   const [numFound, setNumFound] = useState(initialSearch?.numFound || 0);
+  // Solr's raw offset is independent of the visible/deduplicated row count.
+  // Keeping it as state also drives the sentinel when a page contains a row
+  // already seen because its sort field changed between requests.
+  const [serverStart, setServerStart] = useState(() => {
+    const supplied = Number(initialSearch?.nextStart);
+    return Number.isFinite(supplied)
+      ? Math.max(0, supplied)
+      : nextSolrStart(0, initialSearch?.docs?.length || 0);
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [searched, setSearched] = useState(!!initialSearch);
@@ -386,19 +398,24 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const lastSearchRef = useRef({ q: '', t: 'all', qb: null });
   const loadingMoreRef = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState('');
   const gen = useRef(0);   // ignore stale responses
 
   const runSearch = useCallback(async (q, t, qb) => {
     const g = ++gen.current;
+    loadingMoreRef.current = false;
     setLoading(true);
+    setLoadingMore(false);
     setError(false);
     setSelectedRows(new Set());
     setRenderCount(24);
+    setServerStart(0);
+    setLoadMoreError('');
     selectionAnchorRef.current = null;
     setSearched(true);
     lastSearchRef.current = { q, t, qb };
     try {
-      const { docs, numFound, facets: fc } = await searchClient({
+      const { docs, numFound, nextStart, facets: fc } = await searchClient({
         query: q, type: t, solrFq: qb?.solrFq || '',
         filters: facetFilters(selRef.current),
         start: 0,
@@ -406,8 +423,11 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         facet: true,
       });
       if (gen.current !== g) return;
-      setRows(docs.slice(0, SOLR_ROWS));
+      setRows(mergeSolrDocs([], docs));
       setNumFound(numFound);
+      setServerStart(Number.isFinite(Number(nextStart))
+        ? Math.max(0, Number(nextStart))
+        : nextSolrStart(0, docs.length));
       if (fc) setFacets(fc);
     } catch (e) {
       if (gen.current !== g) return;
@@ -419,28 +439,53 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     }
   }, [searchClient]);
 
-  /* Server pagination: the initial search only fetches the first SOLR_ROWS.
-     When the reader reaches the end of the fetched set and the server has more
-     (rows.length < numFound), fetch the next page (start = rows.length) with the
-     SAME query/facets and append. Guards against overlap + a superseding search. */
+  /* Server pagination: serverStart is the RAW Solr offset, never the visible
+     row count. The two can differ after deduplication (or under the old
+     client-side type filter), and using rows.length here re-fetches overlapping
+     pages until a duplicate-inflated count falsely looks complete. */
   const fetchMore = useCallback(async () => {
     if (loadingMoreRef.current) return;
-    if (rows.length === 0 || rows.length >= numFound) return;
+    if (serverStart >= numFound) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
+    setLoadMoreError('');
     const g = gen.current;
+    const start = serverStart;
     try {
       const { q, t, qb } = lastSearchRef.current;
-      const { docs } = await searchClient({
+      const page = await searchClient({
         query: q, type: t, solrFq: qb?.solrFq || '',
         filters: facetFilters(selRef.current),
-        start: rows.length, rows: SOLR_ROWS, facet: false,
+        start, rows: SOLR_ROWS, facet: false,
       });
       if (gen.current !== g) return;                 // a new search superseded us
-      setRows((cur) => cur.concat(docs));
-    } catch (e) { /* keep what we have */ }
-    finally { loadingMoreRef.current = false; if (gen.current === g) setLoadingMore(false); }
-  }, [rows.length, numFound, searchClient]);
+      const docs = Array.isArray(page.docs) ? page.docs : [];
+      const reportedTotal = Number.isFinite(Number(page.numFound))
+        ? Math.max(0, Number(page.numFound))
+        : numFound;
+      const resolvedNext = Number.isFinite(Number(page.nextStart))
+        ? Math.max(start, Number(page.nextStart))
+        : nextSolrStart(start, docs.length);
+      if (resolvedNext <= start && docs.length === 0 && start < reportedTotal) {
+        throw new Error('The CRM returned an empty page before the result set ended.');
+      }
+      setRows((cur) => mergeSolrDocs(cur, docs));
+      setNumFound(reportedTotal);
+      setServerStart(resolvedNext);
+      setLoadMoreError('');
+    } catch (e) {
+      if (gen.current !== g) return;
+      setLoadMoreError(e?.message || 'Could not load the next CRM page.');
+      gbToast('Could not load more CRM records — retry below', 'error');
+    }
+    finally {
+      // A stale page from the previous search must not unlock a newer request.
+      if (gen.current === g) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [serverStart, numFound, searchClient]);
 
   // Toggle a facet value and re-run (selRef gives runSearch the fresh set).
   const toggleFacet = (field, value) => {
@@ -524,8 +569,8 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   useEffect(() => {
     const el = loadMoreRef.current;
     const moreToReveal = renderCount < rows.length;
-    const moreOnServer = rows.length > 0 && rows.length < numFound;
-    if (!el || (!moreToReveal && !moreOnServer)) return undefined;
+    const moreOnServer = rows.length > 0 && serverStart < numFound;
+    if (!el || loadMoreError || (!moreToReveal && !moreOnServer)) return undefined;
     const io = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       if (renderCount < rows.length) {
@@ -536,7 +581,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     }, { root: resultsScrollRef.current || null, rootMargin: '600px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [renderCount, rows.length, numFound, fetchMore]);
+  }, [renderCount, rows.length, serverStart, numFound, loadMoreError, fetchMore]);
   const openWorkflow = useCallback(() => {
     const audience = selectedResults
       .map((row) => crmRowToWorkflowContact(row, recUrl(row)))
@@ -698,9 +743,9 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                       ))}
                     </tbody>
                   </table>
-              {(renderedRows.length < rows.length || rows.length < numFound) && (
+              {(renderedRows.length < rows.length || serverStart < numFound) && (
                 <div ref={loadMoreRef} style={{
-                  height: 38,
+                  minHeight: 38,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -708,15 +753,24 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                   color: 'var(--gb-text-muted)',
                   fontSize: 10.5,
                 }}>
-                  <span style={{
-                    width: 13,
-                    height: 13,
-                    borderRadius: '50%',
-                    border: '2px solid var(--gb-border-default)',
-                    borderTopColor: 'var(--gb-brand-label)',
-                    animation: 'gb-spin .75s linear infinite',
-                  }} />
-                  {rows.length < numFound ? `Loading more of ${numFound.toLocaleString()}…` : 'Loading more records…'}
+                  {loadMoreError ? (
+                    <>
+                      <span title={loadMoreError}>Loading paused before all records arrived.</span>
+                      <Btn variant="secondary" size="xs" icon={<I.refresh />} onClick={fetchMore} disabled={loadingMore}>Retry</Btn>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{
+                        width: 13,
+                        height: 13,
+                        borderRadius: '50%',
+                        border: '2px solid var(--gb-border-default)',
+                        borderTopColor: 'var(--gb-brand-label)',
+                        animation: 'gb-spin .75s linear infinite',
+                      }} />
+                      {serverStart < numFound ? `Loading more of ${numFound.toLocaleString()}…` : 'Loading more records…'}
+                    </>
+                  )}
                 </div>
               )}
               </div>

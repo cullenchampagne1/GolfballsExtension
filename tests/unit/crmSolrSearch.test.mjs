@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSolrQ, buildSolrBody, parseFacets, facetFilters } from '../../src/lib/crmSolrSearch.js';
+import {
+  buildSolrQ, buildSolrBody, parseFacets, facetFilters,
+  crmSolrQuery, mergeSolrDocs, nextSolrStart,
+} from '../../src/lib/crmSolrSearch.js';
 
 describe('crm · Solr search query building', () => {
   it('empty term → match-all', () => {
@@ -27,11 +30,13 @@ describe('crm · Solr search query building', () => {
   it('with a term, sorts by score first then the chosen column', () => {
     const b = buildSolrBody({ query: 'smith', sortKey: 'lastOrderDate_dt', sortDir: 'desc' });
     assert.match(b, new RegExp('sort=' + encodeURIComponent('score desc, lastOrderDate_dt desc')));
+    assert.ok(b.includes(encodeURIComponent(', id asc')), 'deep pages need a unique-key tiebreaker');
   });
 
   it('without a term, sorts by the chosen column only (no score)', () => {
     const b = buildSolrBody({ query: '', sortKey: 'yearToDateRevenue_f', sortDir: 'desc' });
     assert.match(b, new RegExp('sort=' + encodeURIComponent('yearToDateRevenue_f desc')));
+    assert.ok(b.includes(encodeURIComponent(', id asc')), 'deep pages need a unique-key tiebreaker');
     assert.doesNotMatch(b, /score/);
     assert.match(b, /^\*:\*&/);
   });
@@ -57,12 +62,77 @@ describe('crm · Solr search query building', () => {
     assert.ok(b.includes('&fq=' + encodeURIComponent('role_s:("BDR")')));
   });
 
+  it('filters Contacts and Accounts in Solr so numFound and start share one result set', () => {
+    const contacts = buildSolrBody({ type: 'contact' });
+    const accounts = buildSolrBody({ type: 'account' });
+    assert.ok(contacts.includes('&fq=' + encodeURIComponent('recordType_s:"Contact"')));
+    assert.ok(accounts.includes('&fq=' + encodeURIComponent('recordType_s:"Account"')));
+    assert.doesNotMatch(buildSolrBody({ type: 'all' }), /recordType_s%3A/);
+  });
+
   it('requests value + date facets when facet:true', () => {
     const b = buildSolrBody({ facet: true });
     assert.match(b, /facet=true/);
     assert.ok(b.includes('facet.field=' + encodeURIComponent('recordType_s')));
     assert.ok(b.includes('facet.field=' + encodeURIComponent('salesRep_s')));
     assert.ok(b.includes('facet.query='));   // date-bucket counts
+  });
+});
+
+describe('crm · Solr pagination state', () => {
+  it('returns the next raw offset from the actual page size', async () => {
+    const originalFetch = globalThis.fetch;
+    let requestBody = null;
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        async json() {
+          return { d: JSON.stringify({
+            response: {
+              docs: [{ id: 'contact_3001' }, { id: 'contact_3002' }],
+              numFound: 3407,
+            },
+          }) };
+        },
+      };
+    };
+    try {
+      const page = await crmSolrQuery({ type: 'contact', start: 3000, rows: 100 });
+      assert.equal(page.nextStart, 3002);
+      assert.equal(page.numFound, 3407);
+      assert.equal(page.docs.length, 2);
+      assert.ok(requestBody.str.includes('&start=3000&'));
+      assert.ok(requestBody.str.includes('&fq=' + encodeURIComponent('recordType_s:"Contact"')));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('advances from the raw server cursor rather than displayed-row length', () => {
+    assert.equal(nextSolrStart(3000, 73), 3073);
+    assert.equal(nextSolrStart('3073', 27), 3100);
+    assert.equal(nextSolrStart(-10, 'bad'), 0);
+  });
+
+  it('deduplicates overlapping pages without losing id-less records', () => {
+    const first = [{ id: 'contact_1' }, { id: 'contact_2' }];
+    const next = [{ id: 'contact_2' }, { id: 'contact_3' }, { contactName_t: 'No id' }];
+    assert.deepEqual(mergeSolrDocs(first, next), [
+      { id: 'contact_1' },
+      { id: 'contact_2' },
+      { id: 'contact_3' },
+      { contactName_t: 'No id' },
+    ]);
+  });
+
+  it('does not mutate either page while merging', () => {
+    const first = [{ id: 'contact_1' }];
+    const next = [{ id: 'contact_2' }];
+    const merged = mergeSolrDocs(first, next);
+    assert.notEqual(merged, first);
+    assert.deepEqual(first, [{ id: 'contact_1' }]);
+    assert.deepEqual(next, [{ id: 'contact_2' }]);
   });
 });
 

@@ -15,6 +15,11 @@ export const SOLR_QF = 'id^100 accountID_s^100 contactName_t^120 accountName_t^1
 export const SOLR_PF = 'contactName_t^400 accountName_t^400 email_tp^60';
 export const SOLR_ROWS = 100;
 
+const SOLR_RECORD_TYPES = Object.freeze({
+  contact: 'Contact',
+  account: 'Account',
+});
+
 /* The value facets the native CRM search sidebar exposes, in display order.
    Each yields facet_counts.facet_fields.<field> = [value,count,value,count,…].
    `int` fields are numbered pods; the rest are string values. */
@@ -66,12 +71,23 @@ export function buildSolrQ(term) {
    - `filters` — extra fq strings (selected facets), each its own &fq=.
    - `facet`   — when true, request value facets + the date-bucket facet.query
                  counts for the sidebar. */
-export function buildSolrBody({ query = '', solrFq = '', filters = [], start = 0, sortKey = 'lastOrderDate_dt', sortDir = 'desc', rows = SOLR_ROWS, facet = false, facetLimit = 60 } = {}) {
+export function buildSolrBody({ query = '', type = 'all', solrFq = '', filters = [], start = 0, sortKey = 'lastOrderDate_dt', sortDir = 'desc', rows = SOLR_ROWS, facet = false, facetLimit = 60 } = {}) {
   const term = (query || '').trim();
   const qStr = buildSolrQ(term);
-  const effectiveSort = term ? `score desc, ${sortKey} ${sortDir}` : `${sortKey} ${sortDir}`;
+  // A unique-key tiebreaker makes deep `start` pagination deterministic when
+  // thousands of contacts share the same/null date or identical score.
+  const effectiveSort = term
+    ? `score desc, ${sortKey} ${sortDir}, id asc`
+    : `${sortKey} ${sortDir}, id asc`;
   const startPart = start > 0 ? `&start=${start}` : '';
   let body = `${qStr}${startPart}&sort=${encodeURIComponent(effectiveSort)}&rows=${rows}&qf=${encodeURIComponent(SOLR_QF)}&pf=${encodeURIComponent(SOLR_PF)}&q.op=AND&sow=false&defType=edismax`;
+  // Type must be a SERVER filter. Filtering each returned page in the browser
+  // makes displayedRows.length diverge from Solr's raw `start` cursor, causing
+  // overlapping pages, duplicates, and a false completion around large result
+  // sets. It also leaves numFound describing all record types instead of the
+  // Contacts/Accounts tab the user selected.
+  const recordType = SOLR_RECORD_TYPES[String(type || '').toLowerCase()];
+  if (recordType) body += `&fq=${encodeURIComponent(`recordType_s:"${recordType}"`)}`;
   if (solrFq) body += `&fq=${encodeURIComponent(solrFq)}`;
   for (const f of (filters || [])) if (f) body += `&fq=${encodeURIComponent(f)}`;
   if (facet) {
@@ -80,6 +96,34 @@ export function buildSolrBody({ query = '', solrFq = '', filters = [], start = 0
     for (const g of SOLR_DATE_FACETS) for (const b of g.buckets) body += `&facet.query=${encodeURIComponent(b.fq)}`;
   }
   return body;
+}
+
+/** Advance by what Solr actually returned, never by a filtered/deduplicated UI
+ *  length or the requested page size. Gateways are allowed to cap `rows`. */
+export function nextSolrStart(start, returnedCount) {
+  const offset = Math.max(0, Math.floor(Number(start) || 0));
+  const count = Math.max(0, Math.floor(Number(returnedCount) || 0));
+  return offset + count;
+}
+
+/** Append a Solr page without letting a changing sort field or an overlapping
+ *  legacy response create duplicate visible records. Rows without an id are
+ *  retained because there is no stable key by which to identify a duplicate. */
+export function mergeSolrDocs(current, incoming) {
+  const out = Array.isArray(current) ? current.slice() : [];
+  const seen = new Set(out.filter((row) => row && row.id != null).map((row) => String(row.id)));
+  for (const row of (Array.isArray(incoming) ? incoming : [])) {
+    if (!row) continue;
+    if (row.id == null) {
+      out.push(row);
+      continue;
+    }
+    const id = String(row.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(row);
+  }
+  return out;
 }
 
 /* Parse facet_counts into { fields: { field: [{value,count}] }, queries: { fq: count } }. */
@@ -98,10 +142,10 @@ export function parseFacets(data) {
   return out;
 }
 
-/* Run one Solr page. `type` ('all'|'contact'|'account') filters recordType_s
-   client-side. Returns { docs, numFound, facets }. */
+/* Run one Solr page. `type` ('all'|'contact'|'account') is compiled into a
+   server-side fq so docs, numFound, and the raw pagination cursor all describe
+   the same result set. */
 export async function crmSolrQuery(opts = {}) {
-  const { type = 'all' } = opts;
   const body = buildSolrBody(opts);
   const res = await fetch(SOLR_ENDPOINT, {
     method: 'POST',
@@ -112,10 +156,14 @@ export async function crmSolrQuery(opts = {}) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const raw = await res.json();
   const data = JSON.parse(raw.d);
-  let docs = (data.response && data.response.docs) || [];
+  const docs = (data.response && data.response.docs) || [];
   const numFound = (data.response && data.response.numFound != null) ? data.response.numFound : docs.length;
-  if (type !== 'all') docs = docs.filter((r) => (r.recordType_s || '').toLowerCase() === type);
-  return { docs, numFound, facets: opts.facet ? parseFacets(data) : null };
+  return {
+    docs,
+    numFound,
+    nextStart: nextSolrStart(opts.start, docs.length),
+    facets: opts.facet ? parseFacets(data) : null,
+  };
 }
 
 /* Build the fq strings for the selected facets. `selected` is
