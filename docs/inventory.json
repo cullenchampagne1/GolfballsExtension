@@ -1364,8 +1364,8 @@
   },
   "remoteSettingsPolicy": {
     "endpoint": "GET https://api.cullenchampagne.com/projects/golfballs-extension/client/configuration",
-    "policyFile": "api-access-configs/golfballs-extension-configuration.yaml",
-    "what": "Complete, authenticated feature/developer value and visibility policy with dashboard-administrator bypass.",
+    "legacySeedFile": "api-access-configs/golfballs-extension-configuration.yaml",
+    "what": "Complete, authenticated database policy for feature/developer values, visibility, and management with per-installation overrides and dashboard-administrator bypass.",
     "consoleCommands": {
       "__gbScan": [
         "reset() — clear recent-orders scan clock (next scan covers 7 days)",

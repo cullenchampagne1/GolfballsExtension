@@ -13,6 +13,7 @@ export { T, TINT, SHAKE, SHAKE_T, Spinner, sizeIcon, useAsyncState, inputBaseSty
 export { useClickOutside, useTransientFlag } from './hooks.js';
 export { EmptyState } from './components/EmptyState.jsx';
 export { StatusBadge } from './components/StatusBadge.jsx';
+export { ManagedBadge } from './components/ManagedBadge.jsx';
 
 export { Btn } from './components/Btn.jsx';
 export { IconBtn } from './components/IconBtn.jsx';

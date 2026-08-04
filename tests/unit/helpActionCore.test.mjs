@@ -204,6 +204,14 @@ describe('Help Companion action policy', () => {
       { type: 'set_feature', target: 'actionsShelfEnabled', value: 'false' },
       { ...registry, policy: { hiddenFeatures: { actionsShelfEnabled: true } } },
     ), /hidden/);
+    assert.throws(() => planHelpAction(
+      { type: 'set_feature', target: 'actionsShelfEnabled', value: 'false' },
+      { ...registry, policy: { managedFeatures: { actionsShelfEnabled: true } } },
+    ), /managed/);
+    assert.throws(() => planHelpAction(
+      { type: 'set_setting', target: 'marginCalc.minAllowedMargin', value: '42' },
+      { ...registry, policy: { managedDeveloperSettings: { 'marginCalc.minAllowedMargin': 20 } } },
+    ), /managed/);
     assert.throws(() => planHelpAction({ type: 'set_setting', target: 'marginCalc.minAllowedMargin', value: '101' }, registry), /at most 100/);
     assert.throws(() => planHelpAction({ type: 'set_theme_preset', target: 'theme', value: 'invented' }, registry), /not registered/);
     assert.throws(() => planHelpAction({ type: 'set_theme_palette', target: 'brand', options: ['red'] }, registry), /four valid colors/);

@@ -1,5 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { sendBackgroundMessage } from './backgroundMessage.js';
+import {
+  REMOTE_POLICY_KEY,
+  enforceManagedStorageValue,
+} from './managedSettingsPolicy.js';
 
 /* ───────────────────────────────────────────────────────────────
    devSettings.js — low-priority knobs that don't deserve a top-
@@ -646,9 +650,16 @@ export function loadDevSettings() {
 
 /** Persist the whole bag — UI calls this on every edit. */
 export function saveDevSettings(settings) {
-  if (typeof chrome === 'undefined' || !chrome.storage) return;
+  if (typeof chrome === 'undefined' || !chrome.storage) return Promise.resolve();
   const { settings: canonical } = normalizeStoredDevSettings(settings);
-  chrome.storage.local.set({ [STORAGE_KEY]: canonical });
+  return new Promise((resolve) => {
+    chrome.storage.local.get(REMOTE_POLICY_KEY, (stored) => {
+      const guarded = enforceManagedStorageValue(
+        STORAGE_KEY, canonical, stored?.[REMOTE_POLICY_KEY],
+      );
+      chrome.storage.local.set({ [STORAGE_KEY]: guarded }, resolve);
+    });
+  });
 }
 
 /**

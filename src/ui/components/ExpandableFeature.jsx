@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { T } from '../shared.jsx';
 import { Switch } from './Switch.jsx';
 import { Dot } from './Dot.jsx';
+import { ManagedBadge } from './ManagedBadge.jsx';
 
 /**
  * ExpandableFeature — a toggle whose header reveals a collapsible
@@ -20,7 +21,7 @@ const SIZES = {
 
 export function ExpandableFeature({
   on, onChange, name, desc, icon, tone = 'brand', size = 'md',
-  children, defaultExpanded = true,
+  children, defaultExpanded = true, disabled = false, managed = false,
 }) {
   const s = SIZES[size] || SIZES.md;
   const palette = tone === 'warning'
@@ -44,11 +45,12 @@ export function ExpandableFeature({
       }}
     >
       <div
-        onClick={() => onChange?.(!on)}
+        onClick={() => !disabled && onChange?.(!on)}
+        aria-disabled={disabled || undefined}
         style={{
           padding: s.pad,
           display: 'flex', alignItems: 'center', gap: s.gap,
-          cursor: 'pointer',
+          cursor: disabled ? 'not-allowed' : 'pointer',
           borderBottom: expanded ? `1px solid ${palette.bd}` : '1px solid transparent',
         }}
       >
@@ -88,6 +90,7 @@ export function ExpandableFeature({
                 <Dot tone={tone} glow size={5} /> ACTIVE
               </span>
             )}
+            {managed && <ManagedBadge />}
           </div>
           {desc && (
             <motion.div
@@ -100,7 +103,7 @@ export function ExpandableFeature({
           )}
         </div>
 
-        <Switch on={on} size={s.sw} tone={tone} onChange={onChange} />
+        <Switch on={on} size={s.sw} tone={tone} onChange={onChange} disabled={disabled} />
       </div>
 
       {/* Collapsible body — real height transition (not the toast keyframe). */}

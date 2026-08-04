@@ -79,7 +79,7 @@
           ] }
         ],
         "advanced": [
-          { "type": "callout", "kind": "info", "text": "If the toggle itself is missing, the authenticated server policy marked it hidden. A RevStack administrator can change golfballs-extension-configuration.yaml; the extension applies the next valid sync automatically." }
+          { "type": "callout", "kind": "info", "text": "A lock badge means the authenticated server policy manages that visible value; a missing toggle is independently marked hidden. A RevStack administrator can change either state in the global or per-installation policy editor." }
         ]
       },
       "related": ["feature-toggles", "hidden-settings", "actions-shelf"]
@@ -161,7 +161,7 @@
           ] }
         ],
         "advanced": [
-          { "type": "callout", "kind": "info", "text": "Policy changes belong in golfballs-extension-configuration.yaml. The previous console hide/show commands were removed so local users cannot override an administrator disable." }
+          { "type": "callout", "kind": "info", "text": "Policy changes belong in the RevStack database editor. Global and per-installation management are explicit; the legacy YAML is read only once to seed an empty policy database." }
         ]
       },
       "related": ["presets", "hidden-settings"]

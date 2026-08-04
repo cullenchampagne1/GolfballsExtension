@@ -161,6 +161,50 @@ describe('sharing fallback · preset scopes', () => {
       'pageEngine.territory': 'P5 / BDR (Cullen)',
     });
   });
+
+  it('cannot overwrite managed values through a current or legacy settings file', async () => {
+    const storageState = {
+      gbRemoteSettingsPolicy: {
+        schemaVersion: 1,
+        adminBypass: false,
+        managedFeatures: { taskListEnabled: false },
+        managedDeveloperSettings: { 'numberDisplay.durationMs': 400 },
+        managedCustomPages: true,
+        managedCustomPageScopes: { all: ['dashboard', 'search'] },
+      },
+      featureFlags: { taskListEnabled: false },
+      devSettings: { 'numberDisplay.durationMs': 400 },
+      customPages: { all: ['dashboard', 'search'] },
+    };
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            const list = Array.isArray(keys) ? keys : [keys];
+            callback(Object.fromEntries(
+              list.filter((key) => key in storageState).map((key) => [key, storageState[key]]),
+            ));
+          },
+          set(value, callback) { Object.assign(storageState, value); callback?.(); },
+        },
+      },
+    };
+
+    await applyScopes({
+      'settings-preferences': {
+        featureFlags: { taskListEnabled: true, marginCalcEnabled: false },
+        devSettings: { 'numberDisplay.durationMs': 2_000 },
+        customPages: { all: [] },
+      },
+    });
+
+    assert.deepEqual(storageState.featureFlags, {
+      taskListEnabled: false,
+      marginCalcEnabled: false,
+    });
+    assert.equal(storageState.devSettings['numberDisplay.durationMs'], 400);
+    assert.deepEqual(storageState.customPages.all, ['dashboard', 'search']);
+  });
 });
 
 describe('sharing fallback · email templates', () => {

@@ -54,10 +54,11 @@
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "The extension periodically loads the authenticated Golfballs configuration. Managed values are applied locally and hidden controls are removed from Settings; an unavailable or invalid response leaves the last valid policy in place." },
+          { "type": "p", "text": "The extension periodically loads the authenticated Golfballs configuration. Visible managed controls stay readable but are locked at the authoritative value; hidden controls are removed. An unavailable or invalid response leaves the last valid policy in place." },
           { "type": "list", "items": [
-            "Edit golfballs-extension-configuration.yaml through the RevStack administrator config editor.",
-            "value is authoritative when managed is true; hidden controls whether the setting appears.",
+            "Edit the database-owned global policy or a per-installation override from the RevStack dashboard. The legacy YAML only seeds an empty policy database.",
+            "Value is authoritative when managed is true; hidden independently controls whether the setting appears.",
+            "Settings-template and legacy backup imports preserve every managed value.",
             "A signed-in RevStack dashboard administrator bypasses the remote policy and keeps local settings."
           ] }
         ]

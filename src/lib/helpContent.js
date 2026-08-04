@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.4.2",
-  "generatedAt": "2026-08-03",
+  "generatedAt": "2026-08-04",
   "tree": [
     {
       "title": "Getting Started",
@@ -4421,13 +4421,14 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "The extension periodically loads the authenticated Golfballs configuration. Managed values are applied locally and hidden controls are removed from Settings; an unavailable or invalid response leaves the last valid policy in place."
+            "text": "The extension periodically loads the authenticated Golfballs configuration. Visible managed controls stay readable but are locked at the authoritative value; hidden controls are removed. An unavailable or invalid response leaves the last valid policy in place."
           },
           {
             "type": "list",
             "items": [
-              "Edit golfballs-extension-configuration.yaml through the RevStack administrator config editor.",
-              "value is authoritative when managed is true; hidden controls whether the setting appears.",
+              "Edit the database-owned global policy or a per-installation override from the RevStack dashboard. The legacy YAML only seeds an empty policy database.",
+              "Value is authoritative when managed is true; hidden independently controls whether the setting appears.",
+              "Settings-template and legacy backup imports preserve every managed value.",
               "A signed-in RevStack dashboard administrator bypasses the remote policy and keeps local settings."
             ]
           }
@@ -6746,7 +6747,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "If the toggle itself is missing, the authenticated server policy marked it hidden. A RevStack administrator can change golfballs-extension-configuration.yaml; the extension applies the next valid sync automatically."
+            "text": "A lock badge means the authenticated server policy manages that visible value; a missing toggle is independently marked hidden. A RevStack administrator can change either state in the global or per-installation policy editor."
           }
         ]
       },
@@ -6895,7 +6896,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "Policy changes belong in golfballs-extension-configuration.yaml. The previous console hide/show commands were removed so local users cannot override an administrator disable."
+            "text": "Policy changes belong in the RevStack database editor. Global and per-installation management are explicit; the legacy YAML is read only once to seed an empty policy database."
           }
         ]
       },

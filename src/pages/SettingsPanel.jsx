@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   SectionLabel, Card, Callout, Btn, IconBtn, Input, Dropdown, Field,
   FeatureSpotlight, ExpandableFeature, ColorSpotlight, Switch, Dot, I,
-  Slider,
+  Slider, ManagedBadge,
 } from '../ui/index.js';
 import {
   SCALE_CATEGORIES, DEFAULT_SCALES, loadScales, saveScales, applyScales,
@@ -45,6 +45,12 @@ import {
   identityNoticeSignature,
   installationIdentityNoticeView,
 } from '../lib/installationIdentityNotice.js';
+import {
+  EMPTY_REMOTE_POLICY,
+  customPageScopeIsManaged,
+  developerSettingIsManaged,
+  featureIsManaged,
+} from '../lib/managedSettingsPolicy.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -803,7 +809,7 @@ function SettingsLinksManager({ onPresetLoad }) {
        with the stored default). The draft commits to the store on every
        valid numeric edit AND on blur (clamped); blur with an empty
        field reverts to the last good stored value rather than mutating it. */
-function NumberCell({ def, value, onChange }) {
+function NumberCell({ def, value, onChange, disabled = false }) {
   const [draft, setDraft] = useState(String(value ?? ''));
 
   // Keep the draft in sync when the stored value changes from outside
@@ -817,7 +823,7 @@ function NumberCell({ def, value, onChange }) {
 
   return (
     <Input
-      size="sm" mono
+      size="sm" mono disabled={disabled}
       value={draft}
       onFocus={() => { focusedRef.current = true; }}
       onBlur={() => {
@@ -863,7 +869,7 @@ function NumberCell({ def, value, onChange }) {
        for the kind of settings that use this — local-part of an
        email address, a small label, etc.) and on blur clamps to a
        trimmed value so a stray leading space doesn't persist. */
-function StringCell({ def, value, onChange }) {
+function StringCell({ def, value, onChange, disabled = false }) {
   const [draft, setDraft] = useState(value ?? '');
   const focusedRef = useRef(false);
   useEffect(() => {
@@ -871,7 +877,7 @@ function StringCell({ def, value, onChange }) {
   }, [value]);
   return (
     <Input
-      size="sm"
+      size="sm" disabled={disabled}
       value={draft}
       placeholder={def.placeholder || ''}
       onFocus={() => { focusedRef.current = true; }}
@@ -893,7 +899,7 @@ function StringCell({ def, value, onChange }) {
 /* Select cell — the shared custom Dropdown for `type: 'select'` dev settings.
    `def.options` is an array of strings or { value, label } objects; Dropdown
    wants { id, label }, so we map across. */
-function SelectCell({ def, value, onChange }) {
+function SelectCell({ def, value, onChange, disabled = false }) {
   const opts = (def.options || []).map((o) => (typeof o === 'string'
     ? { id: o, label: o }
     : { id: o.value, label: o.label }));
@@ -903,6 +909,7 @@ function SelectCell({ def, value, onChange }) {
       value={value ?? def.default ?? ''}
       options={opts}
       onChange={onChange}
+      disabled={disabled}
       style={{ minWidth: 150 }}
     />
   );
@@ -912,7 +919,7 @@ function SelectCell({ def, value, onChange }) {
        narrow Input with a unit suffix, string to a text Input, select to a
        dropdown, action to a button that fires the row's `runner`. Add new
        control types here as the registry grows. */
-function DevSettingRow({ def, value, onChange }) {
+function DevSettingRow({ def, value, onChange, managed = false }) {
   const isBool   = def.type === 'bool';
   const isNum    = def.type === 'number';
   const isString = def.type === 'string';
@@ -925,8 +932,9 @@ function DevSettingRow({ def, value, onChange }) {
       borderBottom: '1px solid var(--gb-border-subtle)',
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>
-          {def.label}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>
+          <span>{def.label}</span>
+          {managed && <ManagedBadge />}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, lineHeight: 1.4 }}>
           {def.desc}
@@ -937,20 +945,21 @@ function DevSettingRow({ def, value, onChange }) {
       </div>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
         {isBool && (
-          <Switch on={!!value} size="sm" onChange={(on) => onChange(on)} />
+          <Switch on={!!value} size="sm" disabled={managed} onChange={(on) => onChange(on)} />
         )}
         {isNum && (
-          <NumberCell def={def} value={value} onChange={onChange} />
+          <NumberCell def={def} value={value} onChange={onChange} disabled={managed} />
         )}
         {isString && (
-          <StringCell def={def} value={value} onChange={onChange} />
+          <StringCell def={def} value={value} onChange={onChange} disabled={managed} />
         )}
         {isSelect && (
-          <SelectCell def={def} value={value} onChange={onChange} />
+          <SelectCell def={def} value={value} onChange={onChange} disabled={managed} />
         )}
         {isAction && (
           <Btn
             size="sm"
+            disabled={managed}
             icon={def.buttonIcon && I[def.buttonIcon] ? React.createElement(I[def.buttonIcon]) : undefined}
             onClick={() => def.runner?.()}
           >
@@ -1320,7 +1329,7 @@ function InstallationIdentityNotice() {
 }
 
 /* ── Main Settings Panel ─────────────────────────────────────── */
-export function SettingsPanel({ remotePolicy }) {
+export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [flags, setFlags] = useState(FEATURE_DEFAULTS);
   const [featureCfg, setFeatureCfg] = useState(() => normalizeFeatureConfig({}));
@@ -1337,6 +1346,9 @@ export function SettingsPanel({ remotePolicy }) {
   // Dashboard administrators bypass the policy and retain their local setup.
   const visible = (key) => remotePolicy.adminBypass
     || (!remotePolicy.hiddenFeatures[key] && !remotePolicy.hiddenDeveloperSettings[key]);
+  const managedFeature = (key) => featureIsManaged(remotePolicy, key);
+  const managedDevSetting = (key) => developerSettingIsManaged(remotePolicy, key);
+  const managedCustomPageScope = (scope) => customPageScopeIsManaged(remotePolicy, scope);
   const devSectionHidden = !remotePolicy.adminBypass && remotePolicy.developerSectionHidden;
 
   /* Sort registry alphabetically once; filter on the user's query
@@ -1396,12 +1408,16 @@ export function SettingsPanel({ remotePolicy }) {
   };
 
   function setDevSetting(key, value) {
+    if (managedDevSetting(key)) return;
     const next = { ...devSettings, [key]: value };
     setDevSettings(next);
     saveDevSettings(next);
   }
   function resetDevSettings() {
-    const next = defaultDevSettings();
+    const next = {
+      ...defaultDevSettings(),
+      ...(remotePolicy.adminBypass ? {} : remotePolicy.managedDeveloperSettings),
+    };
     setDevSettings(next);
     saveDevSettings(next);
     window.__gbToast?.success('Developer settings reset to defaults');
@@ -1410,6 +1426,7 @@ export function SettingsPanel({ remotePolicy }) {
   /* The UI manages the one all-pages control. Storage remains an array of
      page ids so the classic page engine keeps its stable runtime shape. */
   function toggleCustomPageScope(section) {
+    if (managedCustomPageScope(section.id)) return;
     const enabled = (customPages[section.id] || []).length > 0;
     const next = {
       ...customPages,
@@ -1436,7 +1453,12 @@ export function SettingsPanel({ remotePolicy }) {
     commitTheme({ ...theme, colors: { ...DEFAULT_BRAND } });
     window.__gbToast?.success('Colors reset to green');
   };
-  const toggleFlag = (key) => { const next = { ...flags, [key]: !flags[key] }; setFlags(next); saveFlags(next); };
+  const toggleFlag = (key) => {
+    if (managedFeature(key)) return;
+    const next = { ...flags, [key]: !flags[key] };
+    setFlags(next);
+    saveFlags(next);
+  };
   /* Surface/page config lives in its own store (featureConfig) so the master
      on/off in featureFlags stays untouched. patch = a shallow merge into one
      feature's row; normalize keeps it clamped to what the feature supports. */
@@ -1458,7 +1480,12 @@ export function SettingsPanel({ remotePolicy }) {
   const editAction = (id) => { try { window.openAction?.(id); } catch { /* */ } };
   const deleteAction = (id) => { try { window.deleteActionById?.(id); } catch { /* */ } };
   const addAction = () => { try { window.newAction?.('contact'); } catch { /* */ } };
-  const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
+  const setFlagValue = (key, value) => {
+    if (managedFeature(key)) return;
+    const next = { ...flags, [key]: value };
+    setFlags(next);
+    saveFlags(next);
+  };
   const setCredentialValue = (key, value) => {
     const next = { ...credentials, [key]: value };
     setCredentials(next);
@@ -1538,6 +1565,7 @@ export function SettingsPanel({ remotePolicy }) {
                     feature={featureByKey(f.key) || { ...f, surfaces: { popup: null, shelf: null } }}
                     icon={getIcon(f.icon)}
                     on={!!flags[f.key]}
+                    managed={managedFeature(f.key)}
                     cfg={featureCfg[f.key] || {}}
                     onToggleEnabled={() => toggleFlag(f.key)}
                     onSetSurface={(surface, value) => setFeatureSurface(f.key, surface, value)}
@@ -1604,6 +1632,8 @@ export function SettingsPanel({ remotePolicy }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <ExpandableFeature
             on={!!flags.powerAutomateEnabled}
+            managed={managedFeature('powerAutomateEnabled')}
+            disabled={managedFeature('powerAutomateEnabled')}
             onChange={(next) => setFlagValue('powerAutomateEnabled', next)}
             icon={<I.send />}
             tone="warning"
@@ -1682,6 +1712,8 @@ export function SettingsPanel({ remotePolicy }) {
               name={section.label}
               desc="Control every registered custom page from one setting."
               on={(customPages[section.id] || []).length > 0}
+              managed={managedCustomPageScope(section.id)}
+              disabled={managedCustomPageScope(section.id)}
               onChange={() => toggleCustomPageScope(section)}
             />
           ))}
@@ -1751,6 +1783,7 @@ export function SettingsPanel({ remotePolicy }) {
                 <DevSettingRow
                   def={def}
                   value={devSettings[def.key]}
+                  managed={managedDevSetting(def.key)}
                   onChange={(v) => setDevSetting(def.key, v)}
                 />
               </motion.div>

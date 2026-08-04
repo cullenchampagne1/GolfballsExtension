@@ -13,6 +13,14 @@ const sidebarSource = await readFile(
   new URL('../../src/content/editor-sidebar.jsx', import.meta.url),
   'utf8',
 );
+const settingsPanelSource = await readFile(
+  new URL('../../src/pages/SettingsPanel.jsx', import.meta.url),
+  'utf8',
+);
+const projectRoutesSource = await readFile(
+  new URL('../../.revstack/routes.py', import.meta.url),
+  'utf8',
+);
 const actionMenuSource = sidebarSource.slice(
   sidebarSource.indexOf('function ActionMenu'),
   sidebarSource.indexOf('function MenuItem'),
@@ -43,5 +51,24 @@ describe('settings menus', () => {
       !FEATURE_FLAGS.some((f) => f.section === 'Workflows'),
       'no one-item Workflows section remains',
     );
+  });
+
+  it('renders managed feature, input, dropdown, and custom-page controls as locked', () => {
+    assert.match(settingsPanelSource, /managed=\{managedFeature\(f\.key\)\}/);
+    assert.match(settingsPanelSource, /managed=\{managedDevSetting\(def\.key\)\}/);
+    assert.match(settingsPanelSource, /disabled=\{managed\}/);
+    assert.match(settingsPanelSource, /managed=\{managedCustomPageScope\(section\.id\)\}/);
+  });
+
+  it('keeps management explicit in global and per-key dashboard editors', () => {
+    assert.match(projectRoutesSource, /"key": "managed"[\s\S]*"Managed by RevStack"/);
+    assert.match(projectRoutesSource, /"key": "managed_mode"[\s\S]*"Managed for this user"/);
+    assert.match(projectRoutesSource, /"visible_when": \{"field": "value_mode", "equals": "override"\}/);
+    const toggleRoute = projectRoutesSource.slice(
+      projectRoutesSource.indexOf('async def toggle_configuration_value'),
+      projectRoutesSource.indexOf('def _policy_value_cell'),
+    );
+    assert.match(toggleRoute, /hidden_marker=True, hidden=going_hidden/);
+    assert.doesNotMatch(toggleRoute, /managed_marker|value_marker/);
   });
 });

@@ -601,6 +601,10 @@
       "file": "tests/unit/remoteSettingsPolicy.test.mjs"
     },
     {
+      "name": "guard \u00b7 managed settings stay authoritative",
+      "file": "tests/unit/managedSettingsPolicy.test.mjs"
+    },
+    {
       "name": "guard \u00b7 extension/backend settings registry parity",
       "file": "tests/unit/settingsRegistryParity.test.mjs"
     },

@@ -138,6 +138,25 @@ class SettingsPolicyTests(unittest.TestCase):
         self.assertTrue(updated["hidden"])
         self.assertEqual(self.legacy.document["developer_settings"]["density"]["value"], "compact")
 
+    def test_visibility_management_and_value_are_independent_policy_axes(self):
+        original = self.store.entry_for_path(["features", "featureEnabled"])
+        self.assertTrue(original["value"])
+        self.assertTrue(original["managed"])
+
+        hidden = self.store.update_global(
+            ["features", "featureEnabled"], hidden_marker=True, hidden=True,
+        )
+        self.assertTrue(hidden["hidden"])
+        self.assertTrue(hidden["value"], "hiding must not force a boolean setting off")
+        self.assertTrue(hidden["managed"], "hiding must not hand management back")
+
+        user_controlled = self.store.update_global(
+            ["features", "featureEnabled"], managed_marker=True, managed=False,
+        )
+        self.assertTrue(user_controlled["hidden"])
+        self.assertTrue(user_controlled["value"])
+        self.assertFalse(user_controlled["managed"])
+
     def test_user_override_resolves_without_changing_global_policy(self):
         self.store.set_override(
             "install-1", ["features", "featureEnabled"],

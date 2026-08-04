@@ -94,7 +94,7 @@ export function Input({
             boxShadow: 'none', padding: 0, margin: 0,
             color: 'var(--gb-text-primary)', font: 'inherit',
             fontFamily: mono ? 'var(--gb-font-mono)' : 'inherit',
-            cursor: readOnly ? 'default' : 'text',
+            cursor: disabled ? 'not-allowed' : readOnly ? 'default' : 'text',
           }}
           {...rest}
         />

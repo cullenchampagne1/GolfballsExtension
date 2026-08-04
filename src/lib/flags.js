@@ -1,3 +1,8 @@
+import {
+  REMOTE_POLICY_KEY,
+  enforceManagedStorageValue,
+} from './managedSettingsPolicy.js';
+
 /* ───────────────────────────────────────────────────────────────
    flags.js — extension feature flags.
 
@@ -148,12 +153,16 @@ export function loadFlags() {
 /** Persist flags and broadcast them to open golfballs.com tabs. */
 export function saveFlags(flags) {
   try {
-    const { flags: safeFlags } = normalizeStoredFlags(flags);
-    chrome.storage.local.set({ featureFlags: safeFlags });
-    chrome.tabs.query({ url: ['https://www.golfballs.com/*', 'https://api.golfballs.com/*'] }, (tabs) => {
-      (tabs || []).forEach((t) => {
-        try { chrome.tabs.sendMessage(t.id, { action: 'GB_FEATURE_FLAGS', flags: safeFlags }); } catch {}
+    const persist = (policy) => {
+      const { flags: canonical } = normalizeStoredFlags(flags);
+      const safeFlags = enforceManagedStorageValue('featureFlags', canonical, policy);
+      chrome.storage.local.set({ featureFlags: safeFlags });
+      chrome.tabs.query({ url: ['https://www.golfballs.com/*', 'https://api.golfballs.com/*'] }, (tabs) => {
+        (tabs || []).forEach((t) => {
+          try { chrome.tabs.sendMessage(t.id, { action: 'GB_FEATURE_FLAGS', flags: safeFlags }); } catch {}
+        });
       });
-    });
+    };
+    chrome.storage.local.get(REMOTE_POLICY_KEY, (stored) => persist(stored?.[REMOTE_POLICY_KEY]));
   } catch { /* not in an extension page — nothing to persist */ }
 }

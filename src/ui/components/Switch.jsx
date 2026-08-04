@@ -27,7 +27,17 @@ export function Switch({ on, size = 'md', tone = 'brand', disabled, onChange, st
     <motion.span
       role="switch"
       aria-checked={!!on}
-      onClick={() => !disabled && onChange?.(!on)}
+      aria-disabled={disabled || undefined}
+      tabIndex={disabled ? -1 : 0}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!disabled) onChange?.(!on);
+      }}
+      onKeyDown={(event) => {
+        if (disabled || !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        onChange?.(!on);
+      }}
       animate={{
         backgroundColor: on ? trackOn : 'var(--gb-surface-2)',
         borderColor: on ? borderOn : 'var(--gb-border-default)',
@@ -37,7 +47,8 @@ export function Switch({ on, size = 'md', tone = 'brand', disabled, onChange, st
         position: 'relative', display: 'inline-block', flexShrink: 0,
         width: s.w, height: s.h, borderRadius: s.h, border: '1px solid',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1, boxSizing: 'border-box',
+        opacity: disabled ? 0.58 : 1, boxSizing: 'border-box',
+        outline: 'none',
         ...style,
       }}
     >

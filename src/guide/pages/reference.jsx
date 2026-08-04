@@ -260,7 +260,7 @@ const FAQ_GROUPS = [
     label: 'Your data & privacy',
     items: [
       { q: 'Does anyone else see my Watch List, templates, or settings?', a: 'Local data stays in your browser profile unless you explicitly create a settings link. The link stores only the scopes you select; Watch List and credentials are never included.' },
-      { q: 'A toggle disappeared from my Settings — am I losing my mind?', a: 'No — the authenticated administrator policy can hide managed controls. Ask a RevStack administrator to review the Golfballs configuration.', link: ['#power-user', 'Managed settings'] },
+      { q: 'A toggle disappeared from my Settings — am I losing my mind?', a: 'No — administrator policy can hide a control, or keep it visible and locked when its value is managed. Ask a RevStack administrator to review the Golfballs configuration.', link: ['#power-user', 'Managed settings'] },
       { q: 'Where do saved proposals live?', a: 'Both locally (your saved proposals list) and server-side as a real cart tied to the CRM opportunity — which is why you can reload one later or send the customer a live cart link.' },
     ],
   },
@@ -378,7 +378,7 @@ function CodeEditorSnippet() {
 const PU_FLAG_ROWS = [
   ['Feature flags', 'featureFlags', 'On/off for every tool — the Features list in Settings. Off = the tool vanishes everywhere.'],
   ['Developer Settings', 'devSettings', `${DEV_SETTINGS.length} low-level knobs in this build: animation timing, per-modal draggable mode, margin threshold, catalog re-index interval, 3D viewer tuning.`],
-  ['Remote policy', 'gbRemoteSettingsPolicy', 'Last validated revision, visibility maps, and administrator-bypass state. Policy does not travel in presets.'],
+  ['Remote policy', 'gbRemoteSettingsPolicy', 'Last validated revision, visibility maps, authoritative managed values, and administrator-bypass state. Policy does not travel in presets.'],
 ];
 
 const PU_STORAGE_ROWS = [
@@ -444,7 +444,7 @@ export function PowerUserPage() {
       </table>
 
       <h2 className="sec">Managed settings &amp; feature flags</h2>
-      <p>The installation-authenticated policy drives managed values and visibility. Local feature and developer values remain in <code>chrome.storage.local</code>; policy metadata never travels in presets.</p>
+      <p>The installation-authenticated database policy drives managed values and visibility. Visible managed controls stay readable but show a lock and cannot be edited; imports preserve their authoritative values. The legacy YAML is only an initial database seed, and policy metadata never travels in presets.</p>
       <table className="spectable">
         <thead><tr><th style={{ width: 200 }}>Map</th><th style={{ width: 150 }}>Storage key</th><th>What it holds</th></tr></thead>
         <tbody>{PU_FLAG_ROWS.map((r) => <tr key={r[1]}><td><b>{r[0]}</b></td><td><code>{r[1]}</code></td><td>{r[2]}</td></tr>)}</tbody>

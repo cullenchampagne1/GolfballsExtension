@@ -1,47 +1,35 @@
 import { useEffect, useState } from 'react';
+import {
+  EMPTY_REMOTE_POLICY,
+  REMOTE_POLICY_KEY,
+  normalizeRemotePolicy,
+} from './managedSettingsPolicy.js';
 
 /* ───────────────────────────────────────────────────────────────
    remoteSettingsPolicy — React view of the server-pushed settings
-   policy that hides features / developer settings / custom pages.
+   policy that hides or locks features / developer settings / custom pages.
 
    useRemoteSettingsPolicy() reads the last policy written to
    chrome.storage.local[gbRemoteSettingsPolicy] and re-renders on
-   chrome.storage.onChanged. normalize() drops anything that isn't
-   schemaVersion 1, so components always get the frozen EMPTY_POLICY
+   chrome.storage.onChanged. normalizeRemotePolicy() drops anything that isn't
+   schemaVersion 1, so components always get the frozen empty-policy
    shape (never a partial object). Outside an extension context the
-   hook simply stays on EMPTY_POLICY.
+   hook simply stays on that empty policy.
 ─────────────────────────────────────────────────────────────── */
 
-export const REMOTE_POLICY_KEY = 'gbRemoteSettingsPolicy';
-const EMPTY_POLICY = Object.freeze({
-  adminBypass: false,
-  hiddenFeatures: {},
-  hiddenDeveloperSettings: {},
-  hiddenCustomPages: false,
-  hiddenCustomPageScopes: {},
-  developerSectionHidden: false,
-});
-
-function normalize(value) {
-  if (!value || typeof value !== 'object' || value.schemaVersion !== 1) return EMPTY_POLICY;
-  return {
-    ...EMPTY_POLICY,
-    ...value,
-    hiddenFeatures: value.hiddenFeatures || {},
-    hiddenDeveloperSettings: value.hiddenDeveloperSettings || {},
-    hiddenCustomPageScopes: value.hiddenCustomPageScopes || {},
-  };
-}
+export { REMOTE_POLICY_KEY } from './managedSettingsPolicy.js';
 
 /** React view of the last policy that was fully validated and applied. */
 export function useRemoteSettingsPolicy() {
-  const [policy, setPolicy] = useState(EMPTY_POLICY);
+  const [policy, setPolicy] = useState(EMPTY_REMOTE_POLICY);
   useEffect(() => {
     if (!globalThis.chrome?.storage?.local) return undefined;
-    chrome.storage.local.get(REMOTE_POLICY_KEY, (data) => setPolicy(normalize(data?.[REMOTE_POLICY_KEY])));
+    chrome.storage.local.get(REMOTE_POLICY_KEY, (data) => (
+      setPolicy(normalizeRemotePolicy(data?.[REMOTE_POLICY_KEY]))
+    ));
     const listener = (changes, area) => {
       if (area === 'local' && changes[REMOTE_POLICY_KEY]) {
-        setPolicy(normalize(changes[REMOTE_POLICY_KEY].newValue));
+        setPolicy(normalizeRemotePolicy(changes[REMOTE_POLICY_KEY].newValue));
       }
     };
     chrome.storage.onChanged.addListener(listener);

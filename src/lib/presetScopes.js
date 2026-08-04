@@ -1,3 +1,8 @@
+import {
+  REMOTE_POLICY_KEY,
+  enforceManagedStorageWrites,
+} from './managedSettingsPolicy.js';
+
 /* ───────────────────────────────────────────────────────────────
    presetScopes.js — what a shared settings template can carry.
 
@@ -193,7 +198,7 @@ export async function gatherScopes(scopeIds) {
 export async function applyScopes(scopes) {
   if (!scopes || typeof scopes !== 'object') return { applied: [], merged: {} };
 
-  const writes = {};
+  let writes = {};
   const summary = {};
   const applied = [];
 
@@ -245,7 +250,11 @@ export async function applyScopes(scopes) {
     }
   }
 
-  if (Object.keys(writes).length > 0) await writeKeys(writes);
+  if (Object.keys(writes).length > 0) {
+    const stored = await readKeys(REMOTE_POLICY_KEY);
+    writes = enforceManagedStorageWrites(writes, stored[REMOTE_POLICY_KEY]);
+    await writeKeys(writes);
+  }
   return { applied, merged: summary };
 }
 

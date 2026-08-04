@@ -1,3 +1,8 @@
+import {
+  REMOTE_POLICY_KEY,
+  enforceManagedStorageValue,
+} from './managedSettingsPolicy.js';
+
 /* ───────────────────────────────────────────────────────────────
    customPages.js — registry of internal site pages the extension can
    override with a custom UI. The one generic Custom Pages switch owns
@@ -75,6 +80,14 @@ export function loadCustomPages() {
 }
 
 export function saveCustomPages(pages) {
-  if (typeof chrome === 'undefined' || !chrome.storage) return;
-  chrome.storage.local.set({ [STORAGE_KEY]: normalizeStoredCustomPages(pages).pages });
+  if (typeof chrome === 'undefined' || !chrome.storage) return Promise.resolve();
+  const normalized = normalizeStoredCustomPages(pages).pages;
+  return new Promise((resolve) => {
+    chrome.storage.local.get(REMOTE_POLICY_KEY, (stored) => {
+      const guarded = enforceManagedStorageValue(
+        STORAGE_KEY, normalized, stored?.[REMOTE_POLICY_KEY],
+      );
+      chrome.storage.local.set({ [STORAGE_KEY]: guarded }, resolve);
+    });
+  });
 }

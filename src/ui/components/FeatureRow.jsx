@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Switch } from './Switch.jsx';
 import { I } from '../icons.jsx';
+import { ManagedBadge } from './ManagedBadge.jsx';
 import { CustomLinkField } from './CustomLinkField.jsx';
 import { surfaceSummary, SHELF_PAGES } from '../../lib/features/featureConfig.js';
 
@@ -51,7 +52,10 @@ function PageChips({ pages, onToggle }) {
   );
 }
 
-export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurface, onTogglePage, onSetCustomUrl }) {
+export function FeatureRow({
+  feature, icon, on, cfg, managed = false,
+  onToggleEnabled, onSetSurface, onTogglePage, onSetCustomUrl,
+}) {
   const [open, setOpen] = useState(false);
   const surfaces = feature.surfaces || {};
   const hasSub = !!(surfaces.popup || surfaces.shelf);
@@ -59,7 +63,10 @@ export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurfa
   const summary = on ? surfaceSummary(cfg) : 'Off';
 
   return (
-    <div style={{ border: `1px solid ${on ? 'var(--gb-border-default)' : 'var(--gb-border-subtle)'}`, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', overflow: 'hidden' }}>
+    <div
+      aria-disabled={managed || undefined}
+      style={{ border: `1px solid ${managed ? 'var(--gb-brand-tint-border)' : on ? 'var(--gb-border-default)' : 'var(--gb-border-subtle)'}`, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', overflow: 'hidden' }}
+    >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 13px' }}>
         <span style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -69,6 +76,7 @@ export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurfa
           style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: canExpand ? 'pointer' : 'default' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, maxWidth: '100%' }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap' }}>{feature.name}</span>
+            {managed ? <ManagedBadge /> : null}
             {on && hasSub ? (
               <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.03em', padding: '1px 6px', borderRadius: 999, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{summary}</span>
             ) : null}
@@ -81,7 +89,7 @@ export function FeatureRow({ feature, icon, on, cfg, onToggleEnabled, onSetSurfa
             <I.chevr size={14} />
           </button>
         ) : null}
-        <Switch on={on} onChange={onToggleEnabled} />
+        <Switch on={on} onChange={onToggleEnabled} disabled={managed} />
       </div>
 
       {/* Expanded surface controls */}

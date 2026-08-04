@@ -120,6 +120,15 @@ describe('remote settings policy', () => {
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenCustomPageScopes.all, true);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedFeatures.copyIdsEnabled, false);
+    assert.equal(Object.hasOwn(stored.gbRemoteSettingsPolicy.managedFeatures, 'workflowManagerEnabled'), false);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedDeveloperSettings['numberDisplay.durationMs'], 400);
+    assert.equal(Object.hasOwn(stored.gbRemoteSettingsPolicy.managedDeveloperSettings, 'workflowManager.scale'), false);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, true);
+    assert.deepEqual(
+      Array.from(stored.gbRemoteSettingsPolicy.managedCustomPageScopes.all),
+      registry.customPageScopes.all.pageIds,
+    );
     assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds);
     assert.equal(Object.hasOwn(stored.customPages, 'crm'), false);
     assert.equal(Object.hasOwn(stored, 'secret_settings'), false);
@@ -137,6 +146,8 @@ describe('remote settings policy', () => {
     await context.GBRemoteSettingsPolicy.sync();
     assert.deepEqual(Array.from(stored.customPages.all), [], 'global custom-pages disable wins over enabled scopes');
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenCustomPages, true);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, false);
+    assert.deepEqual(Array.from(stored.gbRemoteSettingsPolicy.managedCustomPageScopes.all), []);
   });
 
   it('restores the pre-policy values and drops the backup on admin bypass', async () => {
@@ -148,6 +159,8 @@ describe('remote settings policy', () => {
     assert.equal(stored.featureFlags.workflowManagerEnabled, false);
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75);
     assert.equal(stored.gbRemoteSettingsPolicy.adminBypass, true);
+    assert.deepEqual(Object.keys(stored.gbRemoteSettingsPolicy.managedFeatures), []);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, null);
     assert.equal(Object.hasOwn(stored, 'gbRemoteSettingsBackup'), false);
   });
 });

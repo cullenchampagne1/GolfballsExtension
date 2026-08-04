@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { T } from '../shared.jsx';
 import { Switch } from './Switch.jsx';
 import { Tag } from './Tag.jsx';
+import { ManagedBadge } from './ManagedBadge.jsx';
 
 /**
  * FeatureSpotlight — a toggle row with icon, name, description, and switch.
@@ -22,7 +23,10 @@ const SIZES = {
   lg: { pad: 16, box: 44, icon: 20, name: 14,   desc: 11.5, gap: 14, sw: 'lg', radius: 'var(--gb-r-lg)' },
 };
 
-export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experimental, size = 'md' }) {
+export function FeatureSpotlight({
+  on, icon, name, desc, onChange, tone, experimental, size = 'md',
+  disabled = false, managed = false,
+}) {
   const s = SIZES[size] || SIZES.md;
   const effectiveTone = tone || (experimental ? 'warning' : 'brand');
   const fg = experimental ? 'var(--gb-warning)' : 'var(--gb-brand-label)';
@@ -32,7 +36,8 @@ export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experim
 
   return (
     <motion.div
-      onClick={() => onChange?.(!on)}
+      onClick={() => !disabled && onChange?.(!on)}
+      aria-disabled={disabled || undefined}
       animate={{
         backgroundColor: on ? bg : 'var(--gb-surface-1)',
         borderColor: on ? bd : 'var(--gb-border-default)',
@@ -44,7 +49,7 @@ export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experim
         border: '1px solid',
         borderRadius: s.radius,
         display: 'flex', alignItems: 'center', gap: s.gap,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >
       <motion.div
@@ -67,6 +72,7 @@ export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experim
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ fontSize: s.name, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{name}</span>
           {experimental && <Tag tone="warning" size="xs">EXPERIMENTAL</Tag>}
+          {managed && <ManagedBadge />}
         </div>
         {desc && (
           <div title={desc} style={{ fontSize: s.desc, color: 'var(--gb-text-tertiary)', marginTop: 3, lineHeight: 1.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -75,7 +81,7 @@ export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experim
         )}
       </div>
 
-      <Switch on={on} size={s.sw} tone={effectiveTone} onChange={onChange} />
+      <Switch on={on} size={s.sw} tone={effectiveTone} onChange={onChange} disabled={disabled} />
     </motion.div>
   );
 }

@@ -119,6 +119,15 @@ describe('remote policy sync', () => {
     assert.equal(policy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(policy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
     assert.equal(policy.hiddenCustomPageScopes.all, true);
+    assert.equal(policy.managedFeatures.copyIdsEnabled, false);
+    assert.equal(Object.hasOwn(policy.managedFeatures, 'workflowManagerEnabled'), false);
+    assert.equal(policy.managedDeveloperSettings['numberDisplay.durationMs'], 400);
+    assert.equal(Object.hasOwn(policy.managedDeveloperSettings, 'workflowManager.scale'), false);
+    assert.equal(policy.managedCustomPages, true);
+    assert.deepEqual(
+      Array.from(policy.managedCustomPageScopes.all),
+      registry.customPageScopes.all.pageIds,
+    );
     assert.deepEqual(
       Array.from(stored.customPages.all),
       registry.customPageScopes.all.pageIds,
@@ -160,6 +169,8 @@ describe('remote policy sync', () => {
     assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds);
     assert.equal(stored.gbRemoteSettingsPolicy.adminBypass, true);
     assert.equal(stored.gbRemoteSettingsPolicy.revision, 'b'.repeat(64));
+    assert.deepEqual(Object.keys(stored.gbRemoteSettingsPolicy.managedFeatures), []);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, null);
     assert.equal(Object.hasOwn(stored, 'gbRemoteSettingsBackup'), false, 'the backup is consumed');
   });
 });

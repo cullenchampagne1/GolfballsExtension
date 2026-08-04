@@ -124,6 +124,14 @@ function isHidden(target, policy, kind) {
   return policy?.developerSectionHidden === true || policy?.hiddenDeveloperSettings?.[target] === true;
 }
 
+function isManaged(target, policy, kind) {
+  if (policy?.adminBypass) return false;
+  const values = kind === 'feature'
+    ? policy?.managedFeatures
+    : policy?.managedDeveloperSettings;
+  return !!values && typeof values === 'object' && Object.hasOwn(values, target);
+}
+
 /**
  * Validate a model action against the exact registries available in this build.
  * Returns a small normalized operation; never returns arbitrary storage keys.
@@ -174,6 +182,7 @@ export function planHelpAction(action, registry = {}) {
   if (type === 'set_feature') {
     if (!Object.hasOwn(featureRules, target)) fail('That feature is not registered in this build');
     if (isHidden(target, policy, 'feature')) fail('That feature is hidden by administrator policy');
+    if (isManaged(target, policy, 'feature')) fail('That feature is managed by administrator policy');
     return { type, target, value: boolValue(normalizedAction.value) };
   }
 
@@ -181,6 +190,7 @@ export function planHelpAction(action, registry = {}) {
     const rule = settingRules[target];
     if (!rule) fail('That setting is not registered in this build');
     if (isHidden(target, policy, 'setting')) fail('That setting is hidden by administrator policy');
+    if (isManaged(target, policy, 'setting')) fail('That setting is managed by administrator policy');
     return { type, target, value: settingValue(rule, normalizedAction.value) };
   }
 
