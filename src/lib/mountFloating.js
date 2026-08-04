@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { applyFloatingHostScale } from './floatingHost.js';
+import { reportSurfaceOpen } from './usageTelemetry.js';
 
 /**
  * Mount (or toggle) a FloatingPanel-based modal as a content-script overlay.
@@ -10,10 +11,12 @@ import { applyFloatingHostScale } from './floatingHost.js';
  *
  * @param {string} id  host element id — also the open/closed guard
  * @param {(hooks: { onClosed: () => void, bindClose: (close: () => void) => void }) => import('react').ReactElement} render
- * @param {{ scaleCategory?: string | null }} options  null when the mounted
- *        surface owns its own independent scale
+ * @param {{ scaleCategory?: string | null, surface?: string }} options
+ *        scaleCategory null when the mounted surface owns its own independent
+ *        scale; surface overrides the name usage telemetry reports (defaults
+ *        to the host id's entry in usageSurfaces.js)
  */
-export function mountFloating(id, render, { scaleCategory = 'modals' } = {}) {
+export function mountFloating(id, render, { scaleCategory = 'modals', surface } = {}) {
   const existing = document.getElementById(id);
   if (existing) {
     existing.__gbClose?.();
@@ -26,8 +29,14 @@ export function mountFloating(id, render, { scaleCategory = 'modals' } = {}) {
   applyFloatingHostScale(host, scaleCategory);
   document.body.appendChild(host);
 
+  // Every floating modal in the extension mounts through here, so this one
+  // call is what the console's Adoption and Presence blocks are built from.
+  // The close is reported from onClosed rather than the panel's animation
+  // start, so the recorded duration is how long it was actually on screen.
+  const reportClose = reportSurfaceOpen(surface || id, 'modal');
+
   const root = createRoot(host);
-  const onClosed = () => { root.unmount(); host.remove(); };
+  const onClosed = () => { reportClose(); root.unmount(); host.remove(); };
 
   root.render(render({
     onClosed,

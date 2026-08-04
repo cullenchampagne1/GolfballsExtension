@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
@@ -10,12 +10,21 @@ if (!GB_HELP_ASSISTANT) throw new Error('Help assistant failed to initialize');
 const GB_RUNTIME = globalThis.GBRuntimeBootstrap?.createController();
 if (!GB_RUNTIME) throw new Error('Runtime bootstrap failed to initialize');
 globalThis.GBRuntimeCoordinator = GB_RUNTIME;
+const GB_USAGE = globalThis.GBUsageTelemetry?.createReporter();
+if (!GB_USAGE) throw new Error('Usage telemetry failed to initialize');
+// installation-auth samples every backend round-trip through this hook, so
+// the Latency block measures the real wait without auth importing telemetry.
+globalThis.GBUsageSink = GB_USAGE.sample;
 
 GB_RUNTIME.start().then((allowed) => {
   if (!allowed) return;
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
   GB_HELP_ASSISTANT.resume().catch(() => {});
   GBNotificationPoll.reconcile().catch(() => {});
+  // Only an authorized installation reports usage — a revoked or not-yet-
+  // enrolled one has no credential to report under and must stay silent.
+  GB_USAGE.start();
+  GB_USAGE.flush().catch(() => {});
 }).catch(GB_RUNTIME.report);
 chrome.runtime.onStartup?.addListener(() => {
   GB_RUNTIME.sync().then((allowed) => {
@@ -974,6 +983,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'gbBackendOrigin') {
     sendResponse({ origin: globalThis.GB_BACKEND_ORIGIN });
     return true;
+  }
+
+  // ── Surface usage ──────────────────────────────────────────────────────
+  // A modal or takeover page opened or closed in some tab. Buffered here and
+  // flushed as one batch per minute; the reporter validates the envelope, so
+  // a malformed event is dropped rather than shipped. Deliberately does NOT
+  // reply — a content script must never wait on analytics to render.
+  if (msg.action === 'gbUsageEvent') {
+    GB_USAGE.record(msg.event);
+    return false;
   }
 
   // ── Installation user identity ─────────────────────────────────────────

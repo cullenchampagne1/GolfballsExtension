@@ -97,6 +97,48 @@
     },
   };
 
+  /* id → the name the console's Adoption block shows. Kept beside DETECTORS
+     because this is the file that defines the ids; the floating modals keep
+     their own map in src/lib/usageSurfaces.js for the same reason. An id with
+     no row here reports as itself rather than going missing. */
+  var PAGE_NAMES = {
+    contact_details: 'Contact Details',
+    account_details: 'Account Details',
+    opportunity_details: 'Opportunity Details',
+    search: 'CRM Search Page',
+    task_list: 'Task List Page',
+    my_recent_history: 'Recent History',
+    action_review: 'Action Review',
+  };
+
+  /* A takeover is a whole-page surface: it opens when we render over the CRM
+     and ends when the document goes away, so the close rides on `pagehide`.
+     Non-ESM content script — no import — so the worker is messaged directly. */
+  function reportUsage(event) {
+    try {
+      chrome.runtime.sendMessage({ action: 'gbUsageEvent', event: event }, function () {
+        void chrome.runtime.lastError;
+      });
+    } catch (e) { /* worker gone — usage is never worth surfacing */ }
+  }
+
+  function reportTakeover(pageId) {
+    var surface = PAGE_NAMES[pageId] || pageId;
+    var openedAt = Date.now();
+    var closed = false;
+    reportUsage({ kind: 'surface_open', surface: surface, surface_kind: 'page' });
+    window.addEventListener('pagehide', function () {
+      if (closed) return;
+      closed = true;
+      reportUsage({
+        kind: 'surface_close',
+        surface: surface,
+        surface_kind: 'page',
+        ms: Math.max(0, Date.now() - openedAt),
+      });
+    }, { once: true });
+  }
+
   // ── enabled-set helpers ──────────────────────────────────────
   function flatten(pages) {
     // { all: ['contact_details', …] } → ['contact_details', …]
@@ -376,6 +418,9 @@
     }
 
     active = { rootEl: rootEl, store: store, cleanup: cleanup, prevOverflow: prevOverflow };
+    // Reported only after render survived: a takeover that threw above went
+    // back to the host page, and the user never saw this surface.
+    reportTakeover(pageId);
 
     // Our fixed root (z above the cover) now paints — drop the plain
     // document_start cover.

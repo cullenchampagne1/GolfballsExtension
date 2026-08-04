@@ -485,6 +485,10 @@
       "file": "tests/unit/calendarFormState.test.mjs"
     },
     {
+      "name": "flow \u00b7 usage telemetry batching and content-free wire",
+      "file": "tests/integration/usage-telemetry.test.mjs"
+    },
+    {
       "name": "flow \u00b7 install enrollment lifecycle",
       "file": "tests/integration/enrollment-lifecycle.test.mjs"
     },
