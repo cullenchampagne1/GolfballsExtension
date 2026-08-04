@@ -10,6 +10,11 @@ const routesPath = resolve(root, '.revstack/routes.py');
 const localRuntimeAvailable = existsSync(blocksPath) && existsSync(routesPath);
 const blocks = localRuntimeAvailable ? readFileSync(blocksPath, 'utf8') : '';
 const routes = localRuntimeAvailable ? readFileSync(routesPath, 'utf8') : '';
+const keyOverridesStart = routes.indexOf('@router.get("/keys/{key_id}/configuration-overrides")');
+const keyOverridesEnd = routes.indexOf('@router.post("/keys/{key_id}/configuration-overrides")', keyOverridesStart);
+const keyOverridesRoute = keyOverridesStart >= 0 && keyOverridesEnd > keyOverridesStart
+  ? routes.slice(keyOverridesStart, keyOverridesEnd)
+  : '';
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
@@ -26,5 +31,13 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"submit_label": "Send notification"/);
     assert.match(routes, /"key": "message"[\s\S]*?"type": "textarea"[\s\S]*?"required": True/);
     assert.match(routes, /"key": "level"[\s\S]*?"type": "select"/);
+  });
+
+  it('closes per-user settings rows with a narrow, visible reset column', () => {
+    assert.match(keyOverridesRoute, /"clear": _clear_override_action[\s\S]*?if override else "—"/);
+    assert.match(keyOverridesRoute, /"key": "setting", "label": "Setting", "width": "1\.8fr"/);
+    assert.match(keyOverridesRoute, /"key": "act", "label": "Edit"[\s\S]*?"width": "58px"/);
+    assert.match(keyOverridesRoute, /"key": "clear", "label": "Reset"[\s\S]*?"width": "62px"/);
+    assert.doesNotMatch(keyOverridesRoute, /"key": "clear", "label": ""/);
   });
 });
