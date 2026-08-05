@@ -260,6 +260,10 @@ describe('tracker definitions · shipped trackers', () => {
       // Proposals are documents, not lifecycles — nothing changes behind our
       // back, so they carry no refresh clock.
       assert.equal(registry.get('proposals').refresh, null);
+      // Neither do recent orders: the row records an order that already
+      // happened, read out of the search index, and the CRM has no per-order
+      // endpoint to re-ask. The next sweep is the only update.
+      assert.equal(registry.get('recent-orders').refresh, null);
     });
   });
 
@@ -284,5 +288,105 @@ describe('tracker definitions · shipped trackers', () => {
     const patch = tracker.refresh.apply(record, { d: { OpportunityStageId: 5, Subject: 'Spring gift order' } });
     assert.equal(patch.status, 'closed');
     assert.equal(tracker.refresh.settled({ ...record, ...patch }), true);
+  });
+});
+
+/* Recent orders are read out of the CRM SEARCH index — the only place this CRM
+   admits an order happened — so the unit under test is "one contact row in, one
+   order out", against rows shaped exactly like the ones CRM Search renders. */
+describe('tracker definitions · recent orders', () => {
+  const contactDoc = (overrides = {}) => ({
+    id: 'contact_4421',
+    recordType_s: 'Contact',
+    contactName_t: 'Marcus Chen',
+    accountName_t: 'Acme Industries',
+    accountID_s: 'ACME-001',
+    salesRep_s: 'Cullen Champagne',
+    salesRepID_s: 'rep_22',
+    podID_i: 3,
+    role_s: 'AE',
+    orderCount_i: 12,
+    yearToDateRevenue_f: 8400,
+    lastOrderDate_dt: '2026-08-04T00:00:00Z',
+    nextTaskDate_dt: '2026-08-29T00:00:00Z',
+    ...overrides,
+  });
+
+  const definitions = () => globalThis.GBTrackerDefinitions;
+
+  it('reads the contact’s last order off the search row', () => {
+    const raw = definitions().orderFromContactDoc(contactDoc(), { now: NOW });
+    assert.equal(raw.externalId, '4421@2026-08-04');
+    assert.equal(raw.at, Date.UTC(2026, 7, 4));
+    assert.equal(raw.title, 'Marcus Chen · Acme Industries');
+    assert.equal(raw.status, 'ordered');
+    assert.equal(raw.data.contactId, '4421');
+    assert.equal(raw.data.accountId, 'ACME-001');
+    assert.equal(raw.data.salesRep, 'Cullen Champagne');
+    assert.equal(raw.data.orderDate, '2026-08-04');
+    assert.equal(raw.data.orderCount, 12);
+  });
+
+  it('leaves the order total empty, because the index does not carry one', () => {
+    // yearToDateRevenue_f is on the row and is NOT this order's value; a
+    // dashboard showing $8,400 for one order would be wrong, not approximate.
+    const raw = definitions().orderFromContactDoc(contactDoc(), { now: NOW });
+    assert.equal(raw.value, null);
+  });
+
+  it('keys an order by contact and day, so a re-listed contact is one row', () => {
+    const first = definitions().orderFromContactDoc(contactDoc(), { now: NOW });
+    const reListed = definitions().orderFromContactDoc(contactDoc(), { now: NOW + 3_600_000 });
+    const ordersAgain = definitions().orderFromContactDoc(
+      contactDoc({ lastOrderDate_dt: '2026-08-06T00:00:00Z', orderCount_i: 13 }),
+      { now: NOW },
+    );
+    assert.equal(first.externalId, reListed.externalId);
+    assert.notEqual(first.externalId, ordersAgain.externalId);
+    assert.equal(ordersAgain.externalId, '4421@2026-08-06');
+  });
+
+  it('skips accounts and rows with no order date at all', () => {
+    const account = contactDoc({ id: 'account_1187', recordType_s: 'Account', contactName_t: '' });
+    assert.equal(definitions().orderFromContactDoc(account, { now: NOW }), null);
+    assert.equal(
+      definitions().orderFromContactDoc(contactDoc({ lastOrderDate_dt: null }), { now: NOW }),
+      null,
+    );
+    assert.equal(
+      definitions().orderFromContactDoc(contactDoc({ id: 'contact_' }), { now: NOW }),
+      null,
+    );
+    assert.equal(definitions().orderFromContactDoc(null, { now: NOW }), null);
+  });
+
+  it('collects a sweep’s contact rows into order records', async () => {
+    const tracker = registry.get('recent-orders');
+    const asked = [];
+    const rows = await tracker.poll.collect({
+      since: Date.UTC(2026, 7, 1),
+      now: NOW,
+      crmContacts: async (request) => {
+        asked.push(request);
+        return [
+          contactDoc(),
+          contactDoc({ id: 'account_1187', recordType_s: 'Account' }), // dropped
+          contactDoc({ id: 'contact_5223', contactName_t: 'Jordan Brown', accountName_t: '', lastOrderDate_dt: '2026-08-05T00:00:00Z' }),
+        ];
+      },
+    });
+    assert.deepEqual(asked, [{ since: Date.UTC(2026, 7, 1), now: NOW }]);
+    assert.deepEqual(rows.map((row) => row.externalId), ['4421@2026-08-04', '5223@2026-08-05']);
+    assert.equal(rows[1].title, 'Jordan Brown');
+  });
+
+  it('fails the sweep rather than search from the worker with no CRM session', async () => {
+    // A worker fetch is cross-site and carries no CRM cookie, so there is no
+    // fallback to take: the runtime hands over a CRM page or the sweep waits.
+    const tracker = registry.get('recent-orders');
+    await assert.rejects(
+      () => tracker.poll.collect({ since: null, now: NOW, fetchJson: async () => ({}) }),
+      /CRM page/,
+    );
   });
 });

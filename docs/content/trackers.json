@@ -26,7 +26,7 @@
         "beginner": [
           {
             "type": "p",
-            "text": "Trackers watch your work as you do it. When you create an opportunity or save a proposal in the CRM, that record is added to a table the extension keeps for you — you do not click anything, and nothing about how the CRM behaves changes. Recent orders arrive a different way: nobody's click creates them, so the extension checks for new ones on a schedule."
+            "text": "Trackers watch your work as you do it. When you create an opportunity or save a proposal in the CRM, that record is added to a table the extension keeps for you — you do not click anything, and nothing about how the CRM behaves changes. Recent orders arrive a different way: nobody's click creates them, and the CRM has no list of them to ask for, so the extension quietly re-runs the same search the CRM Search action's Scan for recent orders runs — your contacts whose last order moved since the previous look — and reads the order off each contact that comes back. That needs a CRM tab open, because the search only works while you are signed in there."
           },
           {
             "type": "table",
@@ -48,8 +48,8 @@
               ],
               [
                 "Recent orders",
-                "Found by a scheduled check every 15 minutes",
-                "Re-checked every 4 hours until shipped or cancelled"
+                "Found every 15 minutes by re-running your CRM search, while a CRM tab is open",
+                "Not re-checked — the order already happened; a later one arrives as its own row"
               ]
             ]
           },
@@ -70,7 +70,7 @@
           },
           {
             "type": "p",
-            "text": "A tracker declares how records ARRIVE — intercept or poll — but every tracked record also carries its own refresh clock. Capture is event-driven and free: a main-world hook sees the CRM's own fetch/XHR traffic and posts matched exchanges to the service worker, which re-matches the URL against the registry before storing anything. Discovery is a scheduled list sweep for records no request of yours announces. Refresh is per-record and incremental: each row holds its own next-check time, is re-asked in small batches, backs off when the CRM is unavailable, and settles permanently once its state is terminal."
+            "text": "A tracker declares how records ARRIVE — intercept or poll — but every tracked record also carries its own refresh clock. Capture is event-driven and free: a main-world hook sees the CRM's own fetch/XHR traffic and posts matched exchanges to the service worker, which re-matches the URL against the registry before storing anything. Discovery is a scheduled sweep for records no request of yours announces — for recent orders that is the CRM search index, queried by an open CRM page (the index is cookie-authenticated, and the worker's own fetch carries no session) with the worker still the only writer. Refresh is per-record and incremental: each row holds its own next-check time, is re-asked in small batches, backs off when the CRM is unavailable, and settles permanently once its state is terminal."
           },
           {
             "type": "heading",

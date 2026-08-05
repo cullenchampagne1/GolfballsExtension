@@ -144,6 +144,15 @@
     },
     {
       "matches": [
+        "https://api.golfballs.com/*"
+      ],
+      "js": [
+        "react-dist/vanilla/recent-orders-sweep.js"
+      ],
+      "all_frames": false
+    },
+    {
+      "matches": [
         "https://admin.icustomize.com/*"
       ],
       "js": [

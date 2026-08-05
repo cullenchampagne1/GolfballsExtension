@@ -687,6 +687,10 @@
     {
       "name": "flow \u00b7 tracked record capture \u2192 storage",
       "file": "tests/integration/tracker-capture-flow.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 recent-orders sweep \u2192 storage",
+      "file": "tests/integration/recent-orders-sweep.test.mjs"
     }
   ],
   "devDependencies": {
