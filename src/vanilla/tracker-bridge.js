@@ -27,7 +27,11 @@
     try {
       chrome.runtime.sendMessage({ action: 'gbTrackerRules' }, function (response) {
         void chrome.runtime.lastError;
-        if (!response || !Array.isArray(response.rules) || !response.rules.length) return;
+        // An EMPTY list is an answer, not a non-answer: it is how a tracker
+        // switched off mid-session disarms the hook that is already watching
+        // for it. Only a missing/malformed reply (worker restarting) is
+        // ignored, because that would disarm on a hiccup.
+        if (!response || !Array.isArray(response.rules)) return;
         post({ __gbTrackerRules: true, rules: response.rules });
       });
     } catch (e) { /* worker restarting — the next page load re-arms it */ }
@@ -49,10 +53,15 @@
   // this script runs, so the rules are pushed rather than requested.
   sendRules();
 
-  // Turning Trackers on mid-session must not require a reload.
+  // Turning Trackers — or one individual tracker — on or off mid-session must
+  // not require a reload. Per-tracker switches live in the store's state key
+  // (gbTrackerState, see lib/tracker-store.js), which is also where the poll
+  // cursor lives; re-asking on a cursor write costs one message a quarter hour
+  // and keeps this listener from having to understand the value.
   try {
     chrome.storage.onChanged.addListener(function (changes, area) {
-      if (area === 'local' && changes.featureFlags) sendRules();
+      if (area !== 'local') return;
+      if (changes.featureFlags || changes.gbTrackerState) sendRules();
     });
   } catch (e) { /* storage events unavailable */ }
 

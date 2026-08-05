@@ -43,3 +43,28 @@ export async function trackerRecords(trackerId) {
   const snapshot = snapshots.find((entry) => entry.trackerId === trackerId);
   return snapshot ? snapshot.records : [];
 }
+
+/**
+ * One row per tracker for the settings table: what it is, how much it has
+ * collected, when it last learned something, and whether it is switched on.
+ *
+ * Deliberately NOT `trackerSnapshots()`: this carries counts instead of every
+ * stored record, so rendering a four-row table does not push eight hundred
+ * records through the message channel.
+ */
+export async function trackerSummaries() {
+  const response = await sendBackgroundMessage('gbTrackerSummaries');
+  return Array.isArray(response.trackers) ? response.trackers : [];
+}
+
+/**
+ * Switch one tracker on or off.
+ *
+ * The worker is the single writer here too — the settings page asks, it does
+ * not reach into the store. Rows already collected are kept: off means "stop
+ * collecting", not "forget what you saw".
+ */
+export async function setTrackerEnabled(trackerId, enabled) {
+  // sendBackgroundMessage already rejects anything but `{ ok: true }`.
+  return sendBackgroundMessage('gbTrackerSetEnabled', { trackerId, enabled: !!enabled });
+}

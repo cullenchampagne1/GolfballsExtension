@@ -357,3 +357,146 @@ describe('tracker runtime · poll and refresh sweeps', () => {
     assert.equal(off.alarms.get('gbTrackerSweep'), undefined);
   });
 });
+
+/* One switch per tracker, on top of the feature flag. The rule being tested is
+   that switching one OFF costs nothing at every clock — no capture, no sweep,
+   no refresh, and no rules for the page hook to match against — while the rows
+   it already collected stay exactly where they are. */
+describe('tracker runtime · per-tracker switches', () => {
+  const pollFixture = (registry) => registry.define({
+    id: 'fixture-orders',
+    label: 'Fixture orders',
+    kind: 'poll',
+    recordKind: 'order',
+    identify: (raw) => raw.externalId,
+    poll: {
+      everyMinutes: 15,
+      collect: async ({ fetchJson }) => {
+        const payload = await fetchJson(`${CRM}/Order/Recent.ajax?x`);
+        return (payload.orders || []).map((order) => ({ externalId: String(order.id) }));
+      },
+    },
+  });
+
+  it('is on until the rep turns it off, for trackers that ship later too', async () => {
+    const { registry, trackers, store } = harness();
+    defineFixture(registry);
+
+    assert.equal(await store.isEnabled('fixture-deals'), true);
+    assert.equal(await trackers.trackerEnabled('fixture-deals'), true);
+
+    await trackers.setTrackerEnabled('fixture-deals', false);
+    assert.equal(await trackers.trackerEnabled('fixture-deals'), false);
+
+    await trackers.setTrackerEnabled('fixture-deals', true);
+    assert.equal(await trackers.trackerEnabled('fixture-deals'), true);
+  });
+
+  it('refuses to store a switched-off tracker’s captures', async () => {
+    // A CRM tab opened before the switch was flipped still holds the old rules
+    // and keeps posting matches, so the worker has to enforce this itself.
+    const { registry, trackers, store } = harness();
+    defineFixture(registry);
+    await trackers.setTrackerEnabled('fixture-deals', false);
+
+    const result = await trackers.capture({
+      url: `${CRM}/Fixture/Create.ajax?id=D-77`,
+      method: 'GET', status: 200, ok: true, at: NOW,
+    });
+
+    assert.equal(result.stored, 0);
+    assert.equal((await store.list('fixture-deals')).length, 0);
+  });
+
+  it('stops handing the page hook rules it no longer needs to match', async () => {
+    const { registry, trackers } = harness();
+    defineFixture(registry);
+    assert.equal((await trackers.captureRules()).length, 1);
+
+    await trackers.setTrackerEnabled('fixture-deals', false);
+    // Length, not deep-equal: the array is built inside the vm realm, so a
+    // strict comparison against a host [] fails on the prototype, not the data.
+    assert.equal((await trackers.captureRules()).length, 0);
+
+    // The feature flag still trumps every individual switch.
+    const off = harness({ flags: { trackersEnabled: false } });
+    defineFixture(off.registry);
+    assert.equal((await off.trackers.captureRules()).length, 0);
+  });
+
+  it('spends no request on a switched-off tracker’s poll or refresh', async () => {
+    const { registry, trackers, store, requests } = harness({
+      responses: {
+        'Order/Recent': { orders: [{ id: 7 }] },
+        'Fixture/Get': { status: 'closed' },
+      },
+    });
+    const tracker = defineFixture(registry);
+    pollFixture(registry);
+    await store.upsert('fixture-deals', [
+      registry.normalizeRecord(tracker, { externalId: 'D-1', status: 'open' }, { now: NOW }),
+    ], { now: NOW });
+
+    await trackers.setTrackerEnabled('fixture-deals', false);
+    await trackers.setTrackerEnabled('fixture-orders', false);
+    const idle = await trackers.sweep({ now: NOW + 61 * MINUTE });
+
+    assert.equal(idle.polled, 0);
+    assert.equal(idle.refreshed, 0);
+    assert.equal(requests.length, 0);
+
+    // Turning one back on resumes it, and only it.
+    await trackers.setTrackerEnabled('fixture-orders', true);
+    const partial = await trackers.sweep({ now: NOW + 62 * MINUTE });
+    assert.equal(partial.polled, 1);
+    assert.equal(partial.refreshed, 0, 'the switched-off tracker is still not refreshed');
+  });
+
+  it('keeps the rows a switched-off tracker already collected', async () => {
+    // Off means "collect nothing further", not "forget what you saw" — a rep
+    // pausing a tracker must not lose the table they paused it to stop growing.
+    const { registry, trackers, store } = harness();
+    const tracker = defineFixture(registry);
+    await store.upsert('fixture-deals', [
+      registry.normalizeRecord(tracker, { externalId: 'D-1', status: 'open' }, { now: NOW }),
+    ], { now: NOW });
+
+    await trackers.setTrackerEnabled('fixture-deals', false);
+
+    const records = await store.list('fixture-deals');
+    assert.equal(records.length, 1);
+    assert.equal(records[0].externalId, 'D-1');
+  });
+
+  it('refuses to switch a tracker that does not exist', async () => {
+    const { trackers } = harness();
+    const result = await trackers.setTrackerEnabled('not-a-tracker', false);
+    assert.equal(result.ok, false);
+  });
+
+  it('summarises every tracker for the settings table, without the records', async () => {
+    const { registry, trackers, store } = harness();
+    const tracker = defineFixture(registry);
+    pollFixture(registry);
+    await store.upsert('fixture-deals', [
+      registry.normalizeRecord(tracker, { externalId: 'D-1', status: 'open' }, { now: NOW }),
+      { ...registry.normalizeRecord(tracker, { externalId: 'D-2' }, { now: NOW - MINUTE }), settled: true },
+    ], { now: NOW });
+    await trackers.setTrackerEnabled('fixture-orders', false);
+
+    const summaries = await trackers.summaries();
+    const deals = summaries.find((row) => row.trackerId === 'fixture-deals');
+    const orders = summaries.find((row) => row.trackerId === 'fixture-orders');
+
+    assert.equal(summaries.length, 2);
+    assert.equal(deals.total, 2);
+    assert.equal(deals.open, 1, 'a settled row is not open');
+    assert.equal(deals.enabled, true);
+    assert.equal(deals.featureEnabled, true);
+    assert.equal(deals.updatedAt, NOW);
+    assert.equal(deals.label, 'Fixture deals');
+    assert.equal('records' in deals, false, 'the table renders counts, not rows');
+    assert.equal(orders.enabled, false);
+    assert.equal(orders.total, 0);
+  });
+});

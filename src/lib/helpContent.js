@@ -6663,7 +6663,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "Trackers is off until you turn it on in Settings. While it is off, nothing is captured and no scheduled checks run."
+            "text": "Trackers is off until you turn it on in Settings. While it is off, nothing is captured and no scheduled checks run. Once it is on, the Trackers table in Settings lists each tracker with how much it has collected and when it last picked something up, and each row has its own switch — so you can keep opportunities running and stop the scheduled order search, for example. Switching one off stops it collecting; the rows it already gathered stay in its table."
           },
           {
             "type": "p",

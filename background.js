@@ -2645,9 +2645,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      page that learned the message name still cannot plant a record. */
   if (msg.action === 'gbTrackerRules') {
     // The hook cannot hold a RegExp across postMessage; it gets source+flags.
-    GB_TRACKERS.enabled().then((on) => {
-      sendResponse({ ok: true, rules: on ? globalThis.GBTrackerRegistry.captureRules() : [] });
-    }).catch(() => sendResponse({ ok: true, rules: [] }));
+    // Only the trackers still switched on are sent, so a tracker the rep turned
+    // off costs the page nothing at all.
+    GB_TRACKERS.captureRules()
+      .then((rules) => sendResponse({ ok: true, rules }))
+      .catch(() => sendResponse({ ok: true, rules: [] }));
     return true;
   }
 
@@ -2662,6 +2664,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'gbTrackerSnapshots') {
     GB_TRACKERS.snapshots()
       .then((snapshots) => sendResponse({ ok: true, snapshots }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
+  if (msg.action === 'gbTrackerSummaries') {
+    // Counts without records — what the settings table renders. Shipping every
+    // stored row through the message channel to display two numbers is the
+    // whole reason this is a separate action.
+    GB_TRACKERS.summaries()
+      .then((trackers) => sendResponse({ ok: true, trackers }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
+  if (msg.action === 'gbTrackerSetEnabled') {
+    GB_TRACKERS.setTrackerEnabled(msg.trackerId, msg.enabled === true)
+      .then((result) => sendResponse(result))
       .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;
   }

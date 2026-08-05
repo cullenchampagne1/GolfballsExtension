@@ -35,6 +35,8 @@ import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/cred
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { listProductStores, revokeProductStore } from '../lib/customItems.js';
+import { trackerSummaries, setTrackerEnabled } from '../lib/trackers.js';
+import { trackerTableRows } from '../lib/trackerSettings.js';
 import {
   retainManagedRowsOnFailure,
   settingsJsonFallbackMessage,
@@ -1188,6 +1190,127 @@ function SupportTicketsSection() {
   );
 }
 
+/* ── Trackers ────────────────────────────────────────────────────
+   One row per tracker: what it collects, how much it has, when it last
+   learned something, and its own switch. Everything here is read from the
+   worker's summaries — the settings page never reaches into tracker storage,
+   because the worker is the single writer (lib/tracker-store.js). What each
+   row SAYS lives in src/lib/trackerSettings.js, where it is testable.
+
+   Nothing in this section names a tracker: a fourth tracker is a fourth object
+   in lib/tracker-definitions.js and it appears here with no change. */
+
+function TrackersSection({ featureOn, managed }) {
+  const [summaries, setSummaries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
+    try { setSummaries(await trackerSummaries()); }
+    catch { if (!quiet) setSummaries([]); }
+    finally { if (!quiet) setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load, featureOn]);
+
+  const toggle = async (row, next) => {
+    setBusyId(row.trackerId);
+    // Optimistic: the switch is the whole point of the row, so it moves now and
+    // is put back if the worker refuses.
+    const set = (value) => setSummaries((prev) => prev.map(
+      (entry) => (entry.trackerId === row.trackerId ? { ...entry, enabled: value } : entry),
+    ));
+    set(next);
+    try {
+      await setTrackerEnabled(row.trackerId, next);
+      load({ quiet: true });
+    } catch {
+      set(!next);
+      window.__gbToast?.error?.(`Could not turn ${row.label} ${next ? 'on' : 'off'}`);
+    } finally { setBusyId(null); }
+  };
+
+  const rows = trackerTableRows(summaries);
+  if (loading || !rows.length) return null;
+
+  const GRID = 'minmax(0,1fr) 74px 88px 40px';
+  const head = {
+    fontSize: 8.5, fontWeight: 750, textTransform: 'uppercase', letterSpacing: '.5px',
+    color: 'var(--gb-text-muted)',
+  };
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={T.base}
+    >
+      <SectionLabel action={<Btn variant="ghost" size="xs" onClick={() => load()}>Refresh</Btn>}>Trackers</SectionLabel>
+      <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', margin: '-2px 0 10px' }}>
+        {featureOn
+          ? 'Each tracker keeps its own table. Turning one off stops it collecting — the rows it already gathered are kept.'
+          : 'Trackers is off, so none of these are collecting. Turn on Trackers above to start.'}
+      </div>
+      <Card style={{ padding: 0, overflow: 'hidden', opacity: featureOn ? 1 : 0.55 }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: GRID, gap: 10, alignItems: 'center',
+          padding: '7px 12px', borderBottom: '1px solid var(--gb-border-subtle)',
+          background: 'var(--gb-fill-subtle)',
+        }}>
+          <div style={head}>Tracker</div>
+          <div style={{ ...head, textAlign: 'right' }}>Records</div>
+          <div style={{ ...head, textAlign: 'right' }}>Last</div>
+          <div style={{ ...head, textAlign: 'center' }}>On</div>
+        </div>
+        {rows.map((row, index) => (
+          <div
+            key={row.trackerId}
+            style={{
+              display: 'grid', gridTemplateColumns: GRID, gap: 10, alignItems: 'center',
+              padding: '10px 12px',
+              borderTop: index === 0 ? 'none' : '1px solid var(--gb-border-subtle)',
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ flex: 'none', color: row.enabled && featureOn ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', display: 'grid', placeItems: 'center' }}>
+                  {row.kind === 'poll' ? <I.search size={12} /> : <I.eye size={12} />}
+                </span>
+                <span style={{
+                  fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{row.label}</span>
+              </div>
+              <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>
+                {row.arrival}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 12.5, color: 'var(--gb-text-primary)' }}>
+                {row.total}
+              </div>
+              {row.showOpen && (
+                <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{row.open} open</div>
+              )}
+            </div>
+            <div style={{ textAlign: 'right', fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
+              {row.lastLabel}
+            </div>
+            <div style={{ display: 'grid', placeItems: 'center' }}>
+              <Switch
+                size="sm"
+                on={!!row.enabled && featureOn}
+                disabled={!featureOn || managed || busyId === row.trackerId}
+                onChange={(next) => toggle(row, next)}
+              />
+            </div>
+          </div>
+        ))}
+      </Card>
+    </motion.section>
+  );
+}
+
 /* ── Installation identity ──────────────────────────────────── */
 function InstallationIdentityNotice() {
   const [identity, setIdentity] = useState(null);
@@ -1578,6 +1701,13 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
           ))}
         </div>
       </section>
+
+      {/* Trackers — the per-tracker table under the Trackers feature toggle:
+          how much each has collected and its own switch. */}
+      <TrackersSection
+        featureOn={!!flags.trackersEnabled}
+        managed={managedFeature('trackersEnabled')}
+      />
 
       {/* Custom Actions — the "what shows where" matrix for label-less custom
           shelf actions (code-block actions). Built-in features are managed by

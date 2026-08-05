@@ -689,6 +689,10 @@
       "file": "tests/unit/trackerStore.test.mjs"
     },
     {
+      "name": "ui \u00b7 tracker settings table rows",
+      "file": "tests/unit/trackerSettings.test.mjs"
+    },
+    {
       "name": "flow \u00b7 tracked record capture \u2192 storage",
       "file": "tests/integration/tracker-capture-flow.test.mjs"
     },

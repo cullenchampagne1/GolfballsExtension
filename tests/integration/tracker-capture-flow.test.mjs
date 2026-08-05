@@ -169,6 +169,34 @@ describe('trackers · capture flow', () => {
     assert.equal(captured(posted).length, 0);
   });
 
+  it('disarms an already-watching tab when its tracker is switched off', async () => {
+    // An EMPTY rules list is how a per-tracker switch reaches a CRM tab that is
+    // already open — the bridge re-asks on a storage change and posts whatever
+    // comes back, so the hook has to treat "no rules" as an instruction.
+    const { registry } = worker();
+    const { window, posted } = page({ response: '{}' });
+    window.postMessage({ __gbTrackerRules: true, rules: registry.captureRules() }, ORIGIN);
+
+    await window.fetch(`${CREATE_URL}?%7B%7D`, { method: 'GET' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(captured(posted).length, 1, 'armed before the switch');
+
+    window.postMessage({ __gbTrackerRules: true, rules: [] }, ORIGIN);
+    await window.fetch(`${CREATE_URL}?%7B%7D`, { method: 'GET' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(captured(posted).length, 1, 'and silent after it');
+  });
+
+  it('sends an empty rules list on rather than swallowing it as a non-answer', async () => {
+    // The bridge is chrome plumbing this harness deliberately does not run, so
+    // the guarantee is pinned at its source: only a missing/malformed reply is
+    // ignored, because THAT would disarm the hook on a worker restart.
+    const bridge = read('src/vanilla/tracker-bridge.js');
+    assert.match(bridge, /if \(!response \|\| !Array\.isArray\(response\.rules\)\) return;/);
+    assert.doesNotMatch(bridge, /!response\.rules\.length\) return;/);
+    assert.match(bridge, /changes\.featureFlags \|\| changes\.gbTrackerState/);
+  });
+
   it('refuses an entry a page forged for a url the registry does not match', async () => {
     const { trackers, store } = worker();
     const result = await trackers.capture({
