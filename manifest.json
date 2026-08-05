@@ -195,6 +195,33 @@
         "react-dist/content/proposal-debug.js"
       ],
       "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.golfballs.com/*",
+        "https://api.golfballs.com/*",
+        "https://office.gbcadmin.com/*",
+        "https://operations.gbcadmin.com/*"
+      ],
+      "js": [
+        "src/vanilla/tracker-net-hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://www.golfballs.com/*",
+        "https://api.golfballs.com/*",
+        "https://office.gbcadmin.com/*",
+        "https://operations.gbcadmin.com/*"
+      ],
+      "js": [
+        "src/vanilla/tracker-bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "action": {

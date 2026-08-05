@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
@@ -12,6 +12,8 @@ if (!GB_RUNTIME) throw new Error('Runtime bootstrap failed to initialize');
 globalThis.GBRuntimeCoordinator = GB_RUNTIME;
 const GB_USAGE = globalThis.GBUsageTelemetry?.createReporter();
 if (!GB_USAGE) throw new Error('Usage telemetry failed to initialize');
+const GB_TRACKERS = globalThis.GBTrackers;
+if (!GB_TRACKERS) throw new Error('Trackers failed to initialize');
 // installation-auth samples every backend round-trip through this hook, so
 // the Latency block measures the real wait without auth importing telemetry.
 globalThis.GBUsageSink = GB_USAGE.sample;
@@ -21,6 +23,10 @@ GB_RUNTIME.start().then((allowed) => {
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
   GB_HELP_ASSISTANT.resume().catch(() => {});
   GBNotificationPoll.reconcile().catch(() => {});
+  // Trackers arm their own sweep alarm and no-op while the flag is off. Same
+  // authorization gate as everything else: an unauthorized installation must
+  // not be reading the rep's CRM on a schedule.
+  GB_TRACKERS.install();
   // Only an authorized installation reports usage — a revoked or not-yet-
   // enrolled one has no credential to report under and must stay silent.
   GB_USAGE.start();
@@ -2628,6 +2634,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
     }
     sendResponse({ ok: true });
+    return true;
+  }
+
+  /* ── Trackers ───────────────────────────────────────────────────────────
+     Same shape as the proposal-debug bridge above and for the same reason:
+     the MAIN-world hook sees the CRM's own requests, the content script
+     forwards them, and the worker is the single writer. The worker re-matches
+     the URL against the registry rather than trusting the sender's claim, so a
+     page that learned the message name still cannot plant a record. */
+  if (msg.action === 'gbTrackerRules') {
+    // The hook cannot hold a RegExp across postMessage; it gets source+flags.
+    GB_TRACKERS.enabled().then((on) => {
+      sendResponse({ ok: true, rules: on ? globalThis.GBTrackerRegistry.captureRules() : [] });
+    }).catch(() => sendResponse({ ok: true, rules: [] }));
+    return true;
+  }
+
+  if (msg.action === 'gbTrackerCapture' && msg.entry) {
+    // Deliberately does not make the page wait on storage — a capture is
+    // bookkeeping, and a slow write must never delay the CRM's own request.
+    GB_TRACKERS.capture(msg.entry).catch(() => {});
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.action === 'gbTrackerSnapshots') {
+    GB_TRACKERS.snapshots()
+      .then((snapshots) => sendResponse({ ok: true, snapshots }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
+  if (msg.action === 'gbTrackerSweep') {
+    // Manual kick for the dashboard's refresh control (and for verifying a
+    // tracker without waiting out the alarm).
+    GB_TRACKERS.sweep()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;
   }
 

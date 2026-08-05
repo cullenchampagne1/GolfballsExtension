@@ -675,6 +675,18 @@
     {
       "name": "remote \u00b7 backend api contract",
       "file": "tests/integration/backendContract.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 tracker registry, records & schedules",
+      "file": "tests/unit/trackerRegistry.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 tracker storage, capture & sweeps",
+      "file": "tests/unit/trackerStore.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 tracked record capture \u2192 storage",
+      "file": "tests/integration/tracker-capture-flow.test.mjs"
     }
   ],
   "devDependencies": {

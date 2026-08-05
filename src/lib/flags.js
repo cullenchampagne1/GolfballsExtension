@@ -37,6 +37,10 @@ export const FEATURE_DEFAULTS = {
   textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
   workflowManagerEnabled:   true,   // Single-pass account Workflow Manager
   notificationsEnabled:        true,   // targeted messages + completion alerts
+  // Opt-in while the sales dashboard is being built: trackers capture silently
+  // as you work and poll the CRM on a schedule, so the rep turns that on
+  // deliberately rather than discovering it already running.
+  trackersEnabled:          false,  // background capture + polling of tracked records
 };
 // NOTE: the 3D golfball viewer is part of the Image Viewer (it renders inside
 // ImagePreview.jsx), so it has no separate flag — `imagePreviewEnabled` covers it.
@@ -70,6 +74,7 @@ export const FEATURE_FLAGS = [
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
   { key: 'workflowManagerEnabled', section: 'Tools', name: 'Workflow Manager', desc: 'Run one reusable set of steps for each selected account or contact.', icon: 'megaphone' },
   { key: 'notificationsEnabled', section: 'Tools', name: 'Notifications', desc: 'Receive targeted messages and completion alerts in the toolbar notification center.', icon: 'alert' },
+  { key: 'trackersEnabled', section: 'Tools', name: 'Trackers', desc: 'Track opportunities, proposals, and recent orders in the background as you work.', icon: 'eye' },
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
   { key: 'crmNewContactEnabled',   section: 'CRM & Contacts', name: 'New Contact',       desc: 'Quick-create a CRM contact (Ctrl+Q).',             icon: 'user' },

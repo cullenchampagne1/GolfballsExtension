@@ -119,6 +119,9 @@ export const HELP_CONTENT = {
             },
             {
               "article": "recent-orders-scan"
+            },
+            {
+              "article": "trackers"
             }
           ]
         },
@@ -4647,6 +4650,11 @@ export const HELP_CONTENT = {
                 "Receive targeted messages and completion alerts in the toolbar notification center."
               ],
               [
+                "Trackers",
+                "Off",
+                "Track opportunities, proposals, and recent orders in the background as you work."
+              ],
+              [
                 "Image Viewer",
                 "On",
                 "View / extract logo images, the 3D ball preview, and Submit Proof (popup)."
@@ -4671,6 +4679,7 @@ export const HELP_CONTENT = {
               "flagKeys": [
                 "workflowManagerEnabled",
                 "notificationsEnabled",
+                "trackersEnabled",
                 "imagePreviewEnabled",
                 "giftCatalogEnabled",
                 "mockupStudioEnabled",
@@ -6598,6 +6607,94 @@ export const HELP_CONTENT = {
         "ts-settings-vanished"
       ],
       "sectionLabel": "Settings Reference"
+    },
+    {
+      "slug": "trackers",
+      "title": "Trackers",
+      "icon": "eye",
+      "tiers": [
+        "beginner",
+        "advanced"
+      ],
+      "keywords": [
+        "trackers",
+        "tracking",
+        "opportunities",
+        "proposals",
+        "recent orders",
+        "pipeline",
+        "sales dashboard",
+        "background"
+      ],
+      "summary": "Keeps a running record of the opportunities, proposals, and recent orders you work on, and re-checks each one so the table stays true after you have moved on.",
+      "feature": "trackers",
+      "flag": "trackersEnabled",
+      "body": {
+        "beginner": [
+          {
+            "type": "p",
+            "text": "Trackers watch your work as you do it. When you create an opportunity or save a proposal in the CRM, that record is added to a table the extension keeps for you — you do not click anything, and nothing about how the CRM behaves changes. Recent orders arrive a different way: nobody's click creates them, so the extension checks for new ones on a schedule."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Tracker",
+              "How records arrive",
+              "Kept up to date"
+            ],
+            "rows": [
+              [
+                "Opportunities",
+                "Captured when you create or update one in the CRM",
+                "Re-checked hourly until it closes"
+              ],
+              [
+                "Proposals",
+                "Captured when you save one or send a proposal email",
+                "Not re-checked — a saved proposal does not change on its own"
+              ],
+              [
+                "Recent orders",
+                "Found by a scheduled check every 15 minutes",
+                "Re-checked every 4 hours until shipped or cancelled"
+              ]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "text": "Trackers is off until you turn it on in Settings. While it is off, nothing is captured and no scheduled checks run."
+          },
+          {
+            "type": "p",
+            "text": "The re-checking is the part that matters most. An opportunity you opened in March can be closed in April by someone else, and no click of yours would ever tell you. The extension asks about each tracked record on its own quiet schedule and stops asking once the answer can no longer change."
+          }
+        ],
+        "advanced": [
+          {
+            "type": "heading",
+            "text": "Three clocks"
+          },
+          {
+            "type": "p",
+            "text": "A tracker declares how records ARRIVE — intercept or poll — but every tracked record also carries its own refresh clock. Capture is event-driven and free: a main-world hook sees the CRM's own fetch/XHR traffic and posts matched exchanges to the service worker, which re-matches the URL against the registry before storing anything. Discovery is a scheduled list sweep for records no request of yours announces. Refresh is per-record and incremental: each row holds its own next-check time, is re-asked in small batches, backs off when the CRM is unavailable, and settles permanently once its state is terminal."
+          },
+          {
+            "type": "heading",
+            "text": "Storage"
+          },
+          {
+            "type": "p",
+            "text": "The service worker is the only writer. Each tracker owns one chrome.storage.local key (gbTracker:<id>) holding its rows newest-first, trimmed on every write by that tracker's retention policy — 500 opportunities or proposals for 180 days, 300 orders for 90. Records hold identity, title, status, value, and a bounded field bag; the raw CRM response is never kept."
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "text": "Adding a tracker is a definition object in lib/tracker-definitions.js: what to match, how to read one record out of the response, and when the record stops being worth re-asking about. The capture path, storage, and scheduler need no changes."
+          }
+        ]
+      },
+      "sectionLabel": "Core Features / CRM & Contacts"
     },
     {
       "slug": "ts-outlook-opened",
@@ -8978,6 +9075,25 @@ export const HELP_CONTENT = {
       "flag": null
     },
     {
+      "id": "article:trackers",
+      "category": "Articles",
+      "title": "Trackers",
+      "keywords": [
+        "trackers",
+        "tracking",
+        "opportunities",
+        "proposals",
+        "recent orders",
+        "pipeline",
+        "sales dashboard",
+        "background"
+      ],
+      "description": "Keeps a running record of the opportunities, proposals, and recent orders you work on, and re-checks each one so the table stays true after you have moved on.",
+      "article": "trackers",
+      "shortcut": null,
+      "flag": "trackersEnabled"
+    },
+    {
       "id": "article:ts-outlook-opened",
       "category": "Troubleshooting",
       "title": "\"Send opened Outlook instead of sending\"",
@@ -9405,6 +9521,18 @@ export const HELP_CONTENT = {
       "description": "Receive targeted messages and completion alerts in the toolbar notification center.",
       "article": "feature-toggles",
       "flag": "notificationsEnabled"
+    },
+    {
+      "id": "flag:trackersEnabled",
+      "category": "Settings",
+      "title": "Trackers",
+      "keywords": [
+        "trackersEnabled",
+        "Tools"
+      ],
+      "description": "Track opportunities, proposals, and recent orders in the background as you work.",
+      "article": "feature-toggles",
+      "flag": "trackersEnabled"
     },
     {
       "id": "flag:crmSearchEnabled",

@@ -147,6 +147,12 @@
       "default": true,
       "label": "Notifications",
       "managedDefault": true
+    },
+    "trackersEnabled": {
+      "type": "bool",
+      "default": false,
+      "label": "Trackers",
+      "managedDefault": true
     }
   },
   "developerSettings": {
