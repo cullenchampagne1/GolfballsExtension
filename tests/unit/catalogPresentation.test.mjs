@@ -6,6 +6,8 @@ import {
   CATALOG_MOUNT_SCALE_CATEGORY,
   CATALOG_PROPOSAL_WIDTH,
   CATALOG_SCALE_DEFAULT,
+  PROPOSAL_CHECKOUT_AVAILABLE,
+  canOfferProposalCheckout,
   catalogDealBadge,
   catalogSidebarLabel,
   fitCatalogScale,
@@ -56,5 +58,12 @@ describe('catalog presentation', () => {
 
   it('owns one scale system instead of inheriting the shared modal zoom', () => {
     assert.equal(CATALOG_MOUNT_SCALE_CATEGORY, null);
+  });
+
+  it('keeps unfinished proposal checkout out of the layout without deleting its entry path', () => {
+    const buildCheckoutSource = () => ({ entries: [{ id: 'line-1' }] });
+
+    assert.equal(PROPOSAL_CHECKOUT_AVAILABLE, false);
+    assert.equal(canOfferProposalCheckout(buildCheckoutSource, 1), false);
   });
 });

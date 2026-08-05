@@ -8,10 +8,19 @@ export const CATALOG_CARD_HEIGHT = 760;
 export const CATALOG_PROPOSAL_WIDTH = 416;
 export const CATALOG_VIEWPORT_GUTTER = 48;
 export const CATALOG_MOUNT_SCALE_CATEGORY = null;
+// Keep the existing checkout UI in source, but do not offer its proposal
+// entry point until it submits a real order instead of a preview confirmation.
+export const PROPOSAL_CHECKOUT_AVAILABLE = false;
 export const CATALOG_ACCOUNT_CONTEXT_NOTICE = Object.freeze({
   title: 'No account in context',
   message: 'Open the catalog from a Golfballs.com CRM account or opportunity page to view its active proposals.',
 });
+
+export function canOfferProposalCheckout(buildCheckoutSource, itemCount) {
+  return PROPOSAL_CHECKOUT_AVAILABLE
+    && typeof buildCheckoutSource === 'function'
+    && Number(itemCount) > 0;
+}
 
 /* The custom-item and saved-proposal transfer views share this expansion
  * contract. Interpolating `height: 0` -> `height: auto` with a spring asks

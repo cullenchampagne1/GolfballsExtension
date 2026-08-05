@@ -29,6 +29,7 @@ import {
   CATALOG_PROPOSAL_WIDTH,
   catalogDealBadge,
   catalogSidebarLabel,
+  canOfferProposalCheckout,
   fitCatalogScale,
   normalizeCatalogScale,
   CATALOG_SCALE_DEFAULT,
@@ -1524,7 +1525,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   const [checkoutSrc, setCheckoutSrc] = useState(null);
   const checkoutMode = !!checkoutSrc;
   const setCheckoutMode = (on) => setCheckoutSrc(on && buildCheckoutSource ? buildCheckoutSource() : null);
-  const canCheckout = !!buildCheckoutSource && M.count > 0;
+  const canCheckout = canOfferProposalCheckout(buildCheckoutSource, M.count);
   const inSub = emailMode || checkoutMode;
   const exitSub = () => { setEmailMode(false); setCheckoutMode(false); };
   // Copy-as-command spins while artwork uploads, mirroring the card behaviour.
