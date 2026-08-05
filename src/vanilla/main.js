@@ -306,6 +306,7 @@ function __gbAccessAllowed(st, now) {
         name: employeeName,
         nameSource: 'crm_session',
         crmVerified: true,
+        sessionVerified: true,
         updatedAt,
       });
       window.__gbCurrentUser = identity;

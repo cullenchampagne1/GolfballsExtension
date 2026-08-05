@@ -40,7 +40,7 @@ describe('recent-order scan audience', () => {
     const end = crmSearchSource.indexOf('\n  return (', start);
     const action = crmSearchSource.slice(start, end);
     assert.match(action, /resolveCurrentUserContext\(\)/);
-    assert.match(action, /currentUser\.crmVerified/);
+    assert.match(action, /currentUser\.sessionVerified/);
     assert.match(action, /buildRecentOrdersConditions\(employeeName, sinceStr\)/);
     assert.doesNotMatch(action, /loadSavedQueries|compileGroupsToSolr|No “My Clients” filter/);
   });

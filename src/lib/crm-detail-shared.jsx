@@ -25,7 +25,7 @@ import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
 import { submitCallLog } from './submitCallLog.js';
 import { loadCallTemplates } from './callLog.js';
 import { chatTranscriptSummary, isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
-import { resolveCurrentUserContext, subscribeCurrentUserContext } from './employeeIdentity.js';
+import { resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext } from './employeeIdentity.js';
 import { ARMOR, AVATAR_COLOR, ActivityFilter, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, InlineSearch, KV, NAV, PAGE_ZOOM, QuickAddInput, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Spinner, Tag, TaskCheckbox, Td, Th, ThemeSelector, UI_CSS, accountHref, activityType, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
 
 export const PatchCtx = React.createContext(() => {});
@@ -1491,16 +1491,18 @@ function useCurrentUserContext() {
 
 export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) {
   const currentUser = useCurrentUserContext();
+  const sessionUser = sessionEmployeeIdentity(currentUser);
   const [openIds, setOpenIds] = useState(['crm']);
   const toggle = (id) => setOpenIds((s) => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  // This footer identifies the logged-in extension user, never the current
-  // record's assigned sales rep. That distinction matters when one rep opens
-  // another rep's account/contact.
-  const repName = txt(currentUser && currentUser.name) || 'Sales workspace';
-  const repDetail = txt(currentUser?.email?.addresses?.golfballs)
-    || (currentUser?.employeeId ? `Employee #${currentUser.employeeId}` : 'Golfballs Admin');
-  const repMark = repName === 'Sales workspace'
-    ? 'GB'
+  // This footer is intentionally a session diagnostic. Never substitute the
+  // editable registered-extension profile or the open record's assigned rep:
+  // if session extraction fails, say so visibly.
+  const repName = sessionUser?.employeeName || 'CRM session name unavailable';
+  const repDetail = sessionUser
+    ? `Session verified · Employee #${sessionUser.employeeId}`
+    : 'No registered-name fallback';
+  const repMark = !sessionUser
+    ? '?'
     : repName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
   return (

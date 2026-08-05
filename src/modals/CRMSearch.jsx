@@ -919,7 +919,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         //    names are presentation fallbacks only and are never trusted in a
         //    Sales Rep query.
         const currentUser = await resolveCurrentUserContext();
-        const employeeName = currentUser.crmVerified ? currentUser.employeeName : '';
+        const employeeName = currentUser.sessionVerified ? currentUser.employeeName : '';
         if (!employeeName) {
           toast?.error?.('Your signed-in CRM name is not available yet. Wait for the CRM toolbar to finish loading, then try the scan again.', { duration: 6000, placement: 'top-center' });
           return;

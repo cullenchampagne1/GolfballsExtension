@@ -247,23 +247,50 @@ function __gbRenderLegacyQuickNotes() {
   // Ask the authenticated broker for the bounded identity pair needed by the
   // main page. The reusable session credential and all other decoded claims
   // remain inside the MAIN-world broker and never cross the extension channel.
+  let __gbIdentityRequestInFlight = false;
+  let __gbLastIdentityBroadcast = '';
+  async function __gbBroadcastAuthenticatedIdentity(force = false) {
+    const forceBroadcast = force === true;
+    if (__gbIdentityRequestInFlight || typeof __gbGetAuthenticatedIdentity !== 'function') return false;
+    __gbIdentityRequestInFlight = true;
+    try {
+      const identity = await __gbGetAuthenticatedIdentity();
+      const employeeId = String(identity?.employeeId || '');
+      const employeeName = String(identity?.employeeName || '');
+      const signature = `${employeeId}\n${employeeName}`;
+      if (!employeeId || (!forceBroadcast && signature === __gbLastIdentityBroadcast)) return !!employeeId;
+      window.__gbIframeBridge?.post('GB_EMPLOYEE_IDENTITY', { employeeId, employeeName });
+      __gbLastIdentityBroadcast = signature;
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      __gbIdentityRequestInFlight = false;
+    }
+  }
+
+  // A credential may appear long after the toolbar mounts. The MAIN-world
+  // broker emits this detail-free signal whenever it captures a new identity,
+  // eliminating the old 7.5-second cutoff that could leave Custom Pages on a
+  // profile-name fallback for the rest of the tab's lifetime.
+  document.addEventListener('GB_AUTH_IDENTITY_AVAILABLE', () => {
+    __gbBroadcastAuthenticatedIdentity(true);
+  });
   (async function () {
     try {
-      if (typeof __gbGetAuthenticatedIdentity !== 'function') return;
-      // The admin app may not make its first authenticated request until after
-      // this toolbar renders. Retry briefly rather than restoring a storage or
-      // cookie fallback solely to obtain the employee ID.
       for (let attempt = 0; attempt < 10; attempt += 1) {
-        const identity = await __gbGetAuthenticatedIdentity();
-        const id = identity && identity.employeeId;
-        if (id) {
-          window.__gbIframeBridge?.post('GB_EMPLOYEE_IDENTITY', {
-            employeeId: String(id),
-            employeeName: String(identity.employeeName || ''),
-          });
+        if (await __gbBroadcastAuthenticatedIdentity()) {
+          // main.js is deliberately the last top-frame content script. Repeat
+          // after it has had time to register, because runtime broadcasts sent
+          // before that listener exists cannot be acknowledged or replayed.
+          setTimeout(() => __gbBroadcastAuthenticatedIdentity(true), 1000);
+          setTimeout(() => __gbBroadcastAuthenticatedIdentity(true), 5000);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 750));
       }
     } catch (_) {}
   })();
+  // Keep the stored session proof fresh and recover if the top-frame listener
+  // was injected unusually late. This sends only the bounded name/id pair.
+  setInterval(() => __gbBroadcastAuthenticatedIdentity(true), 60_000);

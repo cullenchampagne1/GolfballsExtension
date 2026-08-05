@@ -142,6 +142,19 @@ describe('auth session broker · captured credential lifecycle', () => {
 });
 
 describe('auth session broker · capture sources', () => {
+  it('signals when a new authenticated identity becomes available without putting claims in event detail', async () => {
+    const announced = installBroker();
+    const events = [];
+    announced.win.document.addEventListener('GB_AUTH_IDENTITY_AVAILABLE', (event) => {
+      events.push(event.detail);
+    });
+    await announced.win.fetch('https://master.api.icustomize.com/user/getCart/123', {
+      headers: { adminsession: token },
+    });
+    assert.deepEqual(events, [null]);
+    announced.dom.window.close();
+  });
+
   it('captures a credential set through XMLHttpRequest headers', async () => {
     const xhrOnly = installBroker();
     const xhr = new xhrOnly.win.XMLHttpRequest();
@@ -184,7 +197,10 @@ describe('auth session broker · source guardrails', () => {
       readFile(new URL('../../background.js', import.meta.url), 'utf8'),
       readFile(new URL('../../src/vanilla/main.js', import.meta.url), 'utf8'),
     ]);
-    assert.match(toolbar, /post\('GB_EMPLOYEE_IDENTITY',\s*\{\s*employeeId:[\s\S]*employeeName:/);
+    assert.match(toolbar, /post\('GB_EMPLOYEE_IDENTITY',\s*\{ employeeId, employeeName \}\)/);
+    assert.match(toolbar, /GB_AUTH_IDENTITY_AVAILABLE/);
+    assert.match(toolbar, /setTimeout\(\(\) => __gbBroadcastAuthenticatedIdentity\(true\), 1000\)/);
+    assert.match(toolbar, /setInterval\(\(\) => __gbBroadcastAuthenticatedIdentity\(true\), 60_000\)/);
     assert.match(iframeBridge, /'GB_EMPLOYEE_IDENTITY'/);
     assert.match(background, /'GB_EMPLOYEE_IDENTITY'/);
     assert.match(main, /gbCurrentUser:\s*\{ employeeId, employeeName, source: 'crm_session', updatedAt \}/);

@@ -11,6 +11,7 @@
  */
 export const CURRENT_USER_STORAGE_KEY = 'gbCurrentUser';
 export const CURRENT_USER_EVENT = 'gb:current-user-change';
+export const SESSION_IDENTITY_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 export function validEmployeeId(value) {
   const id = String(value == null ? '' : value).trim();
@@ -43,6 +44,25 @@ function normalizeStoredCrmIdentity(value) {
     source,
     updatedAt: Math.max(0, Number(raw.updatedAt) || 0),
   };
+}
+
+function sessionTimestampIsFresh(updatedAt, now = Date.now()) {
+  const stamp = Number(updatedAt) || 0;
+  return stamp > 0
+    && stamp <= now + 5 * 60 * 1000
+    && now - stamp <= SESSION_IDENTITY_MAX_AGE_MS;
+}
+
+/** Return only an identity that was actually decoded from a recent
+ * authenticated CRM session. Profile and directory fallbacks are rejected. */
+export function sessionEmployeeIdentity(value, now = Date.now()) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const source = raw.nameSource || raw.source;
+  const employeeId = validEmployeeId(raw.employeeId);
+  const employeeName = normalizeEmployeeName(raw.employeeName);
+  if (source !== 'crm_session' || !employeeId || !employeeName
+      || !sessionTimestampIsFresh(raw.updatedAt, now)) return null;
+  return Object.freeze({ employeeId, employeeName, updatedAt: Number(raw.updatedAt) });
 }
 
 export function employeeIdFromDocument(doc = globalThis.document) {
@@ -204,8 +224,8 @@ function publishCurrentUserContext(context) {
  *
  * `employeeName` is populated only from a CRM-authenticated session or an
  * exact employee-id → sales-rep-directory match. `name` may fall back to the
- * installation profile for presentation, so query/API consumers that require
- * CRM authority should check `crmVerified` and use `employeeName`.
+ * installation profile for presentation. Consumers that specifically require
+ * the session must check `sessionVerified` or call `sessionEmployeeIdentity`.
  */
 export async function resolveCurrentUserContext({
   doc = globalThis.document,
@@ -221,7 +241,13 @@ export async function resolveCurrentUserContext({
     try { globalThis.window.__gbEmployeeId = employeeId; } catch { /* no window */ }
   }
 
-  const storedMatches = storedCrm.employeeId === employeeId && !!storedCrm.employeeName;
+  const storedSession = sessionEmployeeIdentity({
+    ...storedCrm,
+    nameSource: storedCrm.source,
+  });
+  const storedMatches = storedCrm.employeeId === employeeId
+    && !!storedCrm.employeeName
+    && (storedCrm.source !== 'crm_session' || !!storedSession);
   const directoryName = employeeNameFromDocument(doc, employeeId);
   const employeeName = storedMatches ? storedCrm.employeeName : directoryName;
   const directoryUpdatedAt = directoryName && !storedMatches ? Date.now() : 0;
@@ -247,15 +273,18 @@ export async function resolveCurrentUserContext({
   );
   const email = senderIdentity(localPart);
   const name = employeeName || installation.displayName;
+  const identityUpdatedAt = storedMatches ? storedCrm.updatedAt : directoryUpdatedAt;
   const context = Object.freeze({
     employeeId,
     employeeName,
     name,
     nameSource: nameSource || (name ? 'installation_profile' : ''),
     crmVerified: !!(employeeId && employeeName),
+    sessionVerified: nameSource === 'crm_session'
+      && sessionTimestampIsFresh(identityUpdatedAt),
     email,
     installation,
-    updatedAt: storedMatches ? storedCrm.updatedAt : directoryUpdatedAt,
+    updatedAt: identityUpdatedAt,
   });
   return publishCurrentUserContext(context);
 }

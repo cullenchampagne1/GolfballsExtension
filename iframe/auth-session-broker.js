@@ -31,6 +31,7 @@
 
   const credentials = new Map();
   let lastCredential = null;
+  let announcedIdentity = '';
   const originalFetch = root.fetch.bind(root);
 
   function parseAllowedUrl(value) {
@@ -66,11 +67,25 @@
     if (record.expiresAt <= capturedAt) return;
     credentials.set(normalizedName, record);
     lastCredential = record;
+    // Notify the isolated extension world that a real authenticated identity
+    // can now be requested. The event intentionally carries no detail, so no
+    // claim—or credential—gets exposed to page scripts.
+    const identity = identityFromCredential(record);
+    const signature = identity
+      ? `${identity.employeeId}\n${identity.employeeName}`
+      : '';
+    if (signature && signature !== announcedIdentity) {
+      announcedIdentity = signature;
+      try {
+        root.document.dispatchEvent(new root.CustomEvent('GB_AUTH_IDENTITY_AVAILABLE'));
+      } catch { /* document is unloading */ }
+    }
   }
 
   function clearCredentials() {
     credentials.clear();
     lastCredential = null;
+    announcedIdentity = '';
   }
 
   function activeCredential(preferredName) {

@@ -8,6 +8,7 @@ import {
   employeeNameFromDocument,
   resolveCurrentUserContext,
   resolveEmployeeId,
+  sessionEmployeeIdentity,
 } from '../../src/lib/employeeIdentity.js';
 
 const cachedStorage = (cacheWrites = []) => ({
@@ -98,7 +99,7 @@ describe('global current-user context', () => {
       gbEmployeeId: '48174',
       gbCurrentUser: {
         employeeId: '48174', employeeName: 'Cullen Champagne',
-        source: 'crm_session', updatedAt: 12345, authorization: 'Bearer secret',
+        source: 'crm_session', updatedAt: Date.now(), authorization: 'Bearer secret',
       },
       gbInstallationIdentity: {
         registered: true,
@@ -118,6 +119,10 @@ describe('global current-user context', () => {
     assert.equal(currentUser.name, 'Cullen Champagne');
     assert.equal(currentUser.nameSource, 'crm_session');
     assert.equal(currentUser.crmVerified, true);
+    assert.equal(currentUser.sessionVerified, true);
+    assert.deepEqual(sessionEmployeeIdentity(currentUser), {
+      employeeId: '48174', employeeName: 'Cullen Champagne', updatedAt: currentUser.updatedAt,
+    });
     assert.equal(currentUser.email.localPart, 'cullen.champagne');
     assert.equal(currentUser.email.addresses.golfballs, 'cullen.champagne@golfballs.com');
     assert.equal(currentUser.email.addresses.loyaltylogo, 'cullen.champagne@loyaltylogo.com');
@@ -152,6 +157,8 @@ describe('global current-user context', () => {
     assert.equal(currentUser.employeeName, 'Taylor Signed In');
     assert.equal(currentUser.nameSource, 'crm_directory');
     assert.equal(currentUser.crmVerified, true);
+    assert.equal(currentUser.sessionVerified, false);
+    assert.equal(sessionEmployeeIdentity(currentUser), null);
     assert.deepEqual(storage.data.gbCurrentUser, {
       employeeId: '42', employeeName: 'Taylor Signed In',
       source: 'crm_directory', updatedAt: currentUser.updatedAt,
@@ -159,7 +166,7 @@ describe('global current-user context', () => {
     page.window.close();
   });
 
-  it('labels an installation-profile fallback as unverified for CRM queries', async () => {
+  it('keeps an installation-profile fallback separate from session identity', async () => {
     const page = new JSDOM('');
     const storage = memoryStorage({
       gbInstallationIdentity: {
@@ -176,6 +183,31 @@ describe('global current-user context', () => {
     assert.equal(currentUser.name, 'Profile Only');
     assert.equal(currentUser.nameSource, 'installation_profile');
     assert.equal(currentUser.crmVerified, false);
+    assert.equal(currentUser.sessionVerified, false);
+    assert.equal(sessionEmployeeIdentity(currentUser), null);
+    page.window.close();
+  });
+
+  it('expires a cached session identity instead of presenting it as current', async () => {
+    const page = new JSDOM('<iframe id="ccaiFrame" src="/toolbar?userId=42"></iframe>');
+    const storage = memoryStorage({
+      gbCurrentUser: {
+        employeeId: '42', employeeName: 'Previous Login', source: 'crm_session',
+        updatedAt: Date.now() - (9 * 60 * 60 * 1000),
+      },
+      gbInstallationIdentity: {
+        registered: true,
+        installationId: '123e4567-e89b-12d3-a456-426614174000',
+        displayName: 'Registered Profile',
+      },
+    });
+    globalThis.window = page.window;
+    const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
+
+    assert.equal(currentUser.employeeName, '');
+    assert.equal(currentUser.name, 'Registered Profile');
+    assert.equal(currentUser.sessionVerified, false);
+    assert.equal(sessionEmployeeIdentity(currentUser), null);
     page.window.close();
   });
 });
