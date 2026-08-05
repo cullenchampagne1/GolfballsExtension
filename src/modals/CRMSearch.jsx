@@ -7,8 +7,9 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { API, CRM_PAGES } from '../lib/constants.js';
-import { QueryBuilder, describeCondition, compileToSolr, compileToLabel, loadSavedQueries, compileGroupsToSolr } from './QueryBuilder.jsx';
-import { SCAN_LAST_RUN_KEY } from '../lib/recentOrdersScan.js';
+import { QueryBuilder, describeCondition, compileToSolr, compileToLabel } from './QueryBuilder.jsx';
+import { buildRecentOrdersConditions, SCAN_LAST_RUN_KEY } from '../lib/recentOrdersScan.js';
+import { resolveCurrentUserContext } from '../lib/employeeIdentity.js';
 import { EmailRunner } from './EmailRunner.jsx';
 import {
   indexRecords, queryIndexed, deleteIndexed, clearIndex, searchIndexed,
@@ -902,26 +903,25 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
     return unsub;
   }, [runSearch, toast]);
 
-  /* "Scan for recent orders" — a one-click morning routine. Applies the
-     user's saved "My Clients" filter ANDed with "last order on/after the
-     last time this was run" (first run = the last 7 days), so the result
-     set is exactly the clients who've ordered since the previous scan.
-     The clock advances on every run so tomorrow's scan starts where this
-     one ended. Requires a saved filter literally named "My Clients". */
+  /* "Scan for recent orders" — a one-click morning routine. The authenticated
+     current-user name supplies an exact Contact + Sales Rep filter, then the
+     last-order watermark narrows it to records ordered since the previous run
+     (first run = the last 7 days). No user-maintained saved query is needed. */
   useEffect(() => {
     const unsub = actionRegistry.register({
       id: 'gb-crm-scan-recent-orders',
       label: 'Scan for recent orders',
       icon: <I.bolt size={13} />,
-      hint: 'My Clients who ordered since your last scan',
+      hint: 'Your contacts who ordered since your last scan',
       whenModalOpen: ['crm-search'],
       handler: async () => {
-        // 1. Locate the saved "My Clients" filter (case-insensitive).
-        let saved = [];
-        try { saved = await loadSavedQueries(); } catch {}
-        const mine = (saved || []).find((f) => (f?.name || '').trim().toLowerCase() === 'my clients');
-        if (!mine) {
-          toast?.error?.('No “My Clients” filter found. Open Query Builder, build your client filter, and save it named exactly “My Clients”.', { duration: 6000, placement: 'top-center' });
+        // 1. Resolve the authenticated CRM employee. Installation-profile
+        //    names are presentation fallbacks only and are never trusted in a
+        //    Sales Rep query.
+        const currentUser = await resolveCurrentUserContext();
+        const employeeName = currentUser.crmVerified ? currentUser.employeeName : '';
+        if (!employeeName) {
+          toast?.error?.('Your signed-in CRM name is not available yet. Wait for the CRM toolbar to finish loading, then try the scan again.', { duration: 6000, placement: 'top-center' });
           return;
         }
 
@@ -939,24 +939,16 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         const sinceStr = sinceDate.toISOString().slice(0, 10); // YYYY-MM-DD
         const niceSince = sinceDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
-        // 3. Combine: (My Clients filter) AND lastOrderDate on/after since.
-        //    Saved filters store the COMPILED query under `query` and the
-        //    grouped state under `state` (NOT top-level groups), so read
-        //    those. Fall back to compiling state.groups if `query` is absent.
-        const mineFq = (mine.query && mine.query.trim())
-          || compileGroupsToSolr(mine.state?.groups || [], mine.state?.outerJoiner || 'AND');
-        if (!mineFq) {
-          toast?.error?.('Your “My Clients” filter has no conditions. Open Query Builder and add at least one (e.g. Sales Rep = you), then re-save it.', { duration: 6000, placement: 'top-center' });
-          return;
-        }
-        const dateFq = `lastOrderDate_dt:[${sinceStr}T00:00:00Z TO *]`;
-        const solrFq = `(${mineFq}) AND ${dateFq}`;
-        // Flattened conditions drive the filter-bar tags (informational).
-        const conditions = [
-          ...(mine.conditions || []),
-          { id: `scan_${Date.now()}`, fieldKey: 'lastOrderDate_dt', op: 'after', val: sinceStr },
-        ];
-        const filter = { label: `My Clients · ordered since ${niceSince}`, solrFq, conditions };
+        // 3. Build the full audience from authoritative identity. Keeping all
+        //    three clauses as Query Builder conditions makes each one visible
+        //    and individually removable in the filter bar.
+        const conditions = buildRecentOrdersConditions(employeeName, sinceStr);
+        const solrFq = compileToSolr(conditions);
+        const filter = {
+          label: `${employeeName} · contacts ordered since ${niceSince}`,
+          solrFq,
+          conditions,
+        };
 
         // 4. Apply + run server-side (paginates all matches via infinite scroll).
         setQuery('');

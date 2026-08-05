@@ -1592,7 +1592,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'broadcastToFrames' && msg.payload) {
     const tabId = sender?.tab?.id;
     const allowedActions = new Set([
-      'GB_SALES_REP_FOUND', 'GB_EMPLOYEE_ID', 'GB_NOTIFY', 'GB_OPEN_CALENDAR',
+      'GB_SALES_REP_FOUND', 'GB_EMPLOYEE_ID', 'GB_EMPLOYEE_IDENTITY',
+      'GB_NOTIFY', 'GB_OPEN_CALENDAR',
       'GB_PUSH_DATES_AND_NOTE', 'GB_CALENDAR_STEP', 'GB_CALENDAR_DONE',
       'GB_CALENDAR_ERROR', 'GB_AUTO_PUSH_STEP', 'GB_DATES_PUSHED',
       'GB_AUTO_PUSH_ERROR', 'GB_CALENDAR_SAVE', 'GB_REQUEST_OPEN_CALENDAR',

@@ -284,11 +284,46 @@ function __gbAccessAllowed(st, now) {
       if (window.__gbFeatureFlags?.autoPushEnabled !== false) openAutoPushNotification(payload);
     }
 
-    // Store employee ID broadcast from the iframe toolbar for use by case actions
+    // Store the safe CRM-authenticated current-user pair. This is the only
+    // broker data allowed into the content-script world: no credential,
+    // header, cookie, token, or additional decoded claim crosses the bridge.
+    if (action === 'GB_EMPLOYEE_IDENTITY') {
+      handled = true;
+      const employeeId = String(payload.employeeId || '').trim();
+      const employeeName = String(payload.employeeName || '').trim().replace(/\s+/g, ' ');
+      if (!/^\d{1,12}$/.test(employeeId) || Number(employeeId) < 1) return true;
+      window.__gbEmployeeId = employeeId;
+      if (!employeeName || employeeName.length > 120
+          || /[\u0000-\u001f\u007f]/.test(employeeName)
+          || /^(?:unknown|n\/?a)$/i.test(employeeName)) {
+        chrome.storage.local.set({ gbEmployeeId });
+        return true;
+      }
+      const updatedAt = Date.now();
+      const identity = Object.freeze({
+        employeeId,
+        employeeName,
+        name: employeeName,
+        nameSource: 'crm_session',
+        crmVerified: true,
+        updatedAt,
+      });
+      window.__gbCurrentUser = identity;
+      window.__gbGetCurrentUser = () => window.__gbCurrentUser || null;
+      try {
+        window.dispatchEvent(new CustomEvent('gb:current-user-change', { detail: identity }));
+      } catch { /* page is unloading */ }
+      chrome.storage.local.set({
+        gbEmployeeId: employeeId,
+        gbCurrentUser: { employeeId, employeeName, source: 'crm_session', updatedAt },
+      });
+    }
+
+    // Backward-compatible id-only broadcast for an older iframe bundle.
     if (action === 'GB_EMPLOYEE_ID') {
       handled = true;
-      const employeeId = String(payload.employeeId || '');
-      if (!/^\d{1,12}$/.test(employeeId)) return true;
+      const employeeId = String(payload.employeeId || '').trim();
+      if (!/^\d{1,12}$/.test(employeeId) || Number(employeeId) < 1) return true;
       window.__gbEmployeeId = employeeId;
       // Persist across page navigations — case pages don't load the iframe toolbar
       chrome.storage.local.set({ gbEmployeeId: window.__gbEmployeeId });

@@ -244,9 +244,9 @@ function __gbRenderLegacyQuickNotes() {
   // Bloodhound Fallback: Check every 1.5 seconds in case the API loads the notes late
   setInterval(__gbBroadcastSalesRep, 1500);
 
-  // Ask the authenticated broker for the minimum identity field needed by the
-  // main page. The reusable session credential never leaves the MAIN-world
-  // broker or crosses the extension message channel.
+  // Ask the authenticated broker for the bounded identity pair needed by the
+  // main page. The reusable session credential and all other decoded claims
+  // remain inside the MAIN-world broker and never cross the extension channel.
   (async function () {
     try {
       if (typeof __gbGetAuthenticatedIdentity !== 'function') return;
@@ -257,7 +257,10 @@ function __gbRenderLegacyQuickNotes() {
         const identity = await __gbGetAuthenticatedIdentity();
         const id = identity && identity.employeeId;
         if (id) {
-          window.__gbIframeBridge?.post('GB_EMPLOYEE_ID', { employeeId: String(id) });
+          window.__gbIframeBridge?.post('GB_EMPLOYEE_IDENTITY', {
+            employeeId: String(id),
+            employeeName: String(identity.employeeName || ''),
+          });
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 750));

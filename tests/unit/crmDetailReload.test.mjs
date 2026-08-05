@@ -45,3 +45,13 @@ describe('crm detail · create reloads for real backend ids', () => {
     assert.doesNotMatch(save, /new-\$\{nextTaskTempId/);
   });
 });
+
+describe('crm detail · sidebar current-user identity', () => {
+  it('uses the global signed-in user instead of the current record owner', () => {
+    const sidebar = slice('export function Sidebar', '\nexport function DetailPageFrame');
+    assert.match(source, /resolveCurrentUserContext, subscribeCurrentUserContext/);
+    assert.match(sidebar, /currentUser && currentUser\.name/);
+    assert.match(sidebar, /currentUser\?\.employeeId/);
+    assert.doesNotMatch(sidebar, /D\.account|territoryName/);
+  });
+});

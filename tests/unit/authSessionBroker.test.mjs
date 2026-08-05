@@ -176,4 +176,17 @@ describe('auth session broker · source guardrails', () => {
     assert.equal(/console\.(?:log|debug|info|warn|error)/.test(source), false,
       'broker must not log credentials or decoded claims');
   });
+
+  it('bridges only the authenticated employee name and id to extension frames', async () => {
+    const [toolbar, iframeBridge, background, main] = await Promise.all([
+      readFile(new URL('../../iframe/toolbar.js', import.meta.url), 'utf8'),
+      readFile(new URL('../../iframe/message-bridge.js', import.meta.url), 'utf8'),
+      readFile(new URL('../../background.js', import.meta.url), 'utf8'),
+      readFile(new URL('../../src/vanilla/main.js', import.meta.url), 'utf8'),
+    ]);
+    assert.match(toolbar, /post\('GB_EMPLOYEE_IDENTITY',\s*\{\s*employeeId:[\s\S]*employeeName:/);
+    assert.match(iframeBridge, /'GB_EMPLOYEE_IDENTITY'/);
+    assert.match(background, /'GB_EMPLOYEE_IDENTITY'/);
+    assert.match(main, /gbCurrentUser:\s*\{ employeeId, employeeName, source: 'crm_session', updatedAt \}/);
+  });
 });

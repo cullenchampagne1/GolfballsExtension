@@ -25,6 +25,7 @@ import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
 import { submitCallLog } from './submitCallLog.js';
 import { loadCallTemplates } from './callLog.js';
 import { chatTranscriptSummary, isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
+import { resolveCurrentUserContext, subscribeCurrentUserContext } from './employeeIdentity.js';
 import { ARMOR, AVATAR_COLOR, ActivityFilter, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, InlineSearch, KV, NAV, PAGE_ZOOM, QuickAddInput, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Spinner, Tag, TaskCheckbox, Td, Th, ThemeSelector, UI_CSS, accountHref, activityType, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
 
 export const PatchCtx = React.createContext(() => {});
@@ -1474,12 +1475,30 @@ export function OpenTaskRow({ t }) {
   );
 }
 
+function useCurrentUserContext() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return window.__gbCurrentUser || null; } catch { return null; }
+  });
+  useEffect(() => {
+    let alive = true;
+    const apply = (value) => { if (alive && value) setCurrentUser(value); };
+    const unsubscribe = subscribeCurrentUserContext(apply);
+    resolveCurrentUserContext().then(apply).catch(() => {});
+    return () => { alive = false; unsubscribe(); };
+  }, []);
+  return currentUser;
+}
+
 export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) {
-  const D = useD();
+  const currentUser = useCurrentUserContext();
   const [openIds, setOpenIds] = useState(['crm']);
   const toggle = (id) => setOpenIds((s) => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const repName = txt(D.account && D.account.salesRep) || 'Sales workspace';
-  const territory = txt(D.account && D.account.territoryName) || 'Golfballs Admin';
+  // This footer identifies the logged-in extension user, never the current
+  // record's assigned sales rep. That distinction matters when one rep opens
+  // another rep's account/contact.
+  const repName = txt(currentUser && currentUser.name) || 'Sales workspace';
+  const repDetail = txt(currentUser?.email?.addresses?.golfballs)
+    || (currentUser?.employeeId ? `Employee #${currentUser.employeeId}` : 'Golfballs Admin');
   const repMark = repName === 'Sales workspace'
     ? 'GB'
     : repName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
@@ -1636,7 +1655,7 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repName}</div>
-            <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{territory}</div>
+            <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repDetail}</div>
           </div>
         )}
         {!collapsed && <IconBtn size="xs" ghost icon={<I.cog />} />}

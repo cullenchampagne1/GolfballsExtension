@@ -3,12 +3,35 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
-import { employeeIdFromDocument, resolveEmployeeId } from '../../src/lib/employeeIdentity.js';
+import {
+  employeeIdFromDocument,
+  employeeNameFromDocument,
+  resolveCurrentUserContext,
+  resolveEmployeeId,
+} from '../../src/lib/employeeIdentity.js';
 
 const cachedStorage = (cacheWrites = []) => ({
   get(_key, callback) { callback({ gbEmployeeId: '77' }); },
   set(value) { cacheWrites.push(value); },
 });
+
+const memoryStorage = (initial = {}) => {
+  const data = structuredClone(initial);
+  const writes = [];
+  return {
+    data,
+    writes,
+    get(keys, callback) {
+      if (Array.isArray(keys)) {
+        callback(Object.fromEntries(keys.filter((key) => key in data).map((key) => [key, data[key]])));
+      } else callback({ [keys]: data[keys] });
+    },
+    set(value) {
+      writes.push(structuredClone(value));
+      Object.assign(data, value);
+    },
+  };
+};
 
 describe('employee identity', () => {
   it('reads the signed-in employee id from the CRM toolbar on Search pages', () => {
@@ -55,5 +78,104 @@ describe('employee identity', () => {
       doc: new JSDOM('').window.document, storage: cachedStorage(),
     });
     assert.equal(resolved, '77');
+  });
+
+  it('maps the signed-in id to its directory option instead of the selected record owner', () => {
+    const page = new JSDOM(`
+      <select id="ddlSalesRepId">
+        <option value="77" selected>Different Record Owner</option>
+        <option value="48174">Cullen Champagne</option>
+      </select>
+    `);
+    assert.equal(employeeNameFromDocument(page.window.document, '48174'), 'Cullen Champagne');
+  });
+});
+
+describe('global current-user context', () => {
+  it('publishes verified CRM identity and only bounded non-credential profile metadata', async () => {
+    const page = new JSDOM('<iframe id="ccaiFrame" src="/toolbar?userId=48174"></iframe>');
+    const storage = memoryStorage({
+      gbEmployeeId: '48174',
+      gbCurrentUser: {
+        employeeId: '48174', employeeName: 'Cullen Champagne',
+        source: 'crm_session', updatedAt: 12345, authorization: 'Bearer secret',
+      },
+      gbInstallationIdentity: {
+        registered: true,
+        installationId: '123e4567-e89b-12d3-a456-426614174000',
+        displayName: 'Editable Profile Name',
+        localPart: 'old.sender',
+        source: 'settings_prompt',
+        apiKey: 'must-not-cross',
+      },
+      devSettings: { 'email.localPart': 'cullen.champagne', password: 'must-not-cross' },
+    });
+    globalThis.window = page.window;
+    const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
+
+    assert.equal(currentUser.employeeId, '48174');
+    assert.equal(currentUser.employeeName, 'Cullen Champagne');
+    assert.equal(currentUser.name, 'Cullen Champagne');
+    assert.equal(currentUser.nameSource, 'crm_session');
+    assert.equal(currentUser.crmVerified, true);
+    assert.equal(currentUser.email.localPart, 'cullen.champagne');
+    assert.equal(currentUser.email.addresses.golfballs, 'cullen.champagne@golfballs.com');
+    assert.equal(currentUser.email.addresses.loyaltylogo, 'cullen.champagne@loyaltylogo.com');
+    assert.equal(currentUser.installation.displayName, 'Editable Profile Name');
+    assert.equal(currentUser.installation.installationId, '123e4567-e89b-12d3-a456-426614174000');
+    assert.equal(page.window.__gbCurrentUser, currentUser);
+    assert.equal(page.window.__gbGetCurrentUser(), currentUser);
+    assert.equal(Object.isFrozen(currentUser), true);
+    assert.doesNotMatch(JSON.stringify(currentUser), /secret|password|authorization|apiKey/i);
+    page.window.close();
+  });
+
+  it('rejects a stale cached rep and falls back to an exact id-directory match', async () => {
+    const page = new JSDOM(`
+      <iframe id="ccaiFrame" src="/toolbar?userId=42"></iframe>
+      <select id="ddlSalesRepId">
+        <option value="77" selected>Stale Record Rep</option>
+        <option value="42">Taylor Signed In</option>
+      </select>
+    `);
+    const storage = memoryStorage({
+      gbEmployeeId: '77',
+      gbCurrentUser: {
+        employeeId: '77', employeeName: 'Wrong Cached User',
+        source: 'crm_session', updatedAt: 12,
+      },
+    });
+    globalThis.window = page.window;
+    const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
+
+    assert.equal(currentUser.employeeId, '42');
+    assert.equal(currentUser.employeeName, 'Taylor Signed In');
+    assert.equal(currentUser.nameSource, 'crm_directory');
+    assert.equal(currentUser.crmVerified, true);
+    assert.deepEqual(storage.data.gbCurrentUser, {
+      employeeId: '42', employeeName: 'Taylor Signed In',
+      source: 'crm_directory', updatedAt: currentUser.updatedAt,
+    });
+    page.window.close();
+  });
+
+  it('labels an installation-profile fallback as unverified for CRM queries', async () => {
+    const page = new JSDOM('');
+    const storage = memoryStorage({
+      gbInstallationIdentity: {
+        registered: true,
+        installationId: '123e4567-e89b-12d3-a456-426614174000',
+        displayName: 'Profile Only',
+      },
+    });
+    globalThis.window = page.window;
+    const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
+
+    assert.equal(currentUser.employeeId, '');
+    assert.equal(currentUser.employeeName, '');
+    assert.equal(currentUser.name, 'Profile Only');
+    assert.equal(currentUser.nameSource, 'installation_profile');
+    assert.equal(currentUser.crmVerified, false);
+    page.window.close();
   });
 });

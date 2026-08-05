@@ -763,7 +763,7 @@ export const HELP_CONTENT = {
         "watermark",
         "morning routine"
       ],
-      "summary": "CRM Search's contextual shelf routines: rerun the last query or scan a saved My Clients audience for orders created since the prior scan.",
+      "summary": "CRM Search's contextual shelf routines: rerun the last query or scan contacts assigned to the signed-in rep for orders created since the prior scan.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "covers": [],
@@ -772,12 +772,12 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "While CRM Search is open, the Actions Shelf registers two modal-specific actions. Run last query repeats the most recently applied CRM search. Scan for recent orders runs a saved client audience against the time since your last scan."
+            "text": "While CRM Search is open, the Actions Shelf registers two modal-specific actions. Run last query repeats the most recently applied CRM search. Scan for recent orders automatically searches Contacts whose Sales Rep matches the authenticated CRM user's exact name."
           },
           {
             "type": "callout",
-            "kind": "warning",
-            "text": "The scan requires a saved Query Builder query named exactly 'My Clients'. If it is missing, the action tells you to create it instead of silently substituting another audience."
+            "kind": "info",
+            "text": "No saved My Clients query is required. If the authenticated CRM name is still loading, the action asks you to wait and retry rather than searching under editable profile text."
           },
           {
             "type": "p",
@@ -787,7 +787,7 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "Use __gbScan.status() in the page console to inspect the local scan clock and __gbScan.reset() to clear it so the next scan covers seven days again. The saved query remains the audience source either way."
+            "text": "Use __gbScan.status() in the page console to inspect the local scan clock and __gbScan.reset() to clear it so the next scan covers seven days again. The signed-in CRM identity remains the audience source either way."
           }
         ]
       },
@@ -7790,12 +7790,12 @@ export const HELP_CONTENT = {
     },
     {
       "id": "scan-recent-orders",
-      "title": "Scan My Clients for recent orders",
+      "title": "Scan your contacts for recent orders",
       "tier": "intermediate",
       "estMinutes": 4,
       "prerequisites": [
         "crmSearchEnabled is on",
-        "A saved Query Builder query named exactly My Clients"
+        "The authenticated CRM toolbar has finished loading your employee identity"
       ],
       "steps": [
         {
@@ -7805,9 +7805,9 @@ export const HELP_CONTENT = {
         },
         {
           "action": "Choose Scan for recent orders.",
-          "expected": "The saved My Clients audience is searched for orders since the prior scan; the first run covers seven days.",
-          "visualCue": "Progress and result count appear in CRM Search.",
-          "commonMistake": "A differently named query is not used. Save it as exactly My Clients."
+          "expected": "Contacts assigned to your signed-in CRM name are searched for orders since the prior scan; the first run covers seven days.",
+          "visualCue": "The filter bar shows Record Type = Contact, Sales Rep = your name, and the date boundary.",
+          "commonMistake": "If your CRM identity is still loading, wait for the toolbar and retry; do not substitute another rep's account assignment."
         },
         {
           "action": "Inspect the results before selecting, exporting, emailing, or starting a workflow.",
@@ -7935,7 +7935,7 @@ export const HELP_CONTENT = {
         "watermark",
         "morning routine"
       ],
-      "description": "CRM Search's contextual shelf routines: rerun the last query or scan a saved My Clients audience for orders created since the prior scan.",
+      "description": "CRM Search's contextual shelf routines: rerun the last query or scan contacts assigned to the signed-in rep for orders created since the prior scan.",
       "article": "recent-orders-scan",
       "shortcut": null,
       "flag": "crmSearchEnabled"
@@ -9315,7 +9315,7 @@ export const HELP_CONTENT = {
     {
       "id": "tutorial:scan-recent-orders",
       "category": "Tutorials",
-      "title": "Scan My Clients for recent orders",
+      "title": "Scan your contacts for recent orders",
       "keywords": [
         "intermediate"
       ],
