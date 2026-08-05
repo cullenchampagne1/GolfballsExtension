@@ -46,11 +46,16 @@ export function resolveWorkflowRecordIds(contact = {}, data = {}) {
 export function workflowPageFromContext(context, audience = []) {
   const ctx = context || {};
   const source = ctx.contact || {};
+  const {
+    pageEngineSnapshot: _pageEngineSnapshot,
+    pageEngineIdentity: _pageEngineIdentity,
+    ...publicSource
+  } = source;
   const data = ctx.data || {};
   const extracted = data.contact || {};
   const contact = {
     ...extracted,
-    ...source,
+    ...publicSource,
     contactId: text(ctx.contactId || source.contactId || source.crmContactId || data.ids?.contact || extracted.id),
     accountId: text(ctx.accountId || source.accountId || data.ids?.account || extracted.accountId),
     contactName: text(ctx.contactName || source.contactName || source.name),
@@ -64,7 +69,12 @@ export function workflowPageFromContext(context, audience = []) {
   const sourceKey = source._key || source.contactId || source.contactUrl;
   const contacts = (Array.isArray(audience) ? audience : []).map((row) => {
     const rowKey = row?._key || row?.contactId || row?.contactUrl;
-    return sourceKey && rowKey === sourceKey ? { ...row, ...contact } : row;
+    const {
+      pageEngineSnapshot: _rowSnapshot,
+      pageEngineIdentity: _rowIdentity,
+      ...publicRow
+    } = row || {};
+    return sourceKey && rowKey === sourceKey ? { ...publicRow, ...contact } : publicRow;
   });
 
   // Preserve the same full schema model Action Shelf custom actions receive.

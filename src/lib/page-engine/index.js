@@ -62,6 +62,19 @@ export async function evaluateCode(doc, body, vars = {}) {
   return runInSandbox(body, ctx?.data || {}, vars, doc);
 }
 
+/** Run a code variable against data that already passed through the Page
+ * Engine (for example an encrypted-index snapshot). A deliberately empty
+ * document services DOM helpers so they cannot accidentally read the CRM
+ * Search host page; schema data still reaches the sandbox as the full ctx. */
+export async function evaluateCodeData(data, body, vars = {}, { sourceUrl = '' } = {}) {
+  let inertDoc = null;
+  try {
+    inertDoc = new DOMParser().parseFromString('<!doctype html><html><body></body></html>', 'text/html');
+    if (inertDoc.body && sourceUrl) inertDoc.body.dataset.gbSourceUrl = String(sourceUrl);
+  } catch { /* sandbox helpers remain unavailable outside a browser */ }
+  return runInSandbox(body, data && typeof data === 'object' ? data : {}, vars, inertDoc);
+}
+
 /** Sync variant — bypasses the timeout. Only safe for synchronous
  *  bodies (the common case). Throws on compile + runtime errors. */
 export function evaluateCodeSync(doc, body, vars = {}) {

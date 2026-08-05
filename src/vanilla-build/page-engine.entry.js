@@ -18,6 +18,7 @@ import {
   inspectPageTerritory,
   resolvePath,
   evaluateCode,
+  evaluateCodeData,
   extract,
   resolve,
   listPaths,
@@ -51,6 +52,7 @@ const api = Object.freeze({
   inspectTerritory: inspectPageTerritory,
   resolvePath,
   evaluateCode,
+  evaluateCodeData,
 
   /* "Which page am I on + what's on it" — the single page-type
      detector (superset of the old shelf/smart-detection copies) plus

@@ -1,14 +1,13 @@
 /* ───────────────────────────────────────────────────────────────
    workflow/context.js — per-contact context for the stateless engine.
 
-   For each audience contact we fetch the contact's CRM page ONCE,
-   parse it, run the page engine for schema (contact / account /
-   orders / items), derive the workflow "signals" used by conditions,
-   and hand back a `getValue(condition)` resolver in the exact shape
-   matchEngine.evalTree expects. Because everything is recomputed from
-   the live page every run, the workflow needs no stored per-contact
-   position — a follow-up step's gate ("sent E2 and no reply") IS the
-   memory.
+   For each audience contact we either consume an explicitly attached,
+   identity-checked Page Engine snapshot or fetch the contact's CRM page
+   ONCE and run the same schema (contact / account / orders / items).
+   We then derive the workflow "signals" used by conditions and hand back
+   a `getValue(condition)` resolver in the exact shape matchEngine.evalTree
+   expects. The workflow needs no stored per-contact position — a follow-up
+   step's gate ("sent E2 and no reply") IS the memory.
 
    Signal coverage (v1):
      • order.* + lifetime spend  — derived from the contact schema
@@ -20,10 +19,13 @@
        `signalScrapers` option without touching the engine.
 ─────────────────────────────────────────────────────────────── */
 
-import { runEngine, resolvePath, evaluateCode } from '../page-engine/index.js';
+import {
+  runEngine, resolve, evaluateCode, evaluateCodeData,
+} from '../page-engine/index.js';
 import { resolveEmployeeId, validEmployeeId } from '../employeeIdentity.js';
 import { SIGNAL_BY_ID } from './fields.js';
 import { resolveWorkflowRecordIds } from './codeContext.js';
+import { cachedSnapshotForContact } from '../page-engine/cache-actions.js';
 
 function parseDoc(html, sourceUrl = '') {
   try {
@@ -95,7 +97,8 @@ export async function buildContactContext(contact, deps = {}) {
 
   let html = '';
   let error = null;
-  if (contact.contactUrl) {
+  const cachedSnapshot = cachedSnapshotForContact(contact);
+  if (!cachedSnapshot && contact.contactUrl) {
     try {
       const fetched = await dispatch({ action: 'fetchRaw', url: contact.contactUrl });
       if (!fetched) error = 'Background not reachable';
@@ -104,30 +107,38 @@ export async function buildContactContext(contact, deps = {}) {
     } catch (e) { error = e?.message || 'fetch threw'; }
   }
 
-  const doc = html ? parseDoc(html, contact.contactUrl) : null;
-  const data = doc ? (runEngine(doc, { sourceUrl: contact.contactUrl })?.data || {}) : {};
-  const signals = doc ? deriveSignals(doc, data) : {};
+  const sourceUrl = cachedSnapshot?.sourceUrl || contact.contactUrl || '';
+  // Cached records already are the output of runEngine(). Give sandbox DOM
+  // helpers an empty, source-labelled document rather than the surrounding
+  // CRM Search page, then feed the stored data into every downstream model.
+  const doc = html
+    ? parseDoc(html, sourceUrl)
+    : (cachedSnapshot ? parseDoc('<!doctype html><html><body></body></html>', sourceUrl) : null);
+  const data = cachedSnapshot?.data
+    || (doc && html ? (runEngine(doc, { sourceUrl })?.data || {}) : {});
+  const signals = Object.keys(data).length ? deriveSignals(doc, data) : {};
 
   // Let callers override / extend signal computation (e.g. wire real
   // email-history scrapers) without editing the engine.
-  if (doc && typeof signalScrapers === 'function') {
+  if (html && doc && typeof signalScrapers === 'function') {
     Object.assign(signals, signalScrapers(doc, data, signals) || {});
   }
 
   // Suppression flags (from the contact schema stat tiles).
   const stats = (data && data.stats) || {};
-  const bounceCode = (stats.lastBounceCode || resolvePath(doc, 'stats.lastBounceCode') || '').toString().trim();
-  const mailerRemoved = !!parseInt(stats.mailerRemoved ?? resolvePath(doc, 'stats.mailerRemoved'), 10);
+  const dataValue = (path, fallback = '') => resolve(data, path, fallback);
+  const bounceCode = (stats.lastBounceCode || dataValue('stats.lastBounceCode') || '').toString().trim();
+  const mailerRemoved = !!parseInt(stats.mailerRemoved ?? dataValue('stats.mailerRemoved'), 10);
 
   const recordIds = resolveWorkflowRecordIds(contact, data);
   const contactId = recordIds.contactId;
-  const phone = (resolvePath(doc, 'contact.phone') || '').toString().replace(/\D/g, '');
-  const first = (contact.imported ? contact.firstName : resolvePath(doc, 'contact.firstName'))
-    || resolvePath(doc, 'contact.firstName') || contact.firstName || '';
-  const last = (contact.imported ? contact.lastName : resolvePath(doc, 'contact.lastName'))
-    || resolvePath(doc, 'contact.lastName') || contact.lastName || '';
-  const email = ((contact.imported ? contact.email : resolvePath(doc, 'contact.email'))
-    || resolvePath(doc, 'contact.email') || contact.email || '').toString();
+  const phone = (dataValue('contact.phone') || '').toString().replace(/\D/g, '');
+  const first = (contact.imported ? contact.firstName : dataValue('contact.firstName'))
+    || dataValue('contact.firstName') || contact.firstName || '';
+  const last = (contact.imported ? contact.lastName : dataValue('contact.lastName'))
+    || dataValue('contact.lastName') || contact.lastName || '';
+  const email = ((contact.imported ? contact.email : dataValue('contact.email'))
+    || dataValue('contact.email') || contact.email || '').toString();
   const contactName = `${first} ${last}`.trim() || contact.contactName || contact.name || '';
   const accountId = recordIds.accountId;
   // A CRM Search launch starts from a page that may not have populated the
@@ -149,15 +160,20 @@ export async function buildContactContext(contact, deps = {}) {
       return Object.prototype.hasOwnProperty.call(signals, cond.ref) ? signals[cond.ref] : null;
     }
     if (cond.source === 'var') {
-      if (!doc || !cond.ref) return null;
-      try { return await evaluateCode(doc, cond.ref, {}); } catch { return null; }
+      if (!cond.ref) return null;
+      try {
+        return cachedSnapshot
+          ? await evaluateCodeData(data, cond.ref, {}, { sourceUrl })
+          : (doc ? await evaluateCode(doc, cond.ref, {}) : null);
+      } catch { return null; }
     }
     // schema (default): page-engine path, possibly array-quantified.
-    return doc ? resolvePath(doc, cond.ref) : null;
+    return cond.ref ? dataValue(cond.ref, null) : null;
   }
 
   return {
     contact, html, doc, data, signals, error,
+    dataSource: cachedSnapshot ? 'page_engine_cache' : (html ? 'live_page' : 'contact_row'),
     contactId, employeeId, phone, contactName, firstName: first, lastName: last, email, accountId,
     bounceCode, mailerRemoved, doNotContact,
     emailConfig, signature, fromLocalPart, dispatch, dryRun,

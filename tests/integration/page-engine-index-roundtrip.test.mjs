@@ -22,6 +22,7 @@ const stored = {
 let background;
 let indexClient;
 let pageEngine;
+let cacheActions;
 
 async function seedRetiredOwnerIndex() {
   await new Promise((resolve, reject) => {
@@ -73,6 +74,7 @@ before(async () => {
   globalThis.chrome = background.chrome;
   indexClient = await import(`../../src/lib/page-engine/index-client.js?test=${Date.now()}`);
   pageEngine = await import(`../../src/lib/page-engine/runner.js?test=${Date.now()}`);
+  cacheActions = await import(`../../src/lib/page-engine/cache-actions.js?test=${Date.now()}`);
 });
 
 function contactSnapshot(overrides = {}) {
@@ -230,6 +232,22 @@ describe('Page Engine index roundtrip', () => {
     });
     assert.equal(live.matched, 1);
     assert.equal(live.rows[0].data.contact.firstName, 'Grace');
+  });
+
+  it('hydrates a mixed CRM Search audience from exact encrypted-index snapshots', async () => {
+    const audience = [
+      { contactId: 'contact_42', pageEngineIdentity: { schemaId: 'contact', id: '42' } },
+      { contactId: 'account_900', pageEngineIdentity: { schemaId: 'account', id: '900' } },
+      { contactId: 'contact_missing', pageEngineIdentity: { schemaId: 'contact', id: '404' } },
+    ];
+
+    const hydrated = await cacheActions.attachCachedPageEngineSnapshots(audience);
+
+    assert.equal(hydrated.available, 2);
+    assert.equal(hydrated.requested, 3);
+    assert.equal(hydrated.contacts[0].pageEngineSnapshot.data.contact.email, 'ada.new@example.test');
+    assert.equal(hydrated.contacts[1].pageEngineSnapshot.data.account.name, 'Analytical Engines');
+    assert.equal('pageEngineSnapshot' in hydrated.contacts[2], false, 'missing rows retain live-fetch fallback');
   });
 
   it('routes the developer territory inspection to the page that opened the manager', async () => {

@@ -169,6 +169,10 @@
       "file": "tests/unit/crmSearchSelection.test.mjs"
     },
     {
+      "name": "crm \u00b7 Page Engine cache action handoff",
+      "file": "tests/unit/pageEngineCacheActions.test.mjs"
+    },
+    {
       "name": "crm \u00b7 search presentation icon contract",
       "file": "tests/unit/crmSearchPresentation.test.mjs"
     },

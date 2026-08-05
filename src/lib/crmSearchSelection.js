@@ -1,4 +1,5 @@
 import { contactIdsFromRow } from './contactImport.js';
+import { pageEngineIdentity } from './page-engine/cache-actions.js';
 
 export function selectedCrmRows(rows, selectedIds) {
   const ids = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
@@ -39,6 +40,9 @@ export function crmRowEmail(row) {
 
 export function crmRowToEmailContact(row, contactUrl = '') {
   const { contactId, accountId } = contactIdsFromRow(row);
+  const cacheIdentity = contactId
+    ? pageEngineIdentity('contact', contactId)
+    : pageEngineIdentity('account', accountId);
   return {
     contactId: row?.id,
     crmContactId: contactId,
@@ -50,11 +54,15 @@ export function crmRowToEmailContact(row, contactUrl = '') {
     importVariables: row?.importVariables_o || {},
     contactUrl,
     imported: !!row?.imported_b,
+    ...(cacheIdentity ? { pageEngineIdentity: cacheIdentity } : {}),
   };
 }
 
 export function crmRowToWorkflowContact(row, contactUrl = '') {
   const { contactId, accountId } = contactIdsFromRow(row);
+  const cacheIdentity = contactId
+    ? pageEngineIdentity('contact', contactId)
+    : pageEngineIdentity('account', accountId);
   return {
     contactId,
     accountId,
@@ -67,6 +75,7 @@ export function crmRowToWorkflowContact(row, contactUrl = '') {
     value: row?.yearToDateRevenue_f ?? row?.priorYearRevenue_f ?? 0,
     sourceRowId: row?.id,
     imported: !!row?.imported_b,
+    ...(cacheIdentity ? { pageEngineIdentity: cacheIdentity } : {}),
   };
 }
 

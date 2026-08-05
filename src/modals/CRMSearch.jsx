@@ -16,6 +16,10 @@ import {
 } from '../lib/crmIndex.js';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { parseContactFile, contactIdsFromRow } from '../lib/contactImport.js';
+import {
+  attachCachedPageEngineSnapshots, pageEngineIdentity,
+} from '../lib/page-engine/cache-actions.js';
+import { EngineCacheTag } from '../ui/components/EngineCacheTag.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -103,6 +107,9 @@ const rowEmail = (row) => row?.emails_tps?.[0] || row?.email_tp || '';
 
 const rowToEmailContact = (row, useMock) => {
   const { contactId, accountId } = contactIdsFromRow(row);
+  const cacheIdentity = contactId
+    ? pageEngineIdentity('contact', contactId)
+    : pageEngineIdentity('account', accountId);
   return {
     // EmailRunner uses this as its row-status key, so retain the full list ID.
     contactId: row.id,
@@ -115,11 +122,15 @@ const rowToEmailContact = (row, useMock) => {
     importVariables: row.importVariables_o || {},
     contactUrl: rowContactUrl(row, useMock),
     imported: !!row.imported_b,
+    ...(cacheIdentity ? { pageEngineIdentity: cacheIdentity } : {}),
   };
 };
 
 const rowToWorkflowContact = (row, useMock) => {
   const { contactId, accountId } = contactIdsFromRow(row);
+  const cacheIdentity = contactId
+    ? pageEngineIdentity('contact', contactId)
+    : pageEngineIdentity('account', accountId);
   return {
     contactId,
     accountId,
@@ -132,6 +143,7 @@ const rowToWorkflowContact = (row, useMock) => {
     value: row.yearToDateRevenue_f ?? row.priorYearRevenue_f ?? 0,
     sourceRowId: row.id,
     imported: !!row.imported_b,
+    ...(cacheIdentity ? { pageEngineIdentity: cacheIdentity } : {}),
   };
 };
 
@@ -144,6 +156,13 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
      the global switch, or no extension context at all (standalone preview). */
   const forceMock = useDevSetting('forceMockData') ?? false;
   const useMock   = useMockProp ?? (forceMock || !hasExtensionContext());
+  const engineIndexingEnabled = useDevSetting('pageEngine.indexingEnabled') === true;
+  const engineTerritory = useDevSetting('pageEngine.territory');
+  const cacheOptionVisible = !useMock
+    && engineIndexingEnabled
+    && !!String(engineTerritory || '').trim();
+  const [useCachedPages, setUseCachedPages] = useState(false);
+  const [cacheActionBusy, setCacheActionBusy] = useState(false);
 
   const [query, setQuery]       = useState('');
   const [typeFilter, setType]   = useState('all');
@@ -593,6 +612,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   // the conditions (and re-opening the QB pre-populates them).
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  const [emailRunnerContacts, setEmailRunnerContacts] = useState([]);
   /* Cursor coords captured at the moment the user clicks Email
      selected. EmailRunner forwards these through DraggablePopup so
      the panel pops up right where the button is — no parent-rect
@@ -609,6 +629,68 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
      'sent' (allSettled over so-far-known rows would otherwise
      trigger the auto-clear between every send). */
   const [emailRunRunning, setEmailRunRunning] = useState(false);
+  useEffect(() => {
+    if (!cacheOptionVisible) setUseCachedPages(false);
+  }, [cacheOptionVisible]);
+  const selectedActionRows = useMemo(
+    () => displayedRows.filter((row) => selected.has(row.id)),
+    [displayedRows, selected],
+  );
+  const workflowContacts = useMemo(
+    () => selectedActionRows
+      .map((row) => rowToWorkflowContact(row, useMock))
+      .filter((contact) => contact.contactUrl || contact.email),
+    [selectedActionRows, useMock],
+  );
+  const emailContacts = useMemo(
+    () => selectedActionRows
+      .map((row) => rowToEmailContact(row, useMock))
+      .filter((contact) => contact.contactUrl || contact.email),
+    [selectedActionRows, useMock],
+  );
+  const prepareActionContacts = useCallback(async (contacts) => {
+    if (!cacheOptionVisible || !useCachedPages) return contacts;
+    setCacheActionBusy(true);
+    try {
+      const prepared = await attachCachedPageEngineSnapshots(contacts);
+      const missing = Math.max(0, prepared.requested - prepared.available);
+      if (missing > 0) {
+        toast?.info?.(
+          prepared.available
+            ? `${prepared.available} cached · ${missing} will load live`
+            : 'No saved page data matched — loading live pages',
+          { duration: 3000, placement: 'top-center' },
+        );
+      }
+      return prepared.contacts;
+    } catch (error) {
+      toast?.warning?.(`Cache unavailable — loading live pages: ${error?.message || error}`, {
+        duration: 4200,
+        placement: 'top-center',
+      });
+      return contacts;
+    } finally {
+      setCacheActionBusy(false);
+    }
+  }, [cacheOptionVisible, useCachedPages, toast]);
+  const openWorkflowForSelection = useCallback(async () => {
+    if (!workflowContacts.length) {
+      toast?.info?.('Select contacts first', { placement: 'top-center' });
+      return;
+    }
+    const audience = await prepareActionContacts(workflowContacts);
+    if (typeof window.__gbOpenWorkflowManager === 'function') window.__gbOpenWorkflowManager(audience);
+    else toast?.info?.('Workflow manager unavailable here', { duration: 2400, placement: 'top-center' });
+  }, [workflowContacts, prepareActionContacts, toast]);
+  const openEmailForSelection = useCallback(async (event) => {
+    if (!emailContacts.length) {
+      toast?.info?.('Select contacts first', { placement: 'top-center' });
+      return;
+    }
+    setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
+    setEmailRunnerContacts(await prepareActionContacts(emailContacts));
+    setEmailRunnerOpen(true);
+  }, [emailContacts, prepareActionContacts, toast]);
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
     setQbFilter(filter);   // triggers the auto re-run effect
@@ -1253,6 +1335,13 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                 <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span>
                 {' '}of {displayedRows.length} result{displayedRows.length === 1 ? '' : 's'}
               </div>
+              {cacheOptionVisible && (
+                <EngineCacheTag
+                  active={useCachedPages}
+                  busy={cacheActionBusy}
+                  onChange={setUseCachedPages}
+                />
+              )}
               <div style={{ flex: 1 }} />
               {/* Run Workflow opens the Workflow Manager submodal. The
                   manager owns the picker, engine, and CRM-UI control —
@@ -1261,24 +1350,15 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                 size="sm"
                 variant="ghost"
                 icon={<MegaphoneIcon />}
-                onClick={() => {
-                  const audience = displayedRows
-                    .filter((r) => selected.has(r.id))
-                    .map((r) => rowToWorkflowContact(r, useMock))
-                    .filter((c) => c.contactUrl || c.email);
-                  if (!audience.length) { toast?.info?.('Select contacts first', { placement: 'top-center' }); return; }
-                  if (typeof window.__gbOpenWorkflowManager === 'function') window.__gbOpenWorkflowManager(audience);
-                  else toast?.info?.('Workflow manager unavailable here', { duration: 2400, placement: 'top-center' });
-                }}
+                disabled={cacheActionBusy}
+                onClick={openWorkflowForSelection}
               >Run workflow</Btn>
               <Btn
                 size="sm"
                 variant="ghost"
                 icon={<I.mail size={11} />}
-                onClick={(e) => {
-                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
-                  setEmailRunnerOpen(true);
-                }}
+                disabled={cacheActionBusy}
+                onClick={openEmailForSelection}
               >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
@@ -1353,11 +1433,8 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       anchorHostId="__gb-csm"
       cursor={emailRunnerCursor}
       useMock={useMock}
-      contacts={displayedRows
-        .filter((r) => selected.has(r.id))
-        .map((r) => rowToEmailContact(r, useMock))
-        .filter((c) => c.contactUrl || c.email)}
-      onClose={() => setEmailRunnerOpen(false)}
+      contacts={emailRunnerContacts}
+      onClose={() => { setEmailRunnerOpen(false); setEmailRunnerContacts([]); }}
       onResetRowStates={() => setEmailStatusByRow({})}
       /* Flip every selected contact to 'queued' the moment Run
          fires so the per-row badge reads as committed-pending

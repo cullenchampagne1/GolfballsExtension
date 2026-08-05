@@ -73,6 +73,7 @@ describe('CRM Search selection · row filtering and action handoff', () => {
       importVariables: {},
       contactUrl: '/contact/42',
       imported: false,
+      pageEngineIdentity: { schemaId: 'contact', id: '42' },
     });
   });
 
@@ -89,6 +90,7 @@ describe('CRM Search selection · row filtering and action handoff', () => {
       value: 0,
       sourceRowId: 'account_17',
       imported: false,
+      pageEngineIdentity: { schemaId: 'account', id: '17' },
     });
   });
 });

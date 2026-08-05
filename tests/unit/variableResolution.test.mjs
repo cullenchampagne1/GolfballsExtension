@@ -7,8 +7,15 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { JSDOM } from 'jsdom';
 
 import { renderTemplate, dropConditional } from '../../src/lib/variableResolution.js';
+
+const vanillaResolverSource = await readFile(
+  new URL('../../src/vanilla/variable-resolution.js', import.meta.url),
+  'utf8',
+);
 
 describe('renderTemplate — substitution', () => {
   it('substitutes a resolved {{var}} placeholder', () => {
@@ -121,5 +128,49 @@ describe('dropConditional', () => {
       dropConditional('Keep. Use {{nick|first}} here. End.', defs, {}),
       'Keep.End.',
     );
+  });
+});
+
+describe('cached Page Engine variable resolution', () => {
+  it('resolves recipient, schema fields, code vars, name, and email history from one saved snapshot', async () => {
+    const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'outside-only' });
+    const get = (object, path, fallback = '') => {
+      const value = String(path || '').split('.').reduce(
+        (current, key) => (current == null ? current : current[key]),
+        object,
+      );
+      return value == null ? fallback : value;
+    };
+    dom.window.__gbPageEngine = {
+      resolve: get,
+      toDisplayString: (value) => (value == null ? '' : String(value)),
+      evaluateCodeData: async (data, _body, vars) => `${vars.first}:${data.stats.totalRevenue}`,
+    };
+    dom.window.eval(vanillaResolverSource);
+    const snapshot = {
+      schemaId: 'contact',
+      id: '42',
+      sourceUrl: 'https://crm.test/Default.aspx?Page=240&customerID=42',
+      data: {
+        contact: {
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          email: 'ada@example.test',
+          emails: [{ date: '2026-07-21T12:00:00Z' }],
+        },
+        stats: { totalRevenue: 1250 },
+      },
+    };
+
+    const result = await dom.window.__gbResolveVarsForData(snapshot, {
+      first: { type: 'schema', path: 'contact.firstName' },
+      summary: { type: 'code', body: 'return `${vars.first}:${ctx.stats.totalRevenue}`;' },
+    }, { type: 'auto' });
+
+    assert.equal(result.toEmail, 'ada@example.test');
+    assert.deepEqual({ ...result.resolved }, { first: 'Ada', summary: 'Ada:1250' });
+    assert.equal(result.displayName, 'Ada Lovelace');
+    assert.equal(result.lastEmailMs, Date.parse('2026-07-21T12:00:00Z'));
+    dom.window.close();
   });
 });

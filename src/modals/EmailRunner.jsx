@@ -8,6 +8,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { renderTemplate } from '../lib/variableResolution.js';
 import { directContactVariables } from '../lib/contactImport.js';
 import { loadCredentials } from '../lib/credentials.js';
+import { cachedSnapshotForContact } from '../lib/page-engine/cache-actions.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -533,11 +534,17 @@ export function EmailRunner({
         const rawSubject = v?.subject || selectedTpl.subject || '';
         const rawBody    = v?.body    || selectedTpl.body    || '';
 
-        // 1. Fetch the contact page when one exists. Spreadsheet rows that
-        // only carry account_id intentionally have no contact URL; their
-        // explicit email/name columns are the safe source of truth.
+        // 1. Resolve the page input. CRM Search may attach a validated,
+        // already-extracted Page Engine snapshot when its Use cache tag is
+        // active. That snapshot enters the same variable pipeline below;
+        // contacts without one keep the normal live-page fetch.
         let fetchedText = '';
-        if (c.contactUrl) {
+        let resolved = null;
+        const cachedSnapshot = cachedSnapshotForContact(c);
+        const cachedResolver = useMock ? null : window.__gbResolveVarsForData;
+        if (cachedSnapshot && typeof cachedResolver === 'function') {
+          resolved = await cachedResolver(cachedSnapshot, tplVars, tplToField);
+        } else if (c.contactUrl) {
           const fetched = await dispatchBg({ action: 'fetchRaw', url: c.contactUrl });
           if (!fetched) {
             if (!c.email) throw new Error('Background not reachable (extension reloaded?)');
@@ -558,7 +565,6 @@ export function EmailRunner({
            the user wants — the message route was the fragile one
            reported as "every send fails to evaluate." */
         const directVars = directContactVariables(c, tplVars);
-        let resolved = null;
         if (fetchedText) {
           const directResolve = useMock ? null : window.__gbResolveVarsForHtml;
           resolved = directResolve

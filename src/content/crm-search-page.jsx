@@ -28,6 +28,9 @@ import {
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
+import { EngineCacheTag } from '../ui/components/EngineCacheTag.jsx';
+import { useDevSetting } from '../lib/devSettings.js';
+import { attachCachedPageEngineSnapshots } from '../lib/page-engine/cache-actions.js';
 import {
   ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, ScrollArea, SectionTitle, Spinner,
   Tag, TaskCheckbox, Td, Th, DASH as _DASH, EmptyRow, fmt$, fmtDate, goUrl, num, recUrl, tableStyle, trStyle, txt,
@@ -128,7 +131,10 @@ function SelectionBox({ checked, onChange, title }) {
   );
 }
 
-function SelectionActionRail({ count, total, onWorkflow, onEmail, onExport }) {
+function SelectionActionRail({
+  count, total, onWorkflow, onEmail, onExport,
+  cacheVisible, cacheActive, cacheBusy, onCacheChange,
+}) {
   return (
     <div style={{
       display: 'grid',
@@ -155,9 +161,16 @@ function SelectionActionRail({ count, total, onWorkflow, onEmail, onExport }) {
               <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{count} selected</strong>
               {' '}of {total} result{total === 1 ? '' : 's'}
             </span>
+            {cacheVisible && (
+              <EngineCacheTag
+                active={cacheActive}
+                busy={cacheBusy}
+                onChange={onCacheChange}
+              />
+            )}
             <div style={{ flex: 1 }} />
-            <Btn size="sm" variant="ghost" icon={<I.target />} onClick={onWorkflow}>Run workflow</Btn>
-            <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail}>Email selected</Btn>
+            <Btn size="sm" variant="ghost" icon={<I.target />} onClick={onWorkflow} disabled={cacheBusy}>Run workflow</Btn>
+            <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail} disabled={cacheBusy}>Email selected</Btn>
             <Btn size="sm" variant="ghost" icon={<I.download />} onClick={onExport}>Export CSV</Btn>
           </div>
         </div>
@@ -358,6 +371,11 @@ function ResultRow({ r, i, selected, onToggle }) {
 export function CrmSearchPageApp({ store, initialSearch = null, searchClient = crmSolrQuery }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
+  const engineIndexingEnabled = useDevSetting('pageEngine.indexingEnabled') === true;
+  const engineTerritory = useDevSetting('pageEngine.territory');
+  const cacheOptionVisible = engineIndexingEnabled && !!String(engineTerritory || '').trim();
+  const [useCachedPages, setUseCachedPages] = useState(false);
+  const [cacheActionBusy, setCacheActionBusy] = useState(false);
 
   const url0 = useMemo(() => initialSearch
     ? { q: initialSearch.query || '', type: initialSearch.type || 'all', fq: '' }
@@ -390,6 +408,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [searched, setSearched] = useState(!!initialSearch);
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  const [emailRunnerContacts, setEmailRunnerContacts] = useState([]);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   const [focused, setFocused] = useState(false);   // input focus ring only
   const inputRef = useRef(null);
@@ -400,6 +419,9 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState('');
   const gen = useRef(0);   // ignore stale responses
+  useEffect(() => {
+    if (!cacheOptionVisible) setUseCachedPages(false);
+  }, [cacheOptionVisible]);
 
   const runSearch = useCallback(async (q, t, qb) => {
     const g = ++gen.current;
@@ -522,6 +544,18 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const applyQb = (filter) => { setQbFilter(filter); setQbOpen(false); writeUrlSearch(query.trim(), type, filter?.solrFq || ''); runSearch(query.trim(), type, filter); };
   const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null); };
   const selectedResults = useMemo(() => selectedCrmRows(rows, selectedRows), [rows, selectedRows]);
+  const workflowContacts = useMemo(
+    () => selectedResults
+      .map((row) => crmRowToWorkflowContact(row, recUrl(row)))
+      .filter((contact) => contact.contactUrl || contact.email),
+    [selectedResults],
+  );
+  const emailContacts = useMemo(
+    () => selectedResults
+      .map((row) => crmRowToEmailContact(row, recUrl(row)))
+      .filter((contact) => contact.contactUrl || contact.email),
+    [selectedResults],
+  );
   const renderedRows = useMemo(() => rows.slice(0, renderCount), [rows, renderCount]);
   const allRowsSelected = renderedRows.length > 0 && renderedRows.every((row) => selectedRows.has(row.id));
   const toggleResult = useCallback((id, index, shiftKey = false) => {
@@ -582,20 +616,49 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     io.observe(el);
     return () => io.disconnect();
   }, [renderCount, rows.length, serverStart, numFound, loadMoreError, fetchMore]);
-  const openWorkflow = useCallback(() => {
-    const audience = selectedResults
-      .map((row) => crmRowToWorkflowContact(row, recUrl(row)))
-      .filter((contact) => contact.contactUrl || contact.email);
-    if (!audience.length) {
+  const prepareActionContacts = useCallback(async (contacts) => {
+    if (!cacheOptionVisible || !useCachedPages) return contacts;
+    setCacheActionBusy(true);
+    try {
+      const prepared = await attachCachedPageEngineSnapshots(contacts);
+      const missing = Math.max(0, prepared.requested - prepared.available);
+      if (missing > 0) {
+        gbToast(
+          prepared.available
+            ? `${prepared.available} cached · ${missing} will load live`
+            : 'No saved page data matched — loading live pages',
+          'info',
+        );
+      }
+      return prepared.contacts;
+    } catch (error) {
+      gbToast(`Cache unavailable — loading live pages: ${error?.message || error}`, 'warning');
+      return contacts;
+    } finally {
+      setCacheActionBusy(false);
+    }
+  }, [cacheOptionVisible, useCachedPages]);
+  const openWorkflow = useCallback(async () => {
+    if (!workflowContacts.length) {
       gbToast('Select contacts or accounts first', 'info');
       return;
     }
+    const audience = await prepareActionContacts(workflowContacts);
     if (typeof window.__gbOpenWorkflowManager === 'function') {
       window.__gbOpenWorkflowManager(audience);
     } else {
       gbToast('Workflow manager is unavailable here', 'error');
     }
-  }, [selectedResults]);
+  }, [workflowContacts, prepareActionContacts]);
+  const openEmail = useCallback(async (event) => {
+    if (!emailContacts.length) {
+      gbToast('Select contacts or accounts first', 'info');
+      return;
+    }
+    setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
+    setEmailRunnerContacts(await prepareActionContacts(emailContacts));
+    setEmailRunnerOpen(true);
+  }, [emailContacts, prepareActionContacts]);
   const exportSelection = useCallback(() => {
     if (!selectedResults.length) {
       gbToast('Select records first', 'info');
@@ -676,11 +739,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 count={selectedResults.length}
                 total={rows.length}
                 onWorkflow={openWorkflow}
-                onEmail={(event) => {
-                  setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
-                  setEmailRunnerOpen(true);
-                }}
+                onEmail={openEmail}
                 onExport={exportSelection}
+                cacheVisible={cacheOptionVisible}
+                cacheActive={useCachedPages}
+                cacheBusy={cacheActionBusy}
+                onCacheChange={setUseCachedPages}
               />
             </Card>
         </div>
@@ -794,10 +858,8 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
       <EmailRunner
         open={emailRunnerOpen}
         cursor={emailRunnerCursor}
-        contacts={selectedResults
-          .map((row) => crmRowToEmailContact(row, recUrl(row)))
-          .filter((contact) => contact.contactUrl || contact.email)}
-        onClose={() => setEmailRunnerOpen(false)}
+        contacts={emailRunnerContacts}
+        onClose={() => { setEmailRunnerOpen(false); setEmailRunnerContacts([]); }}
       />
     </ModalCtx.Provider>
     </DataCtx.Provider>

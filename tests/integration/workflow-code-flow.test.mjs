@@ -197,6 +197,43 @@ describe('workflow code flow', () => {
     );
   });
 
+  it('runs a cached CRM Search record through the workflow page model without fetching its page', async () => {
+    let fetches = 0;
+    const contact = {
+      contactId: '42',
+      contactName: 'Search Row Name',
+      contactUrl: 'https://crm.test/Default.aspx?Page=240&customerID=42',
+      pageEngineIdentity: { schemaId: 'contact', id: '42' },
+      pageEngineSnapshot: {
+        schemaId: 'contact',
+        id: '42',
+        sourceUrl: 'https://crm.test/Default.aspx?Page=240&customerID=42',
+        data: {
+          ids: { contact: '42', account: '900' },
+          contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.test' },
+          account: { name: 'Analytical Engines' },
+          orders: [{ number: '101', total: 825 }],
+          stats: { totalRevenue: 1250 },
+          tasks: { open: [], done: [] },
+        },
+      },
+    };
+
+    const prepared = await hydrateWorkflowContact(contact, [contact], {
+      rep: { employeeId: '7' },
+      dispatch: async () => { fetches += 1; throw new Error('live fetch should not run'); },
+    });
+
+    assert.equal(fetches, 0);
+    assert.equal(prepared.context.dataSource, 'page_engine_cache');
+    assert.equal(prepared.context.email, 'ada@example.test');
+    assert.equal(await prepared.context.getValue({ source: 'schema', ref: 'stats.totalRevenue' }), 1250);
+    assert.equal(prepared.page.orders[0].number, '101');
+    assert.equal(prepared.page.contact.firstName, 'Ada');
+    assert.equal('pageEngineSnapshot' in prepared.page.contact, false);
+    assert.equal('pageEngineSnapshot' in prepared.page.contacts[0], false);
+  });
+
   it('gives an Action Shelf custom action the same live order data as a workflow', async () => {
     const page = shapeLivePage({
       data: {

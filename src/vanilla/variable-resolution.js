@@ -15,10 +15,75 @@
    * @param {Document} doc - The document to scan (defaults to global document).
    * @returns {string} The resolved value, or empty string on failure.
    */
-  function resolveVar(name, def, doc = document) {
+  function engineDataValue(engineData, path, defaultValue = '') {
+    const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+    if (!engineData || !engine || typeof engine.resolve !== 'function') return defaultValue;
+    return engine.resolve(engineData, path, defaultValue);
+  }
+
+  function cachedBuiltinValue(name, engineData) {
+    if (!engineData) return undefined;
+    const first = engineDataValue(engineData, 'contact.firstName', '') || '';
+    const middle = engineDataValue(engineData, 'contact.middleInitial', '') || '';
+    const last = engineDataValue(engineData, 'contact.lastName', '') || '';
+    const now = new Date();
+    const paths = {
+      email: 'contact.email',
+      firstName: 'contact.firstName',
+      lastName: 'contact.lastName',
+      middleInit: 'contact.middleInitial',
+      companyName: 'contact.companyName',
+      jobTitle: 'contact.jobTitle',
+      contactEmail: 'contact.email',
+      phoneNumber: 'contact.phone',
+      zipCode: 'contact.zipCode',
+      contactId: 'ids.contact',
+      accountName: 'account.name',
+      accountId: 'ids.account',
+      webAddress: 'account.webAddress',
+      mainAddress: 'account.mainAddress',
+      mainCity: 'account.city',
+      mainState: 'account.state',
+      mainZip: 'account.postal',
+      mainCountry: 'account.country',
+      salesRep: 'account.salesRep',
+      userType: 'account.userType',
+      linkedIn: 'contact.linkedInUrl',
+      createdBy: 'account.createdBy',
+      orderCount: 'stats.orderCount',
+      totalRevenue: 'stats.totalRevenue',
+      lastOrderDate: 'stats.lastOrderDate',
+      priorYearRev: 'stats.priorYearRevenue',
+      ytdRevenue: 'stats.ytdRevenue',
+      avgOrderSize: 'stats.avgOrderSize',
+      creationDate: 'stats.creationDate',
+    };
+    if (name === 'fullName') return [first, middle, last].filter(Boolean).join(' ');
+    if (name === 'today') return `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+    if (name === 'todayLong') {
+      return now.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+      });
+    }
+    if (name === 'daysSinceLastOrder') {
+      const raw = engineDataValue(engineData, 'stats.lastOrderDate', '');
+      const date = raw ? new Date(raw) : null;
+      return date && !Number.isNaN(date.getTime())
+        ? String(Math.floor((now.getTime() - date.getTime()) / 864e5))
+        : '';
+    }
+    if (paths[name]) return engineDataValue(engineData, paths[name], '');
+    return undefined;
+  }
+
+  function resolveVar(name, def, doc = document, engineData = null) {
     try {
       switch (def.type) {
         case 'builtin':
+          if (engineData) {
+            const cached = cachedBuiltinValue(def.builtin, engineData);
+            if (cached !== undefined) return cached;
+          }
           if (def.builtin === 'email')        return typeof smartEmail === 'function' ? smartEmail(doc) : '';
           if (def.builtin === 'order_number') return typeof smartOrderNumber === 'function' ? smartOrderNumber(doc) : '';
           if (def.builtin === 'payment_link') return typeof smartPaymentLink === 'function' ? smartPaymentLink(doc) : '';
@@ -71,7 +136,9 @@
           if (!def.path) return '';
           const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
           if (!engine) return '';
-          const raw = engine.resolvePath(doc, def.path, '');
+          const raw = engineData
+            ? engine.resolve(engineData, def.path, '')
+            : engine.resolvePath(doc, def.path, '');
           /* Path resolver returns the raw typed value (number / date
              / bool); coerce to string for downstream template
              substitution. Code vars that want typed access call the
@@ -111,7 +178,10 @@
           let src = '';
           if (def.source === 'schema' && def.path) {
             const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
-            src = engine ? String(engine.toDisplayString(engine.resolvePath(doc, def.path, '')) || '') : '';
+            const value = engineData
+              ? engine?.resolve?.(engineData, def.path, '')
+              : engine?.resolvePath?.(doc, def.path, '');
+            src = engine ? String(engine.toDisplayString(value) || '') : '';
           } else if (def.source !== 'code') {
             src = def.url || '';
           }
@@ -220,7 +290,11 @@
    * @param {Document} doc - The document to scan (defaults to global document).
    * @returns {Promise<{resolved:Object.<string,string>, toEmail:string}>}
    */
-  async function resolveAllVarsAsync(vars, toField, doc = document, onProgress = null) {
+  async function resolveAllVarsAsync(vars, toField, doc = document, onProgress = null, engineSnapshot = null) {
+    const engineData = engineSnapshot?.data && typeof engineSnapshot.data === 'object'
+      ? engineSnapshot.data
+      : (engineSnapshot && typeof engineSnapshot === 'object' ? engineSnapshot : null);
+    const engineSourceUrl = engineSnapshot?.sourceUrl || '';
     /* Backwards-compat guard. A template still carrying a flagged-
        deprecated variable (one the one-version migration couldn't lift
        onto the page engine) must not be sent silently — refuse so the rep
@@ -240,8 +314,10 @@
     let toEmail = '';
     try {
       if (!toField || toField.type === 'auto') {
-        toEmail = typeof smartEmail === 'function' ? smartEmail(doc) : '';
-        if (!toEmail && typeof smartPageVariables === 'function') toEmail = smartPageVariables(doc).contactEmail || '';
+        toEmail = engineData
+          ? String(engineDataValue(engineData, 'contact.email', '') || '')
+          : (typeof smartEmail === 'function' ? smartEmail(doc) : '');
+        if (!toEmail && !engineData && typeof smartPageVariables === 'function') toEmail = smartPageVariables(doc).contactEmail || '';
       } else if (toField.type === 'literal') {
         toEmail = toField.value || '';
       } else if (toField.type === 'selector') {
@@ -269,7 +345,7 @@
       let raw;        // raw value for chaining
       let display;    // string for the resolved map
       if (def.type === 'builtin' && def.builtin === 'recommended_replacement') {
-        try { raw = await getRecommendedReplacement(doc); }
+        try { raw = doc ? await getRecommendedReplacement(doc) : ''; }
         catch { raw = ''; }
         display = raw;
       } else if (def.type === 'code') {
@@ -282,7 +358,9 @@
         if (!engine) { raw = ''; display = ''; }
         else {
           try {
-            const value = await engine.evaluateCode(doc, def.body || '', rawValues);
+            const value = engineData && typeof engine.evaluateCodeData === 'function'
+              ? await engine.evaluateCodeData(engineData, def.body || '', rawValues, { sourceUrl: engineSourceUrl })
+              : await engine.evaluateCode(doc, def.body || '', rawValues);
             raw = value;                              // keep intact (could be an object/array) for downstream vars
             display = engine.toDisplayString(value);  // stringify only for template substitution
           } catch (e) {
@@ -296,7 +374,9 @@
         if (!engine) { raw = ''; display = ''; }
         else {
           try {
-            const value = await engine.evaluateCode(doc, def.body || '', rawValues);
+            const value = engineData && typeof engine.evaluateCodeData === 'function'
+              ? await engine.evaluateCodeData(engineData, def.body || '', rawValues, { sourceUrl: engineSourceUrl })
+              : await engine.evaluateCode(doc, def.body || '', rawValues);
             raw = engine.toDisplayString(value);
             display = attachmentHtml(def, raw);
           } catch (e) {
@@ -304,7 +384,7 @@
           }
         }
       } else {
-        raw = resolveVar(name, def, doc);
+        raw = resolveVar(name, def, doc, engineData);
         display = raw;
       }
       rawValues[name] = raw;
@@ -499,6 +579,41 @@
      Preview slash menu the same live-page evaluation path as the popup. */
   if (typeof window !== 'undefined') {
     window.__gbResolveAllVarsAsync = resolveAllVarsAsync;
+    window.__gbResolveVarsForData = async (snapshot, vars, toField) => {
+      const data = snapshot?.data && typeof snapshot.data === 'object'
+        ? snapshot.data
+        : (snapshot && typeof snapshot === 'object' ? snapshot : {});
+      const engine = window.__gbPageEngine || null;
+      const value = (path, fallback = '') => (
+        engine && typeof engine.resolve === 'function'
+          ? engine.resolve(data, path, fallback)
+          : fallback
+      );
+      const first = value('contact.firstName', '') || '';
+      const last = value('contact.lastName', '') || '';
+      let lastEmailMs = 0;
+      const emails = value('contact.emails', []);
+      if (Array.isArray(emails)) {
+        for (const email of emails) {
+          const stamp = email?.date instanceof Date
+            ? email.date.getTime()
+            : Date.parse(String(email?.date || ''));
+          if (Number.isFinite(stamp) && stamp > lastEmailMs) lastEmailMs = stamp;
+        }
+      }
+      try {
+        const result = await resolveAllVarsAsync(vars, toField, null, null, snapshot);
+        return { ...result, displayName: `${first} ${last}`.trim(), lastEmailMs };
+      } catch (error) {
+        return {
+          resolved: {},
+          toEmail: '',
+          displayName: `${first} ${last}`.trim(),
+          lastEmailMs,
+          error: error?.message || 'resolve failed',
+        };
+      }
+    };
   }
 
   // ═══════════════════════════════════════════════════════
