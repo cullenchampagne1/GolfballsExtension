@@ -5,6 +5,7 @@ import { I } from '../ui/icons.jsx';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { linesToShots } from '../lib/proposalSnapshots.js';
+import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 
 /* ─────────────────────────────────────────────────────────────
    Proposal HTML composer — generate customer-facing proposal HTML
@@ -606,6 +607,9 @@ function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
    ProposalEmailModal wrapper below. `onBack` (optional) renders a back button in
    the footer for the inline use. */
 export function ProposalEmailComposer({ source, onBack, backLabel }) {
+  // Mounts when the rep switches the catalog (or the opportunity page) into
+  // proposal-email mode; unmounts on Back. Both wrappers get one report.
+  useSurfaceUsage('Proposal Email');
   const [groupName, setGroupName] = useState(source.groupName || 'Your Custom Order');
   const [optionName, setOptionName] = useState(source.optionName || 'Option 1');
   const [message, setMessage] = useState('');

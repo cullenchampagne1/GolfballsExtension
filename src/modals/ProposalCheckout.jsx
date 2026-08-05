@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useContext, useRef } from 'react';
 import { Btn, IconBtn, I, Tag, Checkbox, Icon, Dropdown } from '../ui/index.js';
 import { suggestAddresses } from '../lib/addressSuggest.js';
+import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 
 /* ───────────────────────────────────────────────────────────────────────────
    Proposal Checkout — embeddable composer (ported from the design bundle).
@@ -797,6 +798,9 @@ function Confirmation({ f, onBack }) {
 export function CheckoutComposer({ source, onBack }) {
   const f = useCheckoutForm(source, { showAdmin: true });
   const scrollRef = useRef(null);
+  // Checkout swaps in over the catalog rather than mounting its own host, so
+  // without this the Adoption block would only ever see "Gifting Catalog".
+  useSurfaceUsage('Gifting Checkout');
   return (
     <CheckoutCtx.Provider value={{ dense: true }}>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)' }}>

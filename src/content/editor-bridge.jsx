@@ -342,6 +342,7 @@ function resolveVarsLive(varsObj) {
       files: [
         'theme.js',
         'src/vanilla/smart-detection.js', 'react-dist/vanilla/page-engine.js', 'src/vanilla/variable-resolution.js',
+        'src/vanilla/usage-report.js', 'src/vanilla/modals/modal-chrome.js',
         'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js', 'src/vanilla/page-utils.js', 'src/vanilla/main.js',
       ],
     }, () => {

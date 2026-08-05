@@ -69,6 +69,14 @@
       "file": "tests/unit/orderEditModal.test.mjs"
     },
     {
+      "name": "guard \u00b7 vanilla overlay close + usage reporting",
+      "file": "tests/unit/vanillaModalClose.test.mjs"
+    },
+    {
+      "name": "guard \u00b7 every modal reports a usage surface",
+      "file": "tests/unit/surfaceCoverage.test.mjs"
+    },
+    {
       "name": "modal \u00b7 call-log submit contract",
       "file": "tests/unit/submitCallLog.test.mjs"
     },

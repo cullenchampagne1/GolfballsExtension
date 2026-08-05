@@ -304,6 +304,11 @@
 
     document.body.appendChild(overlay);
 
+    // The console's Adoption block counts this the same as any React modal.
+    // `__gbCloseModal` fires the reporter, so every close path — button, run-
+    // complete, backdrop — reports without repeating itself here.
+    overlay.__gbReportClose = window.__gbReportSurface?.('Charge Customer');
+
     // 3. Attach Custom Dropdown Listeners
     const wrapElement = document.getElementById('__gb-reason-wrap');
     const btnElement = document.getElementById('__gb-reason-btn');

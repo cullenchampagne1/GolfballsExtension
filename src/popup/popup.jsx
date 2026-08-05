@@ -13,6 +13,7 @@ import {
   Btn, Dropdown, TemplatePicker, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle, ToastHost,
 } from '../ui';
+import { trackDocumentSurface } from '../lib/usageTelemetry.js';
 
 /* Registry features that already have a bespoke popup button above (charge/
    order-edit/proof aren't registry features). We don't duplicate these in the
@@ -328,6 +329,7 @@ function PopupApp() {
                 'src/vanilla/smart-detection.js',
                 'react-dist/vanilla/page-engine.js',
                 'src/vanilla/variable-resolution.js',
+                'src/vanilla/usage-report.js', 'src/vanilla/modals/modal-chrome.js',
                 'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
                 'src/vanilla/page-utils.js', 'react-dist/content/email-preview.js',
                 'react-dist/content/watch-list.js',
@@ -1504,6 +1506,9 @@ function mount() {
   const host = document.getElementById('popup-root');
   if (!host) return;
   host.setAttribute('data-gb-scale', 'popup');
+  // The toolbar popup is the one surface every installation opens; `popup` is
+  // its own kind so the Adoption block can separate it from the in-page work.
+  trackDocumentSurface('Toolbar Popup', 'popup');
   createRoot(host).render(
     <ToastHost>
       <PopupApp />

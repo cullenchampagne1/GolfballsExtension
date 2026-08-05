@@ -19,6 +19,12 @@ import { App } from './lib/app.jsx';
    shell. Build → react-dist/guide/guide.js (see build.js surfaces).
 ─────────────────────────────────────────────────────────────── */
 
+/* The guide's snippets mount the real modals (CRM Search, Task List, the
+   catalog's composers…). They are documentation, not use, so nothing on this
+   page reports to the console's Adoption block — see src/lib/usageTelemetry.js.
+   Set at module scope: it has to hold before the first demo evaluates. */
+globalThis.__gbUsageSilent = true;
+
 const CSS_ID = '__gb-guide-css';
 function injectGuideCss() {
   if (document.getElementById(CSS_ID)) return;

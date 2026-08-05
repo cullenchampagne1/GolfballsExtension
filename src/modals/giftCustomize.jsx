@@ -8,6 +8,7 @@ import { PREVIEW_GRID, GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolo
 import { loadGiftSetOptions } from '../lib/giftSetsData.js';
 import { giftSetSizeLabel } from '../lib/giftSets.js';
 import { giftSetLayout } from '../lib/giftSetLayout.js';
+import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 import { giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import {
   clientDeltaToLocal,
@@ -501,6 +502,8 @@ function ARotationSlider({ value, onChange }) {
 }
 
 export function ImageAlignModal({ image, initial, onCancel, onApply }) {
+  // Rendered only while a logo is pending alignment, so mount = open.
+  useSurfaceUsage('Logo Align');
   const [nat, setNat] = useState(null);
   const [stageSize, setStageSize] = useState({ width: ALIGN_STAGE, height: ALIGN_STAGE });
   const [zoomLevel, setZoomLevel] = useState(Math.round((initial?.scale ?? 1) * 100));

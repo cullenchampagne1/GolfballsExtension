@@ -5,6 +5,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 
 /* ───────────────────────────────────────────────────────────────
    QueryBuilder — CRM match-rule query builder modal.
@@ -466,6 +467,9 @@ function flattenGroups(groups) {
 export function QueryBuilder({ onClosed, bindClose, initialConditions = [], initialState, onApply }) {
   const draggable = useDevSetting('crmSearch.draggable') ?? false;
   const toast = useToast();
+  // Mounted only while open (CRM Search renders it behind `qbOpen`), so the
+  // mount IS the open — there is no mountFloating host to report from.
+  useSurfaceUsage('Query Builder');
 
   const [{ outerJoiner, groups }, setBuilder] = useState(() =>
     buildInitial({ initialState, initialConditions }));

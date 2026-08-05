@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Btn, IconBtn, Tag, I, Spinner } from '../ui/index.js';
 import { DraggablePopup } from '../ui/components/DraggablePopup.jsx';
+import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 
 /* qs-* keyframes for the in-popover run lifecycle (the popover can open
    without the EmailRunner mounted, so inject our own copy; redefining the
@@ -214,6 +215,10 @@ export function QuickTaskPopover({
      TaskList's runQuickAction handler doesn't have to change. */
   onAction,
 }) {
+  // Always mounted by TaskList and toggled by `open`, so the report keys off
+  // the prop rather than the mount — otherwise every task list would count as
+  // a Quick Task open.
+  useSurfaceUsage('Quick Task Popover', { active: !!open });
   const [pane, setPane] = useState('main');
   /* Pushed chip index. -1 = no chip selected (defaults to first on
      first interaction). The "Other" pseudo-chip lives at index

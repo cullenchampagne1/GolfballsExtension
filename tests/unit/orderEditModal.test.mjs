@@ -15,6 +15,12 @@ import vm from 'node:vm';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
 const source = await readFile(new URL('../../src/vanilla/modals/order-edit-modal.js', import.meta.url), 'utf8');
+// The real shared scripts, in manifest order — NOT a `__gbCloseModal` stub. A
+// stub here is what let the helper's deletion ship (see vanillaModalClose).
+const shared = await Promise.all([
+  readFile(new URL('../../src/vanilla/usage-report.js', import.meta.url), 'utf8'),
+  readFile(new URL('../../src/vanilla/modals/modal-chrome.js', import.meta.url), 'utf8'),
+]);
 
 /* Realistic editOrder response slice: $114.99 total = $100.00 product
    subtotal + $6.00 tax + $8.99 ground shipping. */
@@ -48,12 +54,14 @@ function createPage({ messageId = 'MSG-123', order = baseOrder(), info = {}, cha
   const calls = [];
   const alerts = [];
   dom.window.alert = (m) => alerts.push(m);
-  dom.window.__gbCloseModal = (el) => el.remove();
   dom.window.smartMessageId = () => messageId;
   if (chargeRows) dom.window.smartPageChargeRows = () => chargeRows;
   dom.window.chrome = {
     runtime: {
       sendMessage: (msg, cb) => {
+        // Usage samples are fire-and-forget and carry no callback; they are
+        // asserted in vanillaModalClose.test.mjs, not here.
+        if (msg.action === 'gbUsageEvent') return;
         // JSON round-trip: vm-realm objects have a foreign Object.prototype,
         // which breaks deepEqual against node-realm literals.
         calls.push(JSON.parse(JSON.stringify(msg)));
@@ -61,7 +69,9 @@ function createPage({ messageId = 'MSG-123', order = baseOrder(), info = {}, cha
       },
     },
   };
-  vm.runInContext(source, dom.getInternalVMContext());
+  const context = dom.getInternalVMContext();
+  shared.forEach((script) => vm.runInContext(script, context));
+  vm.runInContext(source, context);
   return { win: dom.window, doc: dom.window.document, calls, alerts };
 }
 

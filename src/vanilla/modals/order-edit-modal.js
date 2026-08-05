@@ -390,6 +390,10 @@
     `;
     document.body.appendChild(overlay);
 
+    // Adoption/Presence reporting; `__gbCloseModal` fires the returned close
+    // for the button and the backdrop path alike.
+    overlay.__gbReportClose = window.__gbReportSurface?.('Order Edit');
+
     // --- Hover fade logic ---
     const shell = document.getElementById('__gb-oe-shell');
 
