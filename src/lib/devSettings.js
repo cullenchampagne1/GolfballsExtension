@@ -168,6 +168,22 @@ export const DEV_SETTINGS = [
     watch:   ['pageEngine.indexingEnabled', 'pageEngine.territory'],
     reader:  readEngineCacheStat,
   },
+  /* ── Bounced contacts (admin builds only) ─────────────────────
+     The email relay recognizes a delivery failure and sends the
+     installation a bounce notification; with this on, a HARD bounce
+     also writes the CRM's "Replacement contact needed" task by
+     itself, so the contact is in the queue before the CRM's own
+     automation gets there. Off still notifies — the notification's
+     action button does the same write on click. Spread inline so
+     the row simply does not exist in the served build (and so the
+     node-side registry/help generators never see it either). */
+  ...((typeof __ADMIN__ !== 'undefined' && __ADMIN__) ? [{
+    key:     'bounce.autoFlag',
+    label:   'Flag bounced contacts automatically',
+    desc:    'When the email relay reports a hard bounce, add the CRM\'s "Replacement contact needed" task to the matching contact as soon as a CRM tab is open — no click, and never a second task if one is already open. Off leaves the bounce notification actionable by hand.',
+    type:    'bool',
+    default: true,
+  }] : []),
   {
     key:     'golfballViewer.showDebugHud',
     label:   'Golfball viewer: camera debug HUD',

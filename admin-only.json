@@ -1,9 +1,17 @@
 {
   "_doc": "Admin-only code excluded from the SERVED (consumer) build. The dev/full build (npm run build, GB_ADMIN default) keeps everything; the store/publish build (GB_ADMIN=0) skips 'entries', drops 'rootFiles' + 'contentScripts', strips /* @admin:start */.../* @admin:end */ regions from raw files, and regenerates the settings registry without 'configKeys'. 'leakTokens' must NOT appear anywhere in the packaged consumer output \u2014 the packager fails if they do.",
-  "entries": [],
-  "rootFiles": [],
-  "contentScripts": [],
-  "configKeys": [],
+  "entries": [
+    "src/vanilla-build/bounce-flag.entry.js"
+  ],
+  "rootFiles": [
+    "lib/bounce-queue.js"
+  ],
+  "contentScripts": [
+    "react-dist/vanilla/bounce-flag.js"
+  ],
+  "configKeys": [
+    "bounce.autoFlag"
+  ],
   "helpDocs": [
     "mockup-catalog.json"
   ],
@@ -12,6 +20,11 @@
   ],
   "adminTutorials": [],
   "leakTokens": [
+    "flag_bounced_contact",
+    "gbBounceFlagContact",
+    "GBBounceQueue",
+    "__gbFlagBouncedContact",
+    "bouncedContacts",
     "importHpgCatalog",
     "importSnugzCatalog",
     "fetchHpgList",

@@ -126,6 +126,19 @@ verb be safe whether the AI proposes it or an admin pushes it.
 | **outward‑facing** | create a share link, send an email, run a workflow, export CSV | **confirm** (AI‑proposed shares always) |
 | **money‑critical** | charge a card, commit approval/commitment dates, start an order‑edit | **hard gate** (§9). Never AI‑auto‑runnable. |
 
+**One named exception: `flag_bounced_contact`** (admin builds only). It creates a
+CRM task — mutates‑remote, so the matrix says confirm — and it runs without a
+click. The exception is deliberate and bounded on every side: the target is not
+proposed by a model or chosen by a backend operator but read out of a delivery‑
+failure report our own mail relay received; only a **hard** bounce the relay
+marked `auto` runs by itself (soft/unclassifiable ones keep the click); the CRM
+half refuses to write when the contact already has an open bounce task, and the
+worker keeps a settled‑address ledger, so the effect is idempotent; and
+`bounce.autoFlag` turns the whole automatic path off while leaving the
+notification actionable by hand. The value bought is the point of the feature —
+a dead address is in the Replacement Contacts queue before a rep emails it
+again, which a confirm gate sitting in an unread notification would not achieve.
+
 ---
 
 ## 4. Reference objects — resolving what a verb operates on

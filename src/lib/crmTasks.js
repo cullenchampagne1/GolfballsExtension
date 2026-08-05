@@ -210,6 +210,58 @@ export async function updateTaskById(id, fields = {}) {
   return { ok: true, taskId: safeId, changed: changes.map(([key]) => key) };
 }
 
+/**
+ * Create one task on a contact, from the content-script realm.
+ *
+ * submitQuickTask() covers the same endpoint for the modal, but routes through
+ * the background fetchRaw bridge. This one issues the request from the page,
+ * where the CRM session is unambiguous, and — unlike the modal path — treats an
+ * unparseable response as a failure: the CRM answers a create with JSON, so
+ * HTML coming back means a login redirect, not a task.
+ *
+ * `daysOut` shifts the due date from today; 0 is due today.
+ */
+export async function createTaskForContact({
+  contactId, employeeId, subject, description = '',
+  categoryId = 0, priority = 2, daysOut = 0, today = new Date(),
+} = {}) {
+  const safeContactId = numericId(contactId, 'contact ID');
+  const safeEmployeeId = numericId(employeeId, 'employee ID');
+  const title = String(subject ?? '').trim();
+  if (!title) throw new Error('Task subject is required');
+  const start = parseTaskDate(today) || parseTaskDate(new Date());
+  const offset = Math.max(0, Math.min(Math.floor(Number(daysOut) || 0), 3_650));
+  const due = new Date(start.getTime() + offset * MS_DAY);
+  const category = Number(categoryId);
+  if (!Number.isInteger(category) || category < 0 || category > 999_999) {
+    throw new Error('Invalid task category');
+  }
+  const params = {
+    TaskID: '',
+    Subject: title.slice(0, 500),
+    Description: String(description ?? '').slice(0, 4_000),
+    LiveDate: taskMDY(start),
+    DueDate: taskMDY(due),
+    taskCategoryID: String(category),
+    taskStatusID: '1',
+    Priority: taskPriority(priority),
+    contactID: safeContactId,
+    leadID: '0',
+    employeeID: safeEmployeeId,
+    caseID: 0,
+  };
+  const url = `${BASE}/golfballs/crm/Admin/Task/Create.ajax?${encodeURIComponent(JSON.stringify(params))}`;
+  if (url.length > 20_000) throw new Error('Task request exceeds the CRM URL limit');
+  const response = await fetch(url, { credentials: 'include' });
+  if (!response.ok) throw new Error(`Task create returned HTTP ${response.status}`);
+  let payload;
+  try { payload = JSON.parse(await response.text()); }
+  catch { throw new Error('CRM did not return a created task'); }
+  const taskId = String(payload?.TaskId ?? '').trim();
+  if (!/^\d{1,12}$/.test(taskId)) throw new Error('CRM accepted the request but no TaskId came back');
+  return { ok: true, taskId };
+}
+
 /* Resolve a task's real CRM contactID from its task id via Task/Get — the
    reliable source the Task List's own bulk-create uses (apiGetTaskContactId).
    Task-list rows often expose the contact only through an onclick link with no

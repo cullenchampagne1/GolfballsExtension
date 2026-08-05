@@ -148,7 +148,8 @@
         "https://api.golfballs.com/*"
       ],
       "js": [
-        "react-dist/vanilla/recent-orders-sweep.js"
+        "react-dist/vanilla/recent-orders-sweep.js",
+        "react-dist/vanilla/bounce-flag.js"
       ],
       "all_frames": false
     },

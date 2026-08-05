@@ -93,6 +93,22 @@ function __gbAccessAllowed(st, now) {
       return false;
     },
   );
+  /* @admin:start */
+  __gbActionRuntime?.registerHandler?.(
+    'flag_bounced_contact',
+    'content',
+    (payload) => {
+      // The CRM half owns every CRM call (search index, task list, task
+      // create); this only hands it the address the relay reported. Loaded on
+      // api.golfballs.com pages, so a www page correctly reports the action as
+      // unavailable rather than half-running it.
+      const run = window.__gbFlagBouncedContact;
+      if (typeof run !== 'function') return false;
+      run(payload);
+      return true;
+    },
+  );
+  /* @admin:end */
   __gbActionRuntime?.registerHandler?.(
     'open_support_ticket',
     'content',

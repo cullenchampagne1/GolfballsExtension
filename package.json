@@ -137,6 +137,14 @@
       "file": "tests/unit/crmTasks.test.mjs"
     },
     {
+      "name": "crm \u00b7 bounced contact \u2192 replacement task",
+      "file": "tests/unit/bouncedContacts.test.mjs"
+    },
+    {
+      "name": "crm \u00b7 bounced contact work queue",
+      "file": "tests/unit/bounceQueue.test.mjs"
+    },
+    {
       "name": "crm \u00b7 Action Review tables & WebForms postback",
       "file": "tests/unit/actionReviewModel.test.mjs"
     },

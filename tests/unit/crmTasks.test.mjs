@@ -15,6 +15,7 @@ globalThis.DOMParser = dom.window.DOMParser;
 
 const {
   fetchOpenTasksForContact,
+  createTaskForContact,
   updateTaskById,
   completeTaskById,
   completeContactTasks,
@@ -219,5 +220,103 @@ describe('completeContactTasks', () => {
     installFetch({ listOk: false });
     const res = await completeContactTasks('555');
     assert.deepEqual(res, { ok: false, error: "Couldn't load tasks (HTTP 500)" });
+  });
+});
+
+describe('createTaskForContact', () => {
+  /* Same-origin create used by bounced-contact flagging: the request has to
+     carry the exact CRM field names, and an answer that is not a created task
+     has to fail rather than read as success. */
+  function installCreate({ ok = true, body = '{"TaskId":"4242"}' } = {}) {
+    const created = [];
+    globalThis.fetch = async (url) => {
+      if (!url.includes('/Task/Create.ajax?')) throw new Error('unexpected fetch ' + url);
+      created.push(JSON.parse(decodeURIComponent(url.split('Create.ajax?')[1])));
+      return { ok, status: ok ? 200 : 500, text: async () => body };
+    };
+    return created;
+  }
+
+  it('sends the CRM create payload and returns the new task id', async () => {
+    const created = installCreate();
+    const result = await createTaskForContact({
+      contactId: '555',
+      employeeId: '77',
+      subject: 'Replacement contact needed - jane@acme.com',
+      description: 'Email to jane@acme.com bounced (5.1.1).',
+      categoryId: '18',
+      priority: 1,
+      daysOut: 0,
+      today: new Date(2026, 7, 5),
+    });
+    assert.deepEqual(result, { ok: true, taskId: '4242' });
+    assert.deepEqual(created, [{
+      TaskID: '',
+      Subject: 'Replacement contact needed - jane@acme.com',
+      Description: 'Email to jane@acme.com bounced (5.1.1).',
+      LiveDate: '08/05/2026',
+      DueDate: '08/05/2026',
+      taskCategoryID: '18',
+      taskStatusID: '1',
+      Priority: '1',
+      contactID: '555',
+      leadID: '0',
+      employeeID: '77',
+      caseID: 0,
+    }]);
+  });
+
+  it('pushes the due date out by daysOut, leaving the live date today', async () => {
+    const created = installCreate();
+    await createTaskForContact({
+      contactId: '555', employeeId: '77', subject: 'Follow up',
+      daysOut: 3, today: new Date(2026, 7, 5),
+    });
+    assert.equal(created[0].LiveDate, '08/05/2026');
+    assert.equal(created[0].DueDate, '08/08/2026');
+  });
+
+  it('never writes an orphan task', async () => {
+    let fetched = 0;
+    globalThis.fetch = async () => { fetched += 1; return { ok: true, text: async () => '{}' }; };
+    await assert.rejects(
+      () => createTaskForContact({ contactId: '0', employeeId: '77', subject: 'Hi' }),
+      /Invalid contact ID/,
+    );
+    await assert.rejects(
+      () => createTaskForContact({ contactId: '555', employeeId: '', subject: 'Hi' }),
+      /Invalid employee ID/,
+    );
+    await assert.rejects(
+      () => createTaskForContact({ contactId: '555', employeeId: '77', subject: '  ' }),
+      /subject is required/,
+    );
+    assert.equal(fetched, 0);
+  });
+
+  it('treats a non-JSON answer as a failure, not a created task', async () => {
+    // A login redirect answers HTTP 200 with HTML. Reading that as success is
+    // how a bounce silently never reaches the queue.
+    installCreate({ body: '<!doctype html><title>Sign in</title>' });
+    await assert.rejects(
+      () => createTaskForContact({ contactId: '555', employeeId: '77', subject: 'Hi' }),
+      /did not return a created task/,
+    );
+  });
+
+  it('rejects a JSON answer that carries no task id', async () => {
+    installCreate({ body: '{"Error":"nope"}' });
+    await assert.rejects(
+      () => createTaskForContact({ contactId: '555', employeeId: '77', subject: 'Hi' }),
+      /no TaskId came back/,
+    );
+  });
+
+  it('propagates an HTTP failure', async () => {
+    installCreate({ ok: false });
+    await assert.rejects(
+      () => createTaskForContact({ contactId: '555', employeeId: '77', subject: 'Hi' }),
+      /HTTP 500/,
+    );
   });
 });
