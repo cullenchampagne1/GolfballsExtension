@@ -917,16 +917,67 @@ function SelectCell({ def, value, onChange, disabled = false }) {
   );
 }
 
+/* Stat cell — a read-only readout for `type: 'stat'` rows. The row's
+   `reader(settings)` answers with { value, detail, tone }; we re-read on mount,
+   whenever a watched setting changes (flipping one usually changes the answer),
+   and when the rep clicks refresh. Readers never reject — a failed read comes
+   back as its own view, so the row explains itself instead of going blank. */
+function StatCell({ def, settings }) {
+  const [view, setView] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const watched = (def.watch || []).map((key) => String(settings?.[key] ?? '')).join('|');
+
+  const read = useCallback(() => {
+    if (typeof def.reader !== 'function') return;
+    setBusy(true);
+    Promise.resolve(def.reader(settings))
+      .then(setView)
+      .finally(() => setBusy(false));
+    // `settings` is a fresh object on every edit; the watched values are what
+    // this row actually depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [def, watched]);
+  useEffect(() => { read(); }, [read]);
+
+  const tone = {
+    brand:   'var(--gb-brand-label)',
+    warning: 'var(--gb-warning-fg)',
+  }[view?.tone] || 'var(--gb-text-primary)';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ textAlign: 'right', minWidth: 0, maxWidth: 240 }}>
+        <div style={{
+          fontFamily: 'var(--gb-font-mono)', fontSize: 13.5, fontWeight: 650,
+          color: busy && !view ? 'var(--gb-text-muted)' : tone,
+          lineHeight: 1.2,
+        }}>
+          {view ? view.value : '…'}
+        </div>
+        {view?.detail && (
+          <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.35 }}>
+            {view.detail}
+          </div>
+        )}
+      </div>
+      <IconBtn size="xs" title="Refresh" disabled={busy} onClick={read}>
+        <I.refresh size={11} />
+      </IconBtn>
+    </div>
+  );
+}
+
 /* ── Developer-settings row — bool toggles to a Switch, number to a
        narrow Input with a unit suffix, string to a text Input, select to a
-       dropdown, action to a button that fires the row's `runner`. Add new
-       control types here as the registry grows. */
-function DevSettingRow({ def, value, onChange, managed = false }) {
+       dropdown, action to a button that fires the row's `runner`, stat to a
+       live readout. Add new control types here as the registry grows. */
+function DevSettingRow({ def, value, onChange, settings, managed = false }) {
   const isBool   = def.type === 'bool';
   const isNum    = def.type === 'number';
   const isString = def.type === 'string';
   const isSelect = def.type === 'select';
   const isAction = def.type === 'action';
+  const isStat   = def.type === 'stat';
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -967,6 +1018,9 @@ function DevSettingRow({ def, value, onChange, managed = false }) {
           >
             {def.buttonLabel || 'Run'}
           </Btn>
+        )}
+        {isStat && (
+          <StatCell def={def} settings={settings} />
         )}
       </div>
     </div>
@@ -1913,6 +1967,7 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
                 <DevSettingRow
                   def={def}
                   value={devSettings[def.key]}
+                  settings={devSettings}
                   managed={managedDevSetting(def.key)}
                   onChange={(v) => setDevSetting(def.key, v)}
                 />

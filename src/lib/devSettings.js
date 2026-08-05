@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { sendBackgroundMessage } from './backgroundMessage.js';
+import { readEngineCacheStat } from './engineCacheStats.js';
 import {
   REMOTE_POLICY_KEY,
   enforceManagedStorageValue,
@@ -13,6 +14,12 @@ import {
    Registry-driven: add a row to DEV_SETTINGS and it appears in
    the Developer Settings table automatically. Components subscribe
    to specific keys via `useDevSetting(key)`.
+
+   Row types: bool / number / string / select persist a value; the
+   two read-only kinds do not — `action` fires a `runner()` from a
+   button, `stat` renders a live readout from a `reader(settings)`.
+   Read-only rows carry no default, are never written to storage,
+   and are not remotely manageable (see `isValueSetting`).
 
    Storage shape:
      chrome.storage.local.devSettings = { [key]: value, … }
@@ -150,6 +157,16 @@ export const DEV_SETTINGS = [
     buttonLabel: 'Extract territory',
     buttonIcon:  'search',
     runner:      inspectCurrentPageTerritory,
+  },
+  {
+    key:     'pageEngine.cachedContacts',
+    label:   'Cached contacts',
+    desc:    'How many Contact records the local Page Engine index is holding for the configured territory — what Engine Indexing has actually saved. Cached Accounts and the last write are shown beneath it. Read-only.',
+    type:    'stat',
+    /* Re-reads whenever one of these changes: both decide whether the index
+       collects at all, so a stale count after flipping either would lie. */
+    watch:   ['pageEngine.indexingEnabled', 'pageEngine.territory'],
+    reader:  readEngineCacheStat,
   },
   {
     key:     'golfballViewer.showDebugHud',
@@ -597,10 +614,15 @@ export const STORAGE_KEY = 'devSettings';
 const LEGACY_WORKFLOW_SCALE_KEY = 'campaignManager.scale';
 const LEGACY_ENGINE_ACCOUNT_ID_KEY = 'pageEngine.accountId';
 
-// Skip `action` rows — they fire a runner instead of persisting a value,
-// so there's no default to merge into the bag.
+/* Read-only row types: `action` fires a runner, `stat` renders a readout.
+   Neither persists a value, so both stay out of the settings bag, the
+   remotely-manageable registry, and help-command targets. One predicate so
+   a third read-only type is added in one place. */
+const READ_ONLY_TYPES = new Set(['action', 'stat']);
+export const isValueSetting = (row) => !READ_ONLY_TYPES.has(row?.type);
+
 const DEFAULTS = Object.fromEntries(
-  DEV_SETTINGS.filter((s) => s.type !== 'action').map((s) => [s.key, s.default]),
+  DEV_SETTINGS.filter(isValueSetting).map((s) => [s.key, s.default]),
 );
 
 /** Synchronous fallback when storage isn't ready yet. */

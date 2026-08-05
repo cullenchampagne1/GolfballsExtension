@@ -10,7 +10,7 @@ import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { FEATURE_DEFAULTS, FEATURE_FLAG_META } from '../src/lib/flags.js';
-import { DEV_SETTINGS, defaultDevSettings } from '../src/lib/devSettings.js';
+import { DEV_SETTINGS, defaultDevSettings, isValueSetting } from '../src/lib/devSettings.js';
 import { CUSTOM_PAGE_SECTIONS } from '../src/lib/customPages.js';
 import { ADMIN_ONLY } from './strip-admin.mjs';
 
@@ -38,7 +38,7 @@ const INSTALLATION_LOCAL_KEYS = new Set([
 
 const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((item) => [item.key, item]));
 const featureDefaultEntries = Object.entries(FEATURE_DEFAULTS).filter(([key]) => keep(key));
-const developerRows = DEV_SETTINGS.filter((item) => item.type !== 'action' && keep(item.key));
+const developerRows = DEV_SETTINGS.filter((item) => isValueSetting(item) && keep(item.key));
 const developerDefaults = defaultDevSettings();
 const scalar = (value) => JSON.stringify(value);
 

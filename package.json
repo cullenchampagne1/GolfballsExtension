@@ -173,6 +173,10 @@
       "file": "tests/unit/pageEngineCacheActions.test.mjs"
     },
     {
+      "name": "crm \u00b7 Page Engine cached-contacts readout",
+      "file": "tests/unit/engineCacheStats.test.mjs"
+    },
+    {
       "name": "crm \u00b7 search presentation icon contract",
       "file": "tests/unit/crmSearchPresentation.test.mjs"
     },

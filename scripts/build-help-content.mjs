@@ -143,7 +143,8 @@ function devGroupOf(key) {
 }
 
 function formatDefault(s) {
-  if (s.type === 'action') return '—';
+  // Read-only rows (a button, a readout) hold no value to default to.
+  if (s.type === 'action' || s.type === 'stat') return '—';
   if (typeof s.default === 'boolean') return s.default ? 'On' : 'Off';
   if (s.default === '' || s.default == null) return '(empty)';
   return `${s.default}${s.unit || ''}`;

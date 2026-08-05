@@ -1,5 +1,7 @@
 import { FEATURE_DEFAULTS, FEATURE_FLAGS, loadFlags } from './flags.js';
-import { DEV_SETTINGS, loadDevSettings, saveDevSettings } from './devSettings.js';
+import {
+  DEV_SETTINGS, isValueSetting, loadDevSettings, saveDevSettings,
+} from './devSettings.js';
 import {
   THEME_VARIANTS, loadTheme, applyTheme,
 } from './theme.js';
@@ -93,7 +95,7 @@ function runtimeMessage(payload) {
 
 const featureRules = Object.fromEntries(FEATURE_FLAGS.map((item) => [item.key, { type: 'bool' }]));
 const settingRules = Object.fromEntries(
-  DEV_SETTINGS.filter((item) => item.type !== 'action').map((item) => [item.key, item]),
+  DEV_SETTINGS.filter(isValueSetting).map((item) => [item.key, item]),
 );
 const themeVariants = Object.fromEntries(THEME_VARIANTS.flatMap((item) => {
   const id = String(item.id || '');

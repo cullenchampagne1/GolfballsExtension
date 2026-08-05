@@ -9,6 +9,7 @@ import {
 import {
   DEV_SETTINGS,
   defaultDevSettings,
+  isValueSetting,
 } from '../../src/lib/devSettings.js';
 import { CUSTOM_PAGE_SECTIONS } from '../../src/lib/customPages.js';
 import { ADMIN_ONLY } from '../../scripts/strip-admin.mjs';
@@ -47,7 +48,7 @@ describe('settings registry · extension/backend parity', () => {
   });
 
   it('matches every remotely manageable developer setting', () => {
-    const rows = DEV_SETTINGS.filter((row) => row.type !== 'action' && keep(row.key));
+    const rows = DEV_SETTINGS.filter((row) => isValueSetting(row) && keep(row.key));
     assert.deepEqual(
       Object.keys(registry.developerSettings).sort(),
       rows.map((row) => row.key).sort(),
@@ -65,6 +66,9 @@ describe('settings registry · extension/backend parity', () => {
       }
     }
     assert.equal(Object.hasOwn(registry.developerSettings, 'campaignManager.scale'), false);
+    // Read-only rows hold no value, so a server policy has nothing to manage.
+    assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.cachedContacts'), false);
+    assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.inspectTerritory'), false);
   });
 
   it('exposes one generic Custom Pages scope with every registered page', () => {

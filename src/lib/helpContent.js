@@ -5222,13 +5222,21 @@ export const HELP_CONTENT = {
                 "—",
                 "",
                 "Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification."
+              ],
+              [
+                "Cached contacts",
+                "stat",
+                "—",
+                "",
+                "How many Contact records the local Page Engine index is holding for the configured territory — what Engine Indexing has actually saved. Cached Accounts and the last write are shown beneath it. Read-only."
               ]
             ],
             "meta": {
               "settingKeys": [
                 "pageEngine.indexingEnabled",
                 "pageEngine.territory",
-                "pageEngine.inspectTerritory"
+                "pageEngine.inspectTerritory",
+                "pageEngine.cachedContacts"
               ]
             }
           },
@@ -9806,6 +9814,16 @@ export const HELP_CONTENT = {
         "pageEngine.inspectTerritory"
       ],
       "description": "Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:pageEngine.cachedContacts",
+      "category": "Settings",
+      "title": "Cached contacts",
+      "keywords": [
+        "pageEngine.cachedContacts"
+      ],
+      "description": "How many Contact records the local Page Engine index is holding for the configured territory — what Engine Indexing has actually saved. Cached Accounts and the last write are shown beneath it. Read-only.",
       "article": "developer-settings"
     },
     {
