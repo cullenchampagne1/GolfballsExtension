@@ -10,7 +10,12 @@
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createContext, loadScript } from './helpers/harness.mjs';
+import {
+  createContext,
+  loadBackground,
+  loadScript,
+  validInstallation,
+} from './helpers/harness.mjs';
 
 const dom = new JSDOM('');
 globalThis.document = dom.window.document;
@@ -167,6 +172,54 @@ describe('email pipeline', () => {
     assert.equal(email.subject, 'RE: Order update');
     assert.equal(email.replyMode, 'reply');
     assert.equal(email.htmlBody, '<p>Thanks, Pat.</p><br><div><b>Cullen</b></div>');
+  });
+
+  it('keeps a new inline photo distinct from preserved reply signature CIDs', async () => {
+    const paUrl = 'https://tenant.logic.azure.com/workflows/email-inline-regression';
+    let outbound = null;
+    const background = await loadBackground({
+      stored: {
+        gbApiInstallation: validInstallation(),
+        gbCredentials: { powerAutomateUrl: paUrl },
+      },
+      fetchImpl: async (url, options = {}) => {
+        if (String(url) === paUrl) {
+          outbound = JSON.parse(options.body);
+          return new Response(null, { status: 202 });
+        }
+        return new Response('{}', {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    });
+
+    const response = await background.sendMessage({
+      action: 'paAutomate',
+      payload: {
+        emails: [{
+          from: 'rep@golfballs.com',
+          to: 'buyer@example.com',
+          subject: 'Reply with photo',
+          replyMode: 'reply',
+          htmlBody: '<p>New photo <img src="data:image/png;base64,' + PNG_B64 + '"></p>'
+            + '<blockquote>Prior signature <img src="cid:gbimg1"></blockquote>',
+        }],
+      },
+    });
+
+    assert.equal(response.ok, true);
+    assert.ok(outbound, 'the enriched payload reaches the Power Automate trigger');
+    const [email] = outbound.emails;
+    const cidRefs = [...email.htmlBody.matchAll(/\bcid:([^"'\s>]+)/gi)].map((match) => match[1]);
+    assert.equal(cidRefs.length, 2);
+    assert.equal(cidRefs[1], 'gbimg1', 'the replied-to message keeps its original signature CID');
+    assert.notEqual(cidRefs[0], 'gbimg1', 'the newly inserted photo must not reuse the signature CID');
+    assert.equal(new Set(cidRefs).size, 2, 'the two body images resolve to different MIME parts');
+
+    const [photo] = email.attachments.filter((attachment) => attachment.isInline === true);
+    assert.equal(photo.contentId, cidRefs[0]);
+    assert.match(photo.contentId, /^gbimg-[a-f0-9]{32}-1$/);
   });
 
   it('falls back to a plain-text mailto window when Power Automate is off', async () => {

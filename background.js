@@ -2563,7 +2563,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               // Attached-file markers FIRST (they're stripped from the html),
               // then the CID image pass over what remains.
               const fa = await extractEmailFileAttachments(em.htmlBody);
-              const r  = await extractEmailImages(fa.html);
+              const r  = await extractEmailImages(fa.html, [
+                ...(em.attachments || []),
+                ...fa.attachments,
+              ]);
               em.htmlBody = r.html;
               const extra = [...fa.attachments, ...r.attachments];
               if (extra.length) {
@@ -2771,6 +2774,39 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 const GB_MAX_IMG_BYTES = 3 * 1024 * 1024; // skip images larger than 3 MB
 const GB_MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024;
 const GB_SAFE_IMAGE_TYPE = /^image\/(?:png|jpe?g|gif|webp|bmp)$/i;
+let gbInlineIdFallback = 0;
+
+/** One unpredictable namespace per outbound email. Reply actions preserve the
+ *  original message's inline MIME parts, so restarting every new attachment at
+ *  `gbimg1` makes two different images share a Content-ID. Outlook may then
+ *  resolve the new photo to an old signature asset. */
+function gbInlineIdNamespace() {
+  try {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  } catch {
+    // MV3 workers always expose Web Crypto; keep a bounded monotonic fallback
+    // so an unusual test/embed environment still cannot restart at gbimg1.
+    gbInlineIdFallback = (gbInlineIdFallback + 1) >>> 0;
+    const clock = Date.now().toString(16).padStart(12, '0').slice(-12);
+    const sequence = gbInlineIdFallback.toString(16).padStart(8, '0');
+    const noise = Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0');
+    return `${clock}${sequence}${noise}`;
+  }
+}
+
+function gbReservedInlineIds(html, attachments = []) {
+  const reserved = new Set();
+  const cidRe = /\bcid:([^"'\s<>]+)/gi;
+  let match;
+  while ((match = cidRe.exec(String(html || '')))) reserved.add(match[1].toLowerCase());
+  for (const attachment of attachments || []) {
+    const id = String(attachment?.contentId || '').trim().replace(/^<|>$/g, '');
+    if (id) reserved.add(id.toLowerCase());
+  }
+  return reserved;
+}
 
 /** ArrayBuffer → base64 string (chunked to stay within the call-stack limit). */
 function gbBufToBase64(buf) {
@@ -2803,9 +2839,10 @@ function gbExtFor(type) {
  * Handles base64 data: URIs and http(s) URLs; relative / blob: / cid: are left
  * untouched.
  * @param {string} html
+ * @param {Array} existingAttachments attachments already present on the email
  * @returns {Promise<{ html: string, attachments: Array }>}
  */
-async function extractEmailImages(html) {
+async function extractEmailImages(html, existingAttachments = []) {
   const result = { html, attachments: [] };
   if (!html || typeof html !== 'string' || html.indexOf('<img') === -1) return result;
 
@@ -2864,14 +2901,22 @@ async function extractEmailImages(html) {
 
   if (!found.length) return result;
 
-  // Assign stable Content-IDs and build the attachment list.
+  // Assign send-scoped Content-IDs and build the attachment list.
   // @odata.type MUST be the first property: Graph types each attachment by
   // reading @odata.type before its properties. If contentBytes (a
   // fileAttachment-only field) is read first, Graph rejects it as not
   // existing on the base Attachment type → 400 BadRequest.
   const replace = {};
-  found.forEach((img, i) => {
-    const id = `gbimg${i + 1}`;
+  const namespace = gbInlineIdNamespace();
+  const reservedIds = gbReservedInlineIds(html, existingAttachments);
+  let sequence = 0;
+  found.forEach((img) => {
+    let id;
+    do {
+      sequence += 1;
+      id = `gbimg-${namespace}-${sequence}`;
+    } while (reservedIds.has(id.toLowerCase()));
+    reservedIds.add(id.toLowerCase());
     replace[img.raw] = `cid:${id}`;
     result.attachments.push({
       '@odata.type': '#microsoft.graph.fileAttachment',
