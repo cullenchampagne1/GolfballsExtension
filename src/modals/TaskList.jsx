@@ -16,6 +16,7 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
 import { liveDateOnPush } from '../lib/crmTasks.js';
+import { excludeReplacementTasks } from '../lib/replacementContacts.js';
 import {
   TASK_LIST_ROW_HEIGHT,
   taskListVirtualWindow,
@@ -178,7 +179,12 @@ const tasksSource = defineSource({
     if (looksLikeLoginShell(html)) {
       throw new Error('Session expired — the tasks page redirected to login.');
     }
-    return parseTasksFromHtml(html);
+    /* The automated bounce tasks are not rep work — they are the Replacement
+       Contacts queue, which owns them on its own page (Page 294). Dropping
+       them here keeps them out of every count, filter and bulk action in this
+       modal; without it they crowd out real work with rows a rep can't act on
+       from here. */
+    return excludeReplacementTasks(parseTasksFromHtml(html));
   },
   mock: () => buildMockTasks(),
   errorToast: (err) => ({

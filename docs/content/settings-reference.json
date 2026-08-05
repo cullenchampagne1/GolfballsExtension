@@ -59,16 +59,19 @@
       "title": "Custom CRM Pages",
       "icon": "flag",
       "tiers": ["advanced"],
-      "keywords": ["custom page", "override", "contact details", "account details", "opportunity details", "replace page", "workspace"],
-      "summary": "Replace Contact Details, Account Details, and Opportunity Details with focused extension workspaces backed by live CRM data.",
+      "keywords": ["custom page", "override", "contact details", "account details", "opportunity details", "replacement contacts", "bounced email", "replace page", "workspace"],
+      "summary": "Replace CRM pages — Contact, Account and Opportunity Details, Search, Task List, and the Replacement Contacts bounce queue — with focused extension workspaces backed by live CRM data.",
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "Settings → Custom Pages → CRM exposes the registered takeovers. The implemented pages are Contact Details, Account Details, and Opportunity Details. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy." },
+          { "type": "p", "text": "Settings → Custom Pages → CRM exposes the registered takeovers. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy." },
           { "type": "table", "headers": ["Workspace", "Information and actions"], "rows": [
             ["Contact Details", "Contact/account facts, revenue and order history, proof art, tasks, opportunities, activities, email history, account contacts, a standalone email composer, account templates, and email/chat transcript reading."],
             ["Account Details", "Account profile, linked contacts, activity, and account-level rollups in a focused dashboard."],
-            ["Opportunity Details", "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."]
+            ["Opportunity Details", "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."],
+            ["CRM Search", "The native search rebuilt with refine facets, a selectable result table, and bulk actions."],
+            ["Task List", "The native task list with refine facets, bulk complete/push/email, and live per-row action status."],
+            ["Replacement Contacts", "The bounced-email queue. Takes over the unused Adjust Leader Board route (Page 294) and renames that sidebar entry. Collects the CRM's automated \"Investigate bounced contact\" and \"Replacement contact needed\" tasks — which are hidden from the Task List surfaces — classifies each bounced address by domain, and closes a row by completing its CRM task."]
           ] },
           { "type": "heading", "text": "What writes where" },
           { "type": "p", "text": "CRM records and actions use the live page schema and CRM endpoints. Extension-local context notes and caches remain local unless a control explicitly says it writes to CRM. Turning a takeover off deletes neither source." },

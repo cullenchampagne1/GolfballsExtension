@@ -39,6 +39,7 @@
     { id: 'task_list', re: /[?&]Page=349\b/i },
     { id: 'my_recent_history', re: /[?&]Page=279\b/i },
     { id: 'action_review', re: /[?&]Page=286\b/i },
+    { id: 'replacement_contacts', re: /[?&]Page=294\b/i },
   ];
 
   function enabledSet() {

@@ -13,6 +13,9 @@ globalThis.DOMParser = dom.window.DOMParser;
 const {
   parseTasksFromHtml, filterTasks, sortTasks, dueBucket, distinctCategories, looksLikeLoginShell,
 } = await import('../../src/lib/taskListModel.js');
+const {
+  excludeReplacementTasks, selectReplacementTasks,
+} = await import('../../src/lib/replacementContacts.js');
 
 // One native task row (Account / Contact / Due / Category / Priority / Subject / status input).
 const ROW = (id, { account = 'Acme', contact = 'Jane', cust = '555', due = '7/01/2026', cat = 'Follow Up', pri = '2Med', subject = 'Call', status = 'New' } = {}) => `
@@ -91,6 +94,36 @@ describe('sortTasks', () => {
   });
   it('sorts by priority descending', () => {
     assert.deepEqual(sortTasks(tasks, [{ key: 'priority', dir: 'desc' }]).map((t) => t.id), ['c', 'a', 'b']);
+  });
+});
+
+/* The CRM's automated bounce tasks are worked on the Replacement Contacts page
+   (Page 294), so every Task List surface parses them and then drops them. This
+   pins the two modules together against real native markup — the predicate's
+   own edge cases live in replacementContacts.test.mjs. */
+describe('replacement tasks are lifted out of the task list', () => {
+  const html = PAGE([
+    ROW('1', { subject: 'Quarterly check-in' }),
+    ROW('2', { subject: 'Investigate bounced contact' }),
+    ROW('3', { subject: 'Replacement contact needed - jane@acme.com' }),
+    ROW('4', { subject: 'Send pricing matrix' }),
+  ]);
+
+  it('leaves the task list with only rep work', () => {
+    const tasks = excludeReplacementTasks(parseTasksFromHtml(html));
+    assert.deepEqual(tasks.map((t) => t.subject), ['Quarterly check-in', 'Send pricing matrix']);
+  });
+
+  it('hands the bounce queue exactly the rows the task list dropped', () => {
+    const parsed = parseTasksFromHtml(html);
+    assert.deepEqual(selectReplacementTasks(parsed).map((t) => t.id), ['2', '3']);
+    assert.equal(selectReplacementTasks(parsed).length + excludeReplacementTasks(parsed).length, parsed.length);
+  });
+
+  it('still filters and counts normally once they are gone', () => {
+    const tasks = excludeReplacementTasks(parseTasksFromHtml(html));
+    assert.equal(filterTasks(tasks, { status: '1' }).length, 2);
+    assert.equal(filterTasks(tasks, { query: 'bounced' }).length, 0);
   });
 });
 

@@ -4904,16 +4904,18 @@ export const HELP_CONTENT = {
         "contact details",
         "account details",
         "opportunity details",
+        "replacement contacts",
+        "bounced email",
         "replace page",
         "workspace"
       ],
-      "summary": "Replace Contact Details, Account Details, and Opportunity Details with focused extension workspaces backed by live CRM data.",
+      "summary": "Replace CRM pages — Contact, Account and Opportunity Details, Search, Task List, and the Replacement Contacts bounce queue — with focused extension workspaces backed by live CRM data.",
       "covers": [],
       "body": {
         "advanced": [
           {
             "type": "p",
-            "text": "Settings → Custom Pages → CRM exposes the registered takeovers. The implemented pages are Contact Details, Account Details, and Opportunity Details. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy."
+            "text": "Settings → Custom Pages → CRM exposes the registered takeovers. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy."
           },
           {
             "type": "table",
@@ -4933,6 +4935,18 @@ export const HELP_CONTENT = {
               [
                 "Opportunity Details",
                 "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."
+              ],
+              [
+                "CRM Search",
+                "The native search rebuilt with refine facets, a selectable result table, and bulk actions."
+              ],
+              [
+                "Task List",
+                "The native task list with refine facets, bulk complete/push/email, and live per-row action status."
+              ],
+              [
+                "Replacement Contacts",
+                "The bounced-email queue. Takes over the unused Adjust Leader Board route (Page 294) and renames that sidebar entry. Collects the CRM's automated \"Investigate bounced contact\" and \"Replacement contact needed\" tasks — which are hidden from the Task List surfaces — classifies each bounced address by domain, and closes a row by completing its CRM task."
               ]
             ]
           },
@@ -9022,10 +9036,12 @@ export const HELP_CONTENT = {
         "contact details",
         "account details",
         "opportunity details",
+        "replacement contacts",
+        "bounced email",
         "replace page",
         "workspace"
       ],
-      "description": "Replace Contact Details, Account Details, and Opportunity Details with focused extension workspaces backed by live CRM data.",
+      "description": "Replace CRM pages — Contact, Account and Opportunity Details, Search, Task List, and the Replacement Contacts bounce queue — with focused extension workspaces backed by live CRM data.",
       "article": "custom-crm-pages",
       "shortcut": null,
       "flag": null

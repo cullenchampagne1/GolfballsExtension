@@ -1112,7 +1112,7 @@
         "open_lead",
         "opportunity",
         "opportunity_linking",
-        "adjust_leaderboard",
+        "replacement_contacts",
         "contact_details",
         "account_details",
         "opportunity_details"

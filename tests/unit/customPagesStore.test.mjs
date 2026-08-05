@@ -55,3 +55,57 @@ describe('custom-pages store · extract diffing (deepEqual)', () => {
     assert.equal(deepEqual(null, null), true);
   });
 });
+
+/* With Custom Pages on, CRM Page 294 is the Replacement Contacts takeover, so
+   the host's own sidebar link ("Adjust Leader Board") is renamed in place. It
+   is found by ROUTE rather than by Metronic markup, which is what these pin. */
+describe('custom-pages · host sidebar rename', () => {
+  let applyNavRename;
+  let rule;
+  let win;
+
+  before(async () => {
+    const { JSDOM } = await import('jsdom');
+    const dom = new JSDOM('<!doctype html><body></body>');
+    win = dom.window;
+    globalThis.document = win.document;
+    globalThis.NodeFilter = win.NodeFilter;
+    ({ applyNavRename } = globalThis.__gbCustomPagesInternals);
+    rule = globalThis.__gbCustomPagesInternals.HOST_NAV_RENAMES()
+      .find((r) => r.id === 'replacement_contacts');
+  });
+
+  const nav = (html) => { win.document.body.innerHTML = html; };
+
+  it('renames the Page 294 link the CRM renders', () => {
+    nav('<a href="Default.aspx?Page=294">Adjust Leader Board</a>');
+    assert.equal(applyNavRename(rule), true);
+    assert.equal(win.document.querySelector('a').textContent.trim(), 'Replacement Contacts');
+  });
+
+  it('keeps the icon markup inside the anchor — only the label changes', () => {
+    nav('<a href="/adminnew/Default.aspx?Page=294&x=1"><i class="icon-trophy"></i> Adjust Leader Board </a>');
+    assert.equal(applyNavRename(rule), true);
+    const link = win.document.querySelector('a');
+    assert.equal(link.querySelector('i.icon-trophy') !== null, true);
+    assert.equal(link.textContent.includes('Replacement Contacts'), true);
+  });
+
+  it('does not touch a different page whose number merely starts with 294', () => {
+    nav('<a href="Default.aspx?Page=2940">Adjust Leader Board</a>');
+    assert.equal(applyNavRename(rule), false);
+    assert.equal(win.document.querySelector('a').textContent.trim(), 'Adjust Leader Board');
+  });
+
+  it('reports no hit when the nav has not rendered yet, so the caller retries', () => {
+    nav('<div>no nav</div>');
+    assert.equal(applyNavRename(rule), false);
+  });
+
+  it('is idempotent — a second pass over a renamed link changes nothing', () => {
+    nav('<a href="Default.aspx?Page=294">Adjust Leader Board</a>');
+    applyNavRename(rule);
+    assert.equal(applyNavRename(rule), false);
+    assert.equal(win.document.querySelector('a').textContent.trim(), 'Replacement Contacts');
+  });
+});

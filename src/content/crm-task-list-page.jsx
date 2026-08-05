@@ -21,6 +21,7 @@ import {
   parseTasksFromHtml, parseTasksFromDoc, distinctCategories, filterTasks, sortTasks, dueBucket, looksLikeLoginShell,
 } from '../lib/taskListModel.js';
 import { completeTaskById, getTaskContactId, updateTaskById } from '../lib/crmTasks.js';
+import { contactIdFromUrl, excludeReplacementTasks } from '../lib/replacementContacts.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { FULL_HEIGHT_LIST_PAGE_CSS } from '../lib/customPageLayout.js';
@@ -29,12 +30,6 @@ import {
   Spinner, Tag, TaskCheckbox, Td, Th, fmtDate, goUrl, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import { Breadcrumb, DetailPageFrame, EditTaskModal, ModalCtx, TopBar, gbToast, useDetailData, useModalHost } from '../lib/crm-detail-shared.jsx';
-
-/* Pull a numeric customer/contact id out of a native contact link. */
-function contactIdFromUrl(url) {
-  const m = String(url || '').match(/[?&](?:customerID|customerId|contactID|contactId)=(\d+)/i);
-  return m ? m[1] : '';
-}
 
 const priTone = (p) => (p === 1 ? 'error' : p === 3 ? 'neutral' : 'warning');
 
@@ -202,7 +197,10 @@ function TaskListApp({ store }) {
     // Fast path: the takeover IS on Page=349, so #TableTasks is already in the
     // host DOM (expanded by the engine). Parse it directly — instant, no multi-MB
     // re-fetch — so the shell + sidebar render immediately.
-    const live = parseTasksFromDoc(document);
+    /* The automated bounce tasks belong to the Replacement Contacts queue
+       (Page 294), which is where they can actually be worked. They are
+       excluded from every load path here so this page stays rep work. */
+    const live = excludeReplacementTasks(parseTasksFromDoc(document));
     if (live.length) { setTasks(live); setLoadState('ready'); return; }
     // Fallback (host table not present/ready): re-fetch and parse.
     setLoadState('loading');
@@ -211,7 +209,7 @@ function TaskListApp({ store }) {
       const html = await res.text();
       if (g !== gen.current) return;
       if (looksLikeLoginShell(html)) { setLoadState('error'); return; }
-      const parsed = parseTasksFromHtml(html);
+      const parsed = excludeReplacementTasks(parseTasksFromHtml(html));
       setTasks(parsed);
       setLoadState(parsed.length ? 'ready' : 'ready');
     } catch (e) {

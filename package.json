@@ -177,6 +177,14 @@
       "file": "tests/unit/engineCacheStats.test.mjs"
     },
     {
+      "name": "crm \u00b7 replacement-contacts bounce queue",
+      "file": "tests/unit/replacementContacts.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 replacement contacts close the CRM task",
+      "file": "tests/integration/replacement-contacts-flow.test.mjs"
+    },
+    {
       "name": "crm \u00b7 search presentation icon contract",
       "file": "tests/unit/crmSearchPresentation.test.mjs"
     },

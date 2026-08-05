@@ -650,7 +650,10 @@ export const CRM_CHILD_PAGE = {
   'Open Lead': 245,
   'Opportunity': 280,
   'Opportunity Linking': 356,
-  'Adjust Leader Board': 294,
+  /* 294 is the host's "Adjust Leader Board", which nobody uses. Custom Pages
+     claims the route for the Replacement Contacts queue, so the replica nav
+     shows the new name in that slot — the link is unchanged. */
+  'Replacement Contacts': 294,
 };
 
 export const TOP_PAGE = { dashboard: 18 };
@@ -676,7 +679,7 @@ export const NAV = [
     { label: 'Open Lead' },
     { label: 'Opportunity' },
     { label: 'Opportunity Linking' },
-    { label: 'Adjust Leader Board' },
+    { label: 'Replacement Contacts' },
     { label: '__CURRENT__', current: true },
   ]},
   { id: 'orders',   label: 'Orders',   icon: <I.cart />, children: [
@@ -848,13 +851,18 @@ export function ContactPill({ icon, label, value, muted }) {
 
 /* THE stat-tile row. Every page's stat strip renders through this so new
    pages match by construction. cells: [{ label, value, sub, tone, glow, mono }]
-   tone: 'brand' (tinted card) | 'success' | 'error' | 'warning' | undefined. */
+   tone: 'brand' (tinted card) | 'success' | 'error' | 'warning' | undefined.
+   A cell may also carry `onClick` (making the tile a filter control) and
+   `active` (that filter is the one currently applied) — both optional, so a
+   plain read-only strip is unchanged. */
 export function StatCardGrid({ cells }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 8 }}>
       {cells.map((c, i) => (
-        <Card key={i} className="gbcp-stat" pad="10px 12px" style={{
+        <Card key={i} className="gbcp-stat" pad="10px 12px" onClick={c.onClick} hover={!!c.onClick} style={{
           ...(c.tone === 'brand' ? { background: 'var(--gb-brand-tint-soft)', borderColor: 'var(--gb-brand-tint-border)' } : null),
+          ...(c.active ? { borderColor: 'var(--gb-brand-label)', boxShadow: 'inset 0 -2px 0 var(--gb-brand-label)' } : null),
+          ...(c.onClick ? { userSelect: 'none' } : null),
         }}>
           <div style={{
             fontSize: 9.5, fontWeight: 600, letterSpacing: .75, textTransform: 'uppercase',
