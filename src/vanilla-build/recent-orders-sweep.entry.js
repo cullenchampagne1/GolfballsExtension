@@ -17,11 +17,19 @@
    It answers ONE message, only from our own worker. No URL and no
    query cross this boundary — the page can be asked to run this
    search and nothing else.
+
+   IT ALSO NARRATES. Half of this tracker runs here and half runs in
+   a worker nobody has open, so a sweep that comes back empty could
+   have failed in either — this half logs what it asked the index
+   and what came back, in THIS tab's console, while the worker logs
+   what it did with the answer in its own.
 ─────────────────────────────────────────────────────────────── */
 
 import { crmSolrQuery } from '../lib/crmSolrSearch.js';
 import { buildRecentOrdersFq, recentOrdersSinceDay } from '../lib/recentOrdersScan.js';
 import { resolveCurrentUserContext } from '../lib/employeeIdentity.js';
+import '../../lib/tracker-registry.js';
+import '../../lib/tracker-definitions.js';
 
 const MESSAGE = 'gbRecentOrdersSweep';
 const ROWS = 100;
@@ -31,22 +39,57 @@ const ROWS = 100;
    because the worker only advances that after a sweep it received. */
 const MAX_PAGES = 5;
 
-/** Run the rep's recent-orders search and return the contact rows. */
+/* The same Developer Setting the worker half reads (Settings → Developer
+   Settings → "Trackers: log every sweep"), so one switch narrates both halves.
+   Read per sweep rather than cached: a rep who turns it on to watch the next
+   sweep should not have to reload the tab first. A command typed into this
+   console (below) is loud whatever the setting says. */
+const PREFIX = '[gb:trackers/page]';
+const DEBUG_SETTING = 'trackers.debugLog';
+let loud = false;
+
+const loggingOn = () => new Promise((resolve) => {
+  if (loud) { resolve(true); return; }
+  try {
+    chrome.storage.local.get('devSettings', (bag) => {
+      resolve(bag?.devSettings?.[DEBUG_SETTING] === true);
+    });
+  } catch { resolve(false); }
+});
+
+let logging = false;
+// eslint-disable-next-line no-console
+const note = (...args) => { if (logging) { try { console.log(PREFIX, ...args); } catch { /* */ } } }; // SECURITY-AUDITED-DEV-SETTING-CONSOLE
+// eslint-disable-next-line no-console
+const warn = (...args) => { if (logging) { try { console.warn(PREFIX, ...args); } catch { /* */ } } }; // SECURITY-AUDITED-DEV-SETTING-CONSOLE
+
+/**
+ * Run the rep's recent-orders search and return the contact rows.
+ *
+ * `complete` is the field the worker's cursor turns on: true means this window
+ * was drained, so nothing in it is left unread. Truncating at MAX_PAGES leaves
+ * the OLDER end of the window unread (the sort is newest-first), which is
+ * precisely the case where the cursor must not step over it.
+ */
 async function sweep({ since, now = Date.now() }) {
+  logging = await loggingOn();
+  note('asked for a recent-orders sweep', since ? `since ${new Date(since).toISOString()}` : '(first run)');
   // The audience is the signed-in rep's own contacts, keyed by the employee ID
   // the CRM's own authenticated toolbar carries — exactly as in the quick
   // action. Without one we do not guess: no id means no audience, not everyone.
   const currentUser = await resolveCurrentUserContext();
   if (!currentUser.employeeId) {
+    warn('no CRM-verified employee id on this page yet — the toolbar has not identified you');
     throw new Error('no CRM-verified employee id on this page yet');
   }
 
-  const solrFq = buildRecentOrdersFq(
-    currentUser.employeeId,
-    recentOrdersSinceDay(since, now),
-  );
+  const sinceDay = recentOrdersSinceDay(since, now);
+  const solrFq = buildRecentOrdersFq(currentUser.employeeId, sinceDay);
+  note(`searching as employee ${currentUser.employeeId} (${currentUser.source || 'unknown source'}), fq: ${solrFq}`);
 
   const docs = [];
+  let numFound = 0;
+  let pages = 0;
   let start = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     // Same transport and sort the modal uses; `type` stays 'all' because the
@@ -55,12 +98,19 @@ async function sweep({ since, now = Date.now() }) {
       query: '', type: 'all', solrFq, start, rows: ROWS,
       sortKey: 'lastOrderDate_dt', sortDir: 'desc',
     });
+    pages += 1;
+    numFound = result.numFound;
     docs.push(...result.docs);
+    note(`page ${pages}: ${result.docs.length} row(s), ${docs.length}/${numFound} of the window`);
     // Advance by what Solr actually returned; a gateway may cap `rows`.
     start = result.nextStart;
     if (!result.docs.length || docs.length >= result.numFound) break;
   }
-  return docs;
+  const complete = docs.length >= numFound;
+  if (!complete) {
+    warn(`stopped at the ${MAX_PAGES}-page ceiling with ${docs.length} of ${numFound} rows — the worker will keep its cursor and ask again`);
+  }
+  return { docs, numFound, pages, complete, sinceDay };
 }
 
 try {
@@ -73,8 +123,80 @@ try {
       return true;
     }
     sweep(message)
-      .then((docs) => sendResponse({ ok: true, docs }))
-      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+      .then((result) => {
+        note(`answering with ${result.docs.length} contact row(s)`);
+        sendResponse({ ok: true, ...result });
+      })
+      .catch((error) => {
+        warn('sweep failed:', error?.message || error);
+        sendResponse({ ok: false, error: String(error?.message || error) });
+      });
     return true;
   });
 } catch { /* no extension messaging here — nothing to answer */ }
+
+/* ── the page console command ──────────────────────────────────────
+   Runs in this content script's ISOLATED world, so page code cannot reach it
+   (the same boundary tracker-net-hook.js is kept on the other side of). To use
+   it, open DevTools on a CRM tab and switch the console's context dropdown
+   from "top" to "Golfballs.com Sales Toolkit".
+
+     gbOrderTracking.search()  — run the search this page would answer with,
+                                 and show how every row maps. Reads only; the
+                                 worker's table and cursor are untouched.
+     gbOrderTracking.sweep()   — make the worker run the real thing NOW,
+                                 cadence ignored, and store what comes back.
+     gbOrderTracking.status()  — the worker's gates, cursors and counts.
+
+   `search()` is the one that separates the two halves: if it returns rows and
+   the table is still empty, the problem is in the worker, not the CRM.
+
+   All three are loud whether or not the Developer Setting is on — somebody
+   typed them, which is a clearer request for output than a stored flag. */
+const ask = (action, extra = {}) => new Promise((resolve) => {
+  try {
+    chrome.runtime.sendMessage({ action, ...extra }, (response) => {
+      const failed = chrome.runtime.lastError;
+      resolve(failed ? { ok: false, error: failed.message } : response);
+    });
+  } catch (error) { resolve({ ok: false, error: String(error?.message || error) }); }
+});
+
+try {
+  window.gbOrderTracking = {
+    /** The search alone, with each row's fate spelled out. */
+    async search({ since = null, now = Date.now() } = {}) {
+      loud = true;
+      const result = await sweep({ since, now });
+      const definitions = globalThis.GBTrackerDefinitions;
+      const rows = result.docs.map((doc) => {
+        const read = definitions.readContactDoc(doc, { now });
+        return read.row
+          ? { id: doc.id, order: read.row.externalId, title: read.row.title, kept: true }
+          : { id: doc.id, kept: false, skipped: read.skip };
+      });
+      const kept = rows.filter((row) => row.kept).length;
+      note(`${rows.length} row(s) read → ${kept} order(s) the worker would store`);
+      note(rows);
+      return { ...result, rows };
+    },
+    /** The real sweep, in the worker, right now. */
+    sweep: () => {
+      loud = true;
+      logging = true;
+      return ask('gbTrackerSweep', { force: true }).then((response) => {
+        note('worker sweep:', response);
+        note('the storing half logs in the worker console — chrome://extensions → Inspect views: service worker');
+        return response;
+      });
+    },
+    status: () => {
+      loud = true;
+      logging = true;
+      return ask('gbTrackerStatus').then((response) => {
+        note('worker status:', response?.status || response);
+        return response?.status || response;
+      });
+    },
+  };
+} catch { /* no window here — the listener above is the only thing that matters */ }

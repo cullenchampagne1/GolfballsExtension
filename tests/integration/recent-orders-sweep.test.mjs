@@ -50,7 +50,7 @@ const contactDoc = (overrides = {}) => ({
  * Solr response stubbed. Globals go in before the import because the module
  * registers its listener at load, exactly as it does in a content script.
  */
-async function crmPage({ identity = 'session', pages = [[contactDoc()]] } = {}) {
+async function crmPage({ identity = 'session', pages = [[contactDoc()]], numFound = null } = {}) {
   const requests = [];
   const stored = {
     // The audience is keyed by this id. `no-id` is the only state the sweep
@@ -67,10 +67,18 @@ async function crmPage({ identity = 'session', pages = [[contactDoc()]] } = {}) 
   };
 
   let listener = null;
+  const asked = [];
+  // The page half installs its console command on `window`; a content script
+  // always has one, and without it here that half would silently not be tested.
+  // A FRESH one per page, because identity resolution memoises the employee id
+  // on it — one shared window would carry a previous tab's rep into this one.
+  globalThis.window = {};
   globalThis.chrome = {
     runtime: {
       id: EXTENSION_ID,
       onMessage: { addListener: (fn) => { listener = fn; } },
+      lastError: null,
+      sendMessage: (message, callback) => { asked.push(message); callback({ ok: true }); },
     },
     storage: {
       local: {
@@ -89,11 +97,13 @@ async function crmPage({ identity = 'session', pages = [[contactDoc()]] } = {}) 
     const body = JSON.parse(options.body);
     requests.push({ url: String(url), str: body.str });
     const docs = pages[requests.length - 1] || [];
-    const numFound = pages.reduce((total, page) => total + page.length, 0);
+    // An index holding MORE than the stubbed pages can hand back is how a read
+    // that stops at the page ceiling is expressed.
+    const found = numFound ?? pages.reduce((total, page) => total + page.length, 0);
     return {
       ok: true,
       status: 200,
-      json: async () => ({ d: JSON.stringify({ response: { docs, numFound } }) }),
+      json: async () => ({ d: JSON.stringify({ response: { docs, numFound: found } }) }),
     };
   };
 
@@ -105,7 +115,7 @@ async function crmPage({ identity = 'session', pages = [[contactDoc()]] } = {}) 
     const handled = listener(message, sender, resolve);
     if (!handled) resolve(undefined);
   });
-  return { deliver, requests, stored };
+  return { deliver, requests, stored, asked, console: globalThis.window.gbOrderTracking };
 }
 
 /** The service worker: registry + definitions + store + engine, plus the tab
@@ -267,6 +277,82 @@ describe('recent orders · sweep flow', () => {
     assert.equal(page.requests.length, 1);
     assert.match(page.requests[0].str, /salesRepID_s%3A22/);
     assert.equal((await store.list('recent-orders')).length, 1);
+  });
+
+  /* The reported failure, end to end: the quick action lists contacts with
+     recent orders, you can open those contacts and see the orders — and the
+     tracker's table says none. Whatever stopped the rows from being read, the
+     thing that made it PERMANENT was the cursor moving anyway: the next sweep
+     asked for a narrower window, and those orders were never in range again. */
+  it('does not step over a window whose rows it failed to read', async () => {
+    // Rows the reader cannot turn into an order (no last-order date on them).
+    const unreadable = await crmPage({
+      pages: [[contactDoc({ lastOrderDate_dt: null }), contactDoc({ id: 'contact_x', lastOrderDate_dt: '' })]],
+    });
+    const engine = worker({ deliver: unreadable.deliver });
+
+    await engine.trackers.sweep({ now: NOW });
+    assert.equal((await engine.store.list('recent-orders')).length, 0);
+    // Nothing was banked, so nothing may be skipped: the cursor is untouched
+    // and the poll clock — which only paces the next attempt — has moved.
+    assert.equal(await engine.store.cursorAt('recent-orders'), 0);
+    assert.equal(await engine.store.lastPolledAt('recent-orders'), NOW);
+
+    // A quarter of an hour later the same window is asked for again, and this
+    // time the rows are readable. The orders are still in range.
+    const later = NOW + 20 * 60_000;
+    const readable = await crmPage();
+    const resumed = worker({ deliver: readable.deliver });
+    Object.assign(resumed.stored, engine.stored);
+    await resumed.trackers.sweep({ now: later });
+
+    assert.match(readable.requests[0].str, /lastOrderDate_dt%3A%5B2026-07-29T00%3A00%3A00Z/);
+    assert.equal((await resumed.store.list('recent-orders')).length, 1);
+    assert.equal(await resumed.store.cursorAt('recent-orders'), later);
+  });
+
+  it('holds the cursor when the index had more rows than the page could read', async () => {
+    // Five full pages and Solr still reporting more: the sort is newest-first,
+    // so what went unread is the OLD end of the window — exactly what a cursor
+    // step would skip.
+    const full = Array.from({ length: 100 }, (_, index) => contactDoc({
+      id: `contact_${6000 + index}`,
+    }));
+    const page = await crmPage({ pages: [full, full, full, full, full], numFound: 900 });
+    const { store, trackers } = worker({ deliver: page.deliver });
+
+    await trackers.sweep({ now: NOW });
+
+    assert.equal(page.requests.length, 5, 'stopped at the page ceiling');
+    assert.equal((await store.list('recent-orders')).length, 100, 'what it read is still stored');
+    // Newest-first: the four hundred rows it never reached are OLDER than the
+    // ones it did, so stepping the cursor to now would bury them for good.
+    assert.equal(await store.cursorAt('recent-orders'), 0);
+    assert.equal(await store.lastPolledAt('recent-orders'), NOW);
+  });
+
+  it('lets a rep run the search by hand from the CRM page console', async () => {
+    const page = await crmPage({
+      pages: [[
+        contactDoc(),
+        contactDoc({ id: 'account_1187', recordType_s: 'Account' }),
+      ]],
+    });
+    assert.ok(page.console, 'the page installs its console command');
+
+    const result = await page.console.search({ since: null, now: NOW });
+
+    // Reads only — the answer says what the worker WOULD store and why each
+    // row was kept or passed over, which is the half this command isolates.
+    assert.equal(result.docs.length, 2);
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.rows, [
+      { id: 'contact_4421', order: '4421@2026-08-04', title: 'Marcus Chen · Acme Industries', kept: true },
+      { id: 'account_1187', kept: false, skipped: 'not-a-contact' },
+    ]);
+
+    await page.console.sweep();
+    assert.deepEqual(page.asked, [{ action: 'gbTrackerSweep', force: true }]);
   });
 
   it('answers nothing to a message that did not come from our worker', async () => {

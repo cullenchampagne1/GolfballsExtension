@@ -363,21 +363,71 @@ describe('tracker definitions · recent orders', () => {
   it('collects a sweep’s contact rows into order records', async () => {
     const tracker = registry.get('recent-orders');
     const asked = [];
-    const rows = await tracker.poll.collect({
+    const collected = await tracker.poll.collect({
       since: Date.UTC(2026, 7, 1),
       now: NOW,
       crmContacts: async (request) => {
         asked.push(request);
-        return [
-          contactDoc(),
-          contactDoc({ id: 'account_1187', recordType_s: 'Account' }), // dropped
-          contactDoc({ id: 'contact_5223', contactName_t: 'Jordan Brown', accountName_t: '', lastOrderDate_dt: '2026-08-05T00:00:00Z' }),
-        ];
+        return {
+          docs: [
+            contactDoc(),
+            contactDoc({ id: 'account_1187', recordType_s: 'Account' }), // dropped
+            contactDoc({ id: 'contact_5223', contactName_t: 'Jordan Brown', accountName_t: '', lastOrderDate_dt: '2026-08-05T00:00:00Z' }),
+          ],
+          numFound: 3,
+          complete: true,
+        };
       },
     });
     assert.deepEqual(asked, [{ since: Date.UTC(2026, 7, 1), now: NOW }]);
-    assert.deepEqual(rows.map((row) => row.externalId), ['4421@2026-08-04', '5223@2026-08-05']);
-    assert.equal(rows[1].title, 'Jordan Brown');
+    assert.deepEqual(
+      collected.rows.map((row) => row.externalId),
+      ['4421@2026-08-04', '5223@2026-08-05'],
+    );
+    assert.equal(collected.rows[1].title, 'Jordan Brown');
+    // What it SAW, not just what it kept: the runtime's cursor rule is the
+    // difference between "the window was empty" and "we could not read it".
+    assert.equal(collected.seen, 3);
+    assert.equal(collected.complete, true);
+  });
+
+  it('reports a truncated read as incomplete, so the cursor cannot step over it', async () => {
+    const tracker = registry.get('recent-orders');
+    const collected = await tracker.poll.collect({
+      since: null,
+      now: NOW,
+      crmContacts: async () => ({ docs: [contactDoc()], numFound: 400, complete: false }),
+    });
+    assert.equal(collected.rows.length, 1);
+    assert.equal(collected.seen, 1);
+    assert.equal(collected.numFound, 400);
+    assert.equal(collected.complete, false);
+  });
+
+  it('names why each unusable row was passed over', async () => {
+    const tracker = registry.get('recent-orders');
+    const said = [];
+    await tracker.poll.collect({
+      since: null,
+      now: NOW,
+      log: (...args) => said.push(args.join(' ')),
+      crmContacts: async () => ({
+        docs: [
+          contactDoc({ id: 'account_1187', recordType_s: 'Account' }),
+          contactDoc({ id: 'contact_', recordType_s: 'Contact' }),
+          contactDoc({ id: 'contact_77', lastOrderDate_dt: 'not a date' }),
+        ],
+        numFound: 3,
+        complete: true,
+      }),
+    });
+    assert.match(said.join('\n'), /account_1187 — not-a-contact/);
+    assert.match(said.join('\n'), /contact_ — no-contact-id/);
+    assert.match(said.join('\n'), /contact_77 — no-last-order-date/);
+    assert.match(
+      said.join('\n'),
+      /"not-a-contact":1.*"no-contact-id":1.*"no-last-order-date":1/,
+    );
   });
 
   it('fails the sweep rather than search from the worker with no CRM session', async () => {

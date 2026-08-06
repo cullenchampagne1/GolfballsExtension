@@ -182,6 +182,12 @@
       "label": "Proposal Debug: intercept submit requests",
       "managedDefault": true
     },
+    "trackers.debugLog": {
+      "type": "bool",
+      "default": false,
+      "label": "Trackers: log every sweep",
+      "managedDefault": true
+    },
     "pageEngine.indexingEnabled": {
       "type": "bool",
       "default": false,

@@ -5208,6 +5208,34 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
+            "text": "trackers"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Trackers: log every sweep",
+                "bool",
+                "Off",
+                "",
+                "Narrate background tracking in the console: the window each sweep asks the CRM for, the rows it read, what it stored, and why any row was passed over. The searching half logs in the CRM tab; the storing half in the service worker (chrome://extensions → Inspect views: service worker). Off = silent, which is how Trackers normally run."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "trackers.debugLog"
+              ]
+            }
+          },
+          {
+            "type": "heading",
             "text": "Page Engine"
           },
           {
@@ -9804,6 +9832,16 @@ export const HELP_CONTENT = {
         "proposalDebug.enabled"
       ],
       "description": "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:trackers.debugLog",
+      "category": "Settings",
+      "title": "Trackers: log every sweep",
+      "keywords": [
+        "trackers.debugLog"
+      ],
+      "description": "Narrate background tracking in the console: the window each sweep asks the CRM for, the rows it read, what it stored, and why any row was passed over. The searching half logs in the CRM tab; the storing half in the service worker (chrome://extensions → Inspect views: service worker). Off = silent, which is how Trackers normally run.",
       "article": "developer-settings"
     },
     {

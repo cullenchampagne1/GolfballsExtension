@@ -68,3 +68,20 @@ export async function setTrackerEnabled(trackerId, enabled) {
   // sendBackgroundMessage already rejects anything but `{ ok: true }`.
   return sendBackgroundMessage('gbTrackerSetEnabled', { trackerId, enabled: !!enabled });
 }
+
+/**
+ * Run every enabled tracker now.
+ *
+ * `force` ignores each tracker's poll cadence, which is what a person asking
+ * "does this work?" means — an unforced sweep on a fifteen-minute tracker
+ * polled two minutes ago does nothing and looks identical to a broken one.
+ */
+export async function sweepTrackers({ force = false } = {}) {
+  return sendBackgroundMessage('gbTrackerSweep', { force: !!force });
+}
+
+/** Every gate a record has to pass, in the order it passes them. */
+export async function trackerStatus() {
+  const response = await sendBackgroundMessage('gbTrackerStatus');
+  return response.status || null;
+}

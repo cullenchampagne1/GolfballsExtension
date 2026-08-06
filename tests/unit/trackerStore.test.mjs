@@ -358,6 +358,187 @@ describe('tracker runtime · poll and refresh sweeps', () => {
   });
 });
 
+/* The data cursor, which is NOT the poll clock.
+ *
+ * `lastPolledAt` paces the next attempt and moves on every one; `cursorAt`
+ * says how far the data has actually been read and may only move over a
+ * window that was both fully read and banked. They were one field once, and a
+ * sweep that reached the CRM but stored nothing still stamped it — so the next
+ * sweep asked for a narrower window and the orders in the gap were never asked
+ * about again. Every case below is one way that used to happen. */
+describe('tracker runtime · the data cursor', () => {
+  /** A poll tracker whose collect answers exactly what the test dictates. */
+  const definePoll = (registry, collect) => registry.define({
+    id: 'fixture-orders',
+    label: 'Fixture orders',
+    kind: 'poll',
+    recordKind: 'order',
+    identify: (raw) => raw.externalId,
+    poll: { everyMinutes: 15, collect },
+  });
+
+  const oneRow = [{ externalId: 'O-1', title: 'Acme', status: 'ordered' }];
+
+  it('reads from its own cursor, not from when it last ran', async () => {
+    const { registry, trackers, store } = harness();
+    const windows = [];
+    definePoll(registry, async ({ since }) => {
+      windows.push(since);
+      return { rows: oneRow, seen: 1, complete: true };
+    });
+    const tracker = registry.get('fixture-orders');
+
+    await trackers.pollTracker(tracker, { now: NOW });
+    await trackers.pollTracker(tracker, { now: NOW + 20 * MINUTE });
+
+    // First run has no cursor at all (the tracker's own first-run lookback
+    // decides how far back that reaches); the second resumes from the first.
+    assert.deepEqual(windows, [0, NOW]);
+    assert.equal(await store.cursorAt('fixture-orders'), NOW + 20 * MINUTE);
+  });
+
+  it('holds the cursor when rows were read but none could be stored', async () => {
+    // The exact shape of the bug: the CRM answered, the sweep saw forty
+    // contacts, and not one of them mapped to a record. Advancing here is what
+    // made those orders unreachable — the next window starts after them.
+    const { registry, trackers, store } = harness();
+    definePoll(registry, async () => ({ rows: [], seen: 40, numFound: 40, complete: true }));
+
+    const result = await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+
+    assert.equal(result.seen, 40);
+    assert.equal(result.records, 0);
+    assert.equal(result.cursor, 'held');
+    assert.equal(await store.cursorAt('fixture-orders'), 0);
+    // The poll CLOCK still moves: the attempt happened, and it paces the next.
+    assert.equal(await store.lastPolledAt('fixture-orders'), NOW);
+  });
+
+  it('holds the cursor when the read stopped short of the whole window', async () => {
+    // Newest-first paging means a truncated read leaves the OLDER rows unread,
+    // which are exactly the ones a cursor step would skip.
+    const { registry, trackers, store } = harness();
+    definePoll(registry, async () => ({
+      rows: oneRow, seen: 500, numFound: 900, complete: false,
+    }));
+
+    const result = await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+
+    assert.equal(result.cursor, 'held');
+    assert.equal((await store.list('fixture-orders')).length, 1, 'what it did read is still stored');
+    assert.equal(await store.cursorAt('fixture-orders'), 0);
+  });
+
+  it('advances over a window that was read in full and was simply empty', async () => {
+    const { registry, trackers, store } = harness();
+    definePoll(registry, async () => ({ rows: [], seen: 0, numFound: 0, complete: true }));
+
+    const result = await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+
+    assert.equal(result.cursor, 'advanced');
+    assert.equal(await store.cursorAt('fixture-orders'), NOW);
+  });
+
+  it('never moves the cursor backwards, whatever order sweeps finish in', async () => {
+    const { registry, trackers, store } = harness();
+    definePoll(registry, async () => ({ rows: oneRow, seen: 1, complete: true }));
+    const tracker = registry.get('fixture-orders');
+
+    await trackers.pollTracker(tracker, { now: NOW });
+    await trackers.pollTracker(tracker, { now: NOW - 60 * MINUTE });
+
+    assert.equal(await store.cursorAt('fixture-orders'), NOW);
+  });
+
+  it('rewinds on request, to re-read a window it swept over blind', async () => {
+    const { registry, trackers, store } = harness();
+    definePoll(registry, async () => ({ rows: oneRow, seen: 1, complete: true }));
+    await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+    assert.equal(await store.cursorAt('fixture-orders'), NOW);
+
+    await store.resetCursor('fixture-orders');
+    assert.equal(await store.cursorAt('fixture-orders'), 0);
+  });
+
+  it('leaves the cursor to the runtime: a manual CRM scan cannot touch it', async () => {
+    // The "Scan for recent orders" quick action keeps its own watermark under
+    // gbScanRecentOrders_lastRun. A rep running that scan all morning must not
+    // consume the tracker's window — the two are separate keys on purpose.
+    const { registry, trackers, store, stored } = harness();
+    definePoll(registry, async () => ({ rows: oneRow, seen: 1, complete: true }));
+    await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+
+    stored.gbScanRecentOrders_lastRun = NOW + 6 * 60 * MINUTE;
+
+    assert.equal(await store.cursorAt('fixture-orders'), NOW);
+    assert.equal(
+      Object.keys(stored.gbTrackerState['fixture-orders']).sort().join(),
+      'cursorAt,lastPolledAt',
+    );
+  });
+});
+
+/* The console commands. Trackers are invisible by design — an alarm, a worker
+ * nobody has open, and catches that deliberately swallow — so the way anyone
+ * ever answers "why is this table empty" is by hand, here. */
+describe('tracker runtime · console commands', () => {
+  it('answers every gate a record passes, in order', async () => {
+    const { registry, trackers, store, context } = harness();
+    registry.define({
+      id: 'fixture-orders',
+      label: 'Fixture orders',
+      kind: 'poll',
+      recordKind: 'order',
+      identify: (raw) => raw.externalId,
+      poll: { everyMinutes: 15, collect: async () => ({ rows: [], seen: 0, complete: true }) },
+    });
+    await store.markCursor('fixture-orders', NOW);
+
+    const status = await trackers.status({ now: NOW + 20 * MINUTE });
+
+    assert.equal(status.featureEnabled, true);
+    assert.equal(status.crmTabsOpen, 0, 'no chrome.tabs in this sandbox is zero tabs, not a throw');
+    const row = status.trackers.find((entry) => entry.trackerId === 'fixture-orders');
+    assert.equal(row.enabled, true);
+    assert.equal(row.records, 0);
+    assert.equal(row.cursorAt, new Date(NOW).toISOString());
+    assert.equal(row.pollDue, true);
+    assert.ok(context.gbTrackers, 'the console surface is installed on the worker global');
+  });
+
+  it('forces a poll the cadence would otherwise skip', async () => {
+    const { registry, trackers, store } = harness();
+    let polls = 0;
+    registry.define({
+      id: 'fixture-orders',
+      label: 'Fixture orders',
+      kind: 'poll',
+      recordKind: 'order',
+      identify: (raw) => raw.externalId,
+      poll: {
+        everyMinutes: 15,
+        collect: async () => { polls += 1; return { rows: [], seen: 0, complete: true }; },
+      },
+    });
+    await store.markPolled('fixture-orders', NOW);
+
+    const soon = NOW + 2 * MINUTE;
+    const skipped = await trackers.sweep({ now: soon });
+    assert.equal(polls, 0);
+    assert.match(skipped.trackers[0].skipped, /not due/);
+
+    const forced = await trackers.sweep({ now: soon, force: true });
+    assert.equal(polls, 1);
+    assert.equal(forced.polled, 1);
+  });
+
+  it('says why it did nothing rather than answering with zeroes', async () => {
+    const off = harness({ flags: { trackersEnabled: false } });
+    const idle = await off.trackers.sweep({ now: NOW });
+    assert.equal(idle.skipped, 'feature-off');
+  });
+});
+
 /* One switch per tracker, on top of the feature flag. The rule being tested is
    that switching one OFF costs nothing at every clock — no capture, no sweep,
    no refresh, and no rules for the page hook to match against — while the rows

@@ -2719,9 +2719,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.action === 'gbTrackerSweep') {
     // Manual kick for the dashboard's refresh control (and for verifying a
-    // tracker without waiting out the alarm).
-    GB_TRACKERS.sweep()
+    // tracker without waiting out the alarm). `force` also ignores the poll
+    // cadence — a human who just typed this is not waiting a quarter hour to
+    // find out whether it works.
+    GB_TRACKERS.sweep({ force: msg.force === true })
       .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
+  if (msg.action === 'gbTrackerStatus') {
+    // Every gate a record passes, in order — the answer to "why is this table
+    // empty", without opening the worker's own devtools.
+    GB_TRACKERS.status()
+      .then((status) => sendResponse({ ok: true, status }))
       .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;
   }

@@ -135,6 +135,13 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'trackers.debugLog',
+    label:   'Trackers: log every sweep',
+    desc:    'Narrate background tracking in the console: the window each sweep asks the CRM for, the rows it read, what it stored, and why any row was passed over. The searching half logs in the CRM tab; the storing half in the service worker (chrome://extensions → Inspect views: service worker). Off = silent, which is how Trackers normally run.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'pageEngine.indexingEnabled',
     label:   'Engine Indexing',
     desc:    'Build an encrypted local Page Engine index whenever an Account or Contact in the configured territory is extracted. Order and Opportunity pages are never stored. Off by default.',
