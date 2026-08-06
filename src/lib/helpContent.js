@@ -7928,8 +7928,8 @@ export const HELP_CONTENT = {
         },
         {
           "action": "Choose Scan for recent orders.",
-          "expected": "Contacts assigned to your signed-in CRM name are searched for orders since the prior scan; the first run covers seven days.",
-          "visualCue": "The filter bar shows Record Type = Contact, Sales Rep = your name, and the date boundary.",
+          "expected": "Contacts assigned to your signed-in CRM employee ID are searched for orders since the prior scan; the first run covers seven days.",
+          "visualCue": "The filter bar shows Record Type = Contact, Sales Rep ID = your employee ID, and the date boundary.",
           "commonMistake": "If your CRM identity is still loading, wait for the toolbar and retry; do not substitute another rep's account assignment."
         },
         {

@@ -30,7 +30,7 @@ export function CRMWorkspacesPage() {
       </ul>
 
       <h2 className="sec">Contextual search routines</h2>
-      <p>While CRM Search is open, the Actions Shelf can expose <strong>Run last query</strong> and <strong>Scan for recent orders</strong>. The scan automatically targets contacts assigned to your signed-in CRM name; the first run covers the previous seven days, then later runs continue from the stored watermark. Task List similarly adds <strong>Only overdue + due today</strong> while that modal is open.</p>
+      <p>While CRM Search is open, the Actions Shelf can expose <strong>Run last query</strong> and <strong>Scan for recent orders</strong>. The scan automatically targets contacts assigned to your signed-in CRM employee ID; the first run covers the previous seven days, then later runs continue from the stored watermark. Task List similarly adds <strong>Only overdue + due today</strong> while that modal is open.</p>
 
       <div className="reference-links">
         <a href="#workflows/use-custom-crm-workspace"><I.play size={14} /> Use a CRM workspace</a>

@@ -35,16 +35,29 @@ describe('SCAN_LAST_RUN_KEY', () => {
 
 describe('recent-order scan audience', () => {
   it('targets contacts assigned to the authenticated rep plus the scan date', () => {
-    assert.deepEqual(buildRecentOrdersConditions('Cullen Champagne', '2026-08-01', 'test'), [
+    assert.deepEqual(buildRecentOrdersConditions('22', '2026-08-01', 'test'), [
       { id: 'scan_type_test', fieldKey: 'recordType_s', op: 'is', val: 'Contact' },
-      { id: 'scan_rep_test', fieldKey: 'salesRep_s', op: 'is', val: 'Cullen Champagne' },
+      { id: 'scan_rep_test', fieldKey: 'salesRepID_s', op: 'is', val: '22' },
       { id: 'scan_date_test', fieldKey: 'lastOrderDate_dt', op: 'after', val: '2026-08-01' },
     ]);
   });
 
-  it('refuses an absent/unverified name or malformed scan date', () => {
-    assert.throws(() => buildRecentOrdersConditions('Unknown', '2026-08-01'), /employee name/);
-    assert.throws(() => buildRecentOrdersConditions('Cullen Champagne', '2026-02-31'), /scan date/);
+  // The bug both callers shipped with: keyed on the rep's NAME, which has to
+  // match the index's spelling exactly. The name resolvable on a CRM page is
+  // routinely a first name only, so the search matched no contact at all and
+  // the tracker stayed empty. A name must never reach this query again.
+  it('keys the rep clause on the id, never on a name', () => {
+    const [, rep] = buildRecentOrdersConditions('22', '2026-08-01', 'test');
+    assert.equal(rep.fieldKey, 'salesRepID_s');
+    assert.throws(() => buildRecentOrdersConditions('Cullen Champagne', '2026-08-01'), /employee id/);
+    assert.throws(() => buildRecentOrdersConditions('Cullen', '2026-08-01'), /employee id/);
+  });
+
+  it('refuses an absent/malformed employee id or scan date', () => {
+    assert.throws(() => buildRecentOrdersConditions('', '2026-08-01'), /employee id/);
+    assert.throws(() => buildRecentOrdersConditions('0', '2026-08-01'), /employee id/);
+    assert.throws(() => buildRecentOrdersConditions('rep_22', '2026-08-01'), /employee id/);
+    assert.throws(() => buildRecentOrdersConditions('22', '2026-02-31'), /scan date/);
   });
 
   it('resolves the authenticated user instead of requiring a saved My Clients query', () => {
@@ -52,17 +65,27 @@ describe('recent-order scan audience', () => {
     const end = crmSearchSource.indexOf('\n  return (', start);
     const action = crmSearchSource.slice(start, end);
     assert.match(action, /resolveCurrentUserContext\(\)/);
-    assert.match(action, /currentUser\.sessionVerified/);
-    assert.match(action, /buildRecentOrdersConditions\(employeeName, sinceStr\)/);
+    assert.match(action, /currentUser\.employeeId/);
+    assert.match(action, /buildRecentOrdersConditions\(employeeId, sinceStr\)/);
     assert.doesNotMatch(action, /loadSavedQueries|compileGroupsToSolr|No “My Clients” filter/);
+  });
+
+  // The rep's name is still worth showing on the filter chip; it just cannot be
+  // what the search is keyed by. Passing it into the builder is the regression.
+  it('keeps the name for the chip label and out of the conditions', () => {
+    const start = crmSearchSource.indexOf('/* "Scan for recent orders"');
+    const end = crmSearchSource.indexOf('\n  return (', start);
+    const action = crmSearchSource.slice(start, end);
+    assert.match(action, /label: currentUser\.employeeName/);
+    assert.doesNotMatch(action, /buildRecentOrdersConditions\(\s*(?:currentUser\.)?employeeName/);
   });
 });
 
 describe('recent-order audience as a Solr fq', () => {
   it('compiles the three clauses the search actually runs', () => {
     assert.equal(
-      buildRecentOrdersFq('Cullen Champagne', '2026-08-01'),
-      'recordType_s:Contact AND salesRep_s:"Cullen Champagne"'
+      buildRecentOrdersFq('22', '2026-08-01'),
+      'recordType_s:Contact AND salesRepID_s:22'
       + ' AND lastOrderDate_dt:[2026-08-01T00:00:00Z TO *]',
     );
   });
@@ -87,8 +110,8 @@ describe('recent-order audience as a Solr fq', () => {
   });
 
   it('refuses the same bad inputs the condition builder refuses', () => {
-    assert.throws(() => buildRecentOrdersFq('', '2026-08-01'), /employee name/);
-    assert.throws(() => buildRecentOrdersFq('Cullen Champagne', '08/01/2026'), /scan date/);
+    assert.throws(() => buildRecentOrdersFq('', '2026-08-01'), /employee id/);
+    assert.throws(() => buildRecentOrdersFq('22', '08/01/2026'), /scan date/);
   });
 });
 

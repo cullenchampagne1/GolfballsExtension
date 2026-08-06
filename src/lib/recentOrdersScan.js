@@ -12,21 +12,31 @@
  * audience in the background. This file is the only place that says what the
  * audience is.
  */
-import { normalizeEmployeeName } from './employeeIdentity.js';
+import { validEmployeeId } from './employeeIdentity.js';
 
 export const SCAN_LAST_RUN_KEY = 'gbScanRecentOrders_lastRun';
 
 /** How far back a first look reaches, having no watermark to resume from. */
 export const RECENT_ORDERS_LOOKBACK_DAYS = 7;
 
-/** Build the visible Query Builder conditions for the signed-in rep's own
+/**
+ * Build the visible Query Builder conditions for the signed-in rep's own
  * contacts. The caller compiles these through the shared Solr compiler, so the
- * query and the removable filter tags cannot drift apart. */
-export function buildRecentOrdersConditions(employeeName, sinceDate, id = Date.now()) {
-  const name = normalizeEmployeeName(employeeName);
+ * query and the removable filter tags cannot drift apart.
+ *
+ * The rep clause is the EMPLOYEE ID (`salesRepID_s`), not the name. A name has
+ * to match the index's spelling exactly to match at all, and the name we can
+ * resolve on a CRM page is frequently a first name only — against a full name
+ * in the index it matched nothing, so both callers came back empty and the
+ * tracker looked broken rather than wrong. The id is the same value the CRM
+ * itself keys a rep by, it is what the page's authenticated toolbar carries,
+ * and it has one spelling.
+ */
+export function buildRecentOrdersConditions(employeeId, sinceDate, id = Date.now()) {
+  const repId = validEmployeeId(employeeId);
   const date = String(sinceDate || '').trim();
   const parsedDate = Date.parse(`${date}T00:00:00Z`);
-  if (!name) throw new Error('A CRM-verified employee name is required');
+  if (!repId) throw new Error('A CRM-verified employee id is required');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)
       || !Number.isFinite(parsedDate)
       || new Date(parsedDate).toISOString().slice(0, 10) !== date) {
@@ -35,7 +45,7 @@ export function buildRecentOrdersConditions(employeeName, sinceDate, id = Date.n
   const suffix = String(id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'current';
   return [
     { id: `scan_type_${suffix}`, fieldKey: 'recordType_s', op: 'is', val: 'Contact' },
-    { id: `scan_rep_${suffix}`, fieldKey: 'salesRep_s', op: 'is', val: name },
+    { id: `scan_rep_${suffix}`, fieldKey: 'salesRepID_s', op: 'is', val: repId },
     { id: `scan_date_${suffix}`, fieldKey: 'lastOrderDate_dt', op: 'after', val: date },
   ];
 }
@@ -53,8 +63,8 @@ const solrValue = (value) => (String(value).includes(' ') ? `"${value}"` : Strin
  * above so the fields and values have a single source; only the operator
  * rendering is restated, and a unit test holds it equal to `compileToSolr`.
  */
-export function buildRecentOrdersFq(employeeName, sinceDate) {
-  const [type, rep, date] = buildRecentOrdersConditions(employeeName, sinceDate, 'fq');
+export function buildRecentOrdersFq(employeeId, sinceDate) {
+  const [type, rep, date] = buildRecentOrdersConditions(employeeId, sinceDate, 'fq');
   return [
     `${type.fieldKey}:${solrValue(type.val)}`,
     `${rep.fieldKey}:${solrValue(rep.val)}`,

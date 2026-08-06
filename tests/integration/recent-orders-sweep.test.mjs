@@ -53,12 +53,14 @@ const contactDoc = (overrides = {}) => ({
 async function crmPage({ identity = 'session', pages = [[contactDoc()]] } = {}) {
   const requests = [];
   const stored = {
-    gbEmployeeId: '22',
-    gbCurrentUser: identity === 'none' ? undefined : {
+    // The audience is keyed by this id. `no-id` is the only state the sweep
+    // cannot run in: a page that has not yet told us who is signed in.
+    gbEmployeeId: identity === 'no-id' ? undefined : '22',
+    gbCurrentUser: ['none', 'no-id'].includes(identity) ? undefined : {
       employeeId: '22',
+      // A directory match is a name we inferred rather than one the session
+      // told us. It no longer gates the sweep — the name is not queried.
       employeeName: REP,
-      // A directory match is a name we inferred, not one the CRM session told
-      // us — the sweep must refuse to query another rep's book on it.
       source: identity === 'directory' ? 'crm_directory' : 'crm_session',
       updatedAt: Date.now(),
     },
@@ -172,7 +174,11 @@ describe('recent orders · sweep flow', () => {
     // The search that ran is the quick action's audience, not a guess.
     assert.equal(page.requests.length, 1);
     const { str } = page.requests[0];
-    assert.match(str, /fq=recordType_s%3AContact%20AND%20salesRep_s%3A%22Cullen%20Champagne%22/);
+    // Keyed by the rep's employee id. A name clause is what left this empty:
+    // it has to match the index's spelling, and the name a CRM page gives us
+    // is routinely a first name only.
+    assert.match(str, /fq=recordType_s%3AContact%20AND%20salesRepID_s%3A22/);
+    assert.doesNotMatch(str, /salesRep_s/);
     assert.match(str, /lastOrderDate_dt%3A%5B2026-07-29T00%3A00%3A00Z%20TO%20\*%5D/);
 
     const records = await store.list('recent-orders');
@@ -238,15 +244,29 @@ describe('recent orders · sweep flow', () => {
     );
   });
 
-  it('refuses to search on a name the CRM session did not verify', async () => {
-    const page = await crmPage({ identity: 'directory' });
+  it('refuses to search before the page has told it who is signed in', async () => {
+    const page = await crmPage({ identity: 'no-id' });
     const { store, trackers } = worker({ deliver: page.deliver });
 
     const swept = await trackers.sweep({ now: NOW });
 
     assert.equal(swept.polled, 0);
-    assert.equal(page.requests.length, 0, 'no search ran on an unverified identity');
+    assert.equal(page.requests.length, 0, 'no search ran without an employee id');
     assert.equal((await store.list('recent-orders')).length, 0);
+  });
+
+  // The old gate demanded a session-verified NAME and refused a directory one.
+  // Keyed by id, that distinction is about a value the query never uses — and
+  // it was blocking real sweeps for reps whose page only exposes a first name.
+  it('sweeps on the employee id even when the name came from the directory', async () => {
+    const page = await crmPage({ identity: 'directory' });
+    const { store, trackers } = worker({ deliver: page.deliver });
+
+    await trackers.sweep({ now: NOW });
+
+    assert.equal(page.requests.length, 1);
+    assert.match(page.requests[0].str, /salesRepID_s%3A22/);
+    assert.equal((await store.list('recent-orders')).length, 1);
   });
 
   it('answers nothing to a message that did not come from our worker', async () => {

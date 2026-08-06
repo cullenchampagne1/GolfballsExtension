@@ -986,7 +986,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   }, [runSearch, toast]);
 
   /* "Scan for recent orders" — a one-click morning routine. The authenticated
-     current-user name supplies an exact Contact + Sales Rep filter, then the
+     current-user ID supplies an exact Contact + Sales Rep ID filter, then the
      last-order watermark narrows it to records ordered since the previous run
      (first run = the last 7 days). No user-maintained saved query is needed. */
   useEffect(() => {
@@ -997,13 +997,14 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       hint: 'Your contacts who ordered since your last scan',
       whenModalOpen: ['crm-search'],
       handler: async () => {
-        // 1. Resolve the authenticated CRM employee. Installation-profile
-        //    names are presentation fallbacks only and are never trusted in a
-        //    Sales Rep query.
+        // 1. Resolve the authenticated CRM employee. The query is keyed by the
+        //    employee ID, which the CRM's own toolbar carries: a name has to
+        //    match the index's spelling exactly, and the name available here is
+        //    often a first name only — which matched no contact at all.
         const currentUser = await resolveCurrentUserContext();
-        const employeeName = currentUser.sessionVerified ? currentUser.employeeName : '';
-        if (!employeeName) {
-          toast?.error?.('Your signed-in CRM name is not available yet. Wait for the CRM toolbar to finish loading, then try the scan again.', { duration: 6000, placement: 'top-center' });
+        const employeeId = currentUser.employeeId;
+        if (!employeeId) {
+          toast?.error?.('Your signed-in CRM employee ID is not available yet. Wait for the CRM toolbar to finish loading, then try the scan again.', { duration: 6000, placement: 'top-center' });
           return;
         }
 
@@ -1024,10 +1025,14 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         // 3. Build the full audience from authoritative identity. Keeping all
         //    three clauses as Query Builder conditions makes each one visible
         //    and individually removable in the filter bar.
-        const conditions = buildRecentOrdersConditions(employeeName, sinceStr);
+        const conditions = buildRecentOrdersConditions(employeeId, sinceStr);
         const solrFq = compileToSolr(conditions);
         const filter = {
-          label: `${employeeName} · contacts ordered since ${niceSince}`,
+          // The name is for the chip only — whatever the CRM could tell us, or
+          // nothing at all. It never reaches the query.
+          label: currentUser.employeeName
+            ? `${currentUser.employeeName} · contacts ordered since ${niceSince}`
+            : `Your contacts ordered since ${niceSince}`,
           solrFq,
           conditions,
         };

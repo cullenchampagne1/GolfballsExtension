@@ -5,10 +5,10 @@
    The background worker owns the clock and the storage; it cannot
    own this one request. The CRM search index is cookie-
    authenticated and a worker fetch is cross-site, so it carries no
-   session, and the signed-in employee name whose contacts we ask
-   about is only authoritative where the CRM toolbar is. So the
-   worker asks, and a CRM page answers — with exactly the contact
-   rows the "Scan for recent orders" quick action puts on screen.
+   session, and the signed-in employee id whose contacts we ask
+   about is only readable where the CRM toolbar is. So the worker
+   asks, and a CRM page answers — with exactly the contact rows the
+   "Scan for recent orders" quick action puts on screen.
 
    build.js produces react-dist/vanilla/recent-orders-sweep.js from
    this file; the manifest loads it on api.golfballs.com pages only,
@@ -33,17 +33,16 @@ const MAX_PAGES = 5;
 
 /** Run the rep's recent-orders search and return the contact rows. */
 async function sweep({ since, now = Date.now() }) {
-  // The audience is the signed-in rep's own contacts, so an unverified name is
-  // not a detail to fall back on — it is another rep's book. Installation
-  // profile names are presentation only and never queried, exactly as in the
-  // quick action.
+  // The audience is the signed-in rep's own contacts, keyed by the employee ID
+  // the CRM's own authenticated toolbar carries — exactly as in the quick
+  // action. Without one we do not guess: no id means no audience, not everyone.
   const currentUser = await resolveCurrentUserContext();
-  if (!currentUser.sessionVerified || !currentUser.employeeName) {
-    throw new Error('no CRM-verified employee name on this page yet');
+  if (!currentUser.employeeId) {
+    throw new Error('no CRM-verified employee id on this page yet');
   }
 
   const solrFq = buildRecentOrdersFq(
-    currentUser.employeeName,
+    currentUser.employeeId,
     recentOrdersSinceDay(since, now),
   );
 
