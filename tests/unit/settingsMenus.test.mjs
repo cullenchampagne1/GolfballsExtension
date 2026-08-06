@@ -25,6 +25,10 @@ const actionMenuSource = sidebarSource.slice(
   sidebarSource.indexOf('function ActionMenu'),
   sidebarSource.indexOf('function MenuItem'),
 );
+const statCellSource = settingsPanelSource.slice(
+  settingsPanelSource.indexOf('function StatCell'),
+  settingsPanelSource.indexOf('function DevSettingRow'),
+);
 
 describe('settings menus', () => {
   it('caps the template action menu height and scrolls it internally', () => {
@@ -58,6 +62,11 @@ describe('settings menus', () => {
     assert.match(settingsPanelSource, /managed=\{managedDevSetting\(def\.key\)\}/);
     assert.match(settingsPanelSource, /disabled=\{managed\}/);
     assert.match(settingsPanelSource, /managed=\{managedCustomPageScope\(section\.id\)\}/);
+  });
+
+  it('keeps read-only statistics passive instead of showing a refresh button', () => {
+    assert.match(statCellSource, /useEffect\(\(\) => \{ read\(\); \}, \[read\]\)/);
+    assert.doesNotMatch(statCellSource, /IconBtn|title="Refresh"|I\.refresh/);
   });
 
   it('keeps management explicit in global and per-key dashboard editors', () => {

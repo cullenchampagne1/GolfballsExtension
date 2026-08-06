@@ -65,10 +65,7 @@ export function engineCacheStatView(stats, settings, { now = Date.now() } = {}) 
   return {
     ...view,
     tone: 'brand',
-    detail: [
-      accounts ? `+ ${plural(accounts, 'account')}` : null,
-      `updated ${trackerAgo(lastIndexedAt, now)}`,
-    ].filter(Boolean).join(' · '),
+    detail: `updated ${trackerAgo(lastIndexedAt, now)}`,
   };
 }
 

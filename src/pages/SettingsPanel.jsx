@@ -919,20 +919,16 @@ function SelectCell({ def, value, onChange, disabled = false }) {
 
 /* Stat cell — a read-only readout for `type: 'stat'` rows. The row's
    `reader(settings)` answers with { value, detail, tone }; we re-read on mount,
-   whenever a watched setting changes (flipping one usually changes the answer),
-   and when the rep clicks refresh. Readers never reject — a failed read comes
-   back as its own view, so the row explains itself instead of going blank. */
+   and whenever a watched setting changes (flipping one usually changes the
+   answer). Readers never reject — a failed read comes back as its own view, so
+   the row explains itself instead of going blank. */
 function StatCell({ def, settings }) {
   const [view, setView] = useState(null);
-  const [busy, setBusy] = useState(false);
   const watched = (def.watch || []).map((key) => String(settings?.[key] ?? '')).join('|');
 
   const read = useCallback(() => {
     if (typeof def.reader !== 'function') return;
-    setBusy(true);
-    Promise.resolve(def.reader(settings))
-      .then(setView)
-      .finally(() => setBusy(false));
+    Promise.resolve(def.reader(settings)).then(setView);
     // `settings` is a fresh object on every edit; the watched values are what
     // this row actually depends on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -945,24 +941,19 @@ function StatCell({ def, settings }) {
   }[view?.tone] || 'var(--gb-text-primary)';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ textAlign: 'right', minWidth: 0, maxWidth: 240 }}>
-        <div style={{
-          fontFamily: 'var(--gb-font-mono)', fontSize: 13.5, fontWeight: 650,
-          color: busy && !view ? 'var(--gb-text-muted)' : tone,
-          lineHeight: 1.2,
-        }}>
-          {view ? view.value : '…'}
-        </div>
-        {view?.detail && (
-          <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.35 }}>
-            {view.detail}
-          </div>
-        )}
+    <div style={{ textAlign: 'right', minWidth: 0, maxWidth: 240 }}>
+      <div style={{
+        fontFamily: 'var(--gb-font-mono)', fontSize: 13.5, fontWeight: 650,
+        color: view ? tone : 'var(--gb-text-muted)',
+        lineHeight: 1.2,
+      }}>
+        {view ? view.value : '…'}
       </div>
-      <IconBtn size="xs" title="Refresh" disabled={busy} onClick={read}>
-        <I.refresh size={11} />
-      </IconBtn>
+      {view?.detail && (
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.35 }}>
+          {view.detail}
+        </div>
+      )}
     </div>
   );
 }

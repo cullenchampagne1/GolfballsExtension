@@ -26,14 +26,14 @@ describe('engine cache stat · the cached-contacts readout', () => {
     assert.equal(view.tone, 'brand');
   });
 
-  it('names the cached Accounts and the last write beneath the count', () => {
+  it('shows only the last write beneath the count', () => {
     const view = engineCacheStatView(stats(12, 3, NOW - 2 * 3_600_000), ON, { now: NOW });
-    assert.equal(view.detail, '+ 3 accounts · updated 2h ago');
+    assert.equal(view.detail, 'updated 2h ago');
   });
 
-  it('singularizes a lone cached account', () => {
+  it('keeps a cached Account count off the compact update line', () => {
     const view = engineCacheStatView(stats(12, 1), ON, { now: NOW });
-    assert.equal(view.detail, '+ 1 account · updated 5m ago');
+    assert.equal(view.detail, 'updated 5m ago');
   });
 
   it('drops the account clause when only Contacts are cached', () => {
