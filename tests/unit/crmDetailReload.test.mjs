@@ -52,8 +52,10 @@ describe('crm detail · sidebar current-user identity', () => {
     assert.match(source, /resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext/);
     assert.match(sidebar, /sessionEmployeeIdentity\(currentUser\)/);
     assert.match(sidebar, /sessionUser\?\.employeeName/);
-    assert.match(sidebar, /Session verified · Employee #/);
-    assert.match(sidebar, /No registered-name fallback/);
+    assert.match(sidebar, /sessionUser\?\.employeeName \|\| 'Unknown'/);
+    assert.match(sidebar, /`ID: #\$\{sessionUser\.employeeId\}` : ''/);
+    assert.match(sidebar, /\{repDetail && <div/);
+    assert.doesNotMatch(sidebar, /Session verified|Employee #|No registered-name fallback|CRM session name unavailable/);
     assert.doesNotMatch(sidebar, /currentUser\.name|installation\.displayName|D\.account|territoryName/);
   });
 });

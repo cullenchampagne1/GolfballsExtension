@@ -1497,10 +1497,8 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
   // This footer is intentionally a session diagnostic. Never substitute the
   // editable registered-extension profile or the open record's assigned rep:
   // if session extraction fails, say so visibly.
-  const repName = sessionUser?.employeeName || 'CRM session name unavailable';
-  const repDetail = sessionUser
-    ? `Session verified · Employee #${sessionUser.employeeId}`
-    : 'No registered-name fallback';
+  const repName = sessionUser?.employeeName || 'Unknown';
+  const repDetail = sessionUser ? `ID: #${sessionUser.employeeId}` : '';
   const repMark = !sessionUser
     ? '?'
     : repName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
@@ -1657,7 +1655,7 @@ export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) 
         {!collapsed && (
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--gb-detail-text-primary, var(--gb-text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repName}</div>
-            <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repDetail}</div>
+            {repDetail && <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{repDetail}</div>}
           </div>
         )}
         {!collapsed && <IconBtn size="xs" ghost icon={<I.cog />} />}
