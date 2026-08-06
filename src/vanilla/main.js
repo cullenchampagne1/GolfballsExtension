@@ -147,9 +147,25 @@ function __gbAccessAllowed(st, now) {
           || !Number.isSafeInteger(remoteId)
           || remoteId < 1
         ) return false;
-        return run(`notification:${remoteId}`, payload);
+        // The receipt is per ACTION, not per notification: a notification that
+        // offers two of these would otherwise have its second click replay the
+        // first one's stored receipt instead of running.
+        const index = Math.max(0, Math.floor(Number(context.actionIndex) || 0));
+        return run(
+          index ? `notification:${remoteId}:${index}` : `notification:${remoteId}`,
+          payload,
+        );
       },
     );
+  }
+
+  /* A notification carries an ordered list of things it can do; the first is
+     what clicking the notification itself means. Older rows (and older servers)
+     carry a single `action`, which is the same list with one entry. */
+  function __gbNotificationActions(notification) {
+    const list = Array.isArray(notification?.actions) ? notification.actions : [];
+    if (list.length) return list;
+    return notification?.action ? [notification.action] : [];
   }
 
   async function __gbOpenNotification(notification, options = {}) {
@@ -157,7 +173,12 @@ function __gbAccessAllowed(st, now) {
     const receipt = (state) => {
       if (acknowledge) __gbNotificationReceipt(notification, state);
     };
-    const rawAction = notification?.action;
+    const actions = __gbNotificationActions(notification);
+    const index = Math.min(
+      Math.max(0, Math.floor(Number(options.actionIndex) || 0)),
+      Math.max(0, actions.length - 1),
+    );
+    const rawAction = actions[index];
     if (!rawAction || typeof rawAction !== 'object') {
       window.__gbShowNotificationsModal?.();
       receipt('read');
@@ -168,7 +189,7 @@ function __gbAccessAllowed(st, now) {
       result = await __gbActionRuntime?.execute?.(
         rawAction,
         'content',
-        { notification },
+        { notification, actionIndex: index },
       );
     } catch { result = false; }
     const handled = (
@@ -222,12 +243,12 @@ function __gbAccessAllowed(st, now) {
     return false;
   }
   window.__gbRunNotificationAction = __gbOpenNotification;
-  window.__gbCanRunNotificationAction = (notification) => (
-    __gbActionRuntime?.canExecute?.(
-      notification?.action,
-      'content',
-    ) === true
-  );
+  window.__gbNotificationActions = __gbNotificationActions;
+  window.__gbCanRunNotificationAction = (notification, actionIndex = 0) => {
+    const actions = __gbNotificationActions(notification);
+    const index = Math.max(0, Math.floor(Number(actionIndex) || 0));
+    return __gbActionRuntime?.canExecute?.(actions[index], 'content') === true;
+  };
 
   let __gbAutoPushUpdate = null;
   function __gbHandleIframeMessage(payload) {
@@ -245,8 +266,9 @@ function __gbAccessAllowed(st, now) {
       handled = true;
       const notification = payload?.notification || {};
       const toast = window.__gbToast;
+      const actions = __gbNotificationActions(notification);
       const notificationType = notification.presentation?.type === 'action'
-        && notification.action
+        && actions.length
         ? 'action'
         : 'tag';
       if (
@@ -257,14 +279,22 @@ function __gbAccessAllowed(st, now) {
         const actionTones = {
           success: 'success', warning: 'warning', error: 'error', info: 'brand',
         };
+        // The card has room for two: the default action as the CTA, and a
+        // second one in the ghost slot where a bare Dismiss would otherwise
+        // sit (the card's own × still dismisses). Anything further lives in
+        // the notification center.
+        const alternate = actions[1];
         toast.action({
           tone: actionTones[notification.level] || 'brand',
           title: notification.title || 'New notification',
           message: notification.body || '',
           placement: 'top-right',
           align: 'right',
-          secondary: 'Dismiss',
-          primary: notification.action?.label || 'Open',
+          secondary: alternate?.label || 'Dismiss',
+          onSecondary: alternate
+            ? () => __gbOpenNotification(notification, { actionIndex: 1 })
+            : undefined,
+          primary: actions[0]?.label || 'Open',
           onPrimary: () => __gbOpenNotification(notification),
         });
       } else if (toast && typeof toast.tag === 'function') {

@@ -105,6 +105,81 @@ describe('notification outbox cache', () => {
     assert.equal(rejected.presentation.type, 'tag');
   });
 
+  it('keeps an ordered action list with the default action first', () => {
+    const { store } = harness();
+    const openEmail = {
+      label: 'Open email',
+      payload: JSON.stringify({
+        version: 1,
+        command: 'open_modal',
+        target: 'email_preview',
+        options: [`relay_id=${'a'.repeat(32)}`],
+      }),
+    };
+    const openContact = {
+      label: 'Open contact',
+      payload: JSON.stringify({
+        version: 1,
+        command: 'open_contact',
+        target: 'person@example.com',
+        value: 'message-12',
+        options: [],
+      }),
+    };
+    const normalized = store.normalizeRemote(remote({
+      actions: [openEmail, openContact],
+      action: openEmail,
+      presentation: { type: 'action' },
+    }));
+
+    assert.deepEqual(
+      normalized.actions.map((action) => action.label),
+      ['Open email', 'Open contact'],
+    );
+    // `action` stays the default so every older read path keeps working.
+    assert.equal(normalized.action.label, 'Open email');
+    assert.equal(
+      JSON.parse(normalized.actions[0].payload).target, 'email_preview',
+    );
+    assert.equal(normalized.presentation.type, 'action');
+  });
+
+  it('reads a single-action notification as a list of one', () => {
+    const { store } = harness();
+    const normalized = store.normalizeRemote(remote());
+    assert.equal(normalized.actions.length, 1);
+    assert.equal(normalized.actions[0].label, 'Open gallery');
+    const tag = store.normalizeRemote(remote({
+      id: 14, action: null, presentation: { type: 'tag' },
+    }));
+    assert.equal(tag.actions.length, 0);
+    assert.equal(tag.action, null);
+  });
+
+  it('drops an action this build cannot run without losing the others', () => {
+    const { store } = harness();
+    const normalized = store.normalizeRemote(remote({
+      actions: [
+        { label: 'Do the impossible', payload: '{"command":"open_url"}' },
+        {
+          label: 'Open contact',
+          payload: JSON.stringify({
+            version: 1,
+            command: 'open_contact',
+            target: 'person@example.com',
+            options: [],
+          }),
+        },
+      ],
+      presentation: { type: 'action' },
+    }));
+    assert.deepEqual(
+      normalized.actions.map((action) => action.label), ['Open contact'],
+    );
+    assert.equal(normalized.action.label, 'Open contact');
+    assert.equal(normalized.presentation.type, 'action');
+  });
+
   it('deduplicates retries by remote id and paints only the unread count', async () => {
     const { store, stored, badges } = harness();
     const first = await store.mergeRemote([remote()]);

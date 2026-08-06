@@ -147,6 +147,66 @@ describe('open params · ambient composer verbs', () => {
   });
 });
 
+describe('open params · email composer', () => {
+  const REF = 'a'.repeat(32);
+
+  it('opens a relayed email by its 32-hex reference', () => {
+    assert.deepEqual(
+      planOpenParams(rules('email_preview'), [`relay_id=${REF}`], 'email_preview'),
+      { relay_id: REF },
+    );
+  });
+
+  it('opens a CRM message by id, with an optional guid', () => {
+    assert.deepEqual(
+      planOpenParams(
+        rules('email_preview'),
+        ['message_id=1849302', 'message_guid=7f3a-9c21'],
+        'email_preview',
+      ),
+      { message_id: '1849302', message_guid: '7f3a-9c21' },
+    );
+  });
+
+  it('rejects a reference that is not the relay digest shape', () => {
+    for (const bad of ['relay_id=nope', `relay_id=${'a'.repeat(31)}`,
+      `relay_id=${'A'.repeat(32)}`, 'relay_id=']) {
+      assert.throws(
+        () => planOpenParams(rules('email_preview'), [bad], 'email_preview'),
+        /malformed/,
+      );
+    }
+  });
+
+  it('refuses to open two different messages at once', () => {
+    assert.throws(
+      () => planOpenParams(
+        rules('email_preview'),
+        [`relay_id=${REF}`, 'message_id=1849302'],
+        'email_preview',
+      ),
+      /one message, not two/,
+    );
+  });
+
+  it('refuses to open the composer with no message named', () => {
+    assert.throws(
+      () => planOpenParams(rules('email_preview'), [], 'email_preview'),
+      /needs a message to open/,
+    );
+    assert.throws(
+      () => planOpenParams(
+        rules('email_preview'), ['message_guid=7f3a-9c21'], 'email_preview',
+      ),
+      /guid needs its message id/,
+    );
+  });
+
+  it('leaves other targets free of the email invariants', () => {
+    assert.deepEqual(planOpenParams(rules('crm_search'), [], 'crm_search'), {});
+  });
+});
+
 describe('open params · shape & guards', () => {
   it('returns empty params for no tokens or no rules', () => {
     assert.deepEqual(planOpenParams(rules('margin_calc'), []), {});
@@ -157,7 +217,7 @@ describe('open params · shape & guards', () => {
   it('reports which targets accept parameters', () => {
     for (const target of ['crm_search', 'task_list', 'image_preview', 'mockup_studio',
       'gift_catalog', 'watch_list', 'margin_calc', 'quick_task', 'call_log',
-      'quick_order_note']) {
+      'quick_order_note', 'email_preview']) {
       assert.equal(targetAcceptsOpenParams(target), true, `${target} should accept params`);
     }
     // Parameterless targets are absent from the rules and take no arguments.

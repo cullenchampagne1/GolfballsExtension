@@ -44,6 +44,7 @@ const MODAL_TARGETS = Object.freeze({
   quick_order_note: '__gbShowQuickOrderNoteModal',
   call_log: '__gbShowCallLogModal',
   image_preview: '__gbOpenImagePreview',
+  email_preview: '__gbOpenEmailPreview',
   margin_calc: '__gbShowMarginCalcModal',
   watch_list: '__gbShowWatchListModal',
 });
@@ -66,6 +67,12 @@ const OPEN_ADAPTERS = Object.freeze({
     query: p.query, special: p.special, sort: p.sort, view: p.view,
   }],
   watch_list: (p) => [{ filter: p.filter, query: p.query }],
+  // The composer takes either a relay reference (it fetches the cached message
+  // from the email-relay service) or a CRM message id (it fetches the EML), so
+  // pass exactly the one the payload named — planOpenParams rejects both.
+  email_preview: (p) => [p.relay_id
+    ? { relayId: p.relay_id }
+    : { messageId: p.message_id, messageGuid: p.message_guid || '' }],
   // Ambient composer verbs: open the composer prefilled and auto-composing.
   // The contact is resolved by the modal itself (readTaskContext/readCallContext);
   // the rep submits. Passing a subject implies auto-compose.

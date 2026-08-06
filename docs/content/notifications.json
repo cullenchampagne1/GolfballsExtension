@@ -29,7 +29,8 @@
           { "type": "p", "text": "The extension polls its authenticated installation outbox, merges rows into chrome.storage.local under gbNotifications, and advances its cursor only after the rows are cached. Delivery, read, archive, and action receipts are idempotent, so retries do not duplicate an update or replay an action." },
           { "type": "p", "text": "The worker performs a responsive foreground loop while available and maintains a one-minute Chrome alarm for recovery after service-worker suspension. Updates remain newest-first and are capped at 200 local rows." },
           { "type": "heading", "text": "Safe actions" },
-          { "type": "p", "text": "A notification can request only a registered action type. The extension validates every identifier and reconstructs the action locally; arbitrary URLs and executable payloads are rejected. CRM contact shortcuts are resolved on the device and restricted to the Golfballs admin origin." }
+          { "type": "p", "text": "A notification can request only a registered action type. The extension validates every identifier and reconstructs the action locally; arbitrary URLs and executable payloads are rejected. CRM contact shortcuts are resolved on the device and restricted to the Golfballs admin origin." },
+          { "type": "p", "text": "An update can offer more than one thing to do. A customer reply leads with its email — opening it renders the relayed message in the email composer — and also offers the contact who sent it. Clicking the notification runs the first action; the others sit beside it as their own buttons." }
         ]
       },
       "related": ["product-mockup-studio", "feature-toggles", "hidden-settings"]

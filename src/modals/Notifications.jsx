@@ -235,12 +235,53 @@ function LevelIcon({ level }) {
   );
 }
 
+/* A notification's ordered actions. The first is what clicking the row means;
+   the rest are extra buttons. Rows cached before notifications could carry
+   more than one still hold a single `action`, which is the same list of one. */
+function rowActions(item) {
+  const list = Array.isArray(item?.actions) ? item.actions.filter(Boolean) : [];
+  if (list.length) return list;
+  return item?.action ? [item.action] : [];
+}
+
+function ActionChip({ label, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '3px 7px',
+        borderRadius: 999,
+        border: `1px solid ${hovered ? 'var(--gb-brand-tint-border)' : 'transparent'}`,
+        background: hovered ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        color: 'var(--gb-brand-label)',
+        fontSize: 10.25,
+        fontWeight: 700,
+        font: 'inherit',
+        fontFamily: 'inherit',
+        cursor: 'pointer',
+        transition: 'background .15s, border-color .15s',
+      }}
+    >
+      <span style={{ fontSize: 10.25, fontWeight: 700 }}>{label}</span>
+      <I.chevr size={10} />
+    </button>
+  );
+}
+
 function NotificationRow({
   item, onOpen, onRead, onDismiss,
 }) {
   const [hovered, setHovered] = useState(false);
   const unread = item.status === 'unread';
   const archived = item.status === 'dismissed';
+  const actions = rowActions(item);
   return (
     <motion.li
       layout
@@ -278,78 +319,86 @@ function NotificationRow({
         />
       )}
       <LevelIcon level={item.level} />
-      <button
-        type="button"
-        onClick={() => (item.action ? onOpen(item) : onRead(item))}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          padding: 0,
-          textAlign: 'left',
-          border: 0,
-          background: 'transparent',
-          cursor: 'pointer',
-          font: 'inherit',
-        }}
-      >
-        <span style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 7,
-          minWidth: 0,
-        }}
-        >
-          <strong style={{
-            flex: 1,
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <button
+          type="button"
+          onClick={() => (actions.length ? onOpen(item, 0) : onRead(item))}
+          style={{
+            display: 'block',
+            width: '100%',
             minWidth: 0,
-            color: 'var(--gb-text-primary)',
-            fontSize: 12.25,
-            fontWeight: unread ? 750 : 650,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            padding: 0,
+            textAlign: 'left',
+            border: 0,
+            background: 'transparent',
+            cursor: 'pointer',
+            font: 'inherit',
           }}
-          >
-            {item.title}
-          </strong>
-          <span style={{
-            color: 'var(--gb-text-muted)',
-            fontSize: 9.75,
-            whiteSpace: 'nowrap',
-          }}
-          >
-            {formatHumanDate(item.updatedAt || item.createdAt)}
-          </span>
-        </span>
-        <span style={{
-          display: '-webkit-box',
-          WebkitBoxOrient: 'vertical',
-          WebkitLineClamp: 2,
-          overflow: 'hidden',
-          marginTop: 3,
-          color: 'var(--gb-text-tertiary)',
-          fontSize: 11,
-          lineHeight: 1.42,
-        }}
         >
-          {item.body}
-        </span>
-        {item.action?.label && !archived && (
           <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            marginTop: 6,
-            color: 'var(--gb-brand-label)',
-            fontSize: 10.25,
-            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 7,
+            minWidth: 0,
           }}
           >
-            {item.action.label}
-            <I.chevr size={10} />
+            <strong style={{
+              flex: 1,
+              minWidth: 0,
+              color: 'var(--gb-text-primary)',
+              fontSize: 12.25,
+              fontWeight: unread ? 750 : 650,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+            >
+              {item.title}
+            </strong>
+            <span style={{
+              color: 'var(--gb-text-muted)',
+              fontSize: 9.75,
+              whiteSpace: 'nowrap',
+            }}
+            >
+              {formatHumanDate(item.updatedAt || item.createdAt)}
+            </span>
           </span>
+          <span style={{
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+            overflow: 'hidden',
+            marginTop: 3,
+            color: 'var(--gb-text-tertiary)',
+            fontSize: 11,
+            lineHeight: 1.42,
+          }}
+          >
+            {item.body}
+          </span>
+        </button>
+        {/* One chip per action, outside the row button so each is its own
+            control — a reply offers both its email and the contact who sent
+            it, and clicking the row runs the first. */}
+        {!archived && actions.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 2,
+            margin: '5px 0 0 -7px',
+          }}
+          >
+            {actions.map((action, index) => (
+              <ActionChip
+                key={`${action.label}:${index}`}
+                label={action.label || 'Open'}
+                onClick={() => onOpen(item, index)}
+              />
+            ))}
+          </div>
         )}
-      </button>
+      </div>
       {!archived && (
         <div style={{
           flex: '0 0 auto',
@@ -423,12 +472,12 @@ export function Notifications({ onClosed, bindClose }) {
     sendReceipt(item, state);
   }, []);
 
-  const runAction = useCallback((item) => {
-    if (!item.action) {
+  const runAction = useCallback((item, actionIndex = 0) => {
+    if (!rowActions(item).length) {
       update(item, 'read');
       return;
     }
-    if (window.__gbCanRunNotificationAction?.(item) !== true) {
+    if (window.__gbCanRunNotificationAction?.(item, actionIndex) !== true) {
       toast?.warning?.('That action is not available on this page', {
         duration: 3200,
       });
@@ -439,7 +488,7 @@ export function Notifications({ onClosed, bindClose }) {
     // and made the batch gallery appear behind the center.
     closeRef.current?.();
     setTimeout(() => {
-      Promise.resolve(window.__gbRunNotificationAction?.(item))
+      Promise.resolve(window.__gbRunNotificationAction?.(item, { actionIndex }))
         .then((handled) => {
           if (handled) return;
           window.__gbToast?.warning?.(

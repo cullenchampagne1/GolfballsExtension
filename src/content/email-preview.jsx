@@ -45,6 +45,15 @@ if (!window.__gbEmailPreviewLoaded) {
     } catch { resolve(null); }
   });
 
+  // A relayed message may have only a plain-text preview; wrap it as HTML
+  // without letting its own angle brackets become markup.
+  const escapeHtml = (value) => String(value || '').replace(
+    /[&<>"']/g,
+    (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]),
+  );
+
   const isCasePage = () => /[?&]caseID=/i.test(window.location.search);
   const currentCaseId = () => new URLSearchParams(window.location.search).get('caseID');
 
@@ -113,7 +122,34 @@ if (!window.__gbEmailPreviewLoaded) {
       let alive = true;
       (async () => {
         let parsed;
-        if (target.email) {
+        if (target.relayId) {
+          // Relay path: an email-relay notification names one cached message by
+          // reference; the worker fetches it now, so the notification carries a
+          // pointer rather than a copy of the mail. A relayed reply has no CRM
+          // message id to fetch, so its stored body IS the email.
+          const relayed = await send({
+            action: 'relayMessage', ref: target.relayId,
+          });
+          if (!alive) return;
+          const message = relayed?.ok ? relayed.message : null;
+          if (!message) {
+            toast?.error?.(
+              'That email is no longer in the relay cache', { duration: 4000 },
+            );
+            mountOnClosed?.();
+            return;
+          }
+          parsed = {
+            from: message.contact_name
+              ? `${message.contact_name} <${message.contact_email}>`
+              : (message.contact_email || ''),
+            to: '',
+            subject: message.subject || '(no subject)',
+            date: message.received_at || '',
+            bodyHtml: message.body || (message.preview
+              ? `<p>${escapeHtml(message.preview)}</p>` : ''),
+          };
+        } else if (target.email) {
           // Payload path (relayed Notifications email): render the supplied
           // email directly — a relayed reply has no CRM message id to fetch.
           // Shape: { from, to, subject, date, bodyHtml }.

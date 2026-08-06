@@ -17,6 +17,8 @@
 
 const IMAGE_SUFFIX = new Set(['png', 'jpg', 'jpeg', 'webp']);
 const ID_RE = /^[0-9]{1,12}$/;
+const RELAY_REF_RE = /^[a-f0-9]{32}$/;
+const CRM_MESSAGE_ID_RE = /^[A-Za-z0-9._~-]{1,100}$/;
 
 /**
  * Per-target open parameters. Each field declares a type the planner
@@ -53,6 +55,17 @@ export const OPEN_PARAM_RULES = Object.freeze({
     filter: { type: 'enum', options: ['all', 'active', 'high', 'done'] },
     query: { type: 'string', max: 200 },
   },
+  // The email composer, opened on one specific message. `relay_id` is the
+  // 32-hex reference an email-relay notification carries; the opener resolves
+  // it against the relay and renders the cached message — the notification
+  // itself never ships the email body. `message_id` is the CRM's own Page=268
+  // id, fetched as EML the way an inbox row does it. One or the other, never
+  // both: they name messages in different stores.
+  email_preview: {
+    relay_id: { type: 'pattern', re: RELAY_REF_RE },
+    message_id: { type: 'pattern', re: CRM_MESSAGE_ID_RE },
+    message_guid: { type: 'pattern', re: CRM_MESSAGE_ID_RE },
+  },
   margin_calc: {}, // openable, no parameters
   // Ambient composer verbs (Phase 2): a `subject` prefills the composer for the
   // CURRENT contact (resolved by the modal, not the payload); the rep reviews
@@ -67,6 +80,25 @@ export const OPEN_PARAM_RULES = Object.freeze({
   quick_order_note: {
     // order-scoped: the order id is resolved from the page URL by the opener.
     subject: { type: 'string', max: 120 },
+  },
+});
+
+/**
+ * Cross-parameter invariants a single field rule cannot express. A target
+ * absent from this map has none. These run after every field has coerced, so
+ * they see the normalized params — never raw wire text.
+ */
+const OPEN_PARAM_INVARIANTS = Object.freeze({
+  email_preview: (params) => {
+    if (params.relay_id && params.message_id) {
+      throw new Error('An email open names one message, not two');
+    }
+    if (params.message_guid && !params.message_id) {
+      throw new Error('A CRM message guid needs its message id');
+    }
+    if (!params.relay_id && !params.message_id) {
+      throw new Error('An email open needs a message to open');
+    }
   },
 });
 
@@ -107,13 +139,15 @@ function coerce(rule, raw, key) {
  *
  * @param {object|undefined} rules  the target's schema from OPEN_PARAM_RULES
  * @param {string[]}         options the envelope's options array
+ * @param {string}           [target] the open target, for its cross-field rules
  * @returns {object} a normalized params object (empty when no tokens)
  *
- * Throws on an unknown key, a duplicate key, or a value that fails its rule —
- * so a malformed open payload is rejected exactly like a bad setting, never
- * silently opening the surface with a bogus argument.
+ * Throws on an unknown key, a duplicate key, a value that fails its rule, or a
+ * combination the target forbids — so a malformed open payload is rejected
+ * exactly like a bad setting, never silently opening the surface with a bogus
+ * argument.
  */
-export function planOpenParams(rules, options) {
+export function planOpenParams(rules, options, target) {
   if (!rules) return {};
   const params = {};
   for (const raw of Array.isArray(options) ? options : []) {
@@ -126,6 +160,8 @@ export function planOpenParams(rules, options) {
     if (Object.hasOwn(params, key)) throw new Error(`Duplicate open parameter "${key}"`);
     params[key] = coerce(rules[key], rawValue, key);
   }
+  const invariant = OPEN_PARAM_INVARIANTS[String(target || '')];
+  if (invariant) invariant(params);
   return params;
 }
 

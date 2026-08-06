@@ -1362,6 +1362,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── One relayed email, by the reference a notification action carries ──
+  // The notification ships a pointer, not the mail: the body is fetched here,
+  // on the installation's own key, only when the rep opens it. An unknown or
+  // expired reference resolves to nothing rather than to the newest message.
+  if (msg.action === 'relayMessage') {
+    const ref = String(msg.ref || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{32}$/.test(ref)) {
+      sendResponse({ ok: false, error: 'Invalid message reference' });
+      return true;
+    }
+    GBInstallationAuth.apiJson(
+      `/services/email-relay-service/messages?ref=${ref}&limit=1`,
+      { responseLimit: 2 * 1024 * 1024 },
+    ).then((payload) => {
+      const message = Array.isArray(payload?.messages) ? payload.messages[0] : null;
+      sendResponse(message
+        ? { ok: true, message }
+        : { ok: false, error: 'That email is no longer available' });
+    }).catch((error) => sendResponse({
+      ok: false, error: error?.message || 'Unable to load that email',
+    }));
+    return true;
+  }
+
   // ── Installation-owned support tickets ────────────────────────────────
   if (msg.action === 'supportTicketList') {
     GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/tickets`, { responseLimit: 2 * 1024 * 1024 })

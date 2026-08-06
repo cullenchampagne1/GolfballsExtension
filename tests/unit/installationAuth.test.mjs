@@ -174,6 +174,44 @@ describe('installation auth · authenticated requests', () => {
     );
   });
 
+  it('fetches one relayed email by the reference its notification carried', async () => {
+    const ref = 'a'.repeat(32);
+    const message = await client.apiJson(
+      `/services/email-relay-service/messages?ref=${ref}&limit=1`,
+    );
+    assert.equal(message.ok, true);
+    assert.equal(
+      requests.at(-1).url,
+      `https://api.cullenchampagne.com/services/email-relay-service/messages?ref=${ref}&limit=1`,
+    );
+    assert.equal(
+      requests.at(-1).options.headers.get('Authorization'), `Bearer ${API_KEY}`,
+    );
+    assert.equal(requests.at(-1).options.credentials, 'omit');
+  });
+
+  it('will not read the relay mailbox mirror any other way', async () => {
+    const ref = 'a'.repeat(32);
+    for (const path of [
+      '/services/email-relay-service/messages',
+      '/services/email-relay-service/messages?contact=jane',
+      '/services/email-relay-service/messages/pending?since=0',
+      `/services/email-relay-service/messages?ref=${ref}&limit=50`,
+      `/services/email-relay-service/messages?ref=${ref}&direction=inbound`,
+      '/services/email-relay-service/messages?ref=not-a-digest',
+    ]) {
+      await assert.rejects(
+        client.apiFetch(path), /Blocked non-extension API path/, path,
+      );
+    }
+    await assert.rejects(
+      client.apiFetch(`/services/email-relay-service/messages?ref=${ref}`, {
+        method: 'POST',
+      }),
+      /Blocked non-extension API path/,
+    );
+  });
+
   it('keeps local response-guard options out of the fetch call', async () => {
     const status = await client.apiJson('/projects/golfballs-extension/assistant/status', {
       responseLimit: 512 * 1024,

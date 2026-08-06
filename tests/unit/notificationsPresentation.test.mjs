@@ -16,6 +16,31 @@ describe('notification center presentation', () => {
     assert.doesNotMatch(source, /minHeight: 290/);
   });
 
+  it('gives every action its own control and runs the first on a row click', () => {
+    // The chips are real buttons OUTSIDE the row button — a notification that
+    // offers both its email and its contact needs two independent targets, and
+    // a button cannot nest inside a button.
+    assert.match(source, /function ActionChip\(\{ label, onClick \}\)/);
+    assert.match(source, /onClick=\{\(\) => \(actions\.length \? onOpen\(item, 0\) : onRead\(item\)\)\}/);
+    assert.match(source, /\{actions\.map\(\(action, index\) => \(/);
+    assert.match(source, /onClick=\{\(\) => onOpen\(item, index\)\}/);
+    assert.doesNotMatch(source, /item\.action\?\.label && !archived/);
+  });
+
+  it('reads the ordered action list, falling back to a lone action', () => {
+    assert.match(source, /function rowActions\(item\)/);
+    assert.match(source, /Array\.isArray\(item\?\.actions\)/);
+    assert.match(source, /return item\?\.action \? \[item\.action\] : \[\]/);
+    assert.match(
+      source,
+      /window\.__gbCanRunNotificationAction\?\.\(item, actionIndex\) !== true/,
+    );
+    assert.match(
+      source,
+      /window\.__gbRunNotificationAction\?\.\(item, \{ actionIndex \}\)/,
+    );
+  });
+
   it('uses shared modal controls and active notification semantics', () => {
     assert.match(source, /\{ key: 'active', label: 'Active' \}/);
     assert.match(

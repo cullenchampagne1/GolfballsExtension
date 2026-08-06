@@ -174,7 +174,7 @@ export function planHelpAction(action, registry = {}) {
       return { type, target, params: {} };
     }
     let params;
-    try { params = planOpenParams(rules, options); }
+    try { params = planOpenParams(rules, options, target); }
     catch (error) { fail(error?.message || 'The modal parameters are invalid'); }
     return { type, target, params };
   }

@@ -11,13 +11,14 @@
 
 ## 0. TL;DR
 
-You have already built ~90% of the engine. Three pieces are live:
+You have already built ~90% of the engine. Four pieces are live:
 
 | Piece | File | What it is |
 |---|---|---|
 | **Envelope** | `lib/action-language.js` (`GBActionLanguage`) | A versioned, frozen JSON payload with a strict field allowlist + anti‑spoof check |
 | **Executor** | `lib/action-runtime.js` (`GBActionRuntime`) | Command→handler registry. *"Backends can request commands; they can never ship executable code."* |
 | **Safe run loop** | `src/lib/helpActions.js` (`__gbExecuteActionPayloadOnce`) | Registry validation + receipt ledger (idempotent, replay‑proof) + confirmation gating |
+| **Action list** | `logic/ExtensionNotificationManager.py` + `__gbNotificationActions` | A notification offers up to 3 ordered actions; the first is its default (§10) |
 
 Both callers already route through it. **Two gaps remain:**
 1. **`open_modal` can't carry data** — it opens a surface with no args, though the
@@ -30,7 +31,8 @@ Both callers already route through it. **Two gaps remain:**
 
 | Increment | State | What shipped |
 |---|---|---|
-| **Phase 1** — parameterised open | ✅ shipped | `openParamRules.js` + planner/executor wiring; params ride in `options` as key=value; `crm_search {query,type}` runs the search, `task_list {filter,status,priority}` opens filtered, plus `image_preview`, `mockup_studio`, `gift_catalog`, `watch_list`, `margin_calc`. |
+| **Phase 1** — parameterised open | ✅ shipped | `openParamRules.js` + planner/executor wiring; params ride in `options` as key=value; `crm_search {query,type}` runs the search, `task_list {filter,status,priority}` opens filtered, plus `image_preview`, `mockup_studio`, `gift_catalog`, `watch_list`, `margin_calc`, `email_preview {relay_id\|message_id}` (§5.2). |
+| **Multi-action notifications** | ✅ shipped | A notification carries an ordered list of up to 3 actions instead of one (§10). |
 | **Phase 2** — ambient composer verbs | ✅ shipped (3 of ~6) | `quick_task`, `call_log`, `quick_order_note` take a `subject` that prefills the shared composer for the current contact/order (resolved by the modal), opened auto‑composing; the rep submits in the native UI — that submit is the confirmation, no direct CRM write from the executor. |
 | **Phase 2** — direct‑execute verbs | ⏸ held | `find_phone`, `categorize_case`, `create_contact` need the "confirmation card that shows the resolved object" UI (§4.4/§4.5) and, for find_phone, extraction from the shelf. No composer to reuse. |
 | **Phase 3** — `commit_order_dates` (money) | ⏸ held | Not a clean composer‑open: the calendar only saves through the order‑iframe handshake (needs the scraped `calendarUrl`) and commits via an ASP.NET offset postback that can't be runtime‑verified here. Needs human validation + the §9 admin gate. |
@@ -274,6 +276,42 @@ thread an initial‑state object; (b) child surfaces (query_builder, proposal_em
 gift_customize, …) get **no** opener — reach them pre‑configured through the parent
 per §4.6, or not at all in near‑term scope.
 
+### 5.1 Cross‑field invariants
+
+A field rule validates one value; some targets need a rule about the *set*.
+`OPEN_PARAM_INVARIANTS` (same file) runs after every field has coerced, so it
+sees normalized params and never raw wire text. `email_preview` uses it to
+require exactly one message reference — naming two would silently open one and
+drop the other, and naming none would open an empty composer.
+
+### 5.2 `email_preview` — opening one specific message
+
+The archetype of "open a surface, on this object." Two references, mutually
+exclusive because they name messages in different stores:
+
+```jsonc
+{ "version": 1, "command": "open_modal", "target": "email_preview",
+  "options": ["relay_id=0f5e2c1b9a7d43268c05be71f3a48d90"],
+  "label": "Open email" }
+```
+
+| Param | Shape | Resolves through |
+|---|---|---|
+| `relay_id` | 32 hex | the email‑relay service: worker `relayMessage` → `GET /services/email-relay-service/messages?ref=…&limit=1` |
+| `message_id` (+ optional `message_guid`) | CRM id | the CRM's `Page=268` EML fetch, exactly as an inbox row does it |
+
+**The payload carries a pointer, never the mail.** `relay_id` is a digest of the
+producer's message id, computed relay‑side (`_message_ref`). Two reasons it is a
+digest and not the id itself: the action language bounds an option token to 120
+characters and **truncates** a longer one silently — a Graph message id is
+routinely 150+ — so the raw id would arrive corrupted; and a notification
+payload is not the place to hand out mailbox identifiers. The body is fetched on
+the installation's own key, at click time, only if the rep opens it.
+
+`isAllowedApiRoute` admits that one relay path in exactly one shape (`GET`,
+`ref` 32‑hex, `limit=1` or absent). It is not a general read of the mailbox
+mirror: no contact search, no cursor paging, no other query key.
+
 ---
 
 ## 6. Capability inventory
@@ -430,6 +468,62 @@ For the one money verb that stays (`commit_order_dates`):
 
 `apply_last_note` / `find_phone` follow the §4.5 invariant: ambient‑bound to the
 current order/contact, auto‑resolved, confirmation names the object.
+
+---
+
+## 10. Multiple actions on one notification
+
+One notification can lead to more than one place. A customer's reply is both a
+**message to read** and a **contact to look up**; forcing that through a single
+`action` means the writer picks a winner and whoever wants the other one
+hardcodes it. That is exactly what happened to the email relay: the payload
+system shipped, the "open the email" half had nowhere to live, and it was lost.
+
+**The shape.** `ExtensionNotification.action` accepts a dict (one action, as
+before) or a **list** of up to `_MAX_ACTIONS` (3). Order is the contract:
+
+> **The first action is the default** — what clicking the notification itself
+> means, and the CTA a toast leads with. Later actions are additional buttons.
+
+`serialize()` emits both `action` (the first, alone) and `actions` (the full
+list), so an installed build that predates this reads `action` and still works.
+The column is JSON and single‑action rows are stored exactly as they always
+were, so there is no migration and no historical notification loses its action.
+
+**How each surface renders it** (`__gbNotificationActions` is the one reader):
+
+| Surface | Renders |
+|---|---|
+| Top‑right CTA toast | action 0 as the primary button; action 1 in the ghost slot where a bare "Dismiss" used to sit (the card's own × still dismisses) |
+| Notification center | one chip per action, **outside** the row button so each is its own control; clicking the row runs action 0 |
+
+**Receipts are per action.** `open_modal` and the other shared commands run
+through the receipt ledger keyed `notification:<id>` — action *n>0* appends
+`:<n>`. Without that, a notification's second click would replay the first
+action's stored receipt instead of running.
+
+**Worked example — the email relay's reply notification:**
+
+```jsonc
+[
+  { "label": "Open email",
+    "payload": "{\"version\":1,\"command\":\"open_modal\",\"target\":\"email_preview\",\"options\":[\"relay_id=0f5e…\"]}" },
+  { "label": "Open contact",
+    "payload": "{\"version\":1,\"command\":\"open_contact\",\"target\":\"jane@acme.com\",\"value\":\"AAMk…\"}" }
+]
+```
+
+Neither destination is hardcoded in the extension. The relay names a registered
+surface and hands it a validated parameter (§5.2); `open_contact` resolves the
+address through the CRM index, Solr, or — failing both — CRM Search prefilled.
+A bounce notification uses the same list with `flag_bounced_contact` first,
+because that action is the reason the notification exists and the automatic path
+(§3) reads the default.
+
+**Where the halves are bound.** `tests/integration/backendContract.test.mjs`
+asserts the relay's target/param spelling against `helpActions.js` +
+`openParamRules.js`, and the worker's fetch path against the `isAllowedApiRoute`
+guard — so neither side can rename its half of the contract silently.
 
 ---
 

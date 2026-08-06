@@ -27,6 +27,8 @@ const actionLanguage = await read('lib/action-language.js');
 const actionRuntime = await read('lib/action-runtime.js');
 const notificationPoll = await read('lib/notifications-poll.js');
 const notificationCenter = await read('src/modals/Notifications.jsx');
+const helpActions = await read('src/lib/helpActions.js');
+const openParamRules = await read('src/lib/openParamRules.js');
 const helpAssistant = await read('help/help-assistant.js');
 const sources = {
   'installation-auth.js': installationAuth,
@@ -166,7 +168,7 @@ describe('backend contract · notification producer correlation', () => {
   it('closes the notification center before launching a payload action', () => {
     const closeAt = notificationCenter.indexOf('closeRef.current?.();');
     const launchAt = notificationCenter.indexOf(
-      'window.__gbRunNotificationAction?.(item)',
+      'window.__gbRunNotificationAction?.(item, { actionIndex })',
     );
     assert.ok(closeAt >= 0, 'notification center must request its animated close');
     assert.ok(
@@ -188,8 +190,46 @@ describe('backend contract · notification producer correlation', () => {
     assert.ok(relayServicePy.includes('"command": "open_contact"'),
       'inbound replies must send the extension-owned open-contact payload');
     assert.ok(relayServicePy.includes(
-      '"action" if record["contact_email"] else "tag"',
+      '"type": "action" if actions else "tag"',
     ), 'inbound replies must choose a visible tag or action type');
+  });
+
+  it('binds the relay\'s "open email" action to a surface this build opens', {
+    skip: !hasRelayService,
+  }, () => {
+    // The relay names a target and a parameter; the extension decides what
+    // those mean. Both halves must agree on the spelling or the action lands
+    // as an unrunnable payload the rep can only stare at.
+    assert.ok(relayServicePy.includes('"target": "email_preview"'),
+      'the relay must open the composer by its registered modal target');
+    assert.ok(helpActions.includes("email_preview: '__gbOpenEmailPreview'"),
+      'email_preview must resolve to the composer opener in this build');
+    assert.ok(/f"relay_id=\{ref\}"/.test(relayServicePy),
+      'the relay must pass the message reference as the relay_id open param');
+    assert.ok(/relay_id:\s*\{ type: 'pattern', re: RELAY_REF_RE \}/.test(openParamRules),
+      'relay_id must be a validated open parameter, not free text');
+    assert.ok(/RELAY_REF_RE = \/\^\[a-f0-9\]\{32\}\$\//.test(openParamRules)
+      && relayServicePy.includes('hexdigest()[:32]'),
+      'both halves must agree the reference is a 32-hex digest');
+  });
+
+  it('resolves that reference through the one relay route the guard allows', {
+    skip: !hasRelayService,
+  }, () => {
+    assert.ok(background.includes("msg.action === 'relayMessage'"),
+      'the worker must own the authenticated relay lookup');
+    assert.ok(
+      background.includes('/services/email-relay-service/messages?ref=${ref}&limit=1'),
+      'the worker must fetch exactly one message by reference',
+    );
+    assert.ok(
+      installationAuth.includes(
+        "const RELAY_MESSAGES_PATH = '/services/email-relay-service/messages'",
+      ),
+      'the fetch guard must know the relay message path',
+    );
+    assert.ok(/def messages\([\s\S]{0,400}ref: Optional\[str\] = None/.test(relayServicePy),
+      'the relay must accept the ref query parameter the extension sends');
   });
 });
 

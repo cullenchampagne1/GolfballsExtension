@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.4.2",
-  "generatedAt": "2026-08-05",
+  "generatedAt": "2026-08-06",
   "tree": [
     {
       "title": "Getting Started",
@@ -3846,6 +3846,10 @@ export const HELP_CONTENT = {
           {
             "type": "p",
             "text": "A notification can request only a registered action type. The extension validates every identifier and reconstructs the action locally; arbitrary URLs and executable payloads are rejected. CRM contact shortcuts are resolved on the device and restricted to the Golfballs admin origin."
+          },
+          {
+            "type": "p",
+            "text": "An update can offer more than one thing to do. A customer reply leads with its email — opening it renders the relayed message in the email composer — and also offers the contact who sent it. Clicking the notification runs the first action; the others sit beside it as their own buttons."
           }
         ]
       },
