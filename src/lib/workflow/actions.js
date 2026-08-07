@@ -30,6 +30,7 @@ import { buildCustomTaskTemplate } from '../quickTask.js';
 import { completeContactTasks } from '../crmTasks.js';
 import { runInSandbox } from '../page-engine/sandbox-bridge.js';
 import { directContactVariables } from '../contactImport.js';
+import { contactDataUnavailable } from '../contactPageFetch.js';
 
 /* Weighted random pick — same algorithm EmailRunner's variation
    picker uses. `weightOf(item)` returns the item's weight; zero/missing
@@ -85,6 +86,13 @@ async function resolveVarsForHtml(ctx, vars, toField) {
 }
 
 async function runEmail(step, template, ctx, { dryRun }) {
+  /* The contact page never loaded, so every variable below would render as
+     its fallback. ctx.email / contact.email would still give us a recipient —
+     which is exactly how an all-defaults blast used to get out. Fail the step
+     instead, in dry runs too so the preview shows the same verdict. */
+  const unavailable = contactDataUnavailable(ctx);
+  if (unavailable) return { ok: false, error: `Contact page unavailable — ${unavailable}` };
+
   const vars = template.vars || {};
   const toField = template.toField || { type: 'auto' };
   // Pick one variation (weighted by the step) — its subject/body override

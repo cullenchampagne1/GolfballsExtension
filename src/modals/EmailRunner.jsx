@@ -9,6 +9,7 @@ import { renderTemplate } from '../lib/variableResolution.js';
 import { directContactVariables } from '../lib/contactImport.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { cachedSnapshotForContact } from '../lib/page-engine/cache-actions.js';
+import { contactPageFetchError } from '../lib/contactPageFetch.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -546,13 +547,13 @@ export function EmailRunner({
           resolved = await cachedResolver(cachedSnapshot, tplVars, tplToField);
         } else if (c.contactUrl) {
           const fetched = await dispatchBg({ action: 'fetchRaw', url: c.contactUrl });
-          if (!fetched) {
-            if (!c.email) throw new Error('Background not reachable (extension reloaded?)');
-          } else if (!fetched.ok || typeof fetched.text !== 'string') {
-            if (!c.email) throw new Error(fetched.error || `Fetch failed (HTTP ${fetched.status || '?'})`);
-          } else {
-            fetchedText = fetched.text;
-          }
+          /* A failed fetch used to be swallowed whenever the row carried an
+             email — the send then went out with every page variable rendered
+             as its fallback. The recipient is not the point: the page IS the
+             content, so the row errors out instead. */
+          const failure = contactPageFetchError(fetched, c);
+          if (failure) throw new Error(failure);
+          if (fetched?.ok && typeof fetched.text === 'string') fetchedText = fetched.text;
         }
 
         /* 2. Resolve template vars against the fetched HTML. Prefer

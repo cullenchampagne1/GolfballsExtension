@@ -597,6 +597,10 @@
       "file": "tests/unit/workflowTemplateEvaluation.test.mjs"
     },
     {
+      "name": "flow \u00b7 dead contact fetch errors out instead of sending fallbacks",
+      "file": "tests/unit/contactPageFetch.test.mjs"
+    },
+    {
       "name": "flow \u00b7 background helper dispatch adapter",
       "file": "tests/unit/backgroundMessage.test.mjs"
     },
