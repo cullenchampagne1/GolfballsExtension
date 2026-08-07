@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { sendBackgroundMessage } from './backgroundMessage.js';
 import { readEngineCacheStat } from './engineCacheStats.js';
+import { exportEngineCache } from './engineCacheExport.js';
 import {
   REMOTE_POLICY_KEY,
   enforceManagedStorageValue,
@@ -174,6 +175,11 @@ export const DEV_SETTINGS = [
        collects at all, so a stale count after flipping either would lie. */
     watch:   ['pageEngine.indexingEnabled', 'pageEngine.territory'],
     reader:  readEngineCacheStat,
+    /* A count you cannot open is a number to trust rather than data to use.
+       The export hands back the whole cache as one JSON file — the snapshots
+       as stored, plus the same data flattened into joinable tables. */
+    exporter:    exportEngineCache,
+    exportTitle: 'Export this cache as JSON for analysis',
   },
   /* ── Bounced contacts (admin builds only) ─────────────────────
      The email relay recognizes a delivery failure and sends the

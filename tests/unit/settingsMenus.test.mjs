@@ -65,8 +65,17 @@ describe('settings menus', () => {
   });
 
   it('keeps read-only statistics passive instead of showing a refresh button', () => {
+    // The readout re-reads itself when anything it depends on changes, so a
+    // refresh button would be a control for something already happening.
     assert.match(statCellSource, /useEffect\(\(\) => \{ read\(\); \}, \[read\]\)/);
-    assert.doesNotMatch(statCellSource, /IconBtn|title="Refresh"|I\.refresh/);
+    assert.doesNotMatch(statCellSource, /title="Refresh"|I\.refresh/);
+  });
+
+  it('offers an export only on the stat rows that define one', () => {
+    // The one control a readout may carry: handing over what it counted. A row
+    // with no `exporter` stays exactly as passive as it was.
+    assert.match(statCellSource, /typeof def\.exporter === 'function' && \(/);
+    assert.match(statCellSource, /icon=\{<I\.download \/>\}/);
   });
 
   it('keeps management explicit in global and per-key dashboard editors', () => {

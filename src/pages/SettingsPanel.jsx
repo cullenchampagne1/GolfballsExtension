@@ -924,6 +924,7 @@ function SelectCell({ def, value, onChange, disabled = false }) {
    the row explains itself instead of going blank. */
 function StatCell({ def, settings }) {
   const [view, setView] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const watched = (def.watch || []).map((key) => String(settings?.[key] ?? '')).join('|');
 
   const read = useCallback(() => {
@@ -940,19 +941,52 @@ function StatCell({ def, settings }) {
     warning: 'var(--gb-warning-fg)',
   }[view?.tone] || 'var(--gb-text-primary)';
 
+  /* A stat row that can hand over what it counted gets an export icon beside
+     the number. The row says WHAT it exports (`exporter`); this only downloads
+     what comes back and reports on it — an empty cache is said out loud rather
+     than saved as an empty file the rep would open to find nothing. */
+  const runExport = useCallback(async () => {
+    if (typeof def.exporter !== 'function' || exporting) return;
+    setExporting(true);
+    try {
+      const result = await def.exporter(settings);
+      if (result?.empty) {
+        window.__gbToast?.info?.('Nothing cached to export yet');
+        return;
+      }
+      downloadJson(result.document, result.filename);
+      window.__gbToast?.success?.(`Exported ${result.summary}`);
+    } catch (error) {
+      window.__gbToast?.error?.(error?.message || 'Unable to export this cache');
+    } finally {
+      setExporting(false);
+    }
+  }, [def, settings, exporting]);
+
   return (
-    <div style={{ textAlign: 'right', minWidth: 0, maxWidth: 240 }}>
-      <div style={{
-        fontFamily: 'var(--gb-font-mono)', fontSize: 13.5, fontWeight: 650,
-        color: view ? tone : 'var(--gb-text-muted)',
-        lineHeight: 1.2,
-      }}>
-        {view ? view.value : '…'}
-      </div>
-      {view?.detail && (
-        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.35 }}>
-          {view.detail}
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0 }}>
+      <div style={{ textAlign: 'right', minWidth: 0, maxWidth: 240 }}>
+        <div style={{
+          fontFamily: 'var(--gb-font-mono)', fontSize: 13.5, fontWeight: 650,
+          color: view ? tone : 'var(--gb-text-muted)',
+          lineHeight: 1.2,
+        }}>
+          {view ? view.value : '…'}
         </div>
+        {view?.detail && (
+          <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.35 }}>
+            {view.detail}
+          </div>
+        )}
+      </div>
+      {typeof def.exporter === 'function' && (
+        <IconBtn
+          size="sm"
+          icon={<I.download />}
+          disabled={exporting}
+          onClick={runExport}
+          title={def.exportTitle || 'Export as JSON'}
+        />
       )}
     </div>
   );
