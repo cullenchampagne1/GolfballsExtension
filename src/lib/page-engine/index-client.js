@@ -100,9 +100,11 @@ export async function queryEngineIndex({
   where = [],
   orderBy = null,
   limit = 100,
+  offset = 0,
+  scanAll = false,
 } = {}) {
   return sendBackgroundMessage('pageEngineIndexQuery', {
-    query: { where, orderBy, limit },
+    query: { where, orderBy, limit, offset, scanAll },
   });
 }
 

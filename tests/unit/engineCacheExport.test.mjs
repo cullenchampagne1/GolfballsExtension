@@ -182,3 +182,62 @@ describe('engine cache export · flattenScalars', () => {
     assert.deepEqual(flattenScalars([1, 2]), {});
   });
 });
+
+describe('engine cache export · the paged walk', () => {
+  /* exportEngineCache pulls the cache through the worker in EXPORT_LIMIT
+     windows. These stub the worker boundary (chrome.runtime.sendMessage —
+     the only I/O) and pin the walk itself: every record once, and a stop —
+     not a runaway — when the worker is from before offset support. */
+  const snapshotNo = (n) => ({
+    schemaId: 'contact', entityType: 'contact', id: String(n),
+    contactId: String(n), territory: '412', indexedAt: 1,
+    data: { ids: { contact: String(n) }, contact: { firstName: 'C' + n } },
+  });
+
+  const workerWith = (answer) => {
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage: (message, callback) => callback(answer(message)),
+      },
+    };
+  };
+
+  it('walks offset windows until it holds every record the index reports', async () => {
+    const TOTAL = 1_150;
+    const all = Array.from({ length: TOTAL }, (unused, i) => snapshotNo(i));
+    const queries = [];
+    workerWith((message) => {
+      queries.push(message.query);
+      const { offset = 0, limit } = message.query;
+      return { ok: true, rows: all.slice(offset, offset + limit), total: TOTAL, matched: TOTAL };
+    });
+    const { exportEngineCache, EXPORT_LIMIT } = await import('../../src/lib/engineCacheExport.js?paged=1');
+
+    const result = await exportEngineCache({ 'pageEngine.territory': '412' });
+
+    assert.deepEqual(queries.map((q) => q.offset), [0, 500, 1000]);
+    assert.ok(queries.every((q) => q.scanAll === true && q.limit === EXPORT_LIMIT));
+    assert.equal(result.document.counts.records, TOTAL);
+    assert.equal(result.document.cachedTotal, TOTAL);
+    assert.equal(result.document.truncated, false, 'a complete walk is not truncated');
+    assert.equal(new Set(result.document.records.map((r) => r.id)).size, TOTAL);
+  });
+
+  it('stops on a worker that ignores offset, and says the export is short', async () => {
+    // A stale service worker answers every window with the same first page.
+    const first = Array.from({ length: 500 }, (unused, i) => snapshotNo(i));
+    let asks = 0;
+    workerWith(() => {
+      asks += 1;
+      return { ok: true, rows: first, total: 5_324, matched: 5_324 };
+    });
+    const { exportEngineCache } = await import('../../src/lib/engineCacheExport.js?paged=2');
+
+    const result = await exportEngineCache({ 'pageEngine.territory': '412' });
+
+    assert.equal(asks, 2, 'one page of duplicates is the stop signal');
+    assert.equal(result.document.counts.records, 500, 'each record once, not 400 copies');
+    assert.equal(result.document.truncated, true, 'short of matched means truncated');
+  });
+});

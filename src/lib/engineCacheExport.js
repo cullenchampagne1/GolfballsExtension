@@ -32,10 +32,14 @@ import { sendBackgroundMessage } from './backgroundMessage.js';
 export const EXPORT_FORMAT = 'golfballs-toolkit/page-engine-cache';
 export const EXPORT_VERSION = 1;
 
-/* The index caps a query at 500 rows (lib/page-engine-index-store.js
-   MAX_QUERY_LIMIT). Asking for exactly that means an export is never quietly
-   short of the cap by asking for less; `truncated` says so when it is reached. */
+/* The index caps a single query at 500 rows (lib/page-engine-index-store.js
+   MAX_QUERY_LIMIT), so the export PAGES: offset steps of 500, `scanAll` to
+   lift the interactive scan bound, until the whole cache is in hand. The old
+   single-query export stopped at the first 500 of a 5,324-record territory
+   and shipped a tenth of the cache marked `truncated`. */
 export const EXPORT_LIMIT = 500;
+/* 200k records — far beyond any real territory; a backstop, not a budget. */
+export const EXPORT_MAX_PAGES = 400;
 
 const isPlainObject = (value) => (
   !!value && typeof value === 'object' && !Array.isArray(value)
@@ -178,14 +182,37 @@ export function engineCacheExportSummary(document) {
  * count readout does.
  */
 export async function exportEngineCache(settings) {
-  const answer = await sendBackgroundMessage('pageEngineIndexQuery', {
-    query: { limit: EXPORT_LIMIT },
-  });
-  const rows = Array.isArray(answer?.rows) ? answer.rows : [];
+  const rows = [];
+  const seen = new Set();
+  let total = 0;
+  let matched = null;
+  for (let page = 0; page < EXPORT_MAX_PAGES; page += 1) {
+    const answer = await sendBackgroundMessage('pageEngineIndexQuery', {
+      query: { limit: EXPORT_LIMIT, offset: page * EXPORT_LIMIT, scanAll: true },
+    });
+    const batch = Array.isArray(answer?.rows) ? answer.rows : [];
+    total = Number(answer?.total) || total;
+    if (Number.isFinite(Number(answer?.matched))) matched = Number(answer.matched);
+    // A worker from before offset support answers every page with the same
+    // first 500 — deduping by identity turns that into one page and a stop,
+    // instead of 400 copies of the head of the cache.
+    let fresh = 0;
+    for (const row of batch) {
+      const key = `${row?.schemaId || ''}:${row?.id || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
+      fresh += 1;
+    }
+    if (!fresh || batch.length < EXPORT_LIMIT) break;
+    if (matched != null && rows.length >= matched) break;
+  }
   const document = buildEngineCacheExport(rows, {
     territory: settings?.['pageEngine.territory'],
-    total: answer?.total,
-    truncated: rows.length >= EXPORT_LIMIT,
+    total,
+    // Truncated now means "the walk stopped short of what the index said it
+    // holds" — a stale worker or the page backstop — not the old 500 ceiling.
+    truncated: matched != null && rows.length < matched,
   });
   return {
     document,

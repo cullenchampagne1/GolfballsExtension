@@ -303,6 +303,39 @@ describe('Page Engine index roundtrip', () => {
     assert.equal(fakeDb.pageEntities.size, before);
   });
 
+  it('pages an unfiltered walk by offset without overlap, for the cache export', async () => {
+    // The export reads the whole cache in MAX_QUERY_LIMIT steps. What it needs
+    // from the store: a stable `matched` to walk toward, windows that never
+    // overlap, and a union that is the entire cache — here, all three records,
+    // one per page.
+    const seen = [];
+    let matched = null;
+    for (let offset = 0; ; offset += 1) {
+      const page = await indexClient.queryEngineIndex({ limit: 1, offset, scanAll: true });
+      if (matched == null) matched = page.matched;
+      assert.equal(page.matched, matched, 'matched holds still while the walk advances');
+      if (!page.rows.length) break;
+      assert.equal(page.rows.length, 1);
+      seen.push(`${page.rows[0].schemaId}:${page.rows[0].id}`);
+      if (seen.length > matched) assert.fail('walked past matched — offset is not windowing');
+    }
+    assert.equal(matched, 3);
+    assert.equal(new Set(seen).size, 3, 'every record exactly once across the pages');
+    // A filtered query slices the same way, after matching: offset 1 hands
+    // back the match the first window skipped, never a repeat of it.
+    const where = [{ path: 'ids.contact', op: 'exists' }];
+    const full = await indexClient.queryEngineIndex({ where, limit: 10 });
+    assert.ok(full.matched >= 2, 'needs at least two matches to window over');
+    const windowed = await indexClient.queryEngineIndex({ where, limit: 1, offset: 1 });
+    assert.equal(windowed.matched, full.matched, 'offset never changes what matches');
+    assert.equal(windowed.rows.length, 1);
+    assert.equal(
+      `${windowed.rows[0].schemaId}:${windowed.rows[0].id}`,
+      `${full.rows[1].schemaId}:${full.rows[1].id}`,
+      'offset 1 is the second match of the same ordered walk',
+    );
+  });
+
   it('honors the disabled default for writes while retaining explicit cache maintenance', async () => {
     const oldValue = stored.devSettings;
     stored.devSettings = {
