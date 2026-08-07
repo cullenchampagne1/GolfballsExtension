@@ -33,10 +33,14 @@ import '../../lib/tracker-definitions.js';
 
 const MESSAGE = 'gbRecentOrdersSweep';
 const ROWS = 100;
-/* Five pages of contacts is more than a rep's own book turns over between
-   sweeps, and the tracker only retains 300 rows. A sweep that hits this ceiling
-   still stores what it read; the next one resumes from the same watermark,
-   because the worker only advances that after a sweep it received. */
+/* Five pages — 500 contacts, newest order first — is the most one sweep asks
+   for, against a table that retains 300 rows. It is NOT a claim that a book
+   fits in it: a rep with a few thousand indexed contacts can put more than 500
+   into a week-wide first-run window, and at that size every sweep truncates.
+   What makes that safe is the worker's cursor rule, not this number: a
+   truncated sweep still stores what it read, and the cursor moves only to the
+   oldest row it banked, so the next sweep resumes at the floor of what this one
+   actually drained rather than re-reading the same 500 forever. */
 const MAX_PAGES = 5;
 
 /* The same Developer Setting the worker half reads (Settings → Developer
@@ -67,9 +71,10 @@ const warn = (...args) => { if (logging) { try { console.warn(PREFIX, ...args); 
  * Run the rep's recent-orders search and return the contact rows.
  *
  * `complete` is the field the worker's cursor turns on: true means this window
- * was drained, so nothing in it is left unread. Truncating at MAX_PAGES leaves
- * the OLDER end of the window unread (the sort is newest-first), which is
- * precisely the case where the cursor must not step over it.
+ * was drained, so the cursor may step to now. Truncating at MAX_PAGES leaves
+ * the OLDER end of the window unread (the sort is newest-first) — the worker
+ * then advances only as far as the oldest row it banked, the floor of what this
+ * read did drain.
  */
 async function sweep({ since, now = Date.now() }) {
   logging = await loggingOn();
@@ -108,7 +113,7 @@ async function sweep({ since, now = Date.now() }) {
   }
   const complete = docs.length >= numFound;
   if (!complete) {
-    warn(`stopped at the ${MAX_PAGES}-page ceiling with ${docs.length} of ${numFound} rows — the worker will keep its cursor and ask again`);
+    warn(`stopped at the ${MAX_PAGES}-page ceiling with ${docs.length} of ${numFound} rows — the worker moves its cursor only as far back as the oldest row here, so the older tail of this window goes unread`);
   }
   return { docs, numFound, pages, complete, sinceDay };
 }

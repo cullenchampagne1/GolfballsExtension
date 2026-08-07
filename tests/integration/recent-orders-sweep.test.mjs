@@ -311,24 +311,48 @@ describe('recent orders · sweep flow', () => {
     assert.equal(await resumed.store.cursorAt('recent-orders'), later);
   });
 
-  it('holds the cursor when the index had more rows than the page could read', async () => {
-    // Five full pages and Solr still reporting more: the sort is newest-first,
-    // so what went unread is the OLD end of the window — exactly what a cursor
-    // step would skip.
-    const full = Array.from({ length: 100 }, (_, index) => contactDoc({
-      id: `contact_${6000 + index}`,
-    }));
-    const page = await crmPage({ pages: [full, full, full, full, full], numFound: 900 });
-    const { store, trackers } = worker({ deliver: page.deliver });
+  it('keeps moving when the index holds more rows than five pages can read', async () => {
+    // A rep with a few thousand indexed contacts: five full pages, Solr still
+    // reporting thousands. The sort is newest-first, so what went unread is the
+    // OLD end — the cursor may not step to now. But it may not stay put either:
+    // the window only widens from a fixed first-run lookback, so a sweep that
+    // stalls here truncates again on every sweep after it, forever.
+    // One page per day, newest first: 08-04 back to 07-31.
+    const dayOf = (page) => new Date(Date.UTC(2026, 7, 4 - page)).toISOString();
+    const pages = Array.from({ length: 5 }, (_, page) => Array.from(
+      { length: 100 },
+      (unused, row) => contactDoc({
+        id: `contact_${6000 + page * 100 + row}`,
+        lastOrderDate_dt: dayOf(page),
+      }),
+    ));
+    const first = await crmPage({ pages, numFound: 4_200 });
+    const engine = worker({ deliver: first.deliver });
 
-    await trackers.sweep({ now: NOW });
+    await engine.trackers.sweep({ now: NOW });
 
-    assert.equal(page.requests.length, 5, 'stopped at the page ceiling');
-    assert.equal((await store.list('recent-orders')).length, 100, 'what it read is still stored');
-    // Newest-first: the four hundred rows it never reached are OLDER than the
-    // ones it did, so stepping the cursor to now would bury them for good.
-    assert.equal(await store.cursorAt('recent-orders'), 0);
-    assert.equal(await store.lastPolledAt('recent-orders'), NOW);
+    assert.equal(first.requests.length, 5, 'stopped at the page ceiling');
+    assert.match(first.requests[0].str, /lastOrderDate_dt%3A%5B2026-07-29T00%3A00%3A00Z/);
+    assert.equal((await engine.store.list('recent-orders')).length, 300, 'read 500, retains 300');
+    // The floor of what it DID drain: the oldest row on the last page it read.
+    // Not `now` — the rows below this were never seen.
+    assert.equal(
+      await engine.store.cursorAt('recent-orders'),
+      Date.parse('2026-07-31T00:00:00Z'),
+    );
+    assert.equal(await engine.store.lastPolledAt('recent-orders'), NOW);
+
+    // And the next sweep asks a NARROWER window, which is the whole point: the
+    // cursor stalling at the lookback is what made a big book re-read the same
+    // five pages every quarter hour and never get past them.
+    const second = await crmPage({ pages: [[contactDoc({ id: 'contact_9001' })]] });
+    const resumed = worker({ deliver: second.deliver });
+    Object.assign(resumed.stored, engine.stored);
+
+    await resumed.trackers.sweep({ now: NOW + 20 * 60_000 });
+
+    assert.match(second.requests[0].str, /lastOrderDate_dt%3A%5B2026-07-31T00%3A00%3A00Z/);
+    assert.equal(await resumed.store.cursorAt('recent-orders'), NOW + 20 * 60_000);
   });
 
   it('lets a rep run the search by hand from the CRM page console', async () => {

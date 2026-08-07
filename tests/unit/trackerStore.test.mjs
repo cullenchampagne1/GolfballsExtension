@@ -414,9 +414,10 @@ describe('tracker runtime · the data cursor', () => {
     assert.equal(await store.lastPolledAt('fixture-orders'), NOW);
   });
 
-  it('holds the cursor when the read stopped short of the whole window', async () => {
+  it('holds the cursor when a truncated read cannot say how far it got', async () => {
     // Newest-first paging means a truncated read leaves the OLDER rows unread,
-    // which are exactly the ones a cursor step would skip.
+    // which are exactly the ones a step to `now` would skip. A read that names
+    // no floor for what it did drain gets the conservative answer.
     const { registry, trackers, store } = harness();
     definePoll(registry, async () => ({
       rows: oneRow, seen: 500, numFound: 900, complete: false,
@@ -427,6 +428,59 @@ describe('tracker runtime · the data cursor', () => {
     assert.equal(result.cursor, 'held');
     assert.equal((await store.list('fixture-orders')).length, 1, 'what it did read is still stored');
     assert.equal(await store.cursorAt('fixture-orders'), 0);
+  });
+
+  it('moves a truncated read to the oldest row it banked, not to now', async () => {
+    // A rep with a few thousand indexed contacts overflows the page ceiling on
+    // every sweep. Holding the cursor for that is not caution, it is a stall:
+    // the window only widens, so it truncates again, forever. The read still
+    // drained everything from its oldest row forward — that is where it goes.
+    const { registry, trackers, store } = harness();
+    const floor = NOW - 2 * 24 * 60 * MINUTE;
+    definePoll(registry, async () => ({
+      rows: [{ externalId: 'O-1', at: NOW - 60 * MINUTE }, { externalId: 'O-2', at: floor }],
+      seen: 500, numFound: 4_200, complete: false, cursorTo: floor,
+    }));
+
+    const result = await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+
+    assert.equal(result.cursor, 'advanced to the oldest row read');
+    assert.equal(await store.cursorAt('fixture-orders'), floor);
+    // Not to now: the rows between the window's start and the floor were never
+    // read, and a step to now is what would bury them.
+    assert.notEqual(await store.cursorAt('fixture-orders'), NOW);
+  });
+
+  it('holds a truncated read that banked nothing, floor or no floor', async () => {
+    // Nothing mapped means the floor is a claim about rows we never proved we
+    // could read. The mapping check comes first, and it wins.
+    const { registry, trackers, store } = harness();
+    definePoll(registry, async () => ({
+      rows: [], seen: 500, numFound: 4_200, complete: false, cursorTo: NOW - 60 * MINUTE,
+    }));
+
+    const result = await trackers.pollTracker(registry.get('fixture-orders'), { now: NOW });
+
+    assert.equal(result.cursor, 'held');
+    assert.equal(await store.cursorAt('fixture-orders'), 0);
+  });
+
+  it('ignores a floor that would move the cursor backwards or into the future', async () => {
+    const { registry, trackers, store } = harness();
+    let floor = NOW + 60 * MINUTE;     // a row stamped ahead of the sweep
+    definePoll(registry, async () => ({
+      rows: oneRow, seen: 500, numFound: 4_200, complete: false, cursorTo: floor,
+    }));
+    const tracker = registry.get('fixture-orders');
+
+    assert.equal((await trackers.pollTracker(tracker, { now: NOW })).cursor, 'held');
+    assert.equal(await store.cursorAt('fixture-orders'), 0);
+
+    // And once the cursor is somewhere, a floor behind it is not a rewind.
+    await store.markCursor('fixture-orders', NOW - 30 * MINUTE);
+    floor = NOW - 90 * MINUTE;
+    assert.equal((await trackers.pollTracker(tracker, { now: NOW })).cursor, 'held');
+    assert.equal(await store.cursorAt('fixture-orders'), NOW - 30 * MINUTE);
   });
 
   it('advances over a window that was read in full and was simply empty', async () => {
