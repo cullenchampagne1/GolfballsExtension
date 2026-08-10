@@ -541,10 +541,11 @@ function OptionToggle({ checked, label, hint, onClick, disabled }) {
   );
 }
 
-/* Opportunity-page proposal outline. It lives in the existing settings rail so
-   the generated proposal remains the full-height canvas on the right. Items can
-   be dragged or moved with the keyboard-accessible arrow controls; multi-cart
-   sources retain a distinct named section for every selected proposal. */
+/* Opportunity-page proposal outline. The composer mounts it in its own rail
+   beside the existing settings rail, leaving the generated proposal as the
+   full-height canvas on the right. Items can be dragged or moved with the
+   keyboard-accessible arrow controls; multi-cart sources retain a distinct
+   named section for every selected proposal. */
 function ProposalStructureRail({ source, onChange }) {
   const outline = useMemo(() => buildProposalOutline(source), [source]);
   const [dragging, setDragging] = useState(null);
@@ -838,11 +839,9 @@ export function ProposalEmailComposer({ source, onBack, backLabel, allowReorder 
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* body: settings | preview */}
+        {/* body: settings | proposal structure (Opportunity only) | preview */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <div className="gb-thin-scroll" style={{ width: 340, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {allowReorder && onSourceChange && <ProposalStructureRail source={source} onChange={onSourceChange} />}
-
+          <aside data-proposal-settings-rail="true" aria-label="Proposal settings" className="gb-thin-scroll" style={{ width: 340, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <ConfigGroup title="Template">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {PROPOSAL_TEMPLATES.map((t) => <TemplateCard key={t.id} tpl={t} on={templateId === t.id} onClick={() => setTemplateId(t.id)} />)}
@@ -901,10 +900,19 @@ export function ProposalEmailComposer({ source, onBack, backLabel, allowReorder 
                 </div>
               </ConfigGroup>
             )}
-          </div>
+          </aside>
+
+          {/* A separate outline rail beside settings. Keeping this as a sibling
+              gives structure and settings independent scrolling and intentionally
+              takes width from the oversized live-preview pane. */}
+          {allowReorder && onSourceChange && (
+            <aside data-proposal-structure-rail="true" aria-label="Proposal structure" className="gb-thin-scroll" style={{ width: 300, flexShrink: 0, boxSizing: 'border-box', borderRight: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, background: 'var(--gb-fill-faint)' }}>
+              <ProposalStructureRail source={source} onChange={onSourceChange} />
+            </aside>
+          )}
 
           {/* preview column */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-deep)' }}>
+          <div data-proposal-preview="true" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-deep)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
               <I.eye size={13} style={{ color: 'var(--gb-text-muted)' }} />
               <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Live preview</span>

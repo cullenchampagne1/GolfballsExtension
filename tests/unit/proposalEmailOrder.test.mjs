@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { buildProposalOutline, moveProposalItem } from '../../src/lib/proposalEmailOrder.js';
 
@@ -69,5 +70,18 @@ describe('proposal email structure outline', () => {
     assert.deepEqual(moved.sections[1].rawLines.map((item) => item.id), ['D', 'C']);
     assert.deepEqual(moved.sections[1].lines.map((item) => item.lineId), ['D', 'C']);
     assert.deepEqual(moved.rawLines.map((item) => item.id), ['A', 'B', 'D', 'C']);
+  });
+
+  it('keeps proposal structure in a dedicated rail between settings and preview', () => {
+    const composer = readFileSync(new URL('../../src/modals/ProposalEmail.jsx', import.meta.url), 'utf8');
+    const settingsAt = composer.indexOf('data-proposal-settings-rail');
+    const structureAt = composer.indexOf('data-proposal-structure-rail');
+    const previewAt = composer.indexOf('data-proposal-preview');
+
+    assert.ok(settingsAt >= 0 && structureAt > settingsAt && previewAt > structureAt);
+    assert.doesNotMatch(composer.slice(settingsAt, structureAt), /<ProposalStructureRail/);
+    assert.match(composer.slice(structureAt - 20, previewAt), /<aside data-proposal-structure-rail/);
+    assert.match(composer.slice(structureAt, previewAt), /width: 300/);
+    assert.match(composer.slice(structureAt, previewAt), /<ProposalStructureRail/);
   });
 });
