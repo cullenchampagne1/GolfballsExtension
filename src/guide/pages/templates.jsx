@@ -460,6 +460,14 @@ export function TemplatesPage() {
         </tbody>
       </table>
 
+      <h2 className="sec">Follow-up actions on notes, tasks, and call logs</h2>
+      <p>
+        Every template in the <strong>Notes</strong> tab also has a <strong>Follow-up action</strong> selector. The action runs only after the order note, CRM task, or call log succeeds. It always hydrates and runs against the contact page associated with that first action—for an order note, that is the customer attached to the order—not whichever CRM page happens to be open.
+      </p>
+      <p>
+        If the first action fails, the follow-up is skipped. If the first action succeeds but its follow-up fails, the original action remains successful and the extension shows the follow-up error separately.
+      </p>
+
       <div className="docnote info" style={{ marginTop: 24 }}>
         <span className="dn-ico"><I.bolt size={15} /></span>
         <div className="dn-b">

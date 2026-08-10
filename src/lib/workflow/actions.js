@@ -23,6 +23,7 @@
 import { sendEmail } from '../emailSender.js';
 import { submitCallLog } from '../submitCallLog.js';
 import { submitQuickTask } from '../submitQuickTask.js';
+import { templateFollowUpActionError } from '../templateFollowUpAction.js';
 import { renderTemplate } from '../variableResolution.js';
 import { pickFromAddress } from '../sender.js';
 import { buildCustomTemplate } from '../callLog.js';
@@ -168,7 +169,10 @@ async function runCall(step, template, ctx, { dryRun }) {
     template: tpl,
     context: { contactId: ctx.contactId, phone: ctx.phone, employeeId: ctx.employeeId, contactName: ctx.contactName },
   });
-  return res.ok ? { ok: true, detail: 'Call logged' } : { ok: false, error: res.error };
+  const followUpError = templateFollowUpActionError(res);
+  return res.ok
+    ? { ok: true, detail: `Call logged${followUpError ? ` · Follow-up failed: ${followUpError}` : ''}` }
+    : { ok: false, error: res.error };
 }
 
 async function runTask(step, template, ctx, { dryRun }) {
@@ -192,7 +196,11 @@ async function runTask(step, template, ctx, { dryRun }) {
     template: tpl,
     context: { contactId: ctx.contactId, employeeId: ctx.employeeId, contactName: ctx.contactName, accountId: ctx.accountId },
   });
-  return res.ok ? { ok: true, detail: res.taskId ? `Task #${res.taskId}` : 'Task created' } : { ok: false, error: res.error };
+  const followUpError = templateFollowUpActionError(res);
+  const detail = res.taskId ? `Task #${res.taskId}` : 'Task created';
+  return res.ok
+    ? { ok: true, detail: `${detail}${followUpError ? ` · Follow-up failed: ${followUpError}` : ''}` }
+    : { ok: false, error: res.error };
 }
 
 /* Custom step — runs an arbitrary code block in the isolated sandbox with

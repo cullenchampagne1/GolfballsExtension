@@ -21,6 +21,7 @@ import {
   getTaskCategoryLabel,
   getTaskCategoryTone,
 } from '../lib/taskCategories.js';
+import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
 
 /* ───────────────────────────────────────────────────────────────
    QuickTask — the redesigned, keyboard-first task creator.
@@ -174,7 +175,12 @@ export function QuickTask({
     setBusy(true);
     try {
       const result = await onSubmit(tpl);
-      if (result?.ok) { toast?.success?.(`Task created: ${tpl.name || tpl.subject}`, { duration: 2200 }); animatedClose(); }
+      if (result?.ok) {
+        const followUpError = templateFollowUpActionError(result);
+        if (followUpError) toast?.warning?.(`Task created, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+        else toast?.success?.(`Task created: ${tpl.name || tpl.subject}`, { duration: 2200 });
+        animatedClose();
+      }
       else { toast?.error?.(`Couldn't create task: ${result?.error || 'unknown error'}`); setBusy(false); }
     } catch (err) { toast?.error?.(`Couldn't create task: ${err?.message || err}`); setBusy(false); }
   };
@@ -206,7 +212,12 @@ export function QuickTask({
     setBusy(true);
     try {
       const result = await onSubmit(synthetic);
-      if (result?.ok) { toast?.success?.('Task created', { duration: 2200 }); animatedClose(); }
+      if (result?.ok) {
+        const followUpError = templateFollowUpActionError(result);
+        if (followUpError) toast?.warning?.(`Task created, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+        else toast?.success?.('Task created', { duration: 2200 });
+        animatedClose();
+      }
       else { toast?.error?.(`Couldn't create task: ${result?.error || 'unknown error'}`); setBusy(false); }
     } catch (err) { toast?.error?.(`Couldn't create task: ${err?.message || err}`); setBusy(false); }
   };

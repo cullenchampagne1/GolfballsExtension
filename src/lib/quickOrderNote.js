@@ -39,6 +39,7 @@ export function subscribeToOrderNoteTemplates(handler) {
 
 export function normalizeOrderNote(template = {}) {
   const days = template.daysOut == null ? null : Number.parseInt(template.daysOut, 10);
+  const followUpActionId = String(template.followUpActionId || '').trim();
   return {
     id: String(template.id || ''),
     name: String(template.name || template.subject || 'Quick note').trim().slice(0, 160),
@@ -47,6 +48,7 @@ export function normalizeOrderNote(template = {}) {
     body: String(template.body || '').slice(0, 10_000),
     audienceVal: String(template.audienceVal || '').trim().slice(0, 160),
     daysOut: Number.isInteger(days) && days >= 0 && days <= 3650 ? days : null,
+    ...(followUpActionId ? { followUpActionId } : {}),
   };
 }
 

@@ -24,6 +24,7 @@ import { buildCustomTaskTemplate, loadTaskTemplates } from './quickTask.js';
 import { submitQuickTask, readTaskContext } from './submitQuickTask.js';
 import { submitCallLog } from './submitCallLog.js';
 import { loadCallTemplates } from './callLog.js';
+import { templateFollowUpActionError } from './templateFollowUpAction.js';
 import { chatTranscriptSummary, isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
 import { resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext } from './employeeIdentity.js';
 import { ARMOR, AVATAR_COLOR, ActivityFilter, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, InlineSearch, KV, NAV, PAGE_ZOOM, QuickAddInput, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Spinner, Tag, TaskCheckbox, Td, Th, ThemeSelector, UI_CSS, accountHref, activityType, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
@@ -1976,7 +1977,11 @@ export function TasksPanel({ canCreate = true }) {
       const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
       if (!tpl) { gbToast('Template not found', 'error'); return; }
       const r = await submitQuickTask({ template: tpl, context: await taskContext(D.ids.contact) });
-      if (r && r.ok) addRow({ subject: tpl.subject || tpl.name || chip.label, priority: priLabel(tpl.priorityId || tpl.priority || 2), dueDate: todayMDY() });
+      if (r && r.ok) {
+        const followUpError = templateFollowUpActionError(r);
+        if (followUpError) gbToast(`Task created, but follow-up action failed: ${followUpError}`, 'warning');
+        addRow({ subject: tpl.subject || tpl.name || chip.label, priority: priLabel(tpl.priorityId || tpl.priority || 2), dueDate: todayMDY() });
+      }
       else gbToast((r && r.error) || 'Could not create task', 'error');
     } catch (e) { gbToast('Could not create task', 'error'); }
   };
@@ -2126,6 +2131,8 @@ export function QuickLogCard() {
       });
       const r = await submitCallLog({ template: tpl, context: ctx });
       if (r && r.ok) {
+        const followUpError = templateFollowUpActionError(r);
+        if (followUpError) gbToast(`Call logged, but follow-up action failed: ${followUpError}`, 'warning');
         patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Call', direction: tpl.callDirection === 1 ? 'In' : 'Out', subject: tpl.subject || tpl.name || chip.label, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
       } else { gbToast((r && r.error) || 'Could not log call', 'error'); }
     } catch (e) { gbToast('Could not log call', 'error'); }

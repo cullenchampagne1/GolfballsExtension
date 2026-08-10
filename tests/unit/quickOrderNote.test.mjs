@@ -46,6 +46,15 @@ describe('order-note payload normalization', () => {
     assert.equal(note.daysOut, 3);
     assert.equal(note.audienceVal, 'Custom Logo');
   });
+
+  it('preserves a saved follow-up action for the post-success runner', () => {
+    const note = normalizeOrderNote({
+      id: 'n1',
+      subject: 'Proof requested',
+      followUpActionId: ' action_9 ',
+    });
+    assert.equal(note.followUpActionId, 'action_9');
+  });
 });
 
 describe('Apply last note storage', () => {

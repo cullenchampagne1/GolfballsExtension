@@ -9,6 +9,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
+import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
 import { EmailRunner } from './EmailRunner.jsx';
 import { QuickTaskPopover } from './QuickTaskPopover.jsx';
 import { QuickTask } from './QuickTask.jsx';
@@ -770,6 +771,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
             context:  { contactId, employeeId },
           });
           if (!res?.ok) throw new Error(res?.error || 'Create task failed');
+          const followUpError = templateFollowUpActionError(res);
+          if (followUpError) {
+            toast?.warning?.(`Task ${id} created, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+          }
         }
         setActionStateByRow((cur) => ({ ...cur, [id]: verbed }));
         /* Fall back to natural status after a beat so the row

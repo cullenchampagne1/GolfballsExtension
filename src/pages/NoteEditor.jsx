@@ -12,6 +12,11 @@ import {
 } from '../ui/index.js';
 import { CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
 import { TASK_CATEGORY_OPTIONS } from '../lib/taskCategories.js';
+import {
+  loadTemplateFollowUpActions,
+  subscribeToTemplateFollowUpActions,
+  templateFollowUpActionOptions,
+} from '../lib/templateFollowUpAction.js';
 
 /* ─────────────────────────────────────────────────────────────
    NoteEditor — the production quick-note template editor page.
@@ -442,6 +447,9 @@ export function NoteEditor({ tpl, onDelete }) {
   const initialSubType = SUBTYPES[tpl.subType] ? tpl.subType : 'note';
   const [subType, setSubType] = useState(initialSubType);
   const [enabled, setEnabled] = useState(tpl.enabled !== false);
+  const [followUpActionOpts, setFollowUpActionOpts] = useState(() => (
+    templateFollowUpActionOptions([])
+  ));
 
   /* Single shared field bag — most fields are subtype-conditional in
      persisted form but live in one state object for ergonomic edits.
@@ -461,8 +469,22 @@ export function NoteEditor({ tpl, onDelete }) {
     callStep2:     tpl.callStep2 || '',
     callStep3:     tpl.callStep3 || '',
     callStep4:     tpl.callStep4 || '',
+    followUpActionId: String(tpl.followUpActionId || '').trim(),
   }));
   const set = (patch) => setData((d) => ({ ...d, ...patch }));
+
+  /* The selector is shared by note, task, and call-log templates. Keep it
+     live while the editor is open so enabling/deleting a custom action in a
+     second editor window is reflected without a reload. */
+  useEffect(() => {
+    let live = true;
+    const update = (actions) => {
+      if (live) setFollowUpActionOpts(templateFollowUpActionOptions(actions));
+    };
+    loadTemplateFollowUpActions().then(update);
+    const unsubscribe = subscribeToTemplateFollowUpActions(update);
+    return () => { live = false; unsubscribe(); };
+  }, []);
 
   const t = SUBTYPES[subType] || SUBTYPES.note;
   const Panel = subType === 'task' ? TaskPanel
@@ -496,6 +518,7 @@ export function NoteEditor({ tpl, onDelete }) {
       callStep2:     isCallLog ? (data.callStep2 || '') : undefined,
       callStep3:     isCallLog ? (data.callStep3 || '') : undefined,
       callStep4:     isCallLog ? (data.callStep4 || '') : undefined,
+      followUpActionId: String(data.followUpActionId || '').trim(),
       updatedAt: Date.now(),
     };
   }
@@ -545,6 +568,26 @@ export function NoteEditor({ tpl, onDelete }) {
 
       {/* ── Subtype panel ── */}
       <Panel data={data} set={set} />
+
+      {/* ── Shared post-success automation for every activity subtype ── */}
+      <div style={{ marginTop: 14 }}>
+        <SectionLabel>After success</SectionLabel>
+        <Card padding={11}>
+          <Field
+            label="Follow-up action"
+            hint={`Runs the selected custom action against the associated contact page after this ${t.label.toLowerCase()} succeeds.`}
+          >
+            <Dropdown
+              size="sm"
+              value={data.followUpActionId}
+              options={followUpActionOpts}
+              onChange={(value) => set({ followUpActionId: value })}
+              placeholder="— none —"
+              searchable={followUpActionOpts.length > 8}
+            />
+          </Field>
+        </Card>
+      </div>
     </div>
   );
 }

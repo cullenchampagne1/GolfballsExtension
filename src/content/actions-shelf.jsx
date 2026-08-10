@@ -19,6 +19,7 @@ import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/p
 import { loadLastOrderNote } from '../lib/quickOrderNote.js';
 import { submitOrderNote } from '../lib/submitOrderNote.js';
 import { sendEmailTemplateFromPage } from '../lib/emailTemplateDelivery.js';
+import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -594,7 +595,11 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
             return;
           }
           const result = await submitOrderNote(latest);
-          if (result?.ok) window.__gbToast?.success?.(`Order note applied: ${latest.name || latest.subject}`, { duration: 2400 });
+          if (result?.ok) {
+            const followUpError = templateFollowUpActionError(result);
+            if (followUpError) window.__gbToast?.warning?.(`Order note applied, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+            else window.__gbToast?.success?.(`Order note applied: ${latest.name || latest.subject}`, { duration: 2400 });
+          }
           else window.__gbToast?.error?.(`Couldn't apply note: ${result?.error || 'unknown error'}`, { duration: 5000 });
         },
       });

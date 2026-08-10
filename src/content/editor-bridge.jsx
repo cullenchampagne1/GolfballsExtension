@@ -180,7 +180,7 @@ async function newNoteTemplate() {
   const blank = {
     id, name: 'New Note Template', subType: 'note',
     enabled: true, subject: '', body: '',
-    audienceVal: '', daysOut: null,
+    audienceVal: '', daysOut: null, followUpActionId: '',
     updatedAt: Date.now(),
   };
   noteTemplates.push(blank);

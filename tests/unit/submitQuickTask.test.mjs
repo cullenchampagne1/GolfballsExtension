@@ -180,6 +180,33 @@ describe('submitQuickTask — response handling', () => {
     assert.equal(res.ok, true);
     assert.equal(res.taskId, undefined);
   });
+
+  it('runs a configured follow-up against the created task contact', async () => {
+    installChrome();
+    const calls = [];
+    const res = await submitQuickTask({
+      template: { subject: 'Follow up', followUpActionId: 'action_1' },
+      context: VALID_CONTEXT,
+    }, {
+      loadActions: async () => [{ id: 'action_1', enabled: true, source: '' }],
+      hydrateContact: async (contact) => {
+        calls.push(['hydrate', contact.contactId, contact.contactUrl]);
+        return { page: { contact: { contactId: contact.contactId } }, context: { doc: {} } };
+      },
+      runAction: async ({ action, page }) => {
+        calls.push(['run', action.id, page.contact.contactId]);
+        return { ok: true, steps: 1 };
+      },
+    });
+
+    assert.equal(res.ok, true);
+    assert.equal(res.taskId, 4321);
+    assert.equal(res.followUpAction.ok, true);
+    assert.deepEqual(calls, [
+      ['hydrate', '555001', 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=555001'],
+      ['run', 'action_1', '555001'],
+    ]);
+  });
 });
 
 describe('readTaskContext — parsing the contact/account page', () => {

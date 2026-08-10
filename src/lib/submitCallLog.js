@@ -30,6 +30,7 @@
 
 import { API } from './constants.js';
 import { resolveEmployeeId } from './employeeIdentity.js';
+import { runTemplateFollowUpAfterSuccess } from './templateFollowUpAction.js';
 
 const BASE = API.CRM;
 
@@ -93,7 +94,7 @@ export async function readCallContext() {
  * Never throws — every error path resolves with a string the modal
  * can drop straight into a toast.
  */
-export async function submitCallLog({ template, context } = {}) {
+export async function submitCallLog({ template, context } = {}, followUpDeps = {}) {
   const tpl = template || {};
   const ctx = context  || {};
 
@@ -210,5 +211,15 @@ export async function submitCallLog({ template, context } = {}) {
     return { ok: false, error: `CRM rejected the submission (HTTP ${postResp?.status || 'error'}).` };
   }
 
-  return { ok: true };
+  return runTemplateFollowUpAfterSuccess({
+    result: { ok: true },
+    template: tpl,
+    context: {
+      ...ctx,
+      crmContactId: ctx.crmContactId || ctx.contactId,
+      employeeId,
+    },
+    page: followUpDeps.page,
+    snapshot: followUpDeps.snapshot,
+  }, followUpDeps);
 }

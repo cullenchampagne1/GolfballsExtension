@@ -1,4 +1,5 @@
 import { normalizeOrderNote, saveLastOrderNoteId } from './quickOrderNote.js';
+import { runTemplateFollowUpAfterSuccess } from './templateFollowUpAction.js';
 
 /* ───────────────────────────────────────────────────────────────
    submitOrderNote — normalize a quick-note template and apply it to
@@ -30,7 +31,8 @@ function ensureResultListener() {
   });
 }
 
-export function submitOrderNote(template, { timeoutMs = 35_000 } = {}) {
+export function submitOrderNote(template, options = {}) {
+  const { timeoutMs = 35_000 } = options;
   const note = normalizeOrderNote(template);
   if (!note.subject && !note.body) return Promise.resolve({ ok: false, error: 'Add a subject or note body first' });
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
@@ -56,6 +58,15 @@ export function submitOrderNote(template, { timeoutMs = 35_000 } = {}) {
     });
   }).then(async (result) => {
     if (result.ok && note.id && !note.id.startsWith('custom-')) await saveLastOrderNoteId(note.id);
-    return result;
+    const sourceDocument = options.document
+      || (typeof document !== 'undefined' ? document : null);
+    return runTemplateFollowUpAfterSuccess({
+      result,
+      template: note,
+      context: options.context || {},
+      page: options.page || null,
+      snapshot: options.snapshot || null,
+      document: sourceDocument,
+    }, options.followUpDeps || options);
   });
 }

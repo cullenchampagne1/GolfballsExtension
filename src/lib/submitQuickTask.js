@@ -27,6 +27,7 @@
 import { DEFAULT_PRIORITY } from './quickTask.js';
 import { API } from './constants.js';
 import { resolveEmployeeId } from './employeeIdentity.js';
+import { runTemplateFollowUpAfterSuccess } from './templateFollowUpAction.js';
 
 const BASE = API.CRM;
 
@@ -125,7 +126,7 @@ export async function readTaskContext() {
  * Never throws — every error path resolves with a string the modal
  * pipes straight into a toast.
  */
-export async function submitQuickTask({ template, context } = {}) {
+export async function submitQuickTask({ template, context } = {}, followUpDeps = {}) {
   const tpl = template || {};
   const ctx = context  || {};
 
@@ -207,5 +208,16 @@ export async function submitQuickTask({ template, context } = {}) {
     return { ok: false, error: 'CRM accepted the request but no TaskId came back.' };
   }
 
-  return { ok: true, taskId: payload?.TaskId };
+  return runTemplateFollowUpAfterSuccess({
+    result: { ok: true, taskId: payload?.TaskId },
+    template: tpl,
+    context: {
+      ...ctx,
+      crmContactId: ctx.crmContactId || contactId,
+      contactId,
+      employeeId,
+    },
+    page: followUpDeps.page,
+    snapshot: followUpDeps.snapshot,
+  }, followUpDeps);
 }

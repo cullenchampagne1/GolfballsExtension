@@ -7,12 +7,13 @@
    and runs both follow-ups independently. Callers invoke it ONLY after the
    email transport reports `sent` or `opened`; see emailTemplateDelivery.js.
 
-   Follow-up actions intentionally receive the recipient page/contact model,
-   not transient modal entry-point data from whichever bulk-send window happens
-   to be open. That keeps one action run attached to one successful recipient.
+   Follow-up actions intentionally hydrate the recipient's canonical contact
+   page, not transient modal entry-point data or the order/account document the
+   email originated from. That keeps one action run attached to one recipient.
 ────────────────────────────────────────────────────────────── */
 
 import { shapeExtractedPage } from './codeEngine/pageModel.js';
+import { runTemplateFollowUpAction } from './templateFollowUpAction.js';
 
 const clean = (value) => String(value == null ? '' : value).trim();
 const object = (value) => (
@@ -160,42 +161,6 @@ async function createTask({ template, context }) {
   return submitQuickTask({ template, context });
 }
 
-async function runCustomAction({ action, page, document: sourceDocument }) {
-  const [sim, sandbox, bridge, live] = await Promise.all([
-    import('./codeEngine/simulate.js'),
-    import('./codeEngine/sandboxRunner.js'),
-    import('./page-engine/sandbox-bridge.js'),
-    import('./codeEngine/liveActionRun.js'),
-  ]);
-
-  /* Choosing the action in the email template is the authorization for this
-     automatic run, so there is no second per-recipient confirmation dialog.
-     The code still executes in the sandbox and every write still goes through
-     the same typed executor/validation contracts as a shelf action. */
-  page.entryPoints = [];
-  page.entryPoint = null;
-  const executor = await live.makeLiveExecutor(page);
-  const result = await sim.simulateProgram(action.source || '', page, {
-    run: sandbox.makeSandboxRunner({ exec: bridge.runInSandbox, doc: sourceDocument }),
-    user: {},
-    executor,
-  });
-  const failed = (result.trace || []).filter((entry) => (
-    entry?.contract && entry.status === 'failed'
-  ));
-  if (result.cancelled) return { ok: false, error: 'Action was cancelled.' };
-  if (result.error) return { ok: false, error: result.error };
-  if (failed.length) {
-    const firstError = failed[0]?.errors?.[0] || 'A custom-action step failed.';
-    return { ok: false, error: firstError, failed: failed.length };
-  }
-  return {
-    ok: true,
-    steps: (result.trace || []).filter((entry) => entry?.contract).length,
-    result: typeof result.result === 'string' ? result.result : null,
-  };
-}
-
 function resultError(result, fallback) {
   return clean(result?.error || result?.reason || fallback);
 }
@@ -252,11 +217,30 @@ export async function runEmailTemplateFollowUps(input = {}, deps = {}) {
       action = { ok: false, error: 'Selected follow-up action is disabled or no longer exists.' };
     } else {
       try {
-        action = await (deps.runAction || runCustomAction)({
-          action: selected,
-          page: built.page,
-          document: built.document,
-        });
+        /* Preserve the lightweight runAction injection used by unit hosts.
+           Production always goes through the shared Page=240 hydrator, so an
+           email sent from an order/account row cannot execute against that
+           source page by accident. */
+        action = deps.runAction
+          ? await deps.runAction({
+              action: selected,
+              page: built.page,
+              document: built.document,
+            })
+          : await runTemplateFollowUpAction({
+              template,
+              action: selected,
+              context: {
+                ...object(input.context),
+                crmContactId: built.taskContext.contactId,
+                contactId: built.taskContext.contactId,
+                accountId: built.taskContext.accountId,
+                contactName: built.taskContext.contactName,
+                employeeId: built.taskContext.employeeId,
+              },
+              page: built.page,
+              document: built.document,
+            }, deps);
       } catch (error) {
         action = { ok: false, error: clean(error?.message || error) || 'Custom action failed.' };
       }

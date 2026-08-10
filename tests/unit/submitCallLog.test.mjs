@@ -133,6 +133,28 @@ describe('submitCallLog — CRM request construction', () => {
     assert.equal(body.get('ctl00$Content$tbSubject'), 'Voicemail Left');
     assert.equal(body.get('ctl00$Content$tbBody'), '');
   });
+
+  it('runs a configured follow-up against the logged call contact', async () => {
+    const calls = installChrome(() => ({ ok: true, text: CRM_FORM_HTML }));
+    const res = await submitCallLog({
+      template: { ...VALID_TEMPLATE, followUpActionId: 'action_1' },
+      context: VALID_CONTEXT,
+    }, {
+      loadActions: async () => [{ id: 'action_1', enabled: true, source: '' }],
+      hydrateContact: async (contact) => ({
+        page: { contact: { contactId: contact.contactId } },
+        context: { doc: {} },
+      }),
+      runAction: async ({ action, page }) => {
+        calls.push({ followUpAction: action.id, contactId: page.contact.contactId });
+        return { ok: true, steps: 1 };
+      },
+    });
+
+    assert.equal(res.ok, true);
+    assert.equal(res.followUpAction.ok, true);
+    assert.deepEqual(calls[2], { followUpAction: 'action_1', contactId: '555001' });
+  });
 });
 
 describe('submitCallLog — transport failures', () => {

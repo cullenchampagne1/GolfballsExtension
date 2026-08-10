@@ -15,6 +15,7 @@ import {
 } from '../lib/callLog.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
 import { useDevSetting } from '../lib/devSettings.js';
+import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
 
 /* ───────────────────────────────────────────────────────────────
    CallLog — the redesigned, keyboard-first call logger.
@@ -153,7 +154,12 @@ export function CallLog({
     setBusy(true);
     try {
       const result = await onSubmit(tpl);
-      if (result?.ok) { toast?.success?.(`Logged: ${tpl.name}`, { duration: 2200 }); animatedClose(); }
+      if (result?.ok) {
+        const followUpError = templateFollowUpActionError(result);
+        if (followUpError) toast?.warning?.(`Call logged, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+        else toast?.success?.(`Logged: ${tpl.name}`, { duration: 2200 });
+        animatedClose();
+      }
       else { toast?.error?.(`Couldn't log call: ${result?.error || 'unknown error'}`); setBusy(false); }
     } catch (err) { toast?.error?.(`Couldn't log call: ${err?.message || err}`); setBusy(false); }
   };
@@ -170,7 +176,12 @@ export function CallLog({
     setBusy(true);
     try {
       const result = await onSubmit(synthetic);
-      if (result?.ok) { toast?.success?.('Call logged', { duration: 2200 }); animatedClose(); }
+      if (result?.ok) {
+        const followUpError = templateFollowUpActionError(result);
+        if (followUpError) toast?.warning?.(`Call logged, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+        else toast?.success?.('Call logged', { duration: 2200 });
+        animatedClose();
+      }
       else { toast?.error?.(`Couldn't log call: ${result?.error || 'unknown error'}`); setBusy(false); }
     } catch (err) { toast?.error?.(`Couldn't log call: ${err?.message || err}`); setBusy(false); }
   };

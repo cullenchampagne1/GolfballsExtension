@@ -53,6 +53,10 @@
       "file": "tests/unit/emailTemplateFollowUps.test.mjs"
     },
     {
+      "name": "flow \u00b7 contact-scoped template follow-up actions",
+      "file": "tests/unit/templateFollowUpAction.test.mjs"
+    },
+    {
       "name": "email \u00b7 HTML sanitizer strips scripts & bypasses",
       "file": "tests/unit/sanitizeHtml.test.mjs"
     },
@@ -99,6 +103,10 @@
     {
       "name": "modal \u00b7 quick order-note templates & last-note action",
       "file": "tests/unit/quickOrderNote.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 note, task & call-log follow-up action selector",
+      "file": "tests/unit/noteTemplateFollowUpPresentation.test.mjs"
     },
     {
       "name": "modal \u00b7 product mockup studio client contract",

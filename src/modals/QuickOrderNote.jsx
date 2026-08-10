@@ -7,6 +7,7 @@ import { useModalTopState } from '../lib/actionRegistry.js';
 import {
   buildCustomOrderNote, loadOrderNoteTemplates, subscribeToOrderNoteTemplates,
 } from '../lib/quickOrderNote.js';
+import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
 
 /* ───────────────────────────────────────────────────────────────
    QuickOrderNote — keyboard-first modal for applying an order note.
@@ -91,7 +92,9 @@ export function QuickOrderNote({
     try {
       const result = await onSubmit(template);
       if (result?.ok) {
-        toast?.success?.(`Order note applied: ${template.name || template.subject}`, { duration: 2400 });
+        const followUpError = templateFollowUpActionError(result);
+        if (followUpError) toast?.warning?.(`Order note applied, but follow-up action failed: ${followUpError}`, { duration: 5000 });
+        else toast?.success?.(`Order note applied: ${template.name || template.subject}`, { duration: 2400 });
         close();
       } else {
         toast?.error?.(`Couldn't apply note: ${result?.error || 'unknown error'}`);
