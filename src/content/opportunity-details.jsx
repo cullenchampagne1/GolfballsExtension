@@ -182,7 +182,9 @@ function ProposalsSection({ initialProposals = null }) {
     try {
       // Reuse the modal's proven pipeline: loadProposalCart → cartToEntry →
       // linesFromSaved → proposalToEmailSource (single) / sections (multi).
-      const src = await buildEmailSourceFromCartIds(chosen.map((p) => p.cartId), { name: chosen.length === 1 ? chosen[0].name : '' });
+      const src = await buildEmailSourceFromCartIds(chosen.map((p) => p.cartId), {
+        optionNamesByCartId: Object.fromEntries(chosen.map((proposal) => [proposal.cartId, proposal.name])),
+      });
       setSource(src);
     } catch (e) { gbToast('Could not load proposal carts', 'error'); }
     finally { setBuilding(false); }
@@ -257,9 +259,9 @@ function ProposalsSection({ initialProposals = null }) {
 
       {hasContent && (
         <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
-          <SectionTitle icon={<I.mail />} title="Proposal Email" sub="Generated from the proposals' line items — pick a template & preview" />
+          <SectionTitle icon={<I.mail />} title="Proposal Email" sub="Arrange each proposal section, then pick a template and preview" />
           <div style={{ height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
-            <ProposalEmailComposer source={source} />
+            <ProposalEmailComposer source={source} allowReorder onSourceChange={setSource} />
           </div>
         </Card>
       )}

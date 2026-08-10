@@ -53,6 +53,10 @@
       "file": "tests/unit/proposalEmailSource.test.mjs"
     },
     {
+      "name": "email \u00b7 proposal section ordering",
+      "file": "tests/unit/proposalEmailOrder.test.mjs"
+    },
+    {
       "name": "email \u00b7 template import validation",
       "file": "tests/unit/templateImport.test.mjs"
     },

@@ -5,6 +5,7 @@ import { I } from '../ui/icons.jsx';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { linesToShots } from '../lib/proposalSnapshots.js';
+import { buildProposalOutline, moveProposalItem } from '../lib/proposalEmailOrder.js';
 import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -540,6 +541,85 @@ function OptionToggle({ checked, label, hint, onClick, disabled }) {
   );
 }
 
+/* Opportunity-page proposal outline. It lives in the existing settings rail so
+   the generated proposal remains the full-height canvas on the right. Items can
+   be dragged or moved with the keyboard-accessible arrow controls; multi-cart
+   sources retain a distinct named section for every selected proposal. */
+function ProposalStructureRail({ source, onChange }) {
+  const outline = useMemo(() => buildProposalOutline(source), [source]);
+  const [dragging, setDragging] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+  const move = (sectionIndex, fromIndex, toIndex) => {
+    const next = moveProposalItem(source, sectionIndex, fromIndex, toIndex);
+    if (next !== source) onChange(next);
+    setDragging(null);
+    setDragOver(null);
+  };
+
+  return (
+    <ConfigGroup title={outline.length > 1 ? `Proposal sections · ${outline.length}` : 'Proposal structure'}>
+      <div style={{ fontSize: 10.5, lineHeight: 1.45, color: 'var(--gb-text-muted)' }}>
+        Drag items or use the arrows to change their order in the proposal.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {outline.map((section) => {
+          const sectionLetter = section.index < 26 ? String.fromCharCode(65 + section.index) : String(section.index + 1);
+          return (
+            <div key={section.key} style={{ overflow: 'hidden', borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', background: 'var(--gb-fill-subtle)', borderBottom: section.items.length ? '1px solid var(--gb-border-subtle)' : 'none' }}>
+                <span style={{ width: 22, height: 22, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', fontSize: 10, fontWeight: 800 }}>{sectionLetter}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div title={section.label} style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.label}</div>
+                  <div style={{ marginTop: 1, fontSize: 9.5, color: 'var(--gb-text-muted)' }}>{section.items.length} {section.items.length === 1 ? 'item' : 'items'}</div>
+                </div>
+              </div>
+              {section.items.length === 0 ? (
+                <div style={{ padding: '10px 12px', fontSize: 10.5, color: 'var(--gb-text-muted)' }}>No line items</div>
+              ) : section.items.map((item, itemIndex) => {
+                const isDragging = dragging && dragging.sectionIndex === section.index && dragging.itemIndex === itemIndex;
+                const isTarget = dragOver && dragOver.sectionIndex === section.index && dragOver.itemIndex === itemIndex;
+                return (
+                  <div key={item.key}
+                    draggable={section.items.length > 1}
+                    onDragStart={(event) => {
+                      setDragging({ sectionIndex: section.index, itemIndex });
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', `${section.index}:${itemIndex}`);
+                    }}
+                    onDragOver={(event) => {
+                      if (!dragging || dragging.sectionIndex !== section.index) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      setDragOver({ sectionIndex: section.index, itemIndex });
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (dragging && dragging.sectionIndex === section.index) move(section.index, dragging.itemIndex, itemIndex);
+                    }}
+                    onDragEnd={() => { setDragging(null); setDragOver(null); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 44, padding: '7px 7px 7px 9px', borderBottom: itemIndex < section.items.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none', background: isTarget ? 'var(--gb-brand-tint-soft)' : 'transparent', opacity: isDragging ? .5 : 1, transition: 'background var(--gb-anim), opacity var(--gb-anim)' }}>
+                    <span title="Drag to reorder" style={{ display: 'inline-flex', color: 'var(--gb-text-muted)', cursor: section.items.length > 1 ? 'grab' : 'default', flexShrink: 0 }}><I.grip size={13} /></span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div title={item.title} style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
+                      <div style={{ marginTop: 1, fontSize: 9.5, color: item.free ? 'var(--gb-success-fg)' : 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {[item.brand, item.quantity ? `Qty ${item.quantity}` : '', item.free ? 'Free' : ''].filter(Boolean).join(' · ') || 'Proposal item'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                      <IconBtn size="xs" variant="ghost" disabled={itemIndex === 0} aria-label={`Move ${item.title} up`} title="Move up" icon={<I.chevd style={{ transform: 'rotate(180deg)' }} />} onClick={() => move(section.index, itemIndex, itemIndex - 1)} />
+                      <IconBtn size="xs" variant="ghost" disabled={itemIndex === section.items.length - 1} aria-label={`Move ${item.title} down`} title="Move down" icon={<I.chevd />} onClick={() => move(section.index, itemIndex, itemIndex + 1)} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </ConfigGroup>
+  );
+}
+
 /* ════════════════════════════════════════════════════════════
    THE COMPOSER MODAL — settings · live preview · copy
 ════════════════════════════════════════════════════════════ */
@@ -606,7 +686,7 @@ function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
    saved-proposal breakdown panel in place of the margin view, or sits inside the
    ProposalEmailModal wrapper below. `onBack` (optional) renders a back button in
    the footer for the inline use. */
-export function ProposalEmailComposer({ source, onBack, backLabel }) {
+export function ProposalEmailComposer({ source, onBack, backLabel, allowReorder = false, onSourceChange }) {
   // Mounts when the rep switches the catalog (or the opportunity page) into
   // proposal-email mode; unmounts on Back. Both wrappers get one report.
   useSurfaceUsage('Proposal Email');
@@ -761,6 +841,8 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
         {/* body: settings | preview */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <div className="gb-thin-scroll" style={{ width: 340, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {allowReorder && onSourceChange && <ProposalStructureRail source={source} onChange={onSourceChange} />}
+
             <ConfigGroup title="Template">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {PROPOSAL_TEMPLATES.map((t) => <TemplateCard key={t.id} tpl={t} on={templateId === t.id} onClick={() => setTemplateId(t.id)} />)}
@@ -769,10 +851,14 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
 
             <ConfigGroup title="Proposal">
               <EmailField label="Header (group name)" value={groupName} onChange={setGroupName} placeholder="Your Custom Order" />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <EmailField half label="Option name" value={optionName} onChange={setOptionName} placeholder="Mint Containers" />
-                <EmailField half label="Expires" value={expiration} onChange={setExpiration} placeholder="7/20/2026" mono />
-              </div>
+              {sections ? (
+                <EmailField label="Expires" value={expiration} onChange={setExpiration} placeholder="7/20/2026" mono />
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <EmailField half label="Option name" value={optionName} onChange={setOptionName} placeholder="Mint Containers" />
+                  <EmailField half label="Expires" value={expiration} onChange={setExpiration} placeholder="7/20/2026" mono />
+                </div>
+              )}
               <EmailField label="Personal message" value={message} onChange={setMessage} placeholder="Add a short note above the items…" area />
             </ConfigGroup>
 

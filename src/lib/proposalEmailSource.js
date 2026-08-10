@@ -141,7 +141,8 @@ const cartLinkOf = (cartId) => cartId
  * reproducing GiftCatalog's pipeline exactly.
  *
  * @param {string[]} cartIds   One or more proposal cart IDs.
- * @param {{name?:string}} baseMeta  Meta applied to every cart (cartToEntry meta + option name).
+ * @param {{name?:string, optionNamesByCartId?:Record<string,string>}} baseMeta
+ *        Shared cart metadata plus optional per-cart proposal names.
  * @returns Single cart → a proposalToEmailSource result.
  *          Multiple carts → the combined multi shape
  *          { sections, rawLines, lines:[], total, groupName, optionName }.
@@ -149,12 +150,14 @@ const cartLinkOf = (cartId) => cartId
 export async function buildEmailSourceFromCartIds(cartIds, baseMeta = {}) {
   const ids = (cartIds || []).filter(Boolean);
   const meta = baseMeta || {};
+  const optionNamesByCartId = meta.optionNamesByCartId || {};
   const sources = [];
   for (let i = 0; i < ids.length; i++) {
     const cartId = ids[i];
-    const entry = cartToEntry(await loadProposalCart(cartId), meta);
+    const mappedName = typeof optionNamesByCartId[cartId] === 'string' ? optionNamesByCartId[cartId].trim() : '';
+    const name = mappedName || meta.name || `Option ${i + 1}`;
+    const entry = cartToEntry(await loadProposalCart(cartId), { ...meta, name });
     const lines = linesFromSaved(entry, rid);
-    const name = meta.name || `Option ${i + 1}`;
     // `cartToEntry` recovers both the materialized `-PROMO` giveaway line and
     // the cart's promotion object. The line alone can render "FREE", but the
     // promotion is what supplies the code and tells proposalToEmailSource to

@@ -202,4 +202,17 @@ describe('buildEmailSourceFromCartIds — multiple carts', () => {
     assert.equal(multi.sections[0].optionName, 'Option 1');
     assert.equal(multi.sections[1].optionName, 'Option 2');
   });
+
+  it('preserves each selected proposal name when multiple carts are generated', async () => {
+    const multi = await buildEmailSourceFromCartIds(['CART1', 'CARTG'], {
+      optionNamesByCartId: {
+        CART1: 'Executive Golf Balls',
+        CARTG: 'Event Gift Sets',
+      },
+    });
+    assert.deepEqual(multi.sections.map((section) => section.optionName), [
+      'Executive Golf Balls',
+      'Event Gift Sets',
+    ]);
+  });
 });
