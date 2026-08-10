@@ -2,11 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [searchSource, pageSource, emailRunnerSource, iconSource] = await Promise.all([
+const [searchSource, pageSource, emailRunnerSource, iconSource, queryBuilderSource] = await Promise.all([
   readFile(new URL('../../src/modals/CRMSearch.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/content/crm-search-page.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/EmailRunner.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/ui/icons.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../../src/modals/QueryBuilder.jsx', import.meta.url), 'utf8'),
 ]);
 
 function matches(source, pattern) {
@@ -41,5 +42,19 @@ describe('CRM Search presentation · Page Engine cache control', () => {
     assert.ok(cacheAt > 0);
     assert.ok(dataResolverAt > cacheAt);
     assert.ok(liveFetchAt > dataResolverAt);
+  });
+
+  it('gates cached-account match rules on Page Engine settings and warns on every active search surface', () => {
+    assert.match(queryBuilderSource, /pageEngine\.indexingEnabled/);
+    assert.match(queryBuilderSource, /pageEngine\.territory/);
+    assert.match(queryBuilderSource, /cacheAvailable/);
+    assert.match(queryBuilderSource, /<AccountConditions/);
+    assert.match(queryBuilderSource, /resolveCachedAccountFilter/);
+    assert.match(queryBuilderSource, /<CacheQueryNotice/);
+
+    for (const source of [searchSource, pageSource]) {
+      assert.match(source, /hasCacheQuery/);
+      assert.match(source, /<CacheQueryNotice/);
+    }
   });
 });

@@ -29,8 +29,10 @@ import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { EngineCacheTag } from '../ui/components/EngineCacheTag.jsx';
+import { CacheQueryNotice } from '../ui/components/CacheQueryNotice.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { attachCachedPageEngineSnapshots } from '../lib/page-engine/cache-actions.js';
+import { cacheRuleTreeStatus } from '../lib/crmCacheQuery.js';
 import {
   ARMOR, Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, ScrollArea, SectionTitle, Spinner,
   Tag, TaskCheckbox, Td, Th, DASH as _DASH, EmptyRow, fmt$, fmtDate, goUrl, num, recUrl, tableStyle, trStyle, txt,
@@ -383,6 +385,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [query, setQuery] = useState(url0.q);
   const [type, setType] = useState(url0.type);
   const [qbFilter, setQbFilter] = useState(url0.fq ? { label: 'Saved filter', solrFq: url0.fq, conditions: [], state: null } : null);
+  const hasCacheQuery = cacheRuleTreeStatus(qbFilter?.cacheRules || qbFilter?.state?.cacheRules).active;
   // Facet selections (Sets per field) + the facet counts from the last search.
   const emptySel = () => ({ recordType_s: new Set(), salesRep_s: new Set(), role_s: new Set(), podID_i: new Set(), lastOrderDate_dt: new Set(), nextTaskDate_dt: new Set() });
   const [selected, setSelected] = useState(emptySel);
@@ -541,7 +544,15 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     runSearch(query.trim(), type, qbFilter);
   };
   const onTypeChange = (t) => { setType(t); writeUrlSearch(query.trim(), t, qbFilter?.solrFq || ''); if (searched) runSearch(query.trim(), t, qbFilter); };
-  const applyQb = (filter) => { setQbFilter(filter); setQbOpen(false); writeUrlSearch(query.trim(), type, filter?.solrFq || ''); runSearch(query.trim(), type, filter); };
+  const applyQb = (filter) => {
+    const cacheActive = cacheRuleTreeStatus(filter?.cacheRules || filter?.state?.cacheRules).active;
+    const nextType = cacheActive ? 'account' : type;
+    if (cacheActive) setType('account');
+    setQbFilter(filter);
+    setQbOpen(false);
+    writeUrlSearch(query.trim(), nextType, filter?.solrFq || '');
+    runSearch(query.trim(), nextType, filter);
+  };
   const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null); };
   const selectedResults = useMemo(() => selectedCrmRows(rows, selectedRows), [rows, selectedRows]);
   const workflowContacts = useMemo(
@@ -725,13 +736,16 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
 
             {/* Active QB filter chip */}
             {qbFilter && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Filter</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 6px 4px 10px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 600, maxWidth: '100%' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 520 }}>{qbFilter.label || 'Advanced filter'}</span>
-                  <IconBtn size="xs" ghost icon={<I.close />} title="Remove filter" onClick={clearQb} />
-                </span>
-                <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setQbOpen(true)}>Edit</Btn>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Filter</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 6px 4px 10px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 600, maxWidth: '100%' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 520 }}>{qbFilter.label || 'Advanced filter'}</span>
+                    <IconBtn size="xs" ghost icon={<I.close />} title="Remove filter" onClick={clearQb} />
+                  </span>
+                  <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setQbOpen(true)}>Edit</Btn>
+                </div>
+                {hasCacheQuery && <CacheQueryNotice />}
               </div>
             )}
               </div>

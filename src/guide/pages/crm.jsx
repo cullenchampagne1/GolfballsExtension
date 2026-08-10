@@ -256,6 +256,22 @@ export function QBPage() {
         <tbody>{QB_OPS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
       </table>
 
+      <h3 className="sub">Cached account fields</h3>
+      <p>
+        When Page Engine indexing is on and an Engine Territory is configured, the builder adds a
+        <strong> Cached account fields</strong> mode. It uses the same grouped match-rule picker as email
+        templates, so you can filter on extracted account, order, address, and other Page Engine fields
+        that are not part of the CRM search index. The matching cached Account IDs are combined with any
+        regular CRM conditions before the search runs.
+      </p>
+      <div className="docnote warn">
+        <span className="dn-ico"><I.alert size={15} /></span>
+        <div className="dn-b">
+          <div className="dn-t">Cached accounts only</div>
+          <p style={{ margin: 0 }}>A cache rule can only evaluate Account pages already cached on this device. Accounts that have not been cached are excluded from the results, even when they would otherwise satisfy the rule.</p>
+        </div>
+      </div>
+
       <h3 className="sub">Built-in quick presets</h3>
       <table className="spectable">
         <thead><tr><th>Preset</th><th>Audience</th></tr></thead>

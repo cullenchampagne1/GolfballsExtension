@@ -2,10 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, Btn, Input, IconBtn, Tag, I, Dropdown, DatePicker,
+  Segmented, AccountConditions, CacheQueryNotice,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { useSurfaceUsage } from '../lib/usageTelemetry.js';
+import {
+  cacheRuleTreeStatus,
+  combineCrmFilterFq,
+  resolveCachedAccountFilter,
+} from '../lib/crmCacheQuery.js';
 
 /* ───────────────────────────────────────────────────────────────
    QueryBuilder — CRM match-rule query builder modal.
@@ -443,6 +449,13 @@ function buildInitial({ initialState, initialConditions }) {
       }],
     };
   }
+  if (cacheRuleTreeStatus(initialState?.cacheRules).active) {
+    const accountCondition = { ...newCondition(), val: 'Account' };
+    return {
+      outerJoiner: 'AND',
+      groups: [{ id: uid(), joiner: 'AND', conditions: [accountCondition] }],
+    };
+  }
   return { outerJoiner: 'AND', groups: [newGroup()] };
 }
 
@@ -463,9 +476,35 @@ function flattenGroups(groups) {
   return out;
 }
 
+function savedBuilderState(outerJoiner, groups, cacheRules) {
+  return {
+    outerJoiner,
+    groups: groups.map((group) => ({
+      joiner: group.joiner,
+      conditions: group.conditions.map(({ id: _id, ...condition }) => condition),
+    })),
+    cacheRules,
+  };
+}
+
+function isPristineContactDefault(builder) {
+  const condition = builder?.groups?.[0]?.conditions?.[0];
+  return builder?.groups?.length === 1
+    && builder.groups[0].conditions.length === 1
+    && condition?.fieldKey === 'recordType_s'
+    && condition?.op === 'is'
+    && condition?.val === 'Contact'
+    && !condition?.not;
+}
+
+const emptyCacheRules = () => ({ outerJoiner: 'AND', groups: [] });
+
 /* ── Component ─────────────────────────────────────────────── */
 export function QueryBuilder({ onClosed, bindClose, initialConditions = [], initialState, onApply }) {
   const draggable = useDevSetting('crmSearch.draggable') ?? false;
+  const engineIndexingEnabled = useDevSetting('pageEngine.indexingEnabled') === true;
+  const engineTerritory = useDevSetting('pageEngine.territory');
+  const cacheAvailable = engineIndexingEnabled && !!String(engineTerritory || '').trim();
   const toast = useToast();
   // Mounted only while open (CRM Search renders it behind `qbOpen`), so the
   // mount IS the open — there is no mountFloating host to report from.
@@ -473,6 +512,11 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
 
   const [{ outerJoiner, groups }, setBuilder] = useState(() =>
     buildInitial({ initialState, initialConditions }));
+  const [cacheRules, setCacheRules] = useState(() => initialState?.cacheRules || emptyCacheRules());
+  const [cacheRulesKey, setCacheRulesKey] = useState(0);
+  const [editorMode, setEditorMode] = useState(() => (
+    cacheRuleTreeStatus(initialState?.cacheRules).active ? 'cache' : 'crm'
+  ));
   const [savedQueries, setSavedQueries] = useState([]);
   const [presetLayer, setPresetLayer] = useState(emptyPresetLayer);
   const [saveName, setSaveName] = useState('');
@@ -502,10 +546,22 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
 
   const solrFq = useMemo(() => compileGroupsToSolr(groups, outerJoiner), [groups, outerJoiner]);
   const label  = useMemo(() => compileGroupsToLabel(groups, outerJoiner), [groups, outerJoiner]);
-  const canApply = solrFq.length > 0;
+  const cacheStatus = useMemo(() => cacheRuleTreeStatus(cacheRules), [cacheRules]);
+  const canApply = (solrFq.length > 0 || cacheStatus.active)
+    && cacheStatus.valid
+    && (!cacheStatus.active || cacheAvailable);
   const conditionCount = groups.reduce((n, g) => n + g.conditions.length, 0);
+  const previewLabel = [
+    label,
+    cacheStatus.active
+      ? `${cacheStatus.count} cached account rule${cacheStatus.count === 1 ? '' : 's'}`
+      : '',
+  ].filter(Boolean).join(' · ');
 
-  useEffect(() => { setPulseKey((k) => k + 1); }, [solrFq]);
+  useEffect(() => { setPulseKey((k) => k + 1); }, [solrFq, cacheRules]);
+  useEffect(() => {
+    if (!cacheAvailable && editorMode === 'cache') setEditorMode('crm');
+  }, [cacheAvailable, editorMode]);
 
   /* ── Mutators ── */
   const patchCondition = (gid, cid, patch) => {
@@ -574,6 +630,10 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   const addGroup = () => setBuilder((s) => ({ ...s, groups: [...s.groups, newGroup()] }));
   const setOuterJoiner = (joiner) => setBuilder((s) => ({ ...s, outerJoiner: joiner }));
 
+  const replaceCacheRules = (next) => {
+    setCacheRules(next || emptyCacheRules());
+    setCacheRulesKey((key) => key + 1);
+  };
   const loadFromState = (st) => {
     setBuilder({
       outerJoiner: st.outerJoiner || 'AND',
@@ -583,33 +643,92 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
         conditions: (g.conditions || []).map((c) => ({ ...c, id: uid() })),
       })),
     });
+    replaceCacheRules(st.cacheRules);
+    setEditorMode(cacheAvailable && cacheRuleTreeStatus(st.cacheRules).active ? 'cache' : 'crm');
   };
-  const handleClear = () => setBuilder({ outerJoiner: 'AND', groups: [newGroup()] });
+  const handleCacheRulesChange = (next) => {
+    const wasActive = cacheRuleTreeStatus(cacheRules).active;
+    const isActive = cacheRuleTreeStatus(next).active;
+    setCacheRules(next);
+    if (!wasActive && isActive) {
+      setBuilder((builder) => {
+        if (!isPristineContactDefault(builder)) return builder;
+        return {
+          ...builder,
+          groups: builder.groups.map((group, groupIndex) => groupIndex !== 0 ? group : {
+            ...group,
+            conditions: group.conditions.map((condition, conditionIndex) => (
+              conditionIndex === 0 ? { ...condition, val: 'Account' } : condition
+            )),
+          }),
+        };
+      });
+    }
+  };
+  const handleClear = () => {
+    setBuilder({ outerJoiner: 'AND', groups: [newGroup()] });
+    replaceCacheRules(emptyCacheRules());
+    setEditorMode('crm');
+  };
 
   /* ── Apply / save / load ── */
-  const handleApply = () => {
-    if (!canApply) return;
-    const flat = flattenGroups(groups);
+  const resolvePayload = async (builderState) => {
+    const nativeSolrFq = compileGroupsToSolr(builderState.groups || [], builderState.outerJoiner || 'AND');
+    const nativeLabel = compileGroupsToLabel(builderState.groups || [], builderState.outerJoiner || 'AND');
+    const currentCacheRules = builderState.cacheRules || emptyCacheRules();
+    const status = cacheRuleTreeStatus(currentCacheRules);
+    if (!status.valid) throw new Error(status.reason);
+    if (status.active && !cacheAvailable) {
+      throw new Error('Turn on Page Engine indexing and choose an Engine Territory to use cached-account rules.');
+    }
+    const cacheResult = status.active
+      ? await resolveCachedAccountFilter(currentCacheRules)
+      : { solrFq: '', matchedAccounts: 0, scannedSnapshots: 0 };
+    const resolvedLabel = [
+      nativeLabel,
+      status.active
+        ? `${cacheResult.matchedAccounts} cached account${cacheResult.matchedAccounts === 1 ? '' : 's'} matched`
+        : '',
+    ].filter(Boolean).join(' · ');
     const payload = {
-      label,
-      solrFq,
-      conditions: flat,
+      label: resolvedLabel,
+      nativeLabel,
+      nativeSolrFq,
+      cacheSolrFq: cacheResult.solrFq,
+      cacheRules: currentCacheRules,
+      cacheMatchCount: cacheResult.matchedAccounts,
+      cacheScannedCount: cacheResult.scannedSnapshots,
+      solrFq: combineCrmFilterFq(nativeSolrFq, cacheResult.solrFq),
+      conditions: flattenGroups(builderState.groups || []),
       /* Rich state for round-tripping; CRMSearch can stash this
          and pass it back via initialState on the next open. */
-      state: {
-        outerJoiner,
-        groups: groups.map((g) => ({
-          joiner: g.joiner,
-          conditions: g.conditions.map(({ id: _id, ...rest }) => rest),
-        })),
-      },
+      state: savedBuilderState(
+        builderState.outerJoiner || 'AND',
+        builderState.groups || [],
+        currentCacheRules,
+      ),
     };
-    if (typeof onApply === 'function') {
-      onApply(payload);
-    } else {
-      toast?.info?.(`Query ready: ${solrFq}`, { duration: 4500, placement: 'top-center' });
+    return payload;
+  };
+
+  const applyBuilderState = async (builderState, { rethrow = false } = {}) => {
+    try {
+      const payload = await resolvePayload(builderState);
+      if (typeof onApply === 'function') {
+        onApply(payload);
+      } else {
+        toast?.info?.(`Query ready: ${payload.solrFq}`, { duration: 4500, placement: 'top-center' });
+      }
+      bindCloseRef.current?.();
+    } catch (error) {
+      toast?.error?.(error?.message || 'Unable to apply cached-account rules.', { duration: 5000 });
+      if (rethrow) throw error;
     }
-    bindCloseRef.current?.();
+  };
+
+  const handleApply = () => {
+    if (!canApply) return undefined;
+    return applyBuilderState({ outerJoiner, groups, cacheRules }, { rethrow: true });
   };
 
   const handleCopy = async (text, label) => {
@@ -631,13 +750,9 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
       name,
       query: solrFq,
       conditions: flattenGroups(groups),
-      state: {
-        outerJoiner,
-        groups: groups.map((g) => ({
-          joiner: g.joiner,
-          conditions: g.conditions.map(({ id: _id, ...rest }) => rest),
-        })),
-      },
+      cacheRules,
+      cacheRuleCount: cacheStatus.count,
+      state: savedBuilderState(outerJoiner, groups, cacheRules),
       savedAt: Date.now(),
     };
     const updated = [entry, ...savedQueries.filter((q) => q.name !== name)];
@@ -648,11 +763,12 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   };
   const handleLoadSaved = (q) => {
     if (q?.state?.groups?.length) {
-      loadFromState(q.state);
+      loadFromState({ ...q.state, cacheRules: q.state.cacheRules || q.cacheRules });
     } else if (Array.isArray(q?.conditions) && q.conditions.length) {
       loadFromState({
         outerJoiner: 'AND',
         groups: [{ id: uid(), joiner: 'AND', conditions: q.conditions }],
+        cacheRules: q.cacheRules,
       });
     }
   };
@@ -669,22 +785,12 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   const handleLoadPreset = (p) => {
     const st = p.build ? p.build() : (p.state || { outerJoiner: 'AND', groups: [newGroup()] });
     loadFromState(st); // reflect in the builder (and the fallback when not embedded)
-    if (typeof onApply !== 'function') return;
-    const grps = st.groups || [];
-    const oj = st.outerJoiner || 'AND';
-    onApply({
-      label:  compileGroupsToLabel(grps, oj),
-      solrFq: compileGroupsToSolr(grps, oj),
-      conditions: flattenGroups(grps),
-      state: {
-        outerJoiner: oj,
-        groups: grps.map((g) => ({
-          joiner: g.joiner,
-          conditions: (g.conditions || []).map(({ id: _id, ...rest }) => rest),
-        })),
-      },
+    if (typeof onApply !== 'function') return undefined;
+    return applyBuilderState({
+      outerJoiner: st.outerJoiner || 'AND',
+      groups: st.groups || [],
+      cacheRules: st.cacheRules || emptyCacheRules(),
     });
-    bindCloseRef.current?.();
   };
 
   /* Promote a saved query into the quick presets. */
@@ -696,8 +802,12 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
     const preset = {
       id: `qp-${Date.now().toString(36)}`,
       name: q.name,
-      desc: 'Saved query',
-      state: q.state || { outerJoiner: 'AND', groups: [{ joiner: 'AND', conditions: q.conditions || [] }] },
+      desc: q.cacheRuleCount ? `Saved query · ${q.cacheRuleCount} cache rule${q.cacheRuleCount === 1 ? '' : 's'}` : 'Saved query',
+      state: q.state || {
+        outerJoiner: 'AND',
+        groups: [{ joiner: 'AND', conditions: q.conditions || [] }],
+        cacheRules: q.cacheRules,
+      },
       custom: true,
     };
     const next = { ...presetLayer, custom: [preset, ...presetLayer.custom] };
@@ -729,11 +839,14 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
       <ModalHeader
         icon={<FunnelIcon size={14} />}
         title="Query Builder"
-        subtitle={`Filter CRM contacts and accounts · ${QB_FIELDS.length} queryable fields · Solr fq output`}
+        subtitle={`Filter CRM contacts and accounts · ${QB_FIELDS.length} CRM fields${cacheAvailable ? ' + cached Page Engine fields' : ''}`}
         right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <CountChip>{conditionCount} CONDITION{conditionCount === 1 ? '' : 'S'}</CountChip>
             <CountChip>{groups.length} GROUP{groups.length === 1 ? '' : 'S'}</CountChip>
+            {cacheStatus.active && (
+              <CountChip>{cacheStatus.count} CACHE RULE{cacheStatus.count === 1 ? '' : 'S'}</CountChip>
+            )}
           </div>
         }
       />
@@ -757,43 +870,92 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
             padding: '16px 18px 12px',
             background: 'var(--gb-surface-canvas)',
           }}>
-            <AnimatePresence initial={false}>
-              {groups.map((g, i) => (
-                <motion.div
-                  key={g.id}
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-                >
-                  <GroupCard
-                    group={g}
-                    index={i}
-                    onPatchCondition={(cid, patch) => patchCondition(g.id, cid, patch)}
-                    onRemoveCondition={(cid) => removeCondition(g.id, cid)}
-                    onDuplicateCondition={(cid) => duplicateCondition(g.id, cid)}
-                    onMoveCondition={(cid, dir) => moveCondition(g.id, cid, dir)}
-                    onAddCondition={() => addCondition(g.id)}
-                    onJoinerChange={(j) => setGroupJoiner(g.id, j)}
-                    canRemove={groups.length > 1}
-                    onRemoveGroup={() => removeGroup(g.id)}
-                  />
-                  {i < groups.length - 1 && (
-                    <JoinerDivider
-                      value={outerJoiner}
-                      onChange={setOuterJoiner}
-                      label="GROUP JOIN"
-                      large
-                    />
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            <div style={{ marginTop: 12, display: 'flex' }}>
-              <Btn size="sm" variant="dashed" icon={<I.plus size={11} />} onClick={addGroup}>
-                Add group
-              </Btn>
-            </div>
+            {cacheAvailable && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                marginBottom: 14,
+              }}>
+                <Segmented
+                  size="sm"
+                  value={editorMode}
+                  onChange={setEditorMode}
+                  options={[
+                    { id: 'crm', label: 'CRM fields', icon: <I.search /> },
+                    { id: 'cache', label: 'Cached account fields', icon: <I.cube /> },
+                  ]}
+                />
+                <Tag tone="brand" size="sm">Page Engine cache</Tag>
+              </div>
+            )}
+
+            {(cacheStatus.active || (editorMode === 'cache' && cacheAvailable)) && (
+              <CacheQueryNotice style={{ marginBottom: cacheStatus.valid && cacheAvailable ? 14 : 8 }} />
+            )}
+            {cacheStatus.active && (!cacheStatus.valid || !cacheAvailable) && (
+              <div style={{
+                margin: '0 0 14px', padding: '7px 10px',
+                borderRadius: 'var(--gb-r-sm)',
+                border: '1px solid var(--gb-error-tint-border)',
+                background: 'var(--gb-error-tint-soft)',
+                color: 'var(--gb-error-fg)', fontSize: 11.5, fontWeight: 600,
+              }}>
+                {!cacheAvailable
+                  ? 'Turn on Page Engine indexing and choose an Engine Territory to use this cache query.'
+                  : cacheStatus.reason}
+              </div>
+            )}
+
+            {editorMode === 'cache' && cacheAvailable ? (
+              <AccountConditions
+                key={cacheRulesKey}
+                initial={cacheRules}
+                onChange={handleCacheRulesChange}
+                varNames={[]}
+                allowEmpty
+                label="Cached account match rules"
+                emptyHint="Add grouped AND/OR rules against any Page Engine account field. These rules run only against snapshots cached on this device."
+              />
+            ) : (
+              <>
+                <AnimatePresence initial={false}>
+                  {groups.map((g, i) => (
+                    <motion.div
+                      key={g.id}
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+                    >
+                      <GroupCard
+                        group={g}
+                        index={i}
+                        onPatchCondition={(cid, patch) => patchCondition(g.id, cid, patch)}
+                        onRemoveCondition={(cid) => removeCondition(g.id, cid)}
+                        onDuplicateCondition={(cid) => duplicateCondition(g.id, cid)}
+                        onMoveCondition={(cid, dir) => moveCondition(g.id, cid, dir)}
+                        onAddCondition={() => addCondition(g.id)}
+                        onJoinerChange={(j) => setGroupJoiner(g.id, j)}
+                        canRemove={groups.length > 1}
+                        onRemoveGroup={() => removeGroup(g.id)}
+                      />
+                      {i < groups.length - 1 && (
+                        <JoinerDivider
+                          value={outerJoiner}
+                          onChange={setOuterJoiner}
+                          label="GROUP JOIN"
+                          large
+                        />
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                <div style={{ marginTop: 12, display: 'flex' }}>
+                  <Btn size="sm" variant="dashed" icon={<I.plus size={11} />} onClick={addGroup}>
+                    Add group
+                  </Btn>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Preview row — human label + compiled fq + copy buttons.
@@ -814,14 +976,14 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
                 color: canApply ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
                 fontStyle: canApply ? 'normal' : 'italic',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }} title={label}>
-                {canApply ? label : '— add a valid condition above —'}
+              }} title={previewLabel}>
+                {canApply ? previewLabel : '— add a valid condition above —'}
               </span>
               <IconBtn
                 size="xs" variant="ghost"
                 icon={<I.copy size={10} />}
                 disabled={!canApply}
-                onClick={() => handleCopy(label, 'Label')}
+                onClick={() => handleCopy(previewLabel, 'Label')}
                 tooltip="Copy label"
               />
             </div>
@@ -856,6 +1018,24 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
                 tooltip="Copy fq"
               />
             </div>
+            {cacheStatus.active && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <PreviewKey>CACHE</PreviewKey>
+                <code style={{
+                  flex: 1, minWidth: 0,
+                  fontSize: 11, fontFamily: 'var(--gb-font-mono)',
+                  color: cacheStatus.valid && cacheAvailable ? 'var(--gb-warning-fg)' : 'var(--gb-error-fg)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  padding: '2px 8px',
+                  background: 'var(--gb-fill-inverse-medium)',
+                  border: '1px solid var(--gb-border-subtle)', borderRadius: 4,
+                }}>
+                  {cacheStatus.valid && cacheAvailable
+                    ? `${cacheStatus.count} rule${cacheStatus.count === 1 ? '' : 's'} · account IDs resolve when applied`
+                    : cacheStatus.reason || 'Page Engine cache unavailable'}
+                </code>
+              </div>
+            )}
           </div>
 
           {/* Footer row — save name + Reset/Cancel/Apply actions. */}
@@ -1023,6 +1203,12 @@ function PresetButton({ name, desc, onClick, onDelete }) {
 }
 
 function SavedQueryRow({ query, onLoad, onDelete, onPromote }) {
+  const cacheRuleCount = Number(query.cacheRuleCount)
+    || cacheRuleTreeStatus(query.cacheRules || query.state?.cacheRules).count;
+  const querySummary = [
+    query.query || '',
+    cacheRuleCount ? `${cacheRuleCount} cached account rule${cacheRuleCount === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(' · ') || 'Empty query';
   return (
     <div
       style={{
@@ -1062,7 +1248,7 @@ function SavedQueryRow({ query, onLoad, onDelete, onPromote }) {
         fontFamily: 'var(--gb-font-mono)',
         color: 'var(--gb-text-muted)',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }} title={query.query}>{query.query}</code>
+      }} title={querySummary}>{querySummary}</code>
     </div>
   );
 }

@@ -53,6 +53,7 @@ export { EdgeToast } from './components/EdgeToast.jsx';
 export { ToastHost, useToast } from './components/ToastHost.jsx';
 
 export { Callout } from './components/Callout.jsx';
+export { CacheQueryNotice } from './components/CacheQueryNotice.jsx';
 export { ModalShell } from './components/ModalShell.jsx';
 export { CompactModal } from './components/CompactModal.jsx';
 export { FloatingPanel, FloatingPanelEmbedContext } from './components/FloatingPanel.jsx';

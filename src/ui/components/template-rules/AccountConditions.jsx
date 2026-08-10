@@ -96,7 +96,14 @@ function AccountSubjectPicker({ condition, patch, varNames }) {
   );
 }
 
-export function AccountConditions({ initial, onChange, varNames = [] }) {
+export function AccountConditions({
+  initial,
+  onChange,
+  varNames = [],
+  label = 'Account match conditions',
+  emptyHint = 'No conditions yet. Add a group that tests the contact/account schema fields or this template\'s variables — combine them with AND/OR.',
+  allowEmpty = false,
+}) {
   const renderSubject = (condition, patch) => (
     <AccountSubjectPicker condition={condition} patch={patch} varNames={varNames} />
   );
@@ -108,8 +115,9 @@ export function AccountConditions({ initial, onChange, varNames = [] }) {
       renderSubject={renderSubject}
       opsFor={(c) => OPS_BY_TYPE[c.type || 'string'] || OPS_BY_TYPE.string}
       onChange={onChange}
-      label="Account match conditions"
-      emptyHint="No conditions yet. Add a group that tests the contact/account schema fields or this template's variables — combine them with AND/OR."
+      label={label}
+      emptyHint={emptyHint}
+      allowEmpty={allowEmpty}
     />
   );
 }

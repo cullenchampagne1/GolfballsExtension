@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, IconBtn, Input, Dropdown, Tag, I,
+  FloatingPanel, ModalHeader, Btn, IconBtn, Input, Dropdown, Tag, I, CacheQueryNotice,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -20,6 +20,7 @@ import {
   attachCachedPageEngineSnapshots, pageEngineIdentity,
 } from '../lib/page-engine/cache-actions.js';
 import { EngineCacheTag } from '../ui/components/EngineCacheTag.jsx';
+import { cacheRuleTreeStatus, combineCrmFilterFq } from '../lib/crmCacheQuery.js';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -177,6 +178,8 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   // display + pass to Solr's fq= param. Until that lands, this stays
   // null and the bar is hidden.
   const [qbFilter, setQbFilter] = useState(null);
+  const activeCacheQueryStatus = cacheRuleTreeStatus(qbFilter?.cacheRules || qbFilter?.state?.cacheRules);
+  const hasCacheQuery = activeCacheQueryStatus.active;
   // Run Workflow opens the Workflow Manager submodal which owns the
   // picker + engine. CRMSearch's job here is just to hand off the
   // selection — the manager reads it and drives execution + UI from
@@ -693,6 +696,9 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   }, [emailContacts, prepareActionContacts, toast]);
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
+    if (cacheRuleTreeStatus(filter?.cacheRules || filter?.state?.cacheRules).active) {
+      setType('account');
+    }
     setQbFilter(filter);   // triggers the auto re-run effect
     setQbOpen(false);
   };
@@ -705,11 +711,43 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
     setQbFilter((cur) => {
       if (!cur?.conditions?.length) return null;
       const next = cur.conditions.filter((_, i) => i !== idx);
-      if (!next.length) return null;
+      const cacheActive = cacheRuleTreeStatus(cur.cacheRules || cur.state?.cacheRules).active;
+      if (!next.length && !cacheActive) return null;
+      const nativeSolrFq = compileToSolr(next);
+      const nativeLabel = compileToLabel(next);
       return {
+        ...cur,
         conditions: next,
-        solrFq: compileToSolr(next),
-        label:  compileToLabel(next),
+        nativeSolrFq,
+        nativeLabel,
+        solrFq: combineCrmFilterFq(nativeSolrFq, cur.cacheSolrFq),
+        label: [nativeLabel, cacheActive ? `${cur.cacheMatchCount ?? 0} cached accounts matched` : '']
+          .filter(Boolean).join(' · '),
+        state: {
+          ...(cur.state || {}),
+          outerJoiner: 'AND',
+          groups: next.length ? [{ joiner: 'AND', conditions: next }] : [],
+        },
+      };
+    });
+  }, []);
+  const removeCacheFilter = useCallback(() => {
+    setQbFilter((cur) => {
+      if (!cur) return null;
+      const nativeSolrFq = cur.nativeSolrFq ?? compileToSolr(cur.conditions || []);
+      const nativeLabel = cur.nativeLabel ?? compileToLabel(cur.conditions || []);
+      if (!nativeSolrFq) return null;
+      return {
+        ...cur,
+        label: nativeLabel,
+        solrFq: nativeSolrFq,
+        nativeLabel,
+        nativeSolrFq,
+        cacheSolrFq: '',
+        cacheRules: null,
+        cacheMatchCount: 0,
+        cacheScannedCount: 0,
+        state: { ...(cur.state || {}), cacheRules: null },
       };
     });
   }, []);
@@ -964,15 +1002,26 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
           toast?.warning?.('No previous search to re-run', { duration: 2200 });
           return;
         }
+        const savedCacheActive = cacheRuleTreeStatus(
+          saved.qbFilter?.cacheRules || saved.qbFilter?.state?.cacheRules,
+        ).active;
+        if (savedCacheActive && !cacheOptionVisible) {
+          toast?.warning?.(
+            'Turn on Page Engine indexing and choose an Engine Territory to run this cached-account query.',
+            { duration: 4200 },
+          );
+          return;
+        }
         // Apply the saved state, flip into server mode (the source
         // of recorded searches), then fire runSearch directly with
         // the saved filters — the setQuery/setQbFilter updates are
         // async so passing them inline guarantees the right inputs.
+        const savedType = savedCacheActive ? 'account' : (saved.typeFilter || 'all');
         setQuery(saved.query || '');
-        setType(saved.typeFilter || 'all');
+        setType(savedType);
         setQbFilter(saved.qbFilter || null);
         setMode('server');
-        runSearch(saved.query || '', saved.qbFilter || null, saved.typeFilter || 'all');
+        runSearch(saved.query || '', saved.qbFilter || null, savedType);
         /* Hand control back to the search bar. The user reached this
            action via Tab → shelf-number, which leaves activeIdx at 0
            and the input blurred; without the reset they'd still see
@@ -983,7 +1032,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       },
     });
     return unsub;
-  }, [runSearch, toast]);
+  }, [runSearch, toast, cacheOptionVisible]);
 
   /* "Scan for recent orders" — a one-click morning routine. The authenticated
      current-user ID supplies an exact Contact + Sales Rep ID filter, then the
@@ -1182,12 +1231,10 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         )}
       </AnimatePresence>
 
-      {/* Filter bar — one tag per active condition produced by the
-          Query Builder. Each tag's ✕ drops that single condition from
-          the filter; when the last one goes, qbFilter clears entirely.
-          Lets users prune the filter inline without reopening QB. */}
+      {/* Filter bar — one tag per native condition plus the optional
+          cached-account rule layer produced by Query Builder. */}
       <AnimatePresence initial={false}>
-        {qbFilter && qbFilter.conditions?.length > 0 && (
+        {qbFilter && (qbFilter.conditions?.length > 0 || hasCacheQuery) && (
           <motion.div
             key="qb-bar"
             initial={{ opacity: 0, height: 0 }}
@@ -1207,7 +1254,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
               <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700, flexShrink: 0 }}>
                 Filter:
               </span>
-              {qbFilter.conditions.map((c, idx) => {
+              {(qbFilter.conditions || []).map((c, idx) => {
                 const lbl = describeCondition(c);
                 if (!lbl) return null;
                 return (
@@ -1218,6 +1265,12 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                   />
                 );
               })}
+              {hasCacheQuery && (
+                <ConditionTag
+                  label={`${activeCacheQueryStatus.count} cached account rule${activeCacheQueryStatus.count === 1 ? '' : 's'} · ${qbFilter.cacheMatchCount ?? 0} matched`}
+                  onRemove={removeCacheFilter}
+                />
+              )}
               <div style={{ flex: 1 }} />
               {/* Index-this-query — only meaningful in server mode with
                   results visible. The locally-stored index gives the rep
@@ -1237,6 +1290,11 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                     : `Index these ${results.length}`}</Btn>
               )}
             </div>
+            {hasCacheQuery && (
+              <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-1)' }}>
+                <CacheQueryNotice />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1246,7 +1304,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
           inside the filter chip bar above). Same affordance, just
           surfaces no matter how the search was triggered. */}
       <AnimatePresence initial={false}>
-        {mode === 'server' && status === 'ready' && results.length > 0 && !(qbFilter && qbFilter.conditions?.length > 0) && (
+        {mode === 'server' && status === 'ready' && results.length > 0 && !(qbFilter && (qbFilter.conditions?.length > 0 || hasCacheQuery)) && (
           <motion.div
             key="index-bar"
             initial={{ opacity: 0, height: 0 }}
