@@ -78,7 +78,18 @@ export function buildMailtoUrl(to, subject, plainBody) {
 /* The canonical Power Automate payload for ONE email. When `signature` is
    provided it's glued onto htmlBody here, so callers pass the rendered body
    raw — keeps the resulting payload identical to the inline builders. */
-export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMode }) {
+function trackingFields(message = {}) {
+  if (!message.templateId) return {};
+  return {
+    templateId: String(message.templateId),
+    templateName: String(message.templateName || ''),
+    templateVariationId: String(message.variationId || message.templateVariationId || '__original'),
+    trackingContext: message.trackingContext && typeof message.trackingContext === 'object'
+      ? message.trackingContext : {},
+  };
+}
+
+export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMode, templateId, templateName, variationId, templateVariationId, trackingContext }) {
   return {
     emails: [{
       from,
@@ -86,6 +97,7 @@ export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMo
       subject,
       htmlBody: sanitizeHtml(signature != null ? withSignature(htmlBody, signature) : htmlBody),
       replyMode,
+      ...trackingFields({ templateId, templateName, variationId, templateVariationId, trackingContext }),
     }],
   };
 }
@@ -130,7 +142,7 @@ function classifyPaResult(r) {
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
  * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
  */
-export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'standalone', signature = '', config }, opts = {}) {
+export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'standalone', signature = '', config, templateId, templateName, variationId, templateVariationId, trackingContext }, opts = {}) {
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
   const cfg = config || await readEmailConfig();
@@ -139,14 +151,25 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
     if (!from) {
       return { state: 'failed', transport: 'pa', error: 'Configure Email account host in Settings before sending' };
     }
-    const payload = buildPaPayload({ from, to, subject, htmlBody, signature, replyMode });
+    const payload = buildPaPayload({
+      from, to, subject, htmlBody, signature, replyMode,
+      templateId, templateName, variationId, templateVariationId, trackingContext,
+    });
     const r = await dispatch({ action: 'paAutomate', payload });
     return classifyPaResult(r);
   }
 
   // PA OFF → open the mail client, stripped to plain text + no signature.
   const url = buildMailtoUrl(to, subject, htmlToPlainText(htmlBody));
-  const r = await dispatch({ action: 'openMailto', url });
+  const r = await dispatch({
+    action: 'openMailto',
+    url,
+    email: {
+      to,
+      subject,
+      ...trackingFields({ templateId, templateName, variationId, templateVariationId, trackingContext }),
+    },
+  });
   if (r && r.ok === false) return { state: 'failed', transport: 'mailto', error: r.error || 'Could not open mail window' };
   return { state: 'opened', transport: 'mailto', error: null };
 }

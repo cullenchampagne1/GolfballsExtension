@@ -335,6 +335,10 @@ function makeContactExecutor(context, runDeps, dispatch) {
         replyMode: outbound.replyMode || 'standalone',
         signature: ec.signature || '',
         config: ec,
+        templateId: outbound.templateId || '',
+        templateName: outbound.name || '',
+        variationId: outbound.variationId || '__original',
+        trackingContext: { contactId: ctx.crmContactId || ctx.contactId || '', accountId: ctx.accountId || '' },
       }, { dispatch });
       if (result?.state === 'failed') throw new Error(result.error || 'email send failed');
       return result;

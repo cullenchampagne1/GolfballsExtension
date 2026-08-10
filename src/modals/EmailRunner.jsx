@@ -638,7 +638,16 @@ export function EmailRunner({
              above, which would otherwise fire one more send. */
           if (runTokenRef.current !== token) return;
           const res = await sendEmailTemplateWithFollowUps({
-            email: { from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady } },
+            email: {
+              from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady },
+              templateId: selectedTpl.id || '',
+              templateName: selectedTpl.name || '',
+              variationId: v?.id || '__original',
+              trackingContext: {
+                contactId: c.crmContactId || c.contactId || '',
+                accountId: c.accountId || '',
+              },
+            },
             template: selectedTpl,
             followUpContext: {
               context: {

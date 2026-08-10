@@ -701,6 +701,7 @@ function __gbAccessAllowed(st, now) {
             subject: msg.subject || msg.templateSubject || '',
             htmlBody: msg.htmlBody || msg.templateHtml || '',
             replyMode: msg.replyMode || template.replyMode || 'standalone',
+            variationId: msg.variationId || '__original',
             context: msg.context || {},
           });
           const toast = window.__gbToast;

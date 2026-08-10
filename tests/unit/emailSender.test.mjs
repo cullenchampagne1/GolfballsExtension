@@ -111,6 +111,29 @@ describe('buildPaPayload', () => {
     });
     assert.equal(p.emails[0].htmlBody, '<p>Hi</p>');
   });
+
+  it('carries template, variation, and recipient context for worker-side verification', () => {
+    const p = buildPaPayload({
+      from: 'a@b.com', to: 'buyer@example.com', subject: 'Order #42 update',
+      htmlBody: '<p>Body</p>', replyMode: 'standalone',
+      templateId: 'order-update', templateName: 'Order update', variationId: 'brief',
+      trackingContext: { contactId: 'c42', accountId: 'a7' },
+    });
+    assert.deepEqual(
+      {
+        templateId: p.emails[0].templateId,
+        templateName: p.emails[0].templateName,
+        variationId: p.emails[0].templateVariationId,
+        context: p.emails[0].trackingContext,
+      },
+      {
+        templateId: 'order-update',
+        templateName: 'Order update',
+        variationId: 'brief',
+        context: { contactId: 'c42', accountId: 'a7' },
+      },
+    );
+  });
 });
 
 describe('readEmailConfig', () => {
@@ -212,5 +235,23 @@ describe('sendEmail', () => {
     assert.deepEqual(r, { state: 'opened', transport: 'mailto', error: null });
     assert.equal(seen[0].action, 'openMailto');
     assert.equal(seen[0].url, 'mailto:buyer%40example.com?subject=Order%20update&body=Hello%0Athere');
+  });
+
+  it('passes template tracking metadata with a mailto handoff', async () => {
+    const seen = [];
+    await sendEmail({
+      from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Order #42 update',
+      htmlBody: 'Hello', config: { paReady: false },
+      templateId: 'update', templateName: 'Update', variationId: '__original',
+      trackingContext: { contactId: 'c42' },
+    }, { dispatch: async (msg) => { seen.push(msg); return { ok: true }; } });
+    assert.deepEqual(seen[0].email, {
+      to: 'buyer@example.com',
+      subject: 'Order #42 update',
+      templateId: 'update',
+      templateName: 'Update',
+      templateVariationId: '__original',
+      trackingContext: { contactId: 'c42' },
+    });
   });
 });

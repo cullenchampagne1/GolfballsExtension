@@ -76,6 +76,10 @@ export async function makeLiveExecutor(page) {
         replyMode: outbound.replyMode || 'standalone',
         signature: ec.signature || '',
         config: ec,
+        templateId: outbound.templateId || '',
+        templateName: outbound.name || '',
+        variationId: outbound.variationId || '__original',
+        trackingContext: { contactId: ctx.crmContactId || ctx.contactId || '', accountId: ctx.accountId || '' },
       }, { dispatch: dispatchBackgroundMessage });
     },
     submitQuickTask,

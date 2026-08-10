@@ -32,6 +32,7 @@ export function makeOutbound(ref) {
     kind: r.kind || 'email',
     name: r.name || null,
     templateId: r.id || null,
+    variationId: v.variationId || '__original',
     subject: v.subject || '',
     body: v.body || '',
   };

@@ -963,7 +963,12 @@ function MainView({
     }
     const subject = renderStr(variation?.subject || tpl.subject, resolvedVars, tpl.vars);
     const rawBody = renderStr(variation?.body    || tpl.body,    resolvedVars, tpl.vars);
-    return { subject, rawBody, plainBody: toPlainText(rawBody) };
+    return {
+      subject,
+      rawBody,
+      plainBody: toPlainText(rawBody),
+      variationId: variation?.id || '__original',
+    };
   };
 
   /* Copy the formatted email to the clipboard as BOTH rich HTML and plain
@@ -1012,7 +1017,7 @@ function MainView({
          3. No variations on the template  →  always parent body.
        The random roll is uniform — the popup is a single-send
        surface so there's no slider UX for weighting. */
-    const { subject, rawBody } = buildSendContent();
+    const { subject, rawBody, variationId } = buildSendContent();
 
     // tpl.replyMode drives behavior for ALL template types:
     // 'reply'      → find prior email, thread the reply (file or PA)
@@ -1028,6 +1033,7 @@ function MainView({
       to: resolvedTo,
       subject,
       htmlBody: rawBody,
+      variationId,
       replyMode: tpl.replyMode || replyMode,
       template: {
         id: tpl.id || '',

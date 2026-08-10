@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/notifications-store.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -19,6 +19,11 @@ const GB_USAGE = globalThis.GBUsageTelemetry?.createReporter();
 if (!GB_USAGE) throw new Error('Usage telemetry failed to initialize');
 const GB_TRACKERS = globalThis.GBTrackers;
 if (!GB_TRACKERS) throw new Error('Trackers failed to initialize');
+const GB_EMAIL_TEMPLATE_TRACKING = globalThis.GBEmailTemplateTracking;
+if (!GB_EMAIL_TEMPLATE_TRACKING) throw new Error('Email template tracking failed to initialize');
+// Subject trackers are local derived state, so keep them current even before
+// an installation is authorized to use network-backed runtime features.
+GB_EMAIL_TEMPLATE_TRACKING.install().catch(() => {});
 // installation-auth samples every backend round-trip through this hook, so
 // the Latency block measures the real wait without auth importing telemetry.
 globalThis.GBUsageSink = GB_USAGE.sample;
@@ -870,6 +875,29 @@ function gbValidateEmailPayload(payload) {
     }
     if (typeof email.subject !== 'string' || email.subject.length > 998) return 'Invalid email subject';
     if (typeof email.htmlBody !== 'string' || email.htmlBody.length > 2_000_000) return 'Email body exceeds 2 MB limit';
+    for (const [key, maximum] of Object.entries({
+      templateId: 200,
+      templateName: 200,
+      templateVariationId: 200,
+      templateTrackerId: 260,
+      templateTrackingStatus: 40,
+      templateSubjectRegex: 8_000,
+      templateSubjectRegexFlags: 8,
+      contactId: 120,
+      accountId: 120,
+    })) {
+      if (email[key] != null && (typeof email[key] !== 'string' || email[key].length > maximum)) {
+        return `Invalid email ${key}`;
+      }
+    }
+    if (email.trackingContext != null) {
+      if (!email.trackingContext || typeof email.trackingContext !== 'object' || Array.isArray(email.trackingContext)) {
+        return 'Invalid email tracking context';
+      }
+      let trackingLength = Infinity;
+      try { trackingLength = JSON.stringify(email.trackingContext).length; } catch { /* invalid */ }
+      if (trackingLength > 2_000) return 'Email tracking context exceeds 2 KB limit';
+    }
     if (/<\/?(?:script|iframe|object|embed|form|base|meta|link)\b|\bon[a-z]+\s*=|(?:javascript|vbscript)\s*:/i.test(email.htmlBody)) {
       return 'Email body contains active content';
     }
@@ -2563,6 +2591,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (payloadError) { sendResponse({ ok: false, error: payloadError }); return true; }
     (async () => {
       try {
+        // Template identities arriving from a page are hints. The worker
+        // rebuilds the current catalog, verifies the rendered subject, and
+        // overwrites every tracker field before anything leaves the extension.
+        payload.emails = await GB_EMAIL_TEMPLATE_TRACKING.enrichEmails(payload.emails);
         const credentials = await gbReadCredentials();
         const paUrl = credentials.powerAutomateUrl;
         if (!GB_SECURITY.isPowerAutomateUrl(paUrl)) {
@@ -2621,11 +2653,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           try {
             const data = JSON.parse(text);
             if (typeof data.ok === 'boolean') {
+              if (data.ok) {
+                await GB_EMAIL_TEMPLATE_TRACKING.recordDelivery(payload.emails, 'pa', data.results);
+              }
               sendResponse({ ok: data.ok, sent: data.sent, failed: data.failed, results: data.results });
             } else {
+              await GB_EMAIL_TEMPLATE_TRACKING.recordDelivery(payload.emails, 'pa');
               sendResponse({ ok: true, results: [{ status: 'sent' }] });
             }
           } catch {
+            await GB_EMAIL_TEMPLATE_TRACKING.recordDelivery(payload.emails, 'pa');
             sendResponse({ ok: true, results: [{ status: 'sent' }] });
           }
         } else {
@@ -2737,14 +2774,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'gbEmailTemplateTrackerCatalog') {
+    GB_EMAIL_TEMPLATE_TRACKING.catalog()
+      .then((catalog) => sendResponse({ ok: true, catalog }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
+  if (msg.action === 'gbEmailTemplateTrackingSummaries') {
+    GB_EMAIL_TEMPLATE_TRACKING.summaries()
+      .then((templates) => sendResponse({ ok: true, templates }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
   if (msg.action === 'openMailto') {
     if (!GB_SECURITY.isMailtoUrl(msg.url)) {
       sendResponse({ ok: false, error: 'Invalid mailto URL' });
       return true;
     }
     gbDebugRecord({ cat: 'email', label: 'Open Mailto (Power Automate off)', method: 'MAILTO', url: msg.url, reqBody: null, status: 0, ok: true, respBody: null });
-    try { chrome.tabs.create({ url: msg.url, active: false }); sendResponse({ ok: true }); }
-    catch (e) { sendResponse({ ok: false, error: String(e?.message || e) }); }
+    (async () => {
+      try {
+        chrome.tabs.create({ url: msg.url, active: false });
+        if (msg.email && typeof msg.email === 'object') {
+          await GB_EMAIL_TEMPLATE_TRACKING.recordDelivery([msg.email], 'mailto');
+        }
+        sendResponse({ ok: true });
+      } catch (e) { sendResponse({ ok: false, error: String(e?.message || e) }); }
+    })();
     return true;
   }
 

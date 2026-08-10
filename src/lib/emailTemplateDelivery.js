@@ -64,6 +64,10 @@ export async function sendEmailTemplateFromPage(input = {}, deps = {}) {
       replyMode: input.replyMode || template.replyMode || 'standalone',
       signature: config?.signature || '',
       config,
+      templateId: template.id || '',
+      templateName: template.name || '',
+      variationId: input.variationId || '__original',
+      trackingContext: input.context || {},
     },
     template,
     followUpContext: {
@@ -75,4 +79,3 @@ export async function sendEmailTemplateFromPage(input = {}, deps = {}) {
     runFollowUps: deps.runFollowUps,
   });
 }
-

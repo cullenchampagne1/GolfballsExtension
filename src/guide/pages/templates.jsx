@@ -428,6 +428,20 @@ export function TemplatesPage() {
         <p>Those names show wherever the version is offered. In the popup, selecting the parent (shuffle badge) sends a <strong>random</strong> version each time; expand the row to <strong>pin</strong> one (check badge). In bulk sends, Quick Send lets you set <strong>weighted</strong> splits instead.</p>
       </TourBox>
 
+      <h2 className="sec">Automatic response &amp; order tracking</h2>
+      <p>
+        Every enabled order or account template gets a subject tracker automatically. The tracker reads the fixed wording, variables, code-return fragments, and every variation, then proves that its subject pattern cannot also belong to another enabled template. Reply, forward, and External prefixes are ignored when responses arrive.
+      </p>
+      <table className="spectable">
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><Tag tone="success" size="xs">Tracked</Tag></td><td>The subject language is unique. Successful sends can be credited with replies and later orders from that contact.</td></tr>
+          <tr><td><Tag tone="error" size="xs">Conflict</Tag></td><td>At least one possible subject also matches another template. Both templates stay conflicted and outcomes remain unattributed until their fixed wording is made unique.</td></tr>
+          <tr><td><Tag tone="warning" size="xs">Untracked</Tag></td><td>The subject is empty, can disappear conditionally, or has too little fixed wording to identify safely.</td></tr>
+        </tbody>
+      </table>
+      <p>The template list shows sent/reply/order counts beside each template. Case templates keep the existing conversation subject, so they do not receive a separate subject tracker.</p>
+
       <h2 className="sec">When does a template show up?</h2>
       <p>
         Each template has a <strong>type</strong> — <strong>order</strong>, <strong>account</strong> (contact/account pages), or <strong>case</strong> (the email preview's reply bar) — and optional <strong>auto-match rules</strong>: field + operator + value conditions over the page's real data, grouped with AND/OR. The popup only offers templates whose type fits the current page, and one whose rules pass jumps to the top under “Matched on this page.” That's the matching you saw on <a href="#popup">the Popup</a>.

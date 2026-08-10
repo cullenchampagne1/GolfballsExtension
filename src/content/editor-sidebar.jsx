@@ -12,6 +12,7 @@ import {
   buildEmailTemplateFile, importTemplates, normalizeTemplate, parseEmailTemplateFile,
 } from '../lib/templateImport.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
+import { buildEmailTemplateTrackerCatalog } from '../lib/emailSubjectTracking.js';
 
 /* ────────────────────────────────────────────────────────────────
    editor-sidebar.jsx
@@ -65,7 +66,7 @@ const CogIcon    = (p) => <Icon {...p}><path d="M10.3 4.3c.4-1.7 2.9-1.7 3.3 0a1
 const HelpIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 2.5-3 4.5"/><path d="M12 17.5h.01"/></Icon>;
 
 /* ── Storage helpers ────────────────────────────────────────────── */
-const STORAGE_KEYS = ['templates', 'noteTemplates', 'templateFolders', 'noteFolders'];
+const STORAGE_KEYS = ['templates', 'noteTemplates', 'templateFolders', 'noteFolders', 'gbEmailTemplateSends'];
 function loadAll() { return new Promise((res) => chrome.storage.local.get(STORAGE_KEYS, res)); }
 function saveKey(key, value) { chrome.storage.local.set({ [key]: value }); }
 
@@ -212,7 +213,7 @@ function MenuItem({ children, onClick, danger }) {
 
 /* ── Single template row — draggable, colored left stripe by type.
       Disabled rows render darker + dimmer and sit below enabled siblings. */
-function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDragStart, onDragEnd }) {
+function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onMove, folders, onDragStart, onDragEnd }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const btnRef = useRef(null);
   const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type] || (isNote ? TYPE_META_NOTE.note : TYPE_META_TPL.order);
@@ -301,11 +302,17 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
               {varsN > 0 && (
                 <>{' · '}{varsN} variation{varsN !== 1 ? 's' : ''}</>
               )}
+              {summary?.sent > 0 && (
+                <>{' · '}{summary.responded}/{summary.sent} replies{' · '}{summary.ordered} orders</>
+              )}
             </div>
           );
         })()}
       </div>
       {disabled && <Tag tone="neutral" size="xs">OFF</Tag>}
+      {!isNote && !disabled && tracker?.status === 'ready' && <Tag tone="success" size="xs">Tracked</Tag>}
+      {!isNote && !disabled && tracker?.status === 'conflict' && <Tag tone="error" size="xs">Conflict</Tag>}
+      {!isNote && !disabled && tracker?.status === 'incomplete' && <Tag tone="warning" size="xs">Untracked</Tag>}
       <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
         <IconBtn size="xs" icon={<I.more />} onClick={() => setMenuOpen((v) => !v)} />
         <AnimatePresence>
@@ -354,7 +361,7 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
 
 /* ── Per-type sub-section (Order / Account / Case ...). Enabled rows
       first, then disabled rows below. */
-function TypeSection({ type, isNote, tpls, currentId, onOpen, onMove, folders, onDragStart, onDragEnd }) {
+function TypeSection({ type, isNote, tpls, trackerById, summaryById, currentId, onOpen, onMove, folders, onDragStart, onDragEnd }) {
   if (!tpls.length) return null;
   const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type];
   if (!meta) return null;
@@ -376,7 +383,7 @@ function TypeSection({ type, isNote, tpls, currentId, onOpen, onMove, folders, o
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {enabled.map((t) => (
           <TemplateRow
-            key={t.id} tpl={t} isNote={isNote} type={type}
+            key={t.id} tpl={t} tracker={trackerById?.get(t.id)} summary={summaryById?.get(t.id)} isNote={isNote} type={type}
             active={t.id === currentId}
             onClick={() => onOpen(t)} onMove={(fid) => onMove(t, fid)}
             folders={folders} onDragStart={onDragStart} onDragEnd={onDragEnd}
@@ -384,7 +391,7 @@ function TypeSection({ type, isNote, tpls, currentId, onOpen, onMove, folders, o
         ))}
         {disabled.map((t) => (
           <TemplateRow
-            key={t.id} tpl={t} isNote={isNote} type={type}
+            key={t.id} tpl={t} tracker={trackerById?.get(t.id)} summary={summaryById?.get(t.id)} isNote={isNote} type={type}
             active={t.id === currentId}
             onClick={() => onOpen(t)} onMove={(fid) => onMove(t, fid)}
             folders={folders} onDragStart={onDragStart} onDragEnd={onDragEnd}
@@ -408,7 +415,7 @@ function groupByType(tpls, isNote) {
 }
 
 /* ── Collapsible folder — drop target for template drags ────────── */
-function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename, onDelete, onColor, folders, defaultOpen, onDragStart, onDragEnd }) {
+function FolderGroup({ folder, tpls, isNote, trackerById, summaryById, currentId, onOpen, onMove, onRename, onDelete, onColor, folders, defaultOpen, onDragStart, onDragEnd }) {
   const [open, setOpen] = useState(defaultOpen);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hot, setHot] = useState(false);  // drop-target highlight
@@ -525,6 +532,8 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
               {[...grouped.entries()].map(([type, list]) => (
                 <TypeSection
                   key={type} type={type} isNote={isNote} tpls={list}
+                  trackerById={trackerById}
+                  summaryById={summaryById}
                   currentId={currentId} onOpen={onOpen}
                   onMove={(t, fid) => onMove(t.id, fid)}
                   folders={folders.filter((f) => f.id !== folder.id)}
@@ -715,6 +724,7 @@ function TemplateSidebar() {
   const [notes,       setNotes]       = useState([]);
   const [tplFolders,  setTplFolders]  = useState([]);
   const [noteFolders, setNoteFolders] = useState([]);
+  const [emailSends,  setEmailSends]  = useState([]);
   const [search,      setSearch]      = useState('');
   const [currentId,   setCurrentId]   = useState(null);
   const draggingId = useRef(null);
@@ -728,12 +738,14 @@ function TemplateSidebar() {
       setNotes(d.noteTemplates || []);
       setTplFolders(d.templateFolders || []);
       setNoteFolders(d.noteFolders || []);
+      setEmailSends(d.gbEmailTemplateSends || []);
     });
     const onChange = (changes) => {
       if (changes.templates)       setTemplates(changes.templates.newValue || []);
       if (changes.noteTemplates)   setNotes(changes.noteTemplates.newValue || []);
       if (changes.templateFolders) setTplFolders(changes.templateFolders.newValue || []);
       if (changes.noteFolders)     setNoteFolders(changes.noteFolders.newValue || []);
+      if (changes.gbEmailTemplateSends) setEmailSends(changes.gbEmailTemplateSends.newValue || []);
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => { alive = false; chrome.storage.onChanged.removeListener(onChange); };
@@ -756,6 +768,23 @@ function TemplateSidebar() {
     if (!q) return allItems;
     return allItems.filter((t) => (t.name || '').toLowerCase().includes(q));
   }, [allItems, search]);
+
+  const trackerById = useMemo(() => new Map(
+    buildEmailTemplateTrackerCatalog(templates).trackers
+      .map((tracker) => [tracker.templateId, tracker]),
+  ), [templates]);
+  const summaryById = useMemo(() => {
+    const result = new Map();
+    for (const send of emailSends) {
+      if (!send?.templateId) continue;
+      const row = result.get(send.templateId) || { sent: 0, responded: 0, ordered: 0 };
+      row.sent += 1;
+      if (send.respondedAt) row.responded += 1;
+      if (send.orderedAt) row.ordered += 1;
+      result.set(send.templateId, row);
+    }
+    return result;
+  }, [emailSends]);
 
   const groups = useMemo(() => {
     const byId = new Map(folders.map((f) => [f.id, []]));
@@ -985,6 +1014,8 @@ function TemplateSidebar() {
               <FolderGroup
                 key={folder.id}
                 folder={folder} tpls={tpls} isNote={isNote} currentId={currentId}
+                trackerById={trackerById}
+                summaryById={summaryById}
                 onOpen={openTpl} onMove={moveById}
                 onRename={renameFolder} onDelete={deleteFolder} onColor={setFolderColor}
                 folders={folders}
@@ -1025,6 +1056,8 @@ function TemplateSidebar() {
                 {[...uncatGroups.entries()].map(([type, list]) => (
                   <TypeSection
                     key={type} type={type} isNote={isNote} tpls={list}
+                    trackerById={trackerById}
+                    summaryById={summaryById}
                     currentId={currentId} onOpen={openTpl}
                     onMove={(t, fid) => moveById(t.id, fid)}
                     folders={folders}

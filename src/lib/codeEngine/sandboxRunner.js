@@ -57,7 +57,7 @@ export function buildTraceBody(instrumentedCode) {
     '};',
     'const __mkOut = (ref) => {',
     '  const r = ref || {}; const v = (r.versions && r.versions[0]) || r;',
-    '  const o = { kind: r.kind || "email", name: r.name || null, templateId: r.id || null, subject: v.subject || "", body: v.body || "" };',
+    '  const o = { kind: r.kind || "email", name: r.name || null, templateId: r.id || null, variationId: v.variationId || "__original", subject: v.subject || "", body: v.body || "" };',
     '  for (const k of ["vars","toField","replyMode","senderAccount","senderRandomize","priority","daysOut","categoryId","callDirection","callCategory","callVoicemail"]) {',
     '    if (v[k] !== undefined) o[k] = v[k]; else if (r[k] !== undefined) o[k] = r[k];',
     '  }',

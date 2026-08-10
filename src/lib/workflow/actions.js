@@ -132,7 +132,19 @@ async function runEmail(step, template, ctx, { dryRun }) {
   const from = pickFromAddress(template, ctx.fromLocalPart);
 
   const res = await sendEmail(
-    { from, to: toEmail, subject, htmlBody, replyMode: template.replyMode || 'standalone', signature: ctx.signature || '', config: ctx.emailConfig },
+    {
+      from, to: toEmail, subject, htmlBody,
+      replyMode: template.replyMode || 'standalone',
+      signature: ctx.signature || '',
+      config: ctx.emailConfig,
+      templateId: template.id || '',
+      templateName: template.name || '',
+      variationId: v?.id || '__original',
+      trackingContext: {
+        contactId: ctx.contact?.crmContactId || ctx.contactId || ctx.contact?.contactId || '',
+        accountId: ctx.accountId || ctx.contact?.accountId || '',
+      },
+    },
     { dispatch: ctx.dispatch },
   );
   if (res.state === 'sent' || res.state === 'opened') {

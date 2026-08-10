@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Btn,
   Input, Dropdown, Field, IconBtn,
-  Segmented, FeatureSpotlight, EditorHeader, ResolveHint,
+  Segmented, FeatureSpotlight, EditorHeader, ResolveHint, Callout,
   TYPE_ICONS,
   I, Icon,
   SmartPopover,
@@ -12,6 +12,10 @@ import {
 } from '../ui/index.js';
 import { SENDER_OPTIONS } from '../lib/sender.js';
 import { updateVariableDefinition } from '../lib/templateVariableEditing.js';
+import {
+  buildEmailTemplateTrackerCatalog,
+  trackerForTemplate,
+} from '../lib/emailSubjectTracking.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -276,7 +280,24 @@ export function TemplateEditor({ tpl, onDelete }) {
   // the original shows as a labeled block alongside the alternates (display
   // only — the base still sends tpl.subject/body).
   const [baseLabel, setBaseLabel] = useState(tpl.baseLabel || '');
+  const [trackingTemplates, setTrackingTemplates] = useState([]);
+  const [trackingReady, setTrackingReady] = useState(false);
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
+
+  // The draft must be compared with every other template before autosave, so
+  // a conflict appears while the rep is still typing the subject that caused
+  // it. Storage changes keep the comparison set current across editor windows.
+  useEffect(() => {
+    chrome.storage.local.get('templates', ({ templates }) => {
+      setTrackingTemplates(Array.isArray(templates) ? templates : []);
+      setTrackingReady(true);
+    });
+    const onChanged = (changes) => {
+      if (changes.templates) setTrackingTemplates(changes.templates.newValue || []);
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
 
   function addVariation() {
     // The initial email is block "Variation 1", so added blocks number from 2.
@@ -524,6 +545,16 @@ export function TemplateEditor({ tpl, onDelete }) {
     return next;
   }
 
+  const subjectTracker = useMemo(() => {
+    if (!trackingReady) return null;
+    const draft = buildTemplate();
+    const peers = trackingTemplates.filter((item) => item?.id !== tpl.id);
+    return trackerForTemplate(
+      buildEmailTemplateTrackerCatalog([...peers, draft]),
+      tpl.id,
+    );
+  }, [trackingReady, trackingTemplates, tpl, typeId, enabled, name, subject, vars, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const skipSave     = useRef(true);
   const skipTypeSave = useRef(true);
   const saveTimer    = useRef(0);
@@ -633,6 +664,39 @@ export function TemplateEditor({ tpl, onDelete }) {
           />
         )}
       </div>
+
+      {subjectTracker?.status === 'ready' && (
+        <Callout
+          tone="success"
+          title="Automatic response & order tracker ready"
+          style={{ marginBottom: 12 }}
+        >
+          {subjectTracker.variants.length > 1
+            ? `All ${subjectTracker.variants.length} subject variations are unique to this template.`
+            : 'This subject is unique to this template.'}
+          {' '}Reply, forward, and External prefixes are ignored when responses are matched.
+        </Callout>
+      )}
+      {subjectTracker?.status === 'conflict' && (
+        <Callout
+          tone="error"
+          title="Subject tracker conflict"
+          style={{ marginBottom: 12 }}
+        >
+          This template overlaps {subjectTracker.conflictsWith.map((item) => `“${item.templateName}”`).join(', ')}.
+          {' '}Change the fixed wording in one of the overlapping subject variations; responses and orders remain unattributed until the subjects are unique.
+        </Callout>
+      )}
+      {subjectTracker?.status === 'incomplete' && (
+        <Callout tone="warning" title="Subject cannot be tracked yet" style={{ marginBottom: 12 }}>
+          {subjectTracker.reason}
+        </Callout>
+      )}
+      {subjectTracker?.status === 'not_applicable' && (
+        <Callout tone="neutral" title="Conversation subject tracking" style={{ marginBottom: 12 }}>
+          Case replies keep the existing conversation subject, so they are not assigned a template subject tracker.
+        </Callout>
+      )}
 
       {/* ── Meta row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: recipOpt.toType === 'auto' ? 12 : 8 }}>
