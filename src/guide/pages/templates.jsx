@@ -430,7 +430,7 @@ export function TemplatesPage() {
 
       <h2 className="sec">Automatic response &amp; order tracking</h2>
       <p>
-        Every enabled order or account template gets a subject tracker automatically. The tracker reads the fixed wording, variables, code-return fragments, and every variation, then proves that its subject pattern cannot also belong to another enabled template. Reply, forward, and External prefixes are ignored when responses arrive.
+        Every enabled standalone order or account template gets a subject tracker automatically. The tracker reads the fixed wording, variables, code-return fragments, and every variation, then proves that its subject pattern cannot also belong to another enabled standalone template. Reply, forward, and External prefixes are ignored when responses arrive. The editor's read-only tracking ID field previews the exact generated regular expression.
       </p>
       <table className="spectable">
         <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
@@ -438,9 +438,10 @@ export function TemplatesPage() {
           <tr><td><Tag tone="success" size="xs">Tracked</Tag></td><td>The subject language is unique. Successful sends can be credited with replies and later orders from that contact.</td></tr>
           <tr><td><Tag tone="error" size="xs">Conflict</Tag></td><td>At least one possible subject also matches another template. Both templates stay conflicted and outcomes remain unattributed until their fixed wording is made unique.</td></tr>
           <tr><td><Tag tone="warning" size="xs">Untracked</Tag></td><td>The subject is empty, can disappear conditionally, or has too little fixed wording to identify safely.</td></tr>
+          <tr><td><Tag tone="neutral" size="xs">Inherited</Tag></td><td>Reply-in-thread and case templates keep the current conversation subject, so responses and orders stay credited to the original tracked email.</td></tr>
         </tbody>
       </table>
-      <p>The template list shows sent/reply/order counts beside each template. Case templates keep the existing conversation subject, so they do not receive a separate subject tracker.</p>
+      <p>The template list shows sent/reply/order counts beside each standalone template. Reply-in-thread and case templates do not receive a separate subject tracker or create a second tracked send.</p>
 
       <h2 className="sec">When does a template show up?</h2>
       <p>

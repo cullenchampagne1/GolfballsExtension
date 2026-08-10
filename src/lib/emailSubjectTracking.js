@@ -394,6 +394,9 @@ function initialTracker(template, index) {
   if (type === 'case') {
     return { templateId, templateName, status: 'not_applicable', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Case replies use the existing conversation subject.' };
   }
+  if (template?.replyMode === 'reply') {
+    return { templateId, templateName, status: 'not_applicable', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Reply-in-thread templates inherit tracking from the original email in the conversation.' };
+  }
   if (!templateId) {
     return { templateId, templateName, status: 'incomplete', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Save the template before generating its tracker.' };
   }
@@ -450,7 +453,7 @@ function publicTracker(tracker) {
 
 /**
  * Build a deterministic tracker catalog. Ready trackers are guaranteed not to
- * intersect another enabled, non-case template in this catalog.
+ * intersect another enabled, standalone, non-case template in this catalog.
  */
 export function buildEmailTemplateTrackerCatalog(templates) {
   const trackers = (Array.isArray(templates) ? templates : [])

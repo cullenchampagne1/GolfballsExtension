@@ -157,6 +157,25 @@ describe('automatic email-template subject trackers', () => {
       ['disabled', 'not_applicable', 'incomplete', 'incomplete'],
     );
   });
+
+  it('ignores reply-in-thread templates when checking standalone subject conflicts', () => {
+    const catalog = buildEmailTemplateTrackerCatalog([
+      orderTemplate('initial', 'Order #{{order_number}} update'),
+      { ...orderTemplate('thread-reply', 'Order #{{order_number}} update'), replyMode: 'reply' },
+    ]);
+
+    assert.deepEqual(
+      catalog.trackers.map((tracker) => tracker.status),
+      ['ready', 'not_applicable'],
+    );
+    assert.equal(catalog.trackers[0].conflictsWith.length, 0);
+    assert.equal(catalog.trackers[1].trackerId, null);
+    assert.equal(catalog.trackers[1].regex, null);
+    assert.equal(
+      matchEmailTemplateSubject('Re: Order #5512 update', catalog)?.templateId,
+      'initial',
+    );
+  });
 });
 
 describe('template response and order attribution', () => {
@@ -222,6 +241,37 @@ describe('template response and order attribution', () => {
     assert.deepEqual(
       { sent: summary.sent, responded: summary.responded, ordered: summary.ordered, responseRate: summary.responseRate, orderRate: summary.orderRate },
       { sent: 1, responded: 1, ordered: 1, responseRate: 1, orderRate: 1 },
+    );
+  });
+
+  it('does not create tracked-send rows for actual reply-in-thread deliveries', async () => {
+    const memory = memoryStorage({
+      templates: [
+        orderTemplate('initial', 'Order #{{order_number}} update'),
+        orderTemplate('thread-reply', 'Checking in'),
+      ],
+    });
+    const store = createEmailTemplateTrackingStore({
+      storage: memory.local,
+      storageEvents: memory.events,
+      now: () => 2_000_000_000_000,
+    });
+    await store.install();
+    await store.recordDelivery([
+      {
+        templateId: 'initial', to: 'buyer@example.com', subject: 'Order #5512 update',
+        trackingContext: { contactId: 'contact-9' },
+      },
+      {
+        templateId: 'thread-reply', to: 'buyer@example.com', subject: 'Checking in',
+        replyMode: 'reply',
+        trackingContext: { contactId: 'contact-9' },
+      },
+    ], 'pa', [{ status: 'sent' }, { status: 'sent' }]);
+
+    assert.deepEqual(
+      memory.data[EMAIL_TEMPLATE_SENDS_KEY].map((send) => send.templateId),
+      ['initial'],
     );
   });
 

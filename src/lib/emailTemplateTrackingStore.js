@@ -217,7 +217,8 @@ export function createEmailTemplateTrackingStore(options = {}) {
       const templateId = clean(email.templateId, 200);
       if (!templateId) return email;
       const tracker = trackerForTemplate(current, templateId);
-      const matched = tracker?.status === 'ready'
+      const isThreadReply = clean(email.replyMode, 24).toLowerCase() === 'reply';
+      const matched = !isThreadReply && tracker?.status === 'ready'
         && matchEmailTemplateSubject(email.subject, current)?.templateId === templateId;
       email.templateId = templateId;
       email.templateName = clean(email.templateName || tracker?.templateName, 200);
@@ -225,9 +226,13 @@ export function createEmailTemplateTrackingStore(options = {}) {
       email.contactId = clean(email.contactId || email.trackingContext?.crmContactId || email.trackingContext?.contactId, 120);
       email.accountId = clean(email.accountId || email.trackingContext?.accountId, 120);
       delete email.trackingContext;
-      email.templateTrackingStatus = matched ? 'ready' : (tracker?.status || 'unknown');
+      email.templateTrackingStatus = isThreadReply
+        ? 'not_applicable'
+        : matched ? 'ready' : (tracker?.status || 'unknown');
       email.templateTrackerVersion = current.version;
-      if (tracker?.status === 'ready' && !matched) email.templateTrackingStatus = 'subject-mismatch';
+      if (!isThreadReply && tracker?.status === 'ready' && !matched) {
+        email.templateTrackingStatus = 'subject-mismatch';
+      }
       if (matched) {
         email.templateTrackerId = tracker.trackerId;
         // The authoritative full regex lives in the local catalog. Mirror a
@@ -261,6 +266,11 @@ export function createEmailTemplateTrackingStore(options = {}) {
       const added = [];
       enriched.forEach((email, index) => {
         if (!email?.templateId || !deliveryWasSuccessful(records(results)[index])) return;
+        // A reply-in-thread (and every case reply) belongs to the original
+        // outbound conversation. Recording it as a fresh send would split
+        // later replies/orders away from the initial template that owns the
+        // subject tracker.
+        if (email.templateTrackingStatus === 'not_applicable') return;
         const row = {
           id: sendId(email, now, index),
           templateId: clean(email.templateId, 200),

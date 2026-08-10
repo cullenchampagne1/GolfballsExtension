@@ -553,7 +553,18 @@ export function TemplateEditor({ tpl, onDelete }) {
       buildEmailTemplateTrackerCatalog([...peers, draft]),
       tpl.id,
     );
-  }, [trackingReady, trackingTemplates, tpl, typeId, enabled, name, subject, vars, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trackingReady, trackingTemplates, tpl, typeId, enabled, name, subject, vars, variations, baseLabel, replyMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const trackerRegexPreview = subjectTracker?.status === 'ready' && subjectTracker.regex
+    ? `/${subjectTracker.regex}/${subjectTracker.flags || 'iu'}`
+    : '';
+  const trackerRegexPlaceholder = subjectTracker?.status === 'not_applicable'
+    ? 'Inherited from the original email in this thread'
+    : subjectTracker?.status === 'conflict'
+      ? 'No unique regex — resolve the subject conflict'
+      : subjectTracker?.status === 'disabled'
+        ? 'Enable this template to generate a tracking ID'
+        : 'No subject regex generated yet';
 
   const skipSave     = useRef(true);
   const skipTypeSave = useRef(true);
@@ -693,9 +704,24 @@ export function TemplateEditor({ tpl, onDelete }) {
         </Callout>
       )}
       {subjectTracker?.status === 'not_applicable' && (
-        <Callout tone="neutral" title="Conversation subject tracking" style={{ marginBottom: 12 }}>
-          Case replies keep the existing conversation subject, so they are not assigned a template subject tracker.
+        <Callout tone="neutral" title="Tracking inherited from the original email" style={{ marginBottom: 12 }}>
+          {subjectTracker.reason}
         </Callout>
+      )}
+
+      {subjectTracker && (
+        <div style={{ marginBottom: 12 }}>
+          <Field label="Tracking ID (regex preview)">
+            <Input
+              value={trackerRegexPreview}
+              placeholder={trackerRegexPlaceholder}
+              title={trackerRegexPreview || trackerRegexPlaceholder}
+              size="sm"
+              mono
+              readOnly
+            />
+          </Field>
+        </div>
       )}
 
       {/* ── Meta row ── */}
