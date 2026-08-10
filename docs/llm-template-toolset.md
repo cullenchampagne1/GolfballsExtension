@@ -50,7 +50,11 @@ Your output is a **JSON blob** the user pastes into the extension (Template Mana
   // Power-Automate send options (order/account only; optional)
   "replyMode": "standalone" | "reply",   // reply = threads onto the most recent email
   "senderAccount": "golfballs",
-  "senderRandomize": false
+  "senderRandomize": false,
+
+  // Post-success follow-ups (order/account only; optional; use only ids the user supplies)
+  "presetTaskId": "task-template-id",
+  "followUpActionId": "custom-action-id"
 }
 ```
 
@@ -137,11 +141,12 @@ Body: `<p>{{shop_link}}</p>`. Same for a linked image — return `'<a href="..."
 ### 4.1 `order` templates
 - Run on CRM **order pages**. Schema paths: the ORDER tree (§5.1).
 - Rules: the grouped tree (§6.1).
+- May set `"presetTaskId"` and/or `"followUpActionId"` only when the user supplies those saved ids.
 
 ### 4.2 `account` templates
 - Run on CRM **contact/account pages**. Schema paths: the CONTACT/ACCOUNT tree (§5.2).
 - Rules: `accountConditions` flat array (§6.2).
-- May set `"presetTaskId"` only if the user supplies a task-template id.
+- May set `"presetTaskId"` and/or `"followUpActionId"` only when the user supplies those saved ids.
 
 ### 4.3 `case` templates
 - Replies to inbound case emails (sent via mailto, so **no attachment variables**).

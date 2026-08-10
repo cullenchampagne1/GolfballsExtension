@@ -1469,7 +1469,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "Account templates can also auto-create a follow-up task on send (pick a task template), and case templates carry recommended case tags — those power the category chips in the email preview."
+            "text": "Order and account templates can create a follow-up task and run one saved custom action after a successful send or Outlook handoff. Bulk sends apply those follow-ups once per successfully delivered recipient; failed and skipped rows do not run them. Case templates carry recommended case tags — those power the category chips in the email preview."
           }
         ],
         "advanced": [

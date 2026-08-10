@@ -440,7 +440,8 @@ export function TemplatesPage() {
           <tr><td><b>Recipient (To)</b></td><td>Per type: <b>Smart detect</b> / <b>Pick from page</b> (click the email element, the selector fills itself) / <b>Fixed email</b> — case templates get <b>Reply to sender</b>, account templates <b>Contact email</b>. A live hint shows the resolved address.</td></tr>
           <tr><td><b>Reply mode</b></td><td><b>Standalone</b> starts a fresh email; <b>Reply</b> threads onto the most recent conversation (the Send button reads “Reply”). Power Automate only.</td></tr>
           <tr><td><b>Sender</b></td><td>With Power Automate on, pick which account the email comes from — or <b>Random</b> to rotate per send.</td></tr>
-          <tr><td><b>Auto-create task</b></td><td>Account templates can log a CRM task automatically when the email sends — pick one of your task templates.</td></tr>
+          <tr><td><b>Follow-up task</b></td><td>Order and account templates can create one CRM task after each successful send or Outlook handoff — pick one of your saved task templates.</td></tr>
+          <tr><td><b>Follow-up action</b></td><td>Pick one saved custom action to run against that recipient after the same successful delivery. Bulk sends run it once per successfully delivered recipient.</td></tr>
         </tbody>
       </table>
 

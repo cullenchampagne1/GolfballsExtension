@@ -149,6 +149,16 @@ describe('normalizeTemplate — recipients, variations, sender', () => {
     assert.equal(normalizeTemplate({ ...minimal, replyMode: 'forward' }).replyMode, 'standalone');
   });
 
+  it('preserves task and custom-action follow-ups on non-case templates', () => {
+    const t = normalizeTemplate({
+      ...minimal,
+      presetTaskId: ' task_4 ',
+      followUpActionId: ' action_9 ',
+    });
+    assert.equal(t.presetTaskId, 'task_4');
+    assert.equal(t.followUpActionId, 'action_9');
+  });
+
   it('normalizes a case template: caseVars kinds/config fallbacks, caseRules filtered, no replyMode', () => {
     const t = normalizeTemplate({
       name: 'Case', body: 'b', type: 'case',
@@ -168,6 +178,8 @@ describe('normalizeTemplate — recipients, variations, sender', () => {
     assert.deepEqual(t.caseRules, [{ field: 'subject', op: 'contains', value: 'refund' }]);
     assert.deepEqual(t.caseTags, ['billing', '7']);
     assert.equal('replyMode' in t, false);
+    assert.equal('presetTaskId' in t, false);
+    assert.equal('followUpActionId' in t, false);
   });
 });
 

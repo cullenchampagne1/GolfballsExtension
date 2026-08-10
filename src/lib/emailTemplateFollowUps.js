@@ -1,0 +1,271 @@
+/* ──────────────────────────────────────────────────────────────
+   emailTemplateFollowUps — post-delivery automation for email templates.
+
+   A template may select one saved task preset (`presetTaskId`) and one saved
+   custom action (`followUpActionId`). This module resolves those references,
+   builds the same recipient-scoped page model the code engine uses elsewhere,
+   and runs both follow-ups independently. Callers invoke it ONLY after the
+   email transport reports `sent` or `opened`; see emailTemplateDelivery.js.
+
+   Follow-up actions intentionally receive the recipient page/contact model,
+   not transient modal entry-point data from whichever bulk-send window happens
+   to be open. That keeps one action run attached to one successful recipient.
+────────────────────────────────────────────────────────────── */
+
+import { shapeExtractedPage } from './codeEngine/pageModel.js';
+
+const clean = (value) => String(value == null ? '' : value).trim();
+const object = (value) => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+);
+
+export function emailTemplateFollowUpIds(template = {}) {
+  return {
+    taskId: clean(template.presetTaskId),
+    actionId: clean(template.followUpActionId),
+  };
+}
+
+export function hasEmailTemplateFollowUps(template = {}) {
+  const ids = emailTemplateFollowUpIds(template);
+  return !!(ids.taskId || ids.actionId);
+}
+
+function parseSourceDocument(sourceHtml, sourceUrl, parseHtml) {
+  if (!sourceHtml) return null;
+  if (typeof parseHtml === 'function') return parseHtml(sourceHtml, sourceUrl);
+  if (typeof DOMParser === 'undefined') return null;
+  const doc = new DOMParser().parseFromString(String(sourceHtml), 'text/html');
+  if (sourceUrl && doc?.body) {
+    doc.body.dataset.gbSourceUrl = String(sourceUrl);
+    if (!doc.querySelector('base')) {
+      const base = doc.createElement('base');
+      base.href = String(sourceUrl);
+      doc.head?.prepend(base);
+    }
+  }
+  return doc;
+}
+
+/** Build one recipient-scoped page model for a task and/or custom action. */
+export function buildEmailFollowUpPage(input = {}, deps = {}) {
+  const context = object(input.context);
+  const sourceContact = object(context.contact);
+  const sourceDocument = input.document
+    || parseSourceDocument(input.sourceHtml, input.sourceUrl, deps.parseHtml);
+  const engine = deps.pageEngine
+    || (typeof window !== 'undefined' ? window.__gbPageEngine : null);
+
+  let extracted = input.page || input.snapshot || null;
+  if (!extracted && sourceDocument && engine?.runEngine) {
+    try {
+      engine.clearCache?.(sourceDocument);
+      extracted = engine.runEngine(sourceDocument);
+    } catch { extracted = null; }
+  }
+
+  const wrapped = object(extracted);
+  const data = object(wrapped.data || wrapped);
+  /* Order pages expose the recipient under order.customer and ids.customer;
+     contact/account pages expose contact + ids.contact. Collapse both into
+     the writable page.contact contract used by task/custom-action writers. */
+  const orderCustomer = object(data.order?.customer);
+  const extractedContact = { ...orderCustomer, ...object(data.contact) };
+
+  /* The schema's ids.contact wins over a generic audience row contactId.
+     Account rows often use their account id as the row key, while the fetched
+     account document exposes the representative contact required by CRM task
+     and custom-action writers under data.ids.contact. */
+  const contactId = clean(
+    context.crmContactId
+    || data.ids?.contact
+    || data.ids?.customer
+    || data.order?.customerId
+    || sourceContact.crmContactId
+    || sourceContact.contactId
+    || context.contactId
+    || extractedContact.contactId
+    || extractedContact.customerId
+    || extractedContact.id,
+  );
+  const accountId = clean(
+    data.ids?.account
+    || context.accountId
+    || sourceContact.accountId
+    || extractedContact.accountId,
+  );
+  const contactName = clean(
+    context.contactName
+    || context.name
+    || sourceContact.contactName
+    || sourceContact.name
+    || extractedContact.contactName
+    || extractedContact.name
+    || extractedContact.fullName
+    || [extractedContact.firstName, extractedContact.lastName].filter(Boolean).join(' '),
+  );
+  const email = clean(
+    context.email
+    || sourceContact.email
+    || extractedContact.email,
+  );
+
+  const contact = {
+    ...extractedContact,
+    ...sourceContact,
+    ...(contactId ? {
+      contactId,
+      id: clean(sourceContact.id || extractedContact.id || contactId),
+      customerId: clean(sourceContact.customerId || extractedContact.customerId || contactId),
+    } : {}),
+    ...(accountId ? { accountId } : {}),
+    ...(contactName ? { contactName, name: clean(sourceContact.name || extractedContact.name || contactName) } : {}),
+    ...(email ? { email } : {}),
+  };
+  const contacts = Object.keys(contact).length ? [contact] : [];
+
+  return {
+    page: shapeExtractedPage(data, { contact, contacts }),
+    document: sourceDocument,
+    taskContext: {
+      contactId,
+      accountId,
+      contactName,
+      employeeId: clean(context.employeeId),
+    },
+  };
+}
+
+function storageResources() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        resolve({ noteTemplates: [], customActions: [] });
+        return;
+      }
+      chrome.storage.local.get(['noteTemplates', 'gbCustomActions'], (data) => {
+        resolve({
+          noteTemplates: Array.isArray(data?.noteTemplates) ? data.noteTemplates : [],
+          customActions: Array.isArray(data?.gbCustomActions) ? data.gbCustomActions : [],
+        });
+      });
+    } catch {
+      resolve({ noteTemplates: [], customActions: [] });
+    }
+  });
+}
+
+async function createTask({ template, context }) {
+  const { submitQuickTask } = await import('./submitQuickTask.js');
+  return submitQuickTask({ template, context });
+}
+
+async function runCustomAction({ action, page, document: sourceDocument }) {
+  const [sim, sandbox, bridge, live] = await Promise.all([
+    import('./codeEngine/simulate.js'),
+    import('./codeEngine/sandboxRunner.js'),
+    import('./page-engine/sandbox-bridge.js'),
+    import('./codeEngine/liveActionRun.js'),
+  ]);
+
+  /* Choosing the action in the email template is the authorization for this
+     automatic run, so there is no second per-recipient confirmation dialog.
+     The code still executes in the sandbox and every write still goes through
+     the same typed executor/validation contracts as a shelf action. */
+  page.entryPoints = [];
+  page.entryPoint = null;
+  const executor = await live.makeLiveExecutor(page);
+  const result = await sim.simulateProgram(action.source || '', page, {
+    run: sandbox.makeSandboxRunner({ exec: bridge.runInSandbox, doc: sourceDocument }),
+    user: {},
+    executor,
+  });
+  const failed = (result.trace || []).filter((entry) => (
+    entry?.contract && entry.status === 'failed'
+  ));
+  if (result.cancelled) return { ok: false, error: 'Action was cancelled.' };
+  if (result.error) return { ok: false, error: result.error };
+  if (failed.length) {
+    const firstError = failed[0]?.errors?.[0] || 'A custom-action step failed.';
+    return { ok: false, error: firstError, failed: failed.length };
+  }
+  return {
+    ok: true,
+    steps: (result.trace || []).filter((entry) => entry?.contract).length,
+    result: typeof result.result === 'string' ? result.result : null,
+  };
+}
+
+function resultError(result, fallback) {
+  return clean(result?.error || result?.reason || fallback);
+}
+
+/**
+ * Run all follow-ups selected on one email template. Task/action failures are
+ * independent: a failed task does not prevent the custom action from running.
+ */
+export async function runEmailTemplateFollowUps(input = {}, deps = {}) {
+  const template = object(input.template);
+  const ids = emailTemplateFollowUpIds(template);
+  if (!ids.taskId && !ids.actionId) {
+    return { ok: true, task: null, action: null, errors: [] };
+  }
+
+  const loadResources = deps.loadResources || storageResources;
+  const resources = await loadResources();
+  const noteTemplates = Array.isArray(resources?.noteTemplates) ? resources.noteTemplates : [];
+  const customActions = Array.isArray(resources?.customActions) ? resources.customActions : [];
+  const built = buildEmailFollowUpPage(input, deps);
+  const errors = [];
+  let task = null;
+  let action = null;
+
+  if (ids.taskId) {
+    const selected = noteTemplates.find((item) => (
+      clean(item?.id) === ids.taskId
+      && item?.subType === 'task'
+      && item?.enabled !== false
+    ));
+    if (!selected) {
+      task = { ok: false, error: 'Selected follow-up task is disabled or no longer exists.' };
+    } else {
+      try {
+        task = await (deps.createTask || createTask)({
+          template: selected,
+          context: built.taskContext,
+        });
+      } catch (error) {
+        task = { ok: false, error: clean(error?.message || error) || 'Task creation failed.' };
+      }
+      if (!task || task.ok !== true) {
+        task = { ...(task || {}), ok: false, error: resultError(task, 'Task creation failed.') };
+      }
+    }
+    if (!task.ok) errors.push(`Task: ${task.error}`);
+  }
+
+  if (ids.actionId) {
+    const selected = customActions.find((item) => (
+      clean(item?.id) === ids.actionId && item?.enabled !== false
+    ));
+    if (!selected) {
+      action = { ok: false, error: 'Selected follow-up action is disabled or no longer exists.' };
+    } else {
+      try {
+        action = await (deps.runAction || runCustomAction)({
+          action: selected,
+          page: built.page,
+          document: built.document,
+        });
+      } catch (error) {
+        action = { ok: false, error: clean(error?.message || error) || 'Custom action failed.' };
+      }
+      if (!action || action.ok !== true) {
+        action = { ...(action || {}), ok: false, error: resultError(action, 'Custom action failed.') };
+      }
+    }
+    if (!action.ok) errors.push(`Action: ${action.error}`);
+  }
+
+  return { ok: errors.length === 0, task, action, errors };
+}

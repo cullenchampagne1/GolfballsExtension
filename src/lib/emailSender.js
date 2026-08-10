@@ -19,10 +19,9 @@ import { sanitizeHtml } from './sanitizeHtml.js';
            so a bulk run opens one Outlook window per contact.
 
    This module BUILDS + CLASSIFIES + DISPATCHES a background action; it
-   never fetches itself (PA plumbing stays in background.js). The popup's
-   own path (popup → vanilla/main.js `sendViaPA`) is intentionally left
-   untouched — that content script can't import ESM and shows its result
-   toast on the page after the popup window has closed.
+   never fetches itself (PA plumbing stays in background.js). The toolbar
+   popup reaches this module through the ESM bridge installed by
+   actions-shelf, so popup and bulk delivery share the same result contract.
 ─────────────────────────────────────────────────────────────── */
 
 /* Read the four email-related storage keys in one shot → a frozen config.

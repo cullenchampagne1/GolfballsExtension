@@ -675,96 +675,53 @@ function __gbAccessAllowed(st, now) {
       return true;
     }
 
-    if (msg.action === 'sendViaPA') {
-      // Build the lean payload, send to PA, and surface the real result
-      // as a page toast. The popup has already closed by the time PA
-      // responds, so the content script is the only place we can show
-      // feedback.
-      chrome.storage.local.get(['emailSignature', 'devSettings'], ({ emailSignature, devSettings }) => {
-        let body = msg.templateHtml || '';
-        if (emailSignature) {
-          body += '<br><div>' + emailSignature + '</div>';
-        }
-        /* Sender mapping — inlined because this file is a vanilla
-           content script (no ESM imports). Keep in sync with
-           src/lib/sender.js when adding accounts. Only the DOMAIN
-           lives here; the local part comes from the rep's
-           `email.localPart` dev setting. Missing configuration fails
-           closed instead of falling back to another employee. */
-        const SENDER_DOMAINS = {
-          golfballs:   'golfballs.com',
-          loyaltylogo: 'loyaltylogo.com',
-        };
-        const SENDER_IDS = Object.keys(SENDER_DOMAINS);
-        const rawLocal = (devSettings && devSettings['email.localPart']) || '';
-        const localPart = String(rawLocal).trim();
-        if (!/^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/i.test(localPart)) {
-          window.__gbToast?.error?.('Configure Email account host in Settings before sending', { duration: 6000 });
-          sendResponse({ sent: false, error: 'Sender address is not configured' });
+    if (msg.action === 'sendEmailTemplate' || msg.action === 'sendViaPA') {
+      /* The ESM bridge is installed by actions-shelf before this vanilla file
+         loads. It owns transport selection and runs task/custom-action
+         follow-ups only after the transport reports success. `sendViaPA` is
+         accepted as a compatibility alias for tabs carrying an older popup
+         bundle during an extension update. */
+      (async () => {
+        const run = window.__gbSendEmailTemplate;
+        const to = msg.to || msg.contactEmail || '';
+        if (typeof run !== 'function') {
+          const error = 'Email delivery bridge is unavailable on this page.';
+          window.__gbToast?.error?.(error, { duration: 6000 });
+          sendResponse({ sent: false, state: 'failed', transport: 'none', error });
           return;
         }
-        const domainFor = (id) => SENDER_DOMAINS[id] || SENDER_DOMAINS[SENDER_IDS[0]];
-        const fromAddr = (() => {
-          const id = msg.senderRandomize
-            ? SENDER_IDS[Math.floor(Math.random() * SENDER_IDS.length)]
-            : (msg.senderAccount || SENDER_IDS[0]);
-          return `${localPart}@${domainFor(id)}`;
-        })();
-        const payload = {
-          emails: [{
-            from:      fromAddr,
-            to:        msg.contactEmail,
-            subject:   msg.templateSubject,
-            htmlBody:  body,
-            replyMode: msg.replyMode,
-          }],
-        };
-        chrome.runtime.sendMessage({ action: 'paAutomate', payload }, (result) => {
-          /* Always go through window.__gbToast — actions-shelf mounts
-             a ToastHost on every golfballs.com page (matched in the
-             manifest), so the global is reliably installed by the
-             time a PA roundtrip completes. The legacy
-             showGbNotification fallback used to fire here and produced
-             the old-style banner the user just reported — gone now. */
-          const toast = (typeof window !== 'undefined' && window.__gbToast) ? window.__gbToast : null;
-          if (result?.results?.[0]?.status === 'sent') {
-            toast?.success?.(`Email sent to ${msg.contactEmail}`, { duration: 4000 });
+        try {
+          const template = msg.template || {
+            senderAccount: msg.senderAccount || '',
+            senderRandomize: !!msg.senderRandomize,
+          };
+          const result = await run({
+            template,
+            to,
+            subject: msg.subject || msg.templateSubject || '',
+            htmlBody: msg.htmlBody || msg.templateHtml || '',
+            replyMode: msg.replyMode || template.replyMode || 'standalone',
+            context: msg.context || {},
+          });
+          const toast = window.__gbToast;
+          if (result?.state === 'sent') {
+            toast?.success?.(`Email sent to ${to}`, { duration: 4000 });
+          } else if (result?.state === 'opened') {
+            toast?.success?.(`Email opened in Outlook for ${to}`, { duration: 4000 });
           } else {
-            const err = result?.results?.[0]?.error || result?.error || 'PA FAILED';
-            toast?.error?.(`Email failed: ${err}`, { duration: 6000 });
+            toast?.error?.(`Email failed: ${result?.error || 'delivery failed'}`, { duration: 6000 });
           }
-        });
-        sendResponse({ sent: true });
-      });
-      return true;
-    }
-
-    if (msg.action === 'executePresetTask') {
-      // Inline Task/Create.ajax — same payload shape as lib/submitQuickTask.js
-      // (used by the React QuickTask modal). Kept inline here because main.js
-      // is a vanilla content script and can't ESM-import the lib. The legacy
-      // crm-task-buttons.js used to host this with a "complete + create"
-      // variant; that page-injected button was removed when we deleted the
-      // file, so the message handler is the only remaining entry point.
-      chrome.storage.local.get('noteTemplates', async ({ noteTemplates }) => {
-        const taskTpl = (noteTemplates || []).find(t => t.id === msg.taskId);
-        if (!taskTpl) return;
-        const base = 'https://api.golfballs.com';
-        const go = (url) => fetch(base + url, { credentials: 'include' }).then(r => r.json()).catch(() => null);
-        const today = new Date();
-        const fmt = d => `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
-        const due = taskTpl.daysOut != null
-          ? (() => { const d = new Date(); d.setDate(d.getDate() + taskTpl.daysOut); return fmt(d); })()
-          : fmt(today);
-        await go(`/golfballs/crm/Admin/Task/Create.ajax?${JSON.stringify({
-          TaskID: '', Subject: taskTpl.subject || taskTpl.name,
-          Description: taskTpl.body || '', LiveDate: fmt(today), DueDate: due,
-          taskCategoryID: String(taskTpl.categoryId || '0'), taskStatusID: '1',
-          Priority: String(taskTpl.priority || '1'),
-          contactID: String(msg.contactId || '0'), leadID: '0',
-          employeeID: String(msg.employeeId || '0'), caseID: 0,
-        })}`);
-      });
+          if (result?.followUps && result.followUps.ok === false) {
+            const detail = ((result.followUps.errors || []).join(' · ') || 'Follow-up automation failed.').slice(0, 320);
+            (toast?.warning || toast?.error)?.(`Email delivered, but ${detail}`, { duration: 8000 });
+          }
+          sendResponse({ ...result, sent: result?.state === 'sent' || result?.state === 'opened' });
+        } catch (error) {
+          const detail = String(error?.message || error || 'delivery failed');
+          window.__gbToast?.error?.(`Email failed: ${detail}`, { duration: 6000 });
+          sendResponse({ sent: false, state: 'failed', transport: 'none', error: detail });
+        }
+      })();
       return true;
     }
 

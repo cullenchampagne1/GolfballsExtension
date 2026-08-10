@@ -77,7 +77,7 @@
           ] },
           { "type": "heading", "text": "Auto-match rules" },
           { "type": "p", "text": "Rules decide when a template shows as 'Matched on this page'. Each rule is field + operator + value; rules combine with AND/OR and can be grouped for nesting (e.g. status is 'Hold' AND (total > 500 OR item count > 10)). The field picker is a tree of the page's real data — order fields, contact + account fields, plus this template's own variables. Operators adapt to the field type: text gets is/contains/starts with; numbers get comparisons; dates get before/after/relative." },
-          { "type": "callout", "kind": "info", "text": "Account templates can also auto-create a follow-up task on send (pick a task template), and case templates carry recommended case tags — those power the category chips in the email preview." }
+          { "type": "callout", "kind": "info", "text": "Order and account templates can create a follow-up task and run one saved custom action after a successful send or Outlook handoff. Bulk sends apply those follow-ups once per successfully delivered recipient; failed and skipped rows do not run them. Case templates carry recommended case tags — those power the category chips in the email preview." }
         ],
         "advanced": [
           { "type": "heading", "text": "The body editor" },

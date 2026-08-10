@@ -45,6 +45,10 @@
       "file": "tests/unit/emailSender.test.mjs"
     },
     {
+      "name": "email \u00b7 template follow-up tasks & custom actions",
+      "file": "tests/unit/emailTemplateFollowUps.test.mjs"
+    },
+    {
       "name": "email \u00b7 HTML sanitizer strips scripts & bypasses",
       "file": "tests/unit/sanitizeHtml.test.mjs"
     },

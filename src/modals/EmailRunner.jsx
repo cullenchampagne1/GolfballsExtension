@@ -4,6 +4,7 @@ import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, Te
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail } from '../lib/emailSender.js';
+import { sendEmailTemplateWithFollowUps } from '../lib/emailTemplateDelivery.js';
 import { useDevSetting } from '../lib/devSettings.js';
 import { renderTemplate } from '../lib/variableResolution.js';
 import { directContactVariables } from '../lib/contactImport.js';
@@ -140,9 +141,8 @@ const _dnc = (s) => /do\s*not\s*contact/i.test(String(s || ''));
    silently sending blanks. */
 const renderStr = (str, vars, defs) => renderTemplate(str, vars, defs);
 
-/* The vanilla sendViaPA handler appends emailSignature for the popup's
-   single-contact path; the orchestrator hits paAutomate directly so we
-   match the same behaviour ourselves. */
+/* Bulk delivery passes the stored signature into the shared email sender;
+   it is appended on PA and intentionally omitted from mailto handoff. */
 const readSignature = () => new Promise((resolve) => {
   try {
     chrome.storage.local.get('emailSignature', (out) => resolve(out?.emailSignature || ''));
@@ -498,6 +498,7 @@ export function EmailRunner({
     // updated in memory as we go so "emailed in N days" reflects this run too.
     const emailLog = useMock ? {} : await readEmailLog();
     const recentCutoff = Math.max(1, Number(skipRecentDays) || 30) * DAY_MS;
+    const followUpFailures = [];
 
     for (let i = 0; i < contacts.length; i++) {
       if (runTokenRef.current !== token) return; // cancelled
@@ -636,12 +637,40 @@ export function EmailRunner({
              cancel that arrived DURING the variable-resolution await
              above, which would otherwise fire one more send. */
           if (runTokenRef.current !== token) return;
-          const res = await sendEmail(
-            { from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady } },
-            { dispatch: dispatchBg },
-          );
+          const res = await sendEmailTemplateWithFollowUps({
+            email: { from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady } },
+            template: selectedTpl,
+            followUpContext: {
+              context: {
+                crmContactId: c.crmContactId || '',
+                contactId: c.contactId || '',
+                accountId: c.accountId || '',
+                contactName: pageName,
+                email: toEmail,
+                contact: {
+                  crmContactId: c.crmContactId || '',
+                  contactId: c.contactId || '',
+                  accountId: c.accountId || '',
+                  contactName: pageName,
+                  name: pageName,
+                  email: toEmail,
+                  phone: c.phone || '',
+                  contactUrl: c.contactUrl || '',
+                },
+              },
+              snapshot: cachedSnapshot,
+              sourceHtml: fetchedText,
+              sourceUrl: c.contactUrl || '',
+            },
+          }, {
+            send: (message) => sendEmail(message, { dispatch: dispatchBg }),
+          });
           if (res.state === 'sent' || res.state === 'opened') {
-            outcome = { status: 'sent', email: toEmail, name: pageName };
+            const followUpError = res.followUps?.ok === false
+              ? (res.followUps.errors || []).join(' · ') || 'Follow-up automation failed'
+              : '';
+            outcome = { status: 'sent', email: toEmail, name: pageName, followUpError };
+            if (followUpError) followUpFailures.push({ name: pageName || toEmail, error: followUpError });
             if (!useMock && toEmail) { emailLog[toEmail.toLowerCase()] = Date.now(); writeEmailLog(emailLog); }
           } else {
             outcome = { status: 'error', error: res.error || 'Send failed', email: toEmail, name: pageName };
@@ -703,6 +732,16 @@ export function EmailRunner({
         setDelayState(null);
         if (runTokenRef.current !== token) return;
       }
+    }
+
+    if (followUpFailures.length) {
+      const first = followUpFailures[0];
+      const more = followUpFailures.length > 1 ? ` (+${followUpFailures.length - 1} more)` : '';
+      const detail = String(first.error || '').slice(0, 240);
+      (toast?.warning || toast?.error)?.(
+        `${followUpFailures.length} delivered email follow-up${followUpFailures.length === 1 ? '' : 's'} failed: ${first.name} — ${detail}${more}`,
+        { duration: 9000 },
+      );
     }
 
     setStatus('done');

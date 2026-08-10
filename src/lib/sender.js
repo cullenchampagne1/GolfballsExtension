@@ -26,8 +26,8 @@
        just chrome, not user-facing per template)
      • EmailRunner imports pickFromAddress() and passes the local
        part it reads via useDevSetting('email.localPart')
-     • vanilla/main.js cannot import ESM — it inlines the same
-       domains table and reads the local part from chrome.storage.
+     • Toolbar popup delivery reaches this module through the content-page
+       ESM bridge, so it uses the same mapping as bulk email.
 
    Adding a sender = one entry here. The picker UI updates by
    re-render, the runtime resolution picks it up next send.

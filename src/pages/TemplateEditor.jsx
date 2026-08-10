@@ -248,6 +248,8 @@ export function TemplateEditor({ tpl, onDelete }) {
   const [recipientResolved, setRecipientResolved] = useState(null);
   const [presetTaskId,   setPresetTaskId]   = useState(tpl.presetTaskId || '');
   const [presetTaskOpts, setPresetTaskOpts] = useState([]);
+  const [followUpActionId,   setFollowUpActionId]   = useState(tpl.followUpActionId || '');
+  const [followUpActionOpts, setFollowUpActionOpts] = useState([]);
   // Default to reply mode for new templates — matches legacy editor's
   // "checked unless explicitly 'standalone'" load behavior.
   const [replyMode,      setReplyMode]      = useState(tpl.replyMode !== 'standalone');
@@ -293,13 +295,18 @@ export function TemplateEditor({ tpl, onDelete }) {
   }
 
 
-  // Load task templates (account "Auto-Create Task on Send" picker).
+  // Load the two optional post-send resources in one storage read.
   useEffect(() => {
-    chrome.storage.local.get('noteTemplates', ({ noteTemplates }) => {
-      const tasks = (noteTemplates || []).filter(t => t.subType === 'task');
+    chrome.storage.local.get(['noteTemplates', 'gbCustomActions'], ({ noteTemplates, gbCustomActions }) => {
+      const tasks = (noteTemplates || []).filter(t => t.subType === 'task' && t.enabled !== false);
+      const actions = (gbCustomActions || []).filter(a => a && a.enabled !== false);
       setPresetTaskOpts([
         { id: '', label: '— none —' },
         ...tasks.map(t => ({ id: t.id, label: t.name || 'Untitled task' })),
+      ]);
+      setFollowUpActionOpts([
+        { id: '', label: '— none —' },
+        ...actions.map(a => ({ id: a.id, label: a.name || 'Untitled action' })),
       ]);
     });
   }, []);
@@ -467,9 +474,10 @@ export function TemplateEditor({ tpl, onDelete }) {
       // Name for the initial email — only meaningful (and only persisted) when
       // the template has variations to sit alongside.
       baseLabel: variations.length && baseLabel.trim() ? baseLabel.trim() : undefined,
-      // Only account templates persist a presetTaskId — other types
-      // explicitly clear it so type-switching doesn't strand stale data.
-      presetTaskId: typeId === 'account' ? (presetTaskId || '') : undefined,
+      // Popup + bulk both support recipient-scoped follow-ups for every
+      // ordinary email template. Case templates use a separate reply flow.
+      presetTaskId: typeId !== 'case' ? (presetTaskId || '') : undefined,
+      followUpActionId: typeId !== 'case' ? (followUpActionId || '') : undefined,
       // Reply-mode toggle: case templates always thread as replies (the
       // user opens them inside an existing case), so we omit the field
       // for case to match the legacy editor's behavior.
@@ -526,7 +534,7 @@ export function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, replyMode, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, followUpActionId, replyMode, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
      spring is keyed on tpl.type, so we save the new type immediately and
@@ -675,12 +683,12 @@ export function TemplateEditor({ tpl, onDelete }) {
         </div>
       )}
 
-      {/* ── Auto-Create Task on Send (account templates only) ── */}
-      {typeId === 'account' && (
-        <div style={S.mb12}>
+      {/* ── Successful-delivery follow-ups (all non-case email templates) ── */}
+      {typeId !== 'case' && (
+        <div style={{ ...S.mb12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field
-            label="Auto-create task on send"
-            hint="Picks from your saved task templates — fires when this email opens in Outlook"
+            label="Follow-up task"
+            hint="Creates the selected CRM task after a successful send or Outlook handoff."
           >
             <Dropdown
               size="sm"
@@ -688,6 +696,19 @@ export function TemplateEditor({ tpl, onDelete }) {
               options={presetTaskOpts}
               onChange={setPresetTaskId}
               placeholder="— none —"
+            />
+          </Field>
+          <Field
+            label="Follow-up action"
+            hint="Runs the selected custom action against that recipient after the email succeeds."
+          >
+            <Dropdown
+              size="sm"
+              value={followUpActionId}
+              options={followUpActionOpts}
+              onChange={setFollowUpActionId}
+              placeholder="— none —"
+              searchable={followUpActionOpts.length > 8}
             />
           </Field>
         </div>

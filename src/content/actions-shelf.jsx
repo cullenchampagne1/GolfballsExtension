@@ -18,6 +18,7 @@ import { findPhone } from '../lib/findPhone.js';
 import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
 import { loadLastOrderNote } from '../lib/quickOrderNote.js';
 import { submitOrderNote } from '../lib/submitOrderNote.js';
+import { sendEmailTemplateFromPage } from '../lib/emailTemplateDelivery.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -59,6 +60,16 @@ function __gbIsPdfDocument() {
     if (/\.pdf(?:[?#]|$)/i.test(location.pathname)) return true;
   } catch { /* */ }
   return false;
+}
+
+/* Toolbar-popup bridge. Install outside the one-time shelf guard so an open
+   tab reinjected after an extension update receives the newest delivery
+   implementation even when its existing shelf root is still mounted. */
+if (!__gbIsPdfDocument()) {
+  window.__gbSendEmailTemplate = (input = {}) => sendEmailTemplateFromPage({
+    ...input,
+    document,
+  });
 }
 
 if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {

@@ -115,10 +115,6 @@ function renderStr(str, vars, defs) {
   return renderTemplate(str, vars, defs);
 }
 
-function buildMailto(to, subject, body) {
-  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
 // Convert template HTML → Outlook-friendly plain text for mailto links.
 function toPlainText(html) {
   if (!html) return '';
@@ -1016,52 +1012,39 @@ function MainView({
          3. No variations on the template  →  always parent body.
        The random roll is uniform — the popup is a single-send
        surface so there's no slider UX for weighting. */
-    const { subject, rawBody, plainBody } = buildSendContent();
+    const { subject, rawBody } = buildSendContent();
 
     // tpl.replyMode drives behavior for ALL template types:
     // 'reply'      → find prior email, thread the reply (file or PA)
     // 'standalone' → fresh email (file or PA)
     const replyMode = tpl.replyMode || 'standalone';
-    const isReply = replyMode === 'reply';
-    // PA-ready when the user has BOTH toggled the feature on in Settings
-    // (powerAutomateEnabled) AND saved a flow URL. Mirrors the
-    // sendMode label predicate above EXACTLY so the button label and
-    // the actual send behavior never disagree — explicit Boolean +
-    // string-trim checks defend against non-canonical legacy values
-    // that earlier flag migrations may have left in storage.
-    const paOn   = !!flags.powerAutomateEnabled;
-    const paReady = paOn && paConfigured;
-
-    // When PA is configured we send through it; otherwise fall back to
-    // a mailto window. The legacy file-based reply path is removed —
-    // replyMode now just becomes a hint on the PA payload.
-    if (paReady) {
-      sendMessage(tab.id, {
-        action: 'sendViaPA',
+    /* One content-page delivery boundary now handles BOTH transports. It
+       waits for PA success (or a successful Outlook handoff) before creating
+       the selected task and running the selected custom action. Keeping the
+       follow-up ids on the template record also makes this exact message work
+       for every non-case template type. */
+    sendMessage(tab.id, {
+      action: 'sendEmailTemplate',
+      to: resolvedTo,
+      subject,
+      htmlBody: rawBody,
+      replyMode: tpl.replyMode || replyMode,
+      template: {
+        id: tpl.id || '',
+        name: tpl.name || '',
         replyMode: tpl.replyMode || replyMode,
-        templateHtml: rawBody,
-        templateSubject: subject,
-        contactEmail: resolvedTo,
-        /* Sender config rides along so the content-script handler
-           can resolve the `from` address per the template's pick.
-           senderRandomize=true → fresh random sender per send. */
-        senderAccount:   tpl.senderAccount   || '',
+        senderAccount: tpl.senderAccount || '',
         senderRandomize: !!tpl.senderRandomize,
-      });
-      window.close();
-    } else {
-      try { chrome.tabs.create({ url: buildMailto(resolvedTo, subject, plainBody), active: false }); } catch {}
-    }
-
-    // Preset task (all modes)
-    if (tpl.presetTaskId && (pageInfo.contactId || pageInfo.accountId)) {
-      sendMessage(tab.id, {
-        action: 'executePresetTask',
-        taskId: tpl.presetTaskId,
-        contactId: pageInfo.contactId || pageInfo.accountId || '',
-        employeeId: pageInfo.userId || '0',
-      });
-    }
+        presetTaskId: tpl.presetTaskId || '',
+        followUpActionId: tpl.followUpActionId || '',
+      },
+      context: {
+        contactId: pageInfo.contactId || '',
+        accountId: pageInfo.accountId || '',
+        email: resolvedTo,
+      },
+    });
+    window.close();
   };
 
   // ── send button mode → icon/label
@@ -1073,8 +1056,8 @@ function MainView({
     if (!tpl) return null;
     const replyMode = tpl?.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
-    /* paReady MUST match the predicate the actual send path uses
-       (onSend line ~801 — both the toggle AND the URL). Otherwise
+    /* paReady MUST match the predicate the shared delivery path uses
+       (both the toggle AND the URL). Otherwise
        the button advertises "Send" while clicking it falls through
        to the mailto path, which surprises the user.
 

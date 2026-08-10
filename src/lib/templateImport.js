@@ -164,8 +164,14 @@ export function normalizeTemplate(raw, index = 0) {
     out.baseLabel = String(raw.baseLabel || raw.originalLabel);
   }
 
-  // PA fields
-  if (type !== 'case') out.replyMode = raw.replyMode === 'reply' ? 'reply' : 'standalone';
+  // Delivery + post-success automation fields.
+  if (type !== 'case') {
+    out.replyMode = raw.replyMode === 'reply' ? 'reply' : 'standalone';
+    const presetTaskId = String(raw.presetTaskId || '').trim();
+    const followUpActionId = String(raw.followUpActionId || '').trim();
+    if (presetTaskId) out.presetTaskId = presetTaskId;
+    if (followUpActionId) out.followUpActionId = followUpActionId;
+  }
   if (raw.senderAccount) out.senderAccount = String(raw.senderAccount);
   if (raw.senderRandomize) out.senderRandomize = true;
 
