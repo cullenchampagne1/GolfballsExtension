@@ -20,9 +20,26 @@ function isOrderIndexUrl(url) {
     && /[?&]Page=20(?:&|#|$)/i.test(value);
 }
 
+/* Golfballs serves printable orders/invoices as PDFs from this ASPX route.
+   Keep the host and id validation narrow: a coincidental `printOrder.aspx`
+   link elsewhere must not acquire authenticated order-page behavior. */
+export function isOrderPrintUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== 'api.golfballs.com') return false;
+    if (!/^\/golfballs\/printorder\.aspx$/i.test(url.pathname)) return false;
+    const orderId = [...url.searchParams.entries()]
+      .find(([key]) => key.toLowerCase() === 'orderid')?.[1] || '';
+    return /^\d+(?:-\d+[a-z]?)?$/i.test(orderId);
+  } catch {
+    return false;
+  }
+}
+
 export function detectPageType(doc = (typeof document !== 'undefined' ? document : null)) {
   const url = pageUrl(doc);
   if (/[?&]page=ViewOrder/i.test(url) && /[?&]orderID=/i.test(url)) return PAGE_TYPE.ORDER;
+  if (isOrderPrintUrl(url)) return PAGE_TYPE.ORDER;
   if (/[?&]Page=240\b/i.test(url)) return PAGE_TYPE.CONTACT;
   if (/[?&]Page=271\b/i.test(url)) return PAGE_TYPE.ACCOUNT;
   // Opportunity pages also render a contact id, so URL detection must win.

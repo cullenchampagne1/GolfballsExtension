@@ -241,6 +241,10 @@
       "file": "tests/unit/shelfOrdering.test.mjs"
     },
     {
+      "name": "ui \u00b7 Actions Shelf order-PDF availability",
+      "file": "tests/unit/shelfAvailability.test.mjs"
+    },
+    {
       "name": "ui \u00b7 skin override engine (vars + shadow css)",
       "file": "tests/unit/skinEngine.test.mjs"
     },

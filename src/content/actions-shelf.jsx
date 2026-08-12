@@ -20,6 +20,7 @@ import { loadLastOrderNote } from '../lib/quickOrderNote.js';
 import { submitOrderNote } from '../lib/submitOrderNote.js';
 import { sendEmailTemplateFromPage } from '../lib/emailTemplateDelivery.js';
 import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
+import { shouldMountActionsShelf } from '../lib/shelfAvailability.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -50,30 +51,32 @@ import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
      window.__gbActionsShelfLoaded   single-execution guard
 ─────────────────────────────────────────────────────────────── */
 
-/* Skip the whole shelf when the document IS a PDF (an invoice/order PDF opened
-   in the browser's native viewer). The content script still injects there, but
-   a floating overlay gets in the way of printing — and there's no CRM context
-   to act on anyway. `contentType` catches extension-less endpoints that stream a
-   PDF (e.g. ViewInvoice.aspx); the path check is a belt-and-suspenders fallback. */
-function __gbIsPdfDocument() {
+/* Skip ordinary PDFs so the floating UI does not obstruct the native viewer.
+   Golfballs' authenticated PrintOrder route is intentionally allowed: it is an
+   order surface, even though the response is an extension-less PDF. */
+function __gbShouldMountActionsShelf() {
   try {
-    if ((document.contentType || '').toLowerCase() === 'application/pdf') return true;
-    if (/\.pdf(?:[?#]|$)/i.test(location.pathname)) return true;
-  } catch { /* */ }
-  return false;
+    return shouldMountActionsShelf({
+      url: window.location.href,
+      pathname: window.location.pathname,
+      contentType: document.contentType,
+    });
+  } catch { return true; }
 }
+
+const __gbShelfDocumentAllowed = __gbShouldMountActionsShelf();
 
 /* Toolbar-popup bridge. Install outside the one-time shelf guard so an open
    tab reinjected after an extension update receives the newest delivery
    implementation even when its existing shelf root is still mounted. */
-if (!__gbIsPdfDocument()) {
+if (__gbShelfDocumentAllowed) {
   window.__gbSendEmailTemplate = (input = {}) => sendEmailTemplateFromPage({
     ...input,
     document,
   });
 }
 
-if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
+if (!window.__gbActionsShelfLoaded && __gbShelfDocumentAllowed) {
   window.__gbActionsShelfLoaded = true;
   ensureTheme();
 
