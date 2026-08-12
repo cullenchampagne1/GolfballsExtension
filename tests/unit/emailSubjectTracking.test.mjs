@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildEmailTemplateTrackerCatalog,
+  emailTemplateTrackingIssue,
   emailTemplateClusterId,
   matchEmailTemplateSubject,
   normalizeEmailSubject,
@@ -58,6 +59,40 @@ function memoryStorage(initial = {}) {
 }
 
 describe('automatic email-template subject clusters', () => {
+  it('shows presentation feedback only for actionable tracking problems', () => {
+    assert.equal(emailTemplateTrackingIssue(null), null);
+    assert.equal(emailTemplateTrackingIssue({ status: 'ready' }), null);
+    assert.equal(emailTemplateTrackingIssue({ status: 'not_applicable' }), null);
+    assert.equal(emailTemplateTrackingIssue({ status: 'disabled' }), null);
+
+    assert.deepEqual(
+      emailTemplateTrackingIssue({
+        status: 'incomplete',
+        reason: 'Every subject variation needs a subject line.',
+      }),
+      {
+        status: 'incomplete',
+        tone: 'warning',
+        badge: 'Untracked',
+        title: 'Subject cluster is not ready',
+        message: 'Every subject variation needs a subject line.',
+      },
+    );
+    assert.deepEqual(
+      emailTemplateTrackingIssue({
+        status: 'conflict',
+        conflictsWith: [{ templateName: 'Callaway Promo' }, 'Srixon Promo'],
+      }),
+      {
+        status: 'conflict',
+        tone: 'error',
+        badge: 'Conflict',
+        title: 'Subject tracking conflict',
+        message: 'This template overlaps “Callaway Promo”, “Srixon Promo”. Change the fixed wording in one of the overlapping subjects.',
+      },
+    );
+  });
+
   it('matches personalized order subjects after reply and external prefixes are removed', () => {
     const catalog = buildEmailTemplateTrackerCatalog([
       orderTemplate('update', 'Order #{{order_number}} update for {{name}}'),

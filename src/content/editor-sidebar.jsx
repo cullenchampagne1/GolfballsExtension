@@ -12,7 +12,10 @@ import {
   buildEmailTemplateFile, importTemplates, normalizeTemplate, parseEmailTemplateFile,
 } from '../lib/templateImport.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
-import { buildEmailTemplateTrackerCatalog } from '../lib/emailSubjectTracking.js';
+import {
+  buildEmailTemplateTrackerCatalog,
+  emailTemplateTrackingIssue,
+} from '../lib/emailSubjectTracking.js';
 
 /* ────────────────────────────────────────────────────────────────
    editor-sidebar.jsx
@@ -219,6 +222,9 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
   const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type] || (isNote ? TYPE_META_NOTE.note : TYPE_META_TPL.order);
   const TypeIcon = meta.icon;
   const disabled = tpl.enabled === false;
+  const trackingIssue = !isNote && !disabled
+    ? emailTemplateTrackingIssue(tracker)
+    : null;
   useEffect(() => { ensureRowStyle(); }, []);
 
   return (
@@ -310,8 +316,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
         })()}
       </div>
       {disabled && <Tag tone="neutral" size="xs">OFF</Tag>}
-      {!isNote && !disabled && tracker?.status === 'ready' && <Tag tone="success" size="xs">Tracked</Tag>}
-      {!isNote && !disabled && tracker?.status === 'incomplete' && <Tag tone="warning" size="xs">Untracked</Tag>}
+      {trackingIssue && <Tag tone={trackingIssue.tone} size="xs">{trackingIssue.badge}</Tag>}
       <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
         <IconBtn size="xs" icon={<I.more />} onClick={() => setMenuOpen((v) => !v)} />
         <AnimatePresence>

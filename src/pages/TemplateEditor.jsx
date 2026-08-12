@@ -14,6 +14,7 @@ import { SENDER_OPTIONS } from '../lib/sender.js';
 import { updateVariableDefinition } from '../lib/templateVariableEditing.js';
 import {
   buildEmailTemplateTrackerCatalog,
+  emailTemplateTrackingIssue,
   trackerForTemplate,
 } from '../lib/emailSubjectTracking.js';
 
@@ -535,16 +536,7 @@ export function TemplateEditor({ tpl, onDelete }) {
       tpl.id,
     );
   }, [tpl, typeId, enabled, name, subject, vars, variations, baseLabel, replyMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const clusterIdPreview = subjectTracker?.status === 'ready'
-    ? subjectTracker.clusterId || ''
-    : '';
-  const clusterIdPlaceholder = subjectTracker?.status === 'not_applicable'
-    ? 'Inherited from the original email in this thread'
-    : subjectTracker?.status === 'disabled'
-      ? 'Enable this template to assign a cluster ID'
-      : 'No subject cluster assigned yet';
-  const subjectShapePreview = subjectTracker?.patterns?.join('  |  ') || '';
+  const trackingIssue = emailTemplateTrackingIssue(subjectTracker);
 
   const skipSave     = useRef(true);
   const skipTypeSave = useRef(true);
@@ -656,52 +648,14 @@ export function TemplateEditor({ tpl, onDelete }) {
         )}
       </div>
 
-      {subjectTracker?.status === 'ready' && (
+      {trackingIssue && (
         <Callout
-          tone="success"
-          title="Stable response & order cluster ready"
+          tone={trackingIssue.tone}
+          title={trackingIssue.title}
           style={{ marginBottom: 12 }}
         >
-          {subjectTracker.variants.length > 1
-            ? `All ${subjectTracker.variants.length} subject variations share this template’s cluster.`
-            : 'This subject belongs to this template’s stable cluster.'}
-          {' '}Each send stores its fully rendered subject, including Code output, so unrelated campaigns cannot conflict. Reply, forward, and External prefixes are ignored.
+          {trackingIssue.message}
         </Callout>
-      )}
-      {subjectTracker?.status === 'incomplete' && (
-        <Callout tone="warning" title="Subject cluster is not ready" style={{ marginBottom: 12 }}>
-          {subjectTracker.reason}
-        </Callout>
-      )}
-      {subjectTracker?.status === 'not_applicable' && (
-        <Callout tone="neutral" title="Tracking inherited from the original email" style={{ marginBottom: 12 }}>
-          {subjectTracker.reason}
-        </Callout>
-      )}
-
-      {subjectTracker && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8, marginBottom: 12 }}>
-          <Field label="Subject cluster ID">
-            <Input
-              value={clusterIdPreview}
-              placeholder={clusterIdPlaceholder}
-              title={clusterIdPreview || clusterIdPlaceholder}
-              size="sm"
-              mono
-              readOnly
-            />
-          </Field>
-          <Field label="Subject shape">
-            <Input
-              value={subjectShapePreview}
-              placeholder="A shape appears after you enter a subject"
-              title={subjectShapePreview || 'A shape appears after you enter a subject'}
-              size="sm"
-              mono
-              readOnly
-            />
-          </Field>
-        </div>
       )}
 
       {/* ── Meta row ── */}

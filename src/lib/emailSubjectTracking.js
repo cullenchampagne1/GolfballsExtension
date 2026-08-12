@@ -436,3 +436,42 @@ export function trackerForTemplate(catalog, templateId) {
     (tracker) => tracker?.templateId === String(templateId || ''),
   ) || null;
 }
+
+/**
+ * Return presentation copy only when subject tracking needs user action.
+ * Successful, disabled, and inherited tracking states deliberately stay
+ * silent so template rows and editors do not advertise background plumbing.
+ */
+export function emailTemplateTrackingIssue(tracker) {
+  if (tracker?.status === 'incomplete') {
+    return {
+      status: 'incomplete',
+      tone: 'warning',
+      badge: 'Untracked',
+      title: 'Subject cluster is not ready',
+      message: tracker.reason || 'Add a subject line before using this template.',
+    };
+  }
+
+  if (tracker?.status === 'conflict') {
+    const names = [...new Set((tracker.conflictsWith || [])
+      .map((conflict) => (
+        typeof conflict === 'string' ? conflict : conflict?.templateName
+      ))
+      .map((name) => String(name || '').trim())
+      .filter(Boolean))];
+    const overlap = names.length
+      ? `This template overlaps ${names.map((name) => `“${name}”`).join(', ')}.`
+      : 'This template overlaps another subject cluster.';
+    return {
+      status: 'conflict',
+      tone: 'error',
+      badge: 'Conflict',
+      title: 'Subject tracking conflict',
+      message: tracker.reason
+        || `${overlap} Change the fixed wording in one of the overlapping subjects.`,
+    };
+  }
+
+  return null;
+}
