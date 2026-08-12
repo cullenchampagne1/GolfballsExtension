@@ -76,6 +76,50 @@ export function linePriceAt(line, qty) {
   return Math.round((base + lineSecondPoleFee(line)) * 100) / 100;
 }
 export const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - price) < 0.005;
+
+/* ── Proposal split editing ────────────────────────────────────────────────
+   A typed price is user intent, not another catalog calculation. Keep that
+   intent explicit so delayed live-pricing responses, quantity changes, and
+   modal persistence cannot silently put the split back on the product ladder.
+   The reset control is the only UI action that clears the override. */
+export function editProposalSplitPrice(split, price, { reset = false } = {}) {
+  const numeric = Number(price);
+  const rounded = Math.round((Number.isFinite(numeric) ? Math.max(0, numeric) : 0) * 100) / 100;
+  return { ...(split || {}), price: rounded, priceEdited: !reset };
+}
+
+export function moveProposalSplitQuantity(line, split, qty) {
+  const parsed = Number.parseInt(qty, 10);
+  const nextQty = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  // Older working drafts predate priceEdited. A non-tier value in one of those
+  // drafts is still a hand quote and becomes explicit the first time it moves.
+  const edited = !!split?.priceEdited
+    || !lineIsTierPrice(line, split?.qty, Number(split?.price) || 0);
+  return edited
+    ? { ...(split || {}), qty: nextQty, priceEdited: true }
+    : { ...(split || {}), qty: nextQty, price: linePriceAt(line, nextQty), priceEdited: false };
+}
+
+export function repriceProposalSplits(line, decoration) {
+  const pricedLine = { ...(line || {}), decoration };
+  return (line?.splits || []).map((split) => (
+    split.priceEdited
+      ? split
+      : { ...split, price: linePriceAt(pricedLine, split.qty) }
+  ));
+}
+
+export function restoreProposalPriceOverrides(lines) {
+  return (Array.isArray(lines) ? lines : []).map((line) => {
+    let changed = false;
+    const splits = (line?.splits || []).map((split) => {
+      if (split.priceEdited || lineIsTierPrice(line, split.qty, split.price)) return split;
+      changed = true;
+      return { ...split, priceEdited: true };
+    });
+    return changed ? { ...line, splits } : line;
+  });
+}
 // Largest break ≤ q from a [{q,p}] ladder (the verified engine's output shape).
 export const priceAtBreaks = (breaks, q) => { let p = null; for (const b of (breaks || [])) if (b.q <= q) p = b.p; return p; };
 

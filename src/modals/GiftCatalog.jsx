@@ -9,7 +9,7 @@ import { loadScales } from '../lib/scales.js';
 import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail, createProposalStore, importProposalStore, buildProposalStoreFile, importProposalStoreFile } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
-import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
+import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
 import { CATALOG_FAVORITES_STORAGE_KEY, loadCatalogFavorites, setCatalogFavorite } from '../lib/catalogFavorites.js';
 // The built-in supplier ingesters are admin-only and loaded lazily (see REPO_RUN
@@ -851,6 +851,11 @@ function QtyStepper({ value, onChange }) {
   const [txt, setTxt] = useState(String(value));
   useEffect(() => setTxt(String(value)), [value]);
   const commit = (v) => { let n = parseInt(v, 10); if (isNaN(n) || n < 1) n = 1; onChange(n); setTxt(String(n)); };
+  const edit = (value) => {
+    const clean = value.replace(/[^0-9]/g, '');
+    setTxt(clean);
+    if (clean) onChange(Math.max(1, parseInt(clean, 10) || 1));
+  };
   const Step = ({ d, children }) => {
     const [h, setH] = useState(false);
     return (
@@ -861,7 +866,7 @@ function QtyStepper({ value, onChange }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', height: 28, flexShrink: 0, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', overflow: 'hidden' }}>
       <Step d={-1}><span style={{ width: 9, height: 1.6, borderRadius: 1, background: 'currentColor' }} /></Step>
-      <input value={txt} onChange={(e) => setTxt(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => commit(txt)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      <input value={txt} onChange={(e) => edit(e.target.value)} onBlur={() => commit(txt)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         style={{ width: 40, textAlign: 'center', border: 'none', outline: 'none', background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, borderLeft: '1px solid var(--gb-border-subtle)', borderRight: '1px solid var(--gb-border-subtle)', height: '100%' }} />
       <Step d={1}><I.plus size={11} /></Step>
     </div>
@@ -873,10 +878,16 @@ function PriceField({ value, onChange }) {
   const [focus, setFocus] = useState(false);
   useEffect(() => { if (!focus) setTxt(value.toFixed(2)); }, [value, focus]);
   const commit = () => { let n = parseFloat(txt); if (isNaN(n) || n < 0) n = 0; onChange(Math.round(n * 100) / 100); };
+  const edit = (value) => {
+    const clean = value.replace(/[^0-9.]/g, '');
+    setTxt(clean);
+    const n = Number.parseFloat(clean);
+    if (clean && Number.isFinite(n) && n >= 0) onChange(Math.round(n * 100) / 100);
+  };
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1, height: 28, padding: '0 8px', flexShrink: 0, background: 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (focus ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), boxShadow: focus ? 'var(--gb-focus-ring)' : 'none', borderRadius: 'var(--gb-r-sm)', transition: 'all var(--gb-anim)' }}>
       <span style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>$</span>
-      <input value={txt} inputMode="decimal" onFocus={() => setFocus(true)} onChange={(e) => setTxt(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => { setFocus(false); commit(); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      <input value={txt} inputMode="decimal" onFocus={() => setFocus(true)} onChange={(e) => edit(e.target.value)} onBlur={() => { setFocus(false); commit(); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         style={{ width: 52, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700 }} />
     </div>
   );
@@ -898,11 +909,10 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   // product's custom-logo ladder — so a no-imprint line stays at retail and a
   // dual-pole line keeps its second-pole upcharge as the qty changes.
   const onQty = (q) => {
-    const followTier = lineIsTierPrice(line, split.qty, split.price);
-    onChange({ qty: q, price: followTier ? linePriceAt(line, q) : split.price });
+    onChange(moveProposalSplitQuantity(line, split, q));
   };
   const tier = linePriceAt(line, split.qty);
-  const custom = !lineIsTierPrice(line, split.qty, split.price);
+  const custom = !!split.priceEdited || !lineIsTierPrice(line, split.qty, split.price);
   return (
     <motion.div layout
       initial={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
@@ -912,9 +922,9 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
       style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
       <QtyStepper value={split.qty} onChange={onQty} />
       <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', flexShrink: 0 }}>×</span>
-      <PriceField value={split.price} onChange={(pr) => onChange({ price: pr })} />
+      <PriceField value={split.price} onChange={(pr) => onChange(editProposalSplitPrice(split, pr))} />
       {custom && (
-        <span onClick={() => onChange({ price: tier })} title={`Reset to ${usd(tier)}`}
+        <span onClick={() => onChange(editProposalSplitPrice(split, tier, { reset: true }))} title={`Reset to ${usd(tier)}`}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9.5, fontWeight: 600, color: 'var(--gb-brand-label)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>↺ {usd(tier)}</span>
       )}
       <div style={{ flex: 1 }} />
@@ -3059,23 +3069,35 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const dsDensity = useDevSetting('giftCatalog.density');
   const [selected, setSelected] = useState(null);
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
-  const [proposal, setProposal] = useState([]);
+  const [proposal, setProposalState] = useState([]);
   // The working proposal persists across closes/sessions: hydrate from storage on
-  // mount, then mirror every change back. `propHydrated` gates the save so the
-  // initial empty state can't clobber a stored draft before the load resolves.
+  // mount, then persist at the mutation boundary. Persisting from the setter (not
+  // a later effect) keeps the final typed price when this modal closes in the same
+  // interaction. A ref also gives back-to-back edits one current source of truth.
   const propHydrated = useRef(false);
+  const proposalRef = useRef([]);
+  const setProposal = useCallback((value) => {
+    const current = proposalRef.current;
+    const next = typeof value === 'function' ? value(current) : value;
+    if (Object.is(next, current)) return current;
+    proposalRef.current = next;
+    setProposalState(next);
+    if (propHydrated.current) saveCurrentProposal(next);
+    return next;
+  }, []);
   useEffect(() => {
     let alive = true;
     loadCurrentProposal().then((saved) => {
-      if (alive && Array.isArray(saved) && saved.length) setProposal(saved);
+      if (!alive) return;
       propHydrated.current = true;
+      if (Array.isArray(saved) && saved.length) {
+        // Migrate hand quotes created before priceEdited existed. Their price is
+        // already different from the tier and must not be treated as disposable.
+        setProposal(restoreProposalPriceOverrides(saved));
+      }
     });
     return () => { alive = false; };
-  }, []);
-  useEffect(() => {
-    if (!propHydrated.current) return;
-    saveCurrentProposal(proposal);
-  }, [proposal]);
+  }, [setProposal]);
   // Promo code applied to the current proposal — { code, promotion } (the resolved
   // /user/promotion result). Persisted to its own key so the coupon survives a
   // close like the working proposal does.
@@ -3170,25 +3192,32 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         if (!rawCacheRef.current.has(url)) rawCacheRef.current.set(url, await fetchRawProduct(url));
       }
       if (!alive) return;
-      let changed = false;
-      const next = proposal.map((l) => {
-        if (!l.decoration || !l.decoration.engine || l.decoration.engine === 'none') return l;
-        const raw = rawCacheRef.current.get(l.product && l.product.url);
-        if (!raw) return l;
-        let pr; try { pr = decoratedPricingForLine(raw, l.decoration, { values: l.variant && l.variant.values }); } catch { pr = null; }
-        if (!pr || !pr.breaks || !pr.breaks.length) return l;
-        let lineChanged = false;
-        const splits = l.splits.map((s) => {
-          if (s.priceEdited) return s;                 // respect a hand-edited price
-          const unit = priceAtBreaks(pr.breaks, s.qty);
-          if (unit != null && Math.abs(unit - s.price) > 0.005) { lineChanged = true; return { ...s, price: unit }; }
-          return s;
-        });
-        if (lineChanged) changed = true;
-        return lineChanged ? { ...l, splits } : l;
-      });
       pricedSigRef.current = sig;
-      if (alive && changed) setProposal(next);
+      if (alive) {
+        // Apply the delayed response to the LATEST proposal, not the render that
+        // started the request. Otherwise a price typed while fetch was in flight
+        // could be overwritten by the stale closure when the response arrived.
+        setProposal((current) => {
+          let changed = false;
+          const next = current.map((l) => {
+            if (!l.decoration || !l.decoration.engine || l.decoration.engine === 'none') return l;
+            const raw = rawCacheRef.current.get(l.product && l.product.url);
+            if (!raw) return l;
+            let pr; try { pr = decoratedPricingForLine(raw, l.decoration, { values: l.variant && l.variant.values }); } catch { pr = null; }
+            if (!pr || !pr.breaks || !pr.breaks.length) return l;
+            let lineChanged = false;
+            const splits = l.splits.map((s) => {
+              if (s.priceEdited) return s;
+              const unit = priceAtBreaks(pr.breaks, s.qty);
+              if (unit != null && Math.abs(unit - s.price) > 0.005) { lineChanged = true; return { ...s, price: unit }; }
+              return s;
+            });
+            if (lineChanged) changed = true;
+            return lineChanged ? { ...l, splits } : l;
+          });
+          return changed ? next : current;
+        });
+      }
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3281,7 +3310,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return [...prev, { id: rid(), productId: p.id, product: p, decoration: deco, variant: variant || null, splits: [{ id: rid(), qty, price: startPrice }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
-  const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
+  const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { ...last, id: rid() }] }; }));
   const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
   const removeLine = (lineId) => setProposal((prev) => prev.filter((l) => l.id !== lineId));
 
@@ -3300,7 +3329,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (!check.ok) { toast?.error?.(check.reason); return; }
     const next = mergeImprint(tgt.decoration, tgt.product, imprint);
     setProposal((prev) => prev.map((l) => l.id === toLineId
-      ? { ...l, decoration: next, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: next, variant: l.variant }, s.qty) })) }
+      ? { ...l, decoration: next, splits: repriceProposalSplits(l, next) }
       : l));
   };
 
@@ -3318,7 +3347,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       if (!isLogoEngine || hasArt) return l;
       n += 1;
       const next = { ...d, _localImageDataUrl: imageDataUrl, logo: { filePath: '', fileName, cropFilePath: '' } };
-      return { ...l, decoration: next, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: next, variant: l.variant }, s.qty) })) };
+      return { ...l, decoration: next, splits: repriceProposalSplits(l, next) };
     }));
     if (n) toast?.success?.(`Applied logo to ${n} item${n === 1 ? '' : 's'}`);
     else toast?.error?.('No blank custom-logo items to apply the logo to');
@@ -3326,7 +3355,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   };
 
   // Re-price a line after its decoration changed (imprint removed / promoted).
-  const repriceLine = (l, decoration) => ({ ...l, decoration, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration, variant: l.variant }, s.qty) })) });
+  const repriceLine = (l, decoration) => ({ ...l, decoration, splits: repriceProposalSplits(l, decoration) });
   // Delete the FRONT imprint. If the line is dual-pole, the 2nd pole is promoted
   // to be the sole imprint; otherwise the line goes back to no imprint (retail).
   const removeFrontImprint = (lineId) => setProposal((prev) => prev.map((l) => {
@@ -3971,8 +4000,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                       cartLink: it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null,
                       onSubmit: async ({ message, expiration } = {}) => {
                         try {
-                          await submitProposalEmail({ opportunityID: it.opportunityID, cartID: it.cartID, name: it.name, expiration: expiration || it.expiration, total: r.total, adminId: it.adminId, contactId: it.contactId, subject: it.opportunitySubject, message });
-                          toast?.success?.('Proposal tracked to opportunity ' + it.opportunityID);
+                          const result = await submitProposalEmail({ opportunityID: it.opportunityID, cartID: it.cartID, name: it.name, expiration: expiration || it.expiration, total: r.total, adminId: it.adminId, contactId: it.contactId, subject: it.opportunitySubject, message });
+                          if (result.opportunityUpdated) toast?.success?.('Proposal tracked · opportunity moved to Proposed');
+                          else toast?.warning?.(result.warning || 'Proposal tracked, but the opportunity could not be moved to Proposed', { duration: 7000 });
                         } catch (e) { toast?.error?.('Couldn’t track proposal — ' + ((e && e.message) || 'unknown error')); throw e; }
                       },
                     })}

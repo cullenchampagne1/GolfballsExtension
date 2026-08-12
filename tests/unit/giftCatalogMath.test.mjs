@@ -12,6 +12,8 @@ import {
   onSale, hasPromo, isDeal,
   priceAtQty, isTierPrice, priceAtBreaks,
   SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice,
+  editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits,
+  restoreProposalPriceOverrides,
   topPrice, lowPrice, saleCut, netP, netTop, netLow,
 } from '../../src/lib/giftCatalogMath.js';
 
@@ -246,6 +248,67 @@ describe('linePriceAt', () => {
     const line = { product: { customLogo: true, price: 29.99, breaks: ladder.breaks }, decoration: { engine: 'ballLogo' } };
     assert.equal(lineIsTierPrice(line, 24, 43.99), true);
     assert.equal(lineIsTierPrice(line, 24, 39.99), false);
+  });
+});
+
+describe('proposal split price intent', () => {
+  const line = {
+    product: {
+      customLogo: true,
+      price: 57.99,
+      breaks: [
+        { q: 1, p: 67.99 }, { q: 12, p: 61.99 },
+        { q: 24, p: 60.99 }, { q: 48, p: 59.99 },
+      ],
+    },
+    decoration: { engine: 'ballLogo' },
+    splits: [],
+  };
+
+  it('marks a typed price as an override and keeps it across quantity changes', () => {
+    const typed = editProposalSplitPrice({ id: 'tier-1', qty: 8, price: 67.99 }, 65.25);
+    assert.deepEqual(typed, {
+      id: 'tier-1', qty: 8, price: 65.25, priceEdited: true,
+    });
+    assert.deepEqual(moveProposalSplitQuantity(line, typed, 16), {
+      id: 'tier-1', qty: 16, price: 65.25, priceEdited: true,
+    });
+  });
+
+  it('returns to automatic tier pricing only after an explicit reset', () => {
+    const edited = { id: 'tier-1', qty: 16, price: 59.99, priceEdited: true };
+    const reset = editProposalSplitPrice(edited, linePriceAt(line, 16), { reset: true });
+    assert.equal(reset.priceEdited, false);
+    assert.deepEqual(moveProposalSplitQuantity(line, reset, 24), {
+      id: 'tier-1', qty: 24, price: 60.99, priceEdited: false,
+    });
+  });
+
+  it('does not let an imprint reprice overwrite an edited split', () => {
+    const decorated = { engine: 'ballLogo', pole2: { kind: 'logo' } };
+    const source = {
+      ...line,
+      splits: [
+        { id: 'quoted', qty: 12, price: 58, priceEdited: true },
+        { id: 'automatic', qty: 12, price: 61.99 },
+      ],
+    };
+    assert.deepEqual(repriceProposalSplits(source, decorated), [
+      { id: 'quoted', qty: 12, price: 58, priceEdited: true },
+      { id: 'automatic', qty: 12, price: 67.99 },
+    ]);
+  });
+
+  it('migrates non-tier prices from working drafts saved before the override flag', () => {
+    const restored = restoreProposalPriceOverrides([{
+      ...line,
+      splits: [
+        { id: 'legacy-quote', qty: 8, price: 65 },
+        { id: 'ordinary-tier', qty: 12, price: 61.99 },
+      ],
+    }]);
+    assert.equal(restored[0].splits[0].priceEdited, true);
+    assert.equal(restored[0].splits[1].priceEdited, undefined);
   });
 });
 

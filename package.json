@@ -717,7 +717,7 @@
       "file": "tests/unit/giftCatalogPagination.test.mjs"
     },
     {
-      "name": "catalog \u00b7 shareable proposal stores",
+      "name": "catalog \u00b7 proposal persistence, sharing & send lifecycle",
       "file": "tests/unit/proposalStore.test.mjs"
     },
     {

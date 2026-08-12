@@ -467,51 +467,78 @@ export function cartToEntry(cartData, meta = {}) {
 
 /* Submit a proposal email exactly like the web flow: generate/register it
    (CreateProposalEmail), TRACK it against the opportunity (TrackProposal), and
-   update the opportunity's estimated value (Opportunity Get→Update, preserving
-   subject/description/lead/stage). All credentialed via the CRM relay. Throws if
-   the track step fails; the opp-value update is best-effort. */
+   move the opportunity to Proposed while updating its estimated value
+   (Opportunity Get→Update, preserving the remaining editable fields). All
+   credentialed via the CRM relay. Throws if create/track fails; a failed final
+   opportunity update is returned as an explicit partial success. */
 const _crmBase = API.CRM_CRM;
 function _crmAjax(url, opts = {}) { return sendBackgroundMessage('crmAjax', { url, method: opts.method || 'GET', body: opts.body, contentType: opts.contentType }); }
-function _toISODate(s) {
-  const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || ''));
-  if (!m) return '';
-  return `${m[3]}-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`;
-}
 
 export async function submitProposalEmail(p = {}) {
   if (!p.opportunityID || !p.cartID) throw new Error('Missing opportunity / cart');
   if (!p.adminId) throw new Error('Couldn’t read the rep AdminID from the opportunity page');
   // 1) Generate/register the proposal email (server returns the HTML).
-  const createObj = {
-    ProposalGroupName: p.groupName || 'Custom Order',
-    ContactEmail: p.contactEmail || '', ContactName: p.contactName || '', EmailCC: '',
-    ProposalMessage: p.message || '',
-    CartIds: [p.cartID], ProposalNames: [p.name || 'Proposal'], ProposalExpirations: [p.expiration || ''],
-    ContactId: String(p.contactId || ''), OpportunityID: String(p.opportunityID), OpportunityStatus: String(p.stageId || ''),
-  };
+  const createObj = buildProposalEmailCreatePayload(p);
   await _crmAjax(_crmBase + 'ProposalEmailNewSite/CreateProposalEmail.ajax?' + encodeURIComponent(JSON.stringify(createObj)));
   // 2) Track it against the opportunity (the explicit "proposal sent" log).
   await _crmAjax(_crmBase + 'ProposalEmailNewSite/TrackProposal.ajax', {
     method: 'POST', contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
     body: JSON.stringify({ OpportunityID: String(p.opportunityID), AdminID: Number(p.adminId), ProposalsIncluded: [p.cartID] }),
   });
-  // 3) Update the opportunity's estimated value — best-effort, preserving the
-  //    existing subject/description/lead/stage (read via Get) so we don't clobber.
+  // 3) Move the opportunity to Proposed and update its estimated value. The
+  //    email is already registered/tracked if this final write fails, so return
+  //    an explicit partial-success result instead of inviting a duplicate send.
   try {
-    let cur = {};
-    try { const g = await _crmAjax(_crmBase + 'Opportunity/Get.ajax?' + encodeURIComponent(String(p.opportunityID))); cur = JSON.parse(g.text || '{}') || {}; } catch { cur = {}; }
-    const upd = {
-      OpportunityID: String(p.opportunityID),
-      Subject: cur.Subject != null ? cur.Subject : (p.subject || ''),
-      Description: cur.Description != null ? cur.Description : '',
-      EstimatedClosedDate: _toISODate(p.expiration) || cur.EstimatedClosedDate || '',
-      EstimatedValue: Math.round(Number(p.total) || 0),
-      OpportunityStageId: cur.OpportunityStageId || cur.OpportunityStageID || cur.Stage || 2,
-      LeadID: cur.LeadID != null ? cur.LeadID : null,
-    };
+    const g = await _crmAjax(_crmBase + 'Opportunity/Get.ajax?' + encodeURIComponent(String(p.opportunityID)));
+    const cur = JSON.parse(g.text || '{}') || {};
+    const upd = buildProposedOpportunityUpdate(p, cur);
     await _crmAjax(_crmBase + 'Opportunity/Update.ajax?' + encodeURIComponent(JSON.stringify(upd)));
-  } catch { /* value update is best-effort */ }
-  return { ok: true };
+    return { ok: true, opportunityUpdated: true };
+  } catch (error) {
+    return {
+      ok: true,
+      opportunityUpdated: false,
+      warning: `Proposal tracked, but the opportunity could not be moved to Proposed: ${error?.message || 'unknown error'}`,
+    };
+  }
+}
+
+export const PROPOSED_OPPORTUNITY_STAGE_ID = '2';
+
+export function buildProposalEmailCreatePayload(p = {}) {
+  return {
+    ProposalGroupName: p.groupName || 'Custom Order',
+    ContactEmail: p.contactEmail || '', ContactName: p.contactName || '', EmailCC: '',
+    ProposalMessage: p.message || '',
+    CartIds: [p.cartID], ProposalNames: [p.name || 'Proposal'], ProposalExpirations: [p.expiration || ''],
+    ContactId: String(p.contactId || ''), OpportunityID: String(p.opportunityID), OpportunityStatus: PROPOSED_OPPORTUNITY_STAGE_ID,
+  };
+}
+
+function _toOpportunityDate(value) {
+  const text = String(value || '').trim();
+  let m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
+  if (m) return `${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}-${m[3]}`;
+  m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+  return m ? `${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}-${m[1]}` : '';
+}
+
+export function buildProposedOpportunityUpdate(p = {}, current = {}) {
+  const cur = current && typeof current === 'object' ? current : {};
+  return {
+    opportunityId: String(p.opportunityID || cur.opportunityId || ''),
+    Subject: cur.Subject != null ? cur.Subject : (p.subject || ''),
+    Description: cur.Description != null ? cur.Description : '',
+    EstimatedClosedDate: _toOpportunityDate(p.expiration)
+      || _toOpportunityDate(cur.EstimatedClosedDate)
+      || cur.EstimatedClosedDate
+      || '',
+    EstimatedValue: Math.round(Number(p.total) || 0),
+    OpportunityStageId: PROPOSED_OPPORTUNITY_STAGE_ID,
+    empAssignedId: String(cur.empAssignedId ?? cur.EmpAssignedId ?? '0'),
+    contactId: Number(cur.contactId ?? p.contactId) || 0,
+    LeadID: cur.LeadID != null ? cur.LeadID : null,
+  };
 }
 
 /* Run `fn` over `items` with at most `limit` in flight at once — preserves
@@ -641,7 +668,11 @@ export async function saveProposalDraft(name, proposal, promotion = null) {
       // HAR totals net it off at the right amount on reload. (The parent link is
       // rebuilt from product identity in linesFromSaved — see there.)
       freeValue: l.freeValue != null ? l.freeValue : null,
-      splits: (l.splits || []).map((s) => ({ qty: s.qty, price: s.price })),
+      splits: (l.splits || []).map((s) => ({
+        qty: s.qty,
+        price: s.price,
+        ...(s.priceEdited ? { priceEdited: true } : {}),
+      })),
     })),
   };
   const next = [entry, ...list];
@@ -827,31 +858,40 @@ export async function importProposalStoreFile(text) {
    proposal operations read, so restoring it == the in-memory state.
    ─────────────────────────────────────────────────────────────────────────── */
 const CURRENT_KEY = 'gbCurrentProposal';
+let _currentProposalWrite = Promise.resolve();
 
 export function loadCurrentProposal() {
-  return new Promise((resolve) => {
+  // If the catalog was just closed, let its final queued mutation reach storage
+  // before a freshly opened modal reads the draft back.
+  return _currentProposalWrite.catch(() => undefined).then(() => new Promise((resolve) => {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve([]); return; }
       chrome.storage.local.get(CURRENT_KEY, (d) => resolve((d && Array.isArray(d[CURRENT_KEY])) ? d[CURRENT_KEY] : []));
     } catch { resolve([]); }
-  });
+  }));
 }
 
 export function saveCurrentProposal(lines) {
   const snap = (Array.isArray(lines) ? lines : []).map((l) => ({
     id: l.id,
     product: l.product,
+    productId: l.productId,
     decoration: l.decoration || null,
     variant: l.variant || null,
     free: !!l.free,
+    freeValue: l.freeValue != null ? l.freeValue : null,
+    parentLineId: l.parentLineId || null,
     splits: (l.splits || []).map((s) => ({ ...s })),
   }));
-  return new Promise((resolve) => {
+  // Serialize writes so a slower earlier storage callback can never land after
+  // a newer price edit. Continue the queue even if a prior write was rejected.
+  _currentProposalWrite = _currentProposalWrite.catch(() => undefined).then(() => new Promise((resolve) => {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve(); return; }
       chrome.storage.local.set({ [CURRENT_KEY]: snap }, () => resolve());
     } catch { resolve(); }
-  });
+  }));
+  return _currentProposalWrite;
 }
 
 /* Rebuild live proposal lines (with fresh ids) from a saved entry's snapshot. */
