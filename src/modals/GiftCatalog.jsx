@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { loadScales } from '../lib/scales.js';
 import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail, createProposalStore, importProposalStore, buildProposalStoreFile, importProposalStoreFile } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, savedProposalsForSelection, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail, createProposalStore, importProposalStore, buildProposalStoreFile, importProposalStoreFile } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
@@ -1488,7 +1488,7 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
   );
 }
 
-function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, buildCheckoutSource, onPatchSplit, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onDelete, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, buildCheckoutSource, onPatchSplit, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   // Proactively fetch a cost for any catalog line that has none yet, so the
   // breakdown fills in real numbers on open. `costTick` re-renders once the cost
   // map updates; `costFailed` records SKUs we tried and couldn't price (→ they
@@ -1541,6 +1541,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   // Copy-as-command spins while artwork uploads, mirroring the card behaviour.
   const [copying, setCopying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [deleteArmed, setDeleteArmed] = useState(false);
   const doCopy = () => {
     if (!onCopy || copying) return;
     setCopying(true);
@@ -1668,6 +1669,14 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
               : `Costs assume ${pctOf(ASSUMED_MARGIN)} margin (no synced cost). Click a price to override.`}
         </span>
         <div style={{ flex: 1 }} />
+        {onDelete && (deleteArmed ? (
+          <>
+            <Btn variant="ghost" size="md" onClick={() => setDeleteArmed(false)}>Cancel</Btn>
+            <Btn variant="danger" size="md" icon={<I.trash />} onClick={onDelete}>Confirm delete</Btn>
+          </>
+        ) : (
+          <Btn variant="danger" size="md" icon={<I.trash />} onClick={() => setDeleteArmed(true)}>Delete</Btn>
+        ))}
         {current ? (
           <>
             <Btn variant="ghost" size="md" icon={<I.card />} onClick={onOpenProposal}>Open proposal</Btn>
@@ -1708,7 +1717,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
 
 function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim, readOnly, subtitle, selected, onToggleSelect }) {
   const [hover, setHover] = useState(false);
-  const [tagHover, setTagHover] = useState(false);
+  const [deleteArmed, setDeleteArmed] = useState(false);
   const cardRef = useRef(null);
   // Report natural height up so the masonry can pack columns and animate
   // neighbors into the gap when a card is removed. Re-measure when the column
@@ -1742,26 +1751,26 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
             <I.card size={9} /> Current
           </span>
         ) : (
-        /* The "Draft" tag IS the delete control — hovering it turns it red and
-            clicking removes the draft (keeps the card otherwise button-free). */
-        <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-          onMouseEnter={() => setTagHover(true)} onMouseLeave={() => setTagHover(false)}
-          title={tagHover ? 'Delete this draft' : 'Saved draft'}
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 20, padding: '0 9px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: .2, overflow: 'hidden',
-            background: tagHover ? 'var(--gb-error-tint-medium)' : 'var(--gb-fill-subtle)',
-            border: '1px solid ' + (tagHover ? 'var(--gb-error-tint-border)' : 'var(--gb-border-default)'),
-            color: tagHover ? 'var(--gb-error-fg, var(--gb-error))' : 'var(--gb-text-tertiary)',
-            transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
-          {/* Crossfade the label/icon as it flips Draft → Delete on hover. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span key={tagHover ? 'del' : 'draft'}
-              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: .13, ease: 'easeOut' }}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              {tagHover ? <><I.trash size={10} /> Delete</> : <><I.bookmark size={9} /> Draft</>}
-            </motion.span>
-          </AnimatePresence>
-        </button>
+          /* Deletion is deliberately persistent and two-step. The old control
+             was hidden inside the Draft badge's hover state, making the action
+             effectively absent for touch users and easy to overlook. */
+          <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {!deleteArmed && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 9px', borderRadius: 999, fontSize: 10, fontWeight: 700, letterSpacing: .2, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)' }}>
+                <I.bookmark size={9} /> Draft
+              </span>
+            )}
+            {deleteArmed ? (
+              <>
+                <Btn variant="danger" size="xs" icon={<I.trash />} title="Confirm deletion of saved proposal"
+                  onClick={() => onDelete(item.id)}>Confirm</Btn>
+                <IconBtn variant="ghost" size="xs" icon={<I.close />} title="Cancel deletion" onClick={() => setDeleteArmed(false)} />
+              </>
+            ) : (
+              <IconBtn danger size="xs" icon={<I.trash />} title="Delete saved proposal"
+                aria-label="Delete saved proposal" onClick={() => setDeleteArmed(true)} />
+            )}
+          </div>
         )}
       </div>
       <div>
@@ -2550,6 +2559,14 @@ function StoreTransferPanel({ mode, items, onMode, onClose, onImported, onShared
   const toast = useToast();
   const count = items.length;
 
+  // A generated link/file represents the exact selection used to create it.
+  // If cards are checked or unchecked while this panel remains open, discard
+  // that stale result and return to the create controls for the new selection.
+  useEffect(() => {
+    setCreated(null);
+    setCopied(false);
+  }, [items]);
+
   const safeFilename = (value) => {
     const base = String(value || L.filenameBase).trim().toLowerCase()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -3227,6 +3244,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom' | 'current'
   useEffect(() => { if (view !== 'proposals' && view !== 'current') setDetail(null); setSelProps([]); }, [view]);  // close breakdown + clear multi-select on view change
   const [savedProposals, setSavedProposals] = useState([]);
+  const selectedSavedProposals = useMemo(
+    () => savedProposalsForSelection(savedProposals, selPropIds),
+    [savedProposals, selPropIds],
+  );
   const [loadedId, setLoadedId] = useState(null);
   // Share/import saved proposals via the backend (same workflow as custom
   // items). null = panel closed; { mode: 'share' | 'import' } = open.
@@ -3430,7 +3451,28 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     }))
     .catch((e) => { toast?.error?.('Couldn’t build the command — ' + ((e && e.message) || 'unknown error')); throw e; });
 
-  const deleteSaved = (id) => removeSavedProposal(id).then((next) => setSavedProposals(next));
+  const deleteSaved = (id) => {
+    const name = savedProposals.find((proposal) => proposal.id === id)?.name || 'Saved proposal';
+    return removeSavedProposal(id)
+      .then((next) => {
+        setSavedProposals(next);
+        setSelProps((prev) => prev.filter((proposal) => proposal.id !== id));
+        setLoadedId((current) => (current === id ? null : current));
+        setDetail((current) => {
+          if (!current) return current;
+          if (current.kind === 'saved' && current.item?.id === id) return null;
+          if (current.kind !== 'multi') return current;
+          const items = (current.items || []).filter((proposal) => proposal.id !== id);
+          return items.length ? { ...current, items } : null;
+        });
+        toast?.success?.(`Deleted “${name}”`);
+        return next;
+      })
+      .catch((error) => {
+        toast?.error?.(`Couldn’t delete “${name}” — ${error?.message || 'unknown error'}`);
+        throw error;
+      });
+  };
 
   // Hand-edit a split's unit price inside a SAVED draft's breakdown → persist back
   // to storage and re-render the open breakdown with the new numbers.
@@ -3867,7 +3909,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <AnimatePresence initial={false}>
               {savedTransfer && (
-                <StoreTransferPanel key="proposal-transfer" mode={savedTransfer.mode} items={savedProposals}
+                <StoreTransferPanel key="proposal-transfer" mode={savedTransfer.mode} items={selectedSavedProposals}
                   api={{ create: createProposalStore, importLink: importProposalStore, importFile: importProposalStoreFile, buildFile: buildProposalStoreFile }}
                   labels={{ defaultName: 'My proposal set', title: 'Share saved proposals', subtitle: 'Share with a revocable link or a durable JSON file.', linkPlaceholder: 'Paste a proposal-store link…', filenameBase: 'golfballs-proposal-store' }}
                   onMode={(mode) => setSavedTransfer({ mode })}
@@ -4030,6 +4072,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   entries={r.entries} loaded={loadedId === it.id} onClose={close}
                   promo={it.promotion && it.promotion.promo ? { code: it.promotion.promo, promotion: it.promotion } : null}
                   onPatchSplit={(_entryIndex, srcIndex, splitIndex, price) => editSavedSplitPrice(it, srcIndex, splitIndex, price)}
+                  onDelete={() => deleteSaved(it.id)}
                   buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion })}
                   buildCheckoutSource={() => checkoutSourceFromEntries(r.entries, it.name, it.company || '')}
                   onLoad={() => { close(); loadSaved(it); }} />

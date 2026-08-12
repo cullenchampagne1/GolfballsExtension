@@ -687,6 +687,16 @@ export async function removeSavedProposal(id) {
   return next;
 }
 
+/* Resolve the live saved-proposal records represented by a UI selection.
+   Selection state may contain ids (Set/array) or proposal objects. Always
+   filter the current library so sharing cannot serialize a stale/deleted draft
+   and so checking/unchecking a card changes the transfer count immediately. */
+export function savedProposalsForSelection(proposals, selection) {
+  const values = selection instanceof Set ? [...selection] : (Array.isArray(selection) ? selection : []);
+  const ids = new Set(values.map((value) => String(value && typeof value === 'object' ? value.id : value)).filter(Boolean));
+  return (Array.isArray(proposals) ? proposals : []).filter((proposal) => proposal && ids.has(String(proposal.id)));
+}
+
 /* Replace a saved draft (matched by id) with an edited copy — used when a price
    is hand-edited in the breakdown. Persists + returns the new list. */
 export async function updateSavedProposal(entry) {

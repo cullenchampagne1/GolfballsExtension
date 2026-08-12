@@ -6,10 +6,12 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   normalizeProposalEntry, buildProposalStoreFile, parseProposalStoreFile,
-  saveProposalDraft, linesFromSaved, saveCurrentProposal, loadCurrentProposal,
+  saveProposalDraft, removeSavedProposal, savedProposalsForSelection,
+  linesFromSaved, saveCurrentProposal, loadCurrentProposal,
   buildProposalEmailCreatePayload, buildProposedOpportunityUpdate,
   submitProposalEmail,
   PROPOSAL_STORE_FILE_KIND, PROPOSAL_STORE_FILE_VERSION,
@@ -105,6 +107,54 @@ describe('proposal store · working draft ordering', () => {
       if (priorChrome === undefined) delete globalThis.chrome;
       else globalThis.chrome = priorChrome;
     }
+  });
+});
+
+describe('proposal library menu · delete and share selection', () => {
+  it('shares exactly the checked live drafts as selection changes', () => {
+    const proposals = [
+      { ...entry(), id: 'prop-a', name: 'A' },
+      { ...entry(), id: 'prop-b', name: 'B' },
+      { ...entry(), id: 'prop-c', name: 'C' },
+    ];
+
+    assert.deepEqual(
+      savedProposalsForSelection(proposals, new Set(['prop-a', 'prop-c'])).map((proposal) => proposal.id),
+      ['prop-a', 'prop-c'],
+    );
+    assert.deepEqual(
+      savedProposalsForSelection(proposals, new Set(['prop-c'])).map((proposal) => proposal.id),
+      ['prop-c'],
+    );
+    assert.deepEqual(savedProposalsForSelection(proposals, new Set()), []);
+  });
+
+  it('deletes only the requested draft from persistent storage', async () => {
+    const priorChrome = globalThis.chrome;
+    const data = { gbSavedProposals: [
+      { ...entry(), id: 'prop-a', name: 'A' },
+      { ...entry(), id: 'prop-b', name: 'B' },
+    ] };
+    globalThis.chrome = { storage: { local: {
+      get(key, callback) { callback({ [key]: structuredClone(data[key]) }); },
+      set(values, callback) { Object.assign(data, structuredClone(values)); callback?.(); },
+    } } };
+    try {
+      const remaining = await removeSavedProposal('prop-a');
+      assert.deepEqual(remaining.map((proposal) => proposal.id), ['prop-b']);
+      assert.deepEqual(data.gbSavedProposals.map((proposal) => proposal.id), ['prop-b']);
+    } finally {
+      if (priorChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = priorChrome;
+    }
+  });
+
+  it('keeps delete visible and feeds the transfer panel the checked subset', () => {
+    const source = readFileSync(new URL('../../src/modals/GiftCatalog.jsx', import.meta.url), 'utf8');
+    assert.match(source, /title="Delete saved proposal"/);
+    assert.match(source, />Confirm delete<\/Btn>/);
+    assert.match(source, /mode=\{savedTransfer\.mode\} items=\{selectedSavedProposals\}/);
+    assert.doesNotMatch(source, /const \[tagHover, setTagHover\]/);
   });
 });
 

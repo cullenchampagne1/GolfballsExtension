@@ -940,7 +940,8 @@ export function ProposalsPage() {
       <p>
         Sidebar → <strong>Saved Proposals</strong> is the gallery of your local drafts — each card shows thumbnails, name, date,
         unit count, total, and a <strong>Load</strong> button (loading is <em>additive</em>: it merges into the working proposal).
-        Hover a card's <strong>Draft</strong> tag and it morphs into a red Delete. <strong>Current Proposals</strong> pulls the
+        Every draft has a visible two-step <strong>Delete</strong> control. Check one or more cards before opening Share; the
+        selected count updates live and only those checked drafts are exported. <strong>Current Proposals</strong> pulls the
         linked account's real proposals live from the CRM — open any into the Breakdown view, load it into the builder, or re-email
         it. Saved drafts also expose <strong>Copy command</strong> and <strong>Save to account</strong> from the breakdown.
       </p>
