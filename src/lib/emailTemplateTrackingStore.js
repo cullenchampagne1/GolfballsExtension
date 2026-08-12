@@ -1,10 +1,11 @@
 /* Background-owned persistence and attribution for automatic email-template
- * subject trackers. This module is storage-API agnostic so the worker and unit
+ * subject clusters. This module is storage-API agnostic so the worker and unit
  * tests use the same implementation. */
 
 import {
   buildEmailTemplateTrackerCatalog,
-  matchEmailTemplateSubject,
+  emailTemplateClusterId,
+  normalizeEmailSubject,
   trackerForTemplate,
 } from './emailSubjectTracking.js';
 
@@ -61,16 +62,10 @@ function same(left, right) {
   catch { return false; }
 }
 
-function safeRegexMatches(tracker, subject) {
-  if (!tracker?.canonicalRegex) return false;
-  return matchEmailTemplateSubject(subject, { trackers: [tracker] })?.templateId
-    === tracker.templateId;
-}
-
 function stripTrackingFields(email) {
   const next = { ...(email || {}) };
   for (const key of [
-    'templateTrackerId', 'templateTrackingStatus', 'templateSubjectRegex',
+    'templateClusterId', 'templateTrackerId', 'templateTrackingStatus', 'templateSubjectRegex',
     'templateSubjectRegexFlags', 'templateTrackerVersion',
   ]) delete next[key];
   return next;
@@ -102,16 +97,48 @@ function replyEmail(notification) {
   return '';
 }
 
-function sendStillTrackable(send, catalog) {
-  const tracker = trackerForTemplate(catalog, send?.templateId);
-  return tracker?.status === 'ready' && safeRegexMatches(tracker, send?.subject);
+function sendClusterId(send, catalog) {
+  const current = trackerForTemplate(catalog, send?.templateId);
+  return clean(
+    current?.clusterId
+      || emailTemplateClusterId(send?.templateId)
+      || send?.clusterId
+      || send?.trackerId,
+    260,
+  ) || null;
+}
+
+function normalizedSendSubject(send) {
+  return clean(send?.normalizedSubject, 998) || normalizeEmailSubject(send?.subject);
+}
+
+function sendCanReceiveOutcome(send) {
+  return !!clean(send?.templateId, 200)
+    && clean(send?.trackingStatus, 40).toLowerCase() !== 'not_applicable';
+}
+
+function migrateSendRecord(row) {
+  const clusterId = sendClusterId(row);
+  const normalizedSubject = normalizedSendSubject(row);
+  const priorStatus = clean(row?.trackingStatus, 40) || 'unknown';
+  const trackingStatus = priorStatus === 'not_applicable' || !normalizedSubject
+    ? priorStatus
+    : 'ready';
+  return {
+    ...row,
+    clusterId,
+    trackerId: clusterId,
+    trackingStatus,
+    normalizedSubject,
+  };
 }
 
 function cappedSends(value, now) {
   return records(value)
     .filter((row) => row && Number(row.sentAt) >= now - MAX_SEND_AGE_MS)
     .sort((a, b) => Number(b.sentAt) - Number(a.sentAt))
-    .slice(0, MAX_SENDS);
+    .slice(0, MAX_SENDS)
+    .map(migrateSendRecord);
 }
 
 function sendId(email, sentAt, index) {
@@ -131,6 +158,7 @@ export function summarizeEmailTemplateSends(sends, catalog) {
       templateId: tracker.templateId,
       templateName: tracker.templateName,
       status: tracker.status,
+      clusterId: tracker.clusterId,
       trackerId: tracker.trackerId,
       conflictsWith: tracker.conflictsWith || [],
       sent: 0,
@@ -144,7 +172,8 @@ export function summarizeEmailTemplateSends(sends, catalog) {
     if (!byTemplate.has(send?.templateId)) {
       byTemplate.set(send?.templateId, {
         templateId: send?.templateId || '', templateName: send?.templateName || 'Deleted template',
-        status: 'deleted', trackerId: null, conflictsWith: [], sent: 0,
+        status: 'deleted', clusterId: sendClusterId(send), trackerId: sendClusterId(send),
+        conflictsWith: [], sent: 0,
         responded: 0, ordered: 0, responseRate: 0, orderRate: 0,
       });
     }
@@ -207,7 +236,8 @@ export function createEmailTemplateTrackingStore(options = {}) {
         });
       } catch { /* storage events unavailable */ }
     }
-    return reconcileTemplates();
+    return Promise.all([reconcileTemplates(), migrateStoredSends()])
+      .then(([currentCatalog]) => currentCatalog);
   }
 
   async function enrichEmails(inputEmails) {
@@ -218,8 +248,8 @@ export function createEmailTemplateTrackingStore(options = {}) {
       if (!templateId) return email;
       const tracker = trackerForTemplate(current, templateId);
       const isThreadReply = clean(email.replyMode, 24).toLowerCase() === 'reply';
-      const matched = !isThreadReply && tracker?.status === 'ready'
-        && matchEmailTemplateSubject(email.subject, current)?.templateId === templateId;
+      const renderedSubject = normalizeEmailSubject(email.subject);
+      const clustered = !isThreadReply && tracker?.status === 'ready' && !!renderedSubject;
       email.templateId = templateId;
       email.templateName = clean(email.templateName || tracker?.templateName, 200);
       email.templateVariationId = clean(email.templateVariationId || '__original', 200);
@@ -228,19 +258,16 @@ export function createEmailTemplateTrackingStore(options = {}) {
       delete email.trackingContext;
       email.templateTrackingStatus = isThreadReply
         ? 'not_applicable'
-        : matched ? 'ready' : (tracker?.status || 'unknown');
+        : clustered ? 'ready' : (tracker?.status || 'unknown');
       email.templateTrackerVersion = current.version;
-      if (!isThreadReply && tracker?.status === 'ready' && !matched) {
-        email.templateTrackingStatus = 'subject-mismatch';
+      if (!isThreadReply && tracker?.status === 'ready' && !renderedSubject) {
+        email.templateTrackingStatus = 'empty-subject';
       }
-      if (matched) {
+      if (clustered) {
+        email.templateClusterId = tracker.clusterId;
+        // Legacy transport/property name retained while stored delivery rows
+        // migrate to the cluster terminology.
         email.templateTrackerId = tracker.trackerId;
-        // The authoritative full regex lives in the local catalog. Mirror a
-        // bounded copy into the delivery record when practical, but never let
-        // a template with many variations make an otherwise valid send exceed
-        // the worker payload contract.
-        if (tracker.regex?.length <= 8_000) email.templateSubjectRegex = tracker.regex;
-        email.templateSubjectRegexFlags = tracker.flags;
       }
       return email;
     });
@@ -250,14 +277,26 @@ export function createEmailTemplateTrackingStore(options = {}) {
     const run = async () => {
       const now = Number(clock()) || Date.now();
       const bag = await readStorage(storage, EMAIL_TEMPLATE_SENDS_KEY);
-      const current = cappedSends(bag[EMAIL_TEMPLATE_SENDS_KEY], now);
+      const stored = records(bag[EMAIL_TEMPLATE_SENDS_KEY]);
+      const current = cappedSends(stored, now);
       const result = await mutator(current, now);
       const next = cappedSends(result?.sends || current, now);
-      if (!same(current, next)) await writeStorage(storage, { [EMAIL_TEMPLATE_SENDS_KEY]: next });
+      if (!same(stored, next)) await writeStorage(storage, { [EMAIL_TEMPLATE_SENDS_KEY]: next });
       return result?.value;
     };
     writeQueue = writeQueue.then(run, run);
     return writeQueue;
+  }
+
+  async function migrateStoredSends() {
+    const now = Number(clock()) || Date.now();
+    const bag = await readStorage(storage, EMAIL_TEMPLATE_SENDS_KEY);
+    const stored = records(bag[EMAIL_TEMPLATE_SENDS_KEY]);
+    const migrated = cappedSends(stored, now);
+    if (!same(stored, migrated)) {
+      await writeStorage(storage, { [EMAIL_TEMPLATE_SENDS_KEY]: migrated });
+    }
+    return migrated;
   }
 
   async function recordDelivery(inputEmails, transport = 'pa', results) {
@@ -269,19 +308,21 @@ export function createEmailTemplateTrackingStore(options = {}) {
         // A reply-in-thread (and every case reply) belongs to the original
         // outbound conversation. Recording it as a fresh send would split
         // later replies/orders away from the initial template that owns the
-        // subject tracker.
+        // subject cluster.
         if (email.templateTrackingStatus === 'not_applicable') return;
         const row = {
           id: sendId(email, now, index),
           templateId: clean(email.templateId, 200),
           templateName: clean(email.templateName, 200),
           variationId: clean(email.templateVariationId || '__original', 200),
-          trackerId: clean(email.templateTrackerId, 260) || null,
+          clusterId: clean(email.templateClusterId || email.templateTrackerId, 260) || null,
+          trackerId: clean(email.templateClusterId || email.templateTrackerId, 260) || null,
           trackingStatus: clean(email.templateTrackingStatus, 40) || 'unknown',
           recipient: lower(email.to),
           contactId: clean(email.contactId, 120),
           accountId: clean(email.accountId, 120),
           subject: clean(email.subject, 998),
+          normalizedSubject: normalizeEmailSubject(email.subject),
           sentAt: now,
           transport: clean(transport, 30) || 'unknown',
           respondedAt: null,
@@ -302,20 +343,32 @@ export function createEmailTemplateTrackingStore(options = {}) {
       const next = [...sends];
       for (const notification of records(notifications)) {
         if (notification?.topic !== 'message.reply.received') continue;
-        const tracker = matchEmailTemplateSubject(notification.body, currentCatalog);
-        if (!tracker || tracker.status !== 'ready') continue;
+        const subject = normalizeEmailSubject(notification.body);
+        if (!subject) continue;
         const recipient = replyEmail(notification);
         const repliedAt = Number(notification.createdAt || notification.updatedAt) || Number(clock());
-        const index = next.findIndex((send) => (
-          send?.templateId === tracker.templateId
-          && !send.respondedAt
-          && Number(send.sentAt) <= repliedAt
-          && (!recipient || lower(send.recipient) === recipient)
-          && sendStillTrackable(send, currentCatalog)
-        ));
+        const candidates = next
+          .map((send, index) => ({ send, index }))
+          .filter(({ send }) => (
+            sendCanReceiveOutcome(send)
+            && !send.respondedAt
+            && Number(send.sentAt) <= repliedAt
+            && (!recipient || lower(send.recipient) === recipient)
+            && normalizedSendSubject(send) === subject
+          ));
+        // The contact action normally supplies a recipient. Without it, only
+        // accept a single exact send; choosing among several identical
+        // subjects would turn a missing signal into a false attribution.
+        if (!recipient && candidates.length !== 1) continue;
+        const index = candidates[0]?.index ?? -1;
         if (index < 0) continue;
+        const clusterId = sendClusterId(next[index], currentCatalog);
         next[index] = {
           ...next[index],
+          clusterId,
+          trackerId: clusterId,
+          trackingStatus: 'ready',
+          normalizedSubject: subject,
           respondedAt: repliedAt,
           replyNotificationId: clean(notification.remoteId || notification.id, 120) || null,
         };
@@ -335,15 +388,20 @@ export function createEmailTemplateTrackingStore(options = {}) {
         const orderedAt = Number(order?.at || Date.parse(order?.data?.orderDate || '')) || 0;
         if (!contactId || !orderedAt) continue;
         const index = next.findIndex((send) => (
-          !send.orderedAt
+          sendCanReceiveOutcome(send)
+          && !send.orderedAt
           && clean(send.contactId, 120) === contactId
           && Number(send.sentAt) <= orderedAt
           && orderedAt - Number(send.sentAt) <= ORDER_WINDOW_MS
-          && sendStillTrackable(send, currentCatalog)
         ));
         if (index < 0) continue;
+        const clusterId = sendClusterId(next[index], currentCatalog);
         next[index] = {
           ...next[index],
+          clusterId,
+          trackerId: clusterId,
+          trackingStatus: 'ready',
+          normalizedSubject: normalizedSendSubject(next[index]),
           orderedAt,
           orderId: clean(order.externalId || order.id, 200) || null,
         };

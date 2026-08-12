@@ -21,7 +21,7 @@ const GB_TRACKERS = globalThis.GBTrackers;
 if (!GB_TRACKERS) throw new Error('Trackers failed to initialize');
 const GB_EMAIL_TEMPLATE_TRACKING = globalThis.GBEmailTemplateTracking;
 if (!GB_EMAIL_TEMPLATE_TRACKING) throw new Error('Email template tracking failed to initialize');
-// Subject trackers are local derived state, so keep them current even before
+// Subject clusters are local derived state, so keep them current even before
 // an installation is authorized to use network-backed runtime features.
 GB_EMAIL_TEMPLATE_TRACKING.install().catch(() => {});
 // installation-auth samples every backend round-trip through this hook, so
@@ -879,6 +879,7 @@ function gbValidateEmailPayload(payload) {
       templateId: 200,
       templateName: 200,
       templateVariationId: 200,
+      templateClusterId: 260,
       templateTrackerId: 260,
       templateTrackingStatus: 40,
       templateSubjectRegex: 8_000,

@@ -1,17 +1,21 @@
-/* Automatic subject trackers for saved email templates.
+/* Deterministic subject clusters for saved email templates.
  *
- * Subjects are compiled into a deliberately small regular-language grammar:
- * literal characters plus one-or-more dynamic character classes. Because the
- * grammar is regular, two templates can be checked for a real intersection
- * instead of guessing from a handful of rendered examples. Unknown values are
- * represented conservatively as any non-newline text; uncertainty therefore
- * creates a conflict, never an incorrectly "unique" tracker.
+ * The template definition tells us which text is fixed and which text is
+ * dynamic, so it is a stronger training signal than trying to rediscover the
+ * shape from sent subjects. Each template owns one stable cluster ID; its
+ * subject variations become structural patterns inside that cluster.
+ *
+ * Structural regexes remain in the catalog for diagnostics and backwards
+ * compatibility. They are deliberately not the attribution key. The tracking
+ * store records the fully rendered outbound subject and matches a reply to
+ * that exact normalized value, which naturally includes the result of code
+ * variables without executing arbitrary code while compiling the catalog.
  */
 
 const PLACEHOLDER = /\{\{\s*([^}]+?)\s*\}\}/g;
 const REPLY_PREFIX = '^(?:(?:re|fw|fwd)\\s*:\\s*|\\[external(?:\\s+email)?\\]\\s*)*';
 const MAX_ALTERNATIVES = 32;
-const MAX_CONFLICTS = 12;
+const CLUSTER_PREFIX = 'email-template:';
 
 const object = (value) => (
   value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -49,7 +53,7 @@ function canonicalFragment(value) {
     .toLocaleLowerCase('en-US');
 }
 
-/** Normalize a received subject before applying a canonical tracker regex. */
+/** Normalize an outbound or reply subject to its conversation identity. */
 export function normalizeEmailSubject(value) {
   let out = canonicalFragment(value).trim();
   // Replies can accumulate these in any order (for example
@@ -63,6 +67,16 @@ export function normalizeEmailSubject(value) {
       .trim();
   }
   return out;
+}
+
+/**
+ * Cluster identity is owned by the saved template, not its mutable subject.
+ * Including the complete template ID makes the mapping deterministic and
+ * collision-free without persistence, training order, or a hash registry.
+ */
+export function emailTemplateClusterId(templateId) {
+  const id = String(templateId || '').trim();
+  return id ? `${CLUSTER_PREFIX}${id}` : null;
 }
 
 const exact = (char) => ({ kind: 'exact', char });
@@ -106,8 +120,7 @@ function quotedString(expression) {
   if (!['"', "'"].includes(quote) || text.at(-1) !== quote) return null;
   try {
     if (quote === '"') return JSON.parse(text);
-    // Accept the ordinary escapes used in variable snippets without executing
-    // the code body itself.
+    // Accept ordinary string escapes without executing the code body.
     return text.slice(1, -1)
       .replace(/\\'/g, "'")
       .replace(/\\n/g, '\n')
@@ -159,11 +172,9 @@ function templateLiteralAtoms(expression) {
   return compactAtoms(atoms, { trim: false });
 }
 
-/** Infer fixed text surrounding code output without ever evaluating user code. */
+/** Infer useful fixed fragments from simple code without executing it. */
 function inferCodeAtoms(definition) {
   const body = String(definition?.body ?? definition?.config ?? '').trim();
-  // Only infer a single-return body. More complicated code remains an unknown
-  // dynamic value; being conservative is what protects uniqueness.
   const match = body.match(/^return\s+([\s\S]*?)\s*;?\s*$/);
   if (!match) return null;
   const expression = match[1].replace(/;\s*$/, '').trim();
@@ -194,20 +205,16 @@ function inferCodeAtoms(definition) {
 function variableAlternatives(name, definition) {
   const def = object(definition);
   const smart = object(def.smart);
-  if (smart.conditional) return { conditional: true, alternatives: [] };
 
   if (def.type === 'literal' && def.value != null && String(def.value).length
       && !smart.transform && !smart.extract && !smart.format) {
-    return { conditional: false, alternatives: [literalAtoms(def.value)] };
+    return [literalAtoms(def.value)];
   }
   if (def.type === 'code') {
     const inferred = inferCodeAtoms(def);
-    if (inferred?.length) return { conditional: false, alternatives: [inferred] };
+    if (inferred?.length) return [inferred];
   }
-  return {
-    conditional: false,
-    alternatives: [[repeat(variableClass(name, def))]],
-  };
+  return [[repeat(variableClass(name, def), smart.conditional ? 0 : 1)]];
 }
 
 function appendAlternatives(prefixes, additions) {
@@ -226,19 +233,13 @@ function compileSubject(subject, definitions) {
   const defs = object(definitions);
   let alternatives = [[]];
   let cursor = 0;
-  let conditional = false;
   for (const match of raw.matchAll(PLACEHOLDER)) {
     alternatives = appendAlternatives(
       alternatives,
       [literalAtoms(raw.slice(cursor, match.index))],
     );
     const names = String(match[1]).split('|').map((name) => name.trim()).filter(Boolean);
-    const choices = [];
-    for (const name of names) {
-      const inferred = variableAlternatives(name, defs[name]);
-      conditional = conditional || inferred.conditional;
-      choices.push(...inferred.alternatives);
-    }
+    const choices = names.flatMap((name) => variableAlternatives(name, defs[name]));
     alternatives = appendAlternatives(
       alternatives,
       choices.length ? choices : [[repeat('any')]],
@@ -248,10 +249,7 @@ function compileSubject(subject, definitions) {
   alternatives = appendAlternatives(alternatives, [literalAtoms(raw.slice(cursor))])
     .map(compactAtoms)
     .filter((atoms) => atoms.length > 0);
-  const fixedCharacters = Math.max(0, ...alternatives.map((atoms) => (
-    atoms.filter((atom) => atom.kind === 'exact' && /[\p{L}\p{N}]/u.test(atom.char)).length
-  )));
-  return { alternatives, conditional, fixedCharacters };
+  return { alternatives };
 }
 
 function escapeRegexChar(char, raw = false) {
@@ -275,92 +273,19 @@ function unionRegex(sequences, raw = false) {
   return `${raw ? REPLY_PREFIX : '^'}${body}$`;
 }
 
-function compileNfa(atoms) {
-  const transitions = new Map();
-  const epsilon = new Map();
-  const addTransition = (from, label, to) => {
-    if (!transitions.has(from)) transitions.set(from, []);
-    transitions.get(from).push({ label, to });
-  };
-  const addEpsilon = (from, to) => {
-    if (!epsilon.has(from)) epsilon.set(from, []);
-    epsilon.get(from).push(to);
-  };
-  let state = 0;
+function atomsPattern(atoms) {
+  const parts = [];
   for (const atom of atoms) {
     if (atom.kind === 'exact') {
-      addTransition(state, { kind: 'exact', char: atom.char }, state + 1);
-      state += 1;
-    } else {
-      const loop = state + 1;
-      const end = state + 2;
-      const label = { kind: atom.className || 'any' };
-      addTransition(state, label, loop);
-      addTransition(loop, label, loop);
-      addEpsilon(loop, end);
-      if (atom.minimum === 0) addEpsilon(state, end);
-      state = end;
+      parts.push(atom.char);
+      continue;
     }
+    const marker = atom.className === 'digit' ? '<#>' : '<*>';
+    // Adjacent dynamic fragments represent one unknown rendered span in the
+    // human-readable shape, even if the compatibility regex keeps them apart.
+    if (parts.at(-1) !== marker && !['<*>', '<#>'].includes(parts.at(-1))) parts.push(marker);
   }
-  return { start: 0, accept: state, transitions, epsilon };
-}
-
-function epsilonClosure(nfa, states) {
-  const found = new Set(states);
-  const stack = [...found];
-  while (stack.length) {
-    const state = stack.pop();
-    for (const next of nfa.epsilon.get(state) || []) {
-      if (!found.has(next)) { found.add(next); stack.push(next); }
-    }
-  }
-  return [...found].sort((a, b) => a - b);
-}
-
-function labelWitness(left, right) {
-  if (left.kind === 'exact' && right.kind === 'exact') {
-    return left.char === right.char ? left.char : null;
-  }
-  if (left.kind === 'exact') {
-    if (right.kind === 'digit') return /[0-9]/.test(left.char) ? left.char : null;
-    return /[\r\n]/.test(left.char) ? null : left.char;
-  }
-  if (right.kind === 'exact') return labelWitness(right, left);
-  if (left.kind === 'digit' || right.kind === 'digit') return '0';
-  return 'x';
-}
-
-/** Return one witness when two compiled subject languages intersect. */
-function intersectionWitness(leftAtoms, rightAtoms) {
-  const left = compileNfa(leftAtoms);
-  const right = compileNfa(rightAtoms);
-  const startLeft = epsilonClosure(left, [left.start]);
-  const startRight = epsilonClosure(right, [right.start]);
-  const queue = [{ l: startLeft, r: startRight, text: '' }];
-  const visited = new Set();
-  while (queue.length) {
-    const current = queue.shift();
-    const key = `${current.l.join(',')}|${current.r.join(',')}`;
-    if (visited.has(key)) continue;
-    visited.add(key);
-    if (current.l.includes(left.accept) && current.r.includes(right.accept)) {
-      return current.text.slice(0, 160);
-    }
-    const leftMoves = current.l.flatMap((state) => left.transitions.get(state) || []);
-    const rightMoves = current.r.flatMap((state) => right.transitions.get(state) || []);
-    for (const lm of leftMoves) {
-      for (const rm of rightMoves) {
-        const char = labelWitness(lm.label, rm.label);
-        if (char == null) continue;
-        queue.push({
-          l: epsilonClosure(left, [lm.to]),
-          r: epsilonClosure(right, [rm.to]),
-          text: current.text.length < 160 ? current.text + char : current.text,
-        });
-      }
-    }
-  }
-  return null;
+  return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
 function shortHash(value) {
@@ -384,58 +309,82 @@ function templateSubjects(template) {
   ];
 }
 
+function unavailableTracker(templateId, templateName, status, reason) {
+  return {
+    templateId,
+    templateName,
+    status,
+    clusterId: null,
+    trackerId: null,
+    clusterRevision: null,
+    matchMode: 'recorded_subject',
+    patterns: [],
+    regex: null,
+    canonicalRegex: null,
+    flags: 'iu',
+    variants: [],
+    conflictsWith: [],
+    reason,
+  };
+}
+
 function initialTracker(template, index) {
   const templateId = String(template?.id || '').trim();
   const templateName = String(template?.name || `Template ${index + 1}`).trim();
   const type = template?.type === 'email' ? 'order' : (template?.type || 'order');
   if (template?.enabled === false) {
-    return { templateId, templateName, status: 'disabled', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Template is disabled.' };
+    return unavailableTracker(templateId, templateName, 'disabled', 'Template is disabled.');
   }
   if (type === 'case') {
-    return { templateId, templateName, status: 'not_applicable', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Case replies use the existing conversation subject.' };
+    return unavailableTracker(templateId, templateName, 'not_applicable', 'Case replies use the existing conversation subject.');
   }
   if (template?.replyMode === 'reply') {
-    return { templateId, templateName, status: 'not_applicable', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Reply-in-thread templates inherit tracking from the original email in the conversation.' };
+    return unavailableTracker(templateId, templateName, 'not_applicable', 'Reply-in-thread templates inherit tracking from the original email in the conversation.');
   }
   if (!templateId) {
-    return { templateId, templateName, status: 'incomplete', trackerId: null, regex: null, flags: 'iu', variants: [], conflictsWith: [], reason: 'Save the template before generating its tracker.' };
+    return unavailableTracker(templateId, templateName, 'incomplete', 'Save the template before assigning its subject cluster.');
   }
 
   const variants = templateSubjects(template).map((entry) => {
     const compiled = compileSubject(entry.subject, template?.vars);
+    const patterns = [...new Set(compiled.alternatives.map(atomsPattern).filter(Boolean))];
     return {
       ...entry,
+      pattern: patterns.length === 1 ? patterns[0] : patterns.join(' | '),
+      patterns,
       canonicalRegex: compiled.alternatives.length ? unionRegex(compiled.alternatives) : null,
       regex: compiled.alternatives.length ? unionRegex(compiled.alternatives, true) : null,
       _alternatives: compiled.alternatives,
-      _conditional: compiled.conditional,
-      _fixedCharacters: compiled.fixedCharacters,
     };
   });
   const alternatives = variants.flatMap((variant) => variant._alternatives);
-  let reason = '';
-  if (variants.some((variant) => !variant._alternatives.length)) {
-    reason = 'Every subject variation needs a subject line.';
-  } else if (variants.some((variant) => variant._conditional)) {
-    reason = 'A conditional variable can remove the subject, so it cannot be tracked safely.';
-  } else if (variants.some((variant) => variant._fixedCharacters < 3)) {
-    reason = 'Add at least three fixed letters or numbers to every subject variation.';
-  }
-  const candidateRegex = alternatives.length ? unionRegex(alternatives, true) : null;
+  const patterns = [...new Set(variants.flatMap((variant) => variant.patterns))];
+  const incomplete = variants.some((variant) => !variant._alternatives.length);
+  const clusterId = incomplete ? null : emailTemplateClusterId(templateId);
   const canonicalRegex = alternatives.length ? unionRegex(alternatives) : null;
+  const regex = alternatives.length ? unionRegex(alternatives, true) : null;
+  const revisionSeed = variants
+    .flatMap((variant) => variant.patterns.map((pattern) => `${variant.variationId}:${pattern}`))
+    .sort()
+    .join('\u001f');
+
   return {
     templateId,
     templateName,
-    status: reason ? 'incomplete' : 'ready',
-    trackerId: reason ? null : `email-template:${templateId}:${shortHash(canonicalRegex)}`,
-    regex: reason ? null : candidateRegex,
-    canonicalRegex: reason ? null : canonicalRegex,
-    candidateRegex,
-    candidateCanonicalRegex: canonicalRegex,
+    status: incomplete ? 'incomplete' : 'ready',
+    clusterId,
+    // Keep the original property during the schema migration. New records and
+    // UI use clusterId; older delivery contracts still understand trackerId.
+    trackerId: clusterId,
+    clusterRevision: incomplete ? null : `subject-shape:${shortHash(revisionSeed)}`,
+    matchMode: 'recorded_subject',
+    patterns,
+    regex: incomplete ? null : regex,
+    canonicalRegex: incomplete ? null : canonicalRegex,
     flags: 'iu',
     variants,
     conflictsWith: [],
-    reason,
+    reason: incomplete ? 'Every subject variation needs a subject line.' : '',
     _alternatives: alternatives,
   };
 }
@@ -445,95 +394,29 @@ function publicTracker(tracker) {
   return {
     ...rest,
     variants: (rest.variants || []).map((variant) => {
-      const { _alternatives: ignored, _conditional: ignoredConditional, _fixedCharacters: ignoredFixed, ...visible } = variant;
+      const { _alternatives: ignored, ...visible } = variant;
       return visible;
     }),
   };
 }
 
-/**
- * Build a deterministic tracker catalog. Ready trackers are guaranteed not to
- * intersect another enabled, standalone, non-case template in this catalog.
- */
+/** Build the same subject-cluster catalog for the same saved templates. */
 export function buildEmailTemplateTrackerCatalog(templates) {
-  const trackers = (Array.isArray(templates) ? templates : [])
-    .map(initialTracker);
-
-  // An untrackable template still participates in overlap checks when it has
-  // a subject language. Otherwise a dynamic-only "{{name}}" template could
-  // silently make every apparently-ready tracker non-unique.
-  const comparable = trackers.filter((tracker) => (
-    ['ready', 'incomplete'].includes(tracker.status) && tracker._alternatives?.length
-  ));
-  for (let i = 0; i < comparable.length; i += 1) {
-    for (let j = i + 1; j < comparable.length; j += 1) {
-      const left = comparable[i];
-      const right = comparable[j];
-      let collision = null;
-      for (const leftVariant of left.variants) {
-        for (const rightVariant of right.variants) {
-          for (const leftAtoms of leftVariant._alternatives) {
-            for (const rightAtoms of rightVariant._alternatives) {
-              const witness = intersectionWitness(leftAtoms, rightAtoms);
-              if (witness != null) {
-                collision = {
-                  leftVariationId: leftVariant.variationId,
-                  leftVariationLabel: leftVariant.label,
-                  rightVariationId: rightVariant.variationId,
-                  rightVariationLabel: rightVariant.label,
-                  witness,
-                };
-                break;
-              }
-            }
-            if (collision) break;
-          }
-          if (collision) break;
-        }
-        if (collision) break;
-      }
-      if (!collision) continue;
-      if (left.conflictsWith.length < MAX_CONFLICTS) {
-        left.conflictsWith.push({
-          templateId: right.templateId,
-          templateName: right.templateName,
-          variationId: collision.leftVariationId,
-          variationLabel: collision.leftVariationLabel,
-          otherVariationId: collision.rightVariationId,
-          otherVariationLabel: collision.rightVariationLabel,
-          witness: collision.witness,
-        });
-      }
-      if (right.conflictsWith.length < MAX_CONFLICTS) {
-        right.conflictsWith.push({
-          templateId: left.templateId,
-          templateName: left.templateName,
-          variationId: collision.rightVariationId,
-          variationLabel: collision.rightVariationLabel,
-          otherVariationId: collision.leftVariationId,
-          otherVariationLabel: collision.leftVariationLabel,
-          witness: collision.witness,
-        });
-      }
-    }
-  }
-
-  for (const tracker of comparable) {
-    if (!tracker.conflictsWith.length) continue;
-    tracker.status = 'conflict';
-    tracker.trackerId = null;
-    tracker.regex = null;
-    tracker.canonicalRegex = null;
-    tracker.reason = `Subject overlaps ${tracker.conflictsWith.length} other enabled template${tracker.conflictsWith.length === 1 ? '' : 's'}.`;
-  }
-
   return {
-    version: 1,
-    trackers: trackers.map(publicTracker),
+    version: 2,
+    identityStrategy: 'template-id-v1',
+    matchMode: 'recorded-subject-v1',
+    trackers: (Array.isArray(templates) ? templates : [])
+      .map(initialTracker)
+      .map(publicTracker),
   };
 }
 
-/** Match only when exactly one ready template accepts the received subject. */
+/**
+ * Best-effort structural lookup retained for diagnostics and older callers.
+ * Attribution uses exact recorded send subjects instead; overlapping shapes
+ * therefore never disable either cluster.
+ */
 export function matchEmailTemplateSubject(subject, catalogOrTemplates) {
   const catalog = Array.isArray(catalogOrTemplates)
     ? buildEmailTemplateTrackerCatalog(catalogOrTemplates)

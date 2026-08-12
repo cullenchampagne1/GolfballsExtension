@@ -280,24 +280,7 @@ export function TemplateEditor({ tpl, onDelete }) {
   // the original shows as a labeled block alongside the alternates (display
   // only — the base still sends tpl.subject/body).
   const [baseLabel, setBaseLabel] = useState(tpl.baseLabel || '');
-  const [trackingTemplates, setTrackingTemplates] = useState([]);
-  const [trackingReady, setTrackingReady] = useState(false);
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
-
-  // The draft must be compared with every other template before autosave, so
-  // a conflict appears while the rep is still typing the subject that caused
-  // it. Storage changes keep the comparison set current across editor windows.
-  useEffect(() => {
-    chrome.storage.local.get('templates', ({ templates }) => {
-      setTrackingTemplates(Array.isArray(templates) ? templates : []);
-      setTrackingReady(true);
-    });
-    const onChanged = (changes) => {
-      if (changes.templates) setTrackingTemplates(changes.templates.newValue || []);
-    };
-    chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
-  }, []);
 
   function addVariation() {
     // The initial email is block "Variation 1", so added blocks number from 2.
@@ -546,25 +529,22 @@ export function TemplateEditor({ tpl, onDelete }) {
   }
 
   const subjectTracker = useMemo(() => {
-    if (!trackingReady) return null;
     const draft = buildTemplate();
-    const peers = trackingTemplates.filter((item) => item?.id !== tpl.id);
     return trackerForTemplate(
-      buildEmailTemplateTrackerCatalog([...peers, draft]),
+      buildEmailTemplateTrackerCatalog([draft]),
       tpl.id,
     );
-  }, [trackingReady, trackingTemplates, tpl, typeId, enabled, name, subject, vars, variations, baseLabel, replyMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tpl, typeId, enabled, name, subject, vars, variations, baseLabel, replyMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const trackerRegexPreview = subjectTracker?.status === 'ready' && subjectTracker.regex
-    ? `/${subjectTracker.regex}/${subjectTracker.flags || 'iu'}`
+  const clusterIdPreview = subjectTracker?.status === 'ready'
+    ? subjectTracker.clusterId || ''
     : '';
-  const trackerRegexPlaceholder = subjectTracker?.status === 'not_applicable'
+  const clusterIdPlaceholder = subjectTracker?.status === 'not_applicable'
     ? 'Inherited from the original email in this thread'
-    : subjectTracker?.status === 'conflict'
-      ? 'No unique regex — resolve the subject conflict'
-      : subjectTracker?.status === 'disabled'
-        ? 'Enable this template to generate a tracking ID'
-        : 'No subject regex generated yet';
+    : subjectTracker?.status === 'disabled'
+      ? 'Enable this template to assign a cluster ID'
+      : 'No subject cluster assigned yet';
+  const subjectShapePreview = subjectTracker?.patterns?.join('  |  ') || '';
 
   const skipSave     = useRef(true);
   const skipTypeSave = useRef(true);
@@ -679,27 +659,17 @@ export function TemplateEditor({ tpl, onDelete }) {
       {subjectTracker?.status === 'ready' && (
         <Callout
           tone="success"
-          title="Automatic response & order tracker ready"
+          title="Stable response & order cluster ready"
           style={{ marginBottom: 12 }}
         >
           {subjectTracker.variants.length > 1
-            ? `All ${subjectTracker.variants.length} subject variations are unique to this template.`
-            : 'This subject is unique to this template.'}
-          {' '}Reply, forward, and External prefixes are ignored when responses are matched.
-        </Callout>
-      )}
-      {subjectTracker?.status === 'conflict' && (
-        <Callout
-          tone="error"
-          title="Subject tracker conflict"
-          style={{ marginBottom: 12 }}
-        >
-          This template overlaps {subjectTracker.conflictsWith.map((item) => `“${item.templateName}”`).join(', ')}.
-          {' '}Change the fixed wording in one of the overlapping subject variations; responses and orders remain unattributed until the subjects are unique.
+            ? `All ${subjectTracker.variants.length} subject variations share this template’s cluster.`
+            : 'This subject belongs to this template’s stable cluster.'}
+          {' '}Each send stores its fully rendered subject, including Code output, so unrelated campaigns cannot conflict. Reply, forward, and External prefixes are ignored.
         </Callout>
       )}
       {subjectTracker?.status === 'incomplete' && (
-        <Callout tone="warning" title="Subject cannot be tracked yet" style={{ marginBottom: 12 }}>
+        <Callout tone="warning" title="Subject cluster is not ready" style={{ marginBottom: 12 }}>
           {subjectTracker.reason}
         </Callout>
       )}
@@ -710,12 +680,22 @@ export function TemplateEditor({ tpl, onDelete }) {
       )}
 
       {subjectTracker && (
-        <div style={{ marginBottom: 12 }}>
-          <Field label="Tracking ID (regex preview)">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8, marginBottom: 12 }}>
+          <Field label="Subject cluster ID">
             <Input
-              value={trackerRegexPreview}
-              placeholder={trackerRegexPlaceholder}
-              title={trackerRegexPreview || trackerRegexPlaceholder}
+              value={clusterIdPreview}
+              placeholder={clusterIdPlaceholder}
+              title={clusterIdPreview || clusterIdPlaceholder}
+              size="sm"
+              mono
+              readOnly
+            />
+          </Field>
+          <Field label="Subject shape">
+            <Input
+              value={subjectShapePreview}
+              placeholder="A shape appears after you enter a subject"
+              title={subjectShapePreview || 'A shape appears after you enter a subject'}
               size="sm"
               mono
               readOnly

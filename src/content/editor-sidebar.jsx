@@ -311,7 +311,6 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
       </div>
       {disabled && <Tag tone="neutral" size="xs">OFF</Tag>}
       {!isNote && !disabled && tracker?.status === 'ready' && <Tag tone="success" size="xs">Tracked</Tag>}
-      {!isNote && !disabled && tracker?.status === 'conflict' && <Tag tone="error" size="xs">Conflict</Tag>}
       {!isNote && !disabled && tracker?.status === 'incomplete' && <Tag tone="warning" size="xs">Untracked</Tag>}
       <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
         <IconBtn size="xs" icon={<I.more />} onClick={() => setMenuOpen((v) => !v)} />

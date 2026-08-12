@@ -45,7 +45,7 @@
       "file": "tests/unit/emailSender.test.mjs"
     },
     {
-      "name": "email \u00b7 automatic template subject, response & order trackers",
+      "name": "email \u00b7 deterministic template subject clusters, response & order attribution",
       "file": "tests/unit/emailSubjectTracking.test.mjs"
     },
     {
