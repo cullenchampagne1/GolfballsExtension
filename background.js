@@ -947,6 +947,9 @@ try {
 } catch (e) { /* no theme API */ }
 
 const GB_SETTINGS_SHARE_ID_RE = /^[A-Za-z0-9_-]{32}$/;
+// The project API accepts ten categorized scopes plus the legacy broad
+// `settings` scope. The old limit of eight rejected otherwise-valid imports.
+const GB_SETTINGS_SHARE_SCOPE_LIMIT = 11;
 function gbSettingsShareId(value) {
   const raw = String(value || '').trim();
   if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
@@ -1582,7 +1585,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const scopeIds = Array.isArray(msg.scopeIds)
       ? [...new Set(msg.scopeIds.filter((id) => typeof id === 'string'))]
       : [];
-    if (!shareId || scopeIds.length < 1 || scopeIds.length > 8) {
+    if (!shareId || scopeIds.length < 1 || scopeIds.length > GB_SETTINGS_SHARE_SCOPE_LIMIT) {
       sendResponse({ ok: false, error: 'Invalid settings share import' });
       return true;
     }

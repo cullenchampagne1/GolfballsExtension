@@ -232,12 +232,17 @@ export async function applyScopes(scopes) {
       continue;
     }
 
-    // mergeById — array scope. Read current, merge, queue write.
+    // mergeById — array scope. Several logical scopes can share one physical
+    // storage array (for example Quick Notes, Task Templates, and Call Logs
+    // all live in noteTemplates). Compose each merge on top of an earlier
+    // queued write for that key so a later scope cannot discard it.
     const current = await readKeys(def.keys);
     for (const k of def.keys) {
       const inc = incoming[k];
       if (!Array.isArray(inc)) continue;
-      const have = Array.isArray(current[k]) ? current[k] : [];
+      const have = Array.isArray(writes[k])
+        ? writes[k]
+        : (Array.isArray(current[k]) ? current[k] : []);
       const byId = new Map(have.map((it) => [it?.id, it]));
       let added = 0; let replaced = 0;
       for (const it of inc) {

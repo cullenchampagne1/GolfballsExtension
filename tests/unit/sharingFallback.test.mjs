@@ -115,6 +115,64 @@ describe('sharing fallback · preset scopes', () => {
     assert.equal(JSON.stringify(gathered).includes('must-not-export'), false);
   });
 
+  it('round-trips Quick Task and sibling template scopes through one share', async () => {
+    const storageState = {
+      templates: [
+        { id: 'source-order', type: 'order', name: 'Order update' },
+        { id: 'source-case', type: 'case', name: 'Case update' },
+      ],
+      templateFolders: [{ id: 'email-folder', name: 'Shared email' }],
+      noteTemplates: [
+        { id: 'source-note', subType: 'note', name: 'Order note' },
+        { id: 'source-task', subType: 'task', name: 'Quick Task follow-up' },
+        { id: 'source-call', subType: 'call_log', name: 'Call follow-up' },
+      ],
+      noteFolders: [{ id: 'activity-folder', name: 'Shared activity' }],
+    };
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            const list = Array.isArray(keys) ? keys : [keys];
+            callback(Object.fromEntries(
+              list.filter((key) => key in storageState).map((key) => [key, storageState[key]]),
+            ));
+          },
+          set(value, callback) { Object.assign(storageState, value); callback?.(); },
+        },
+      },
+    };
+
+    const shared = await gatherScopes([
+      'tpl-order', 'tpl-case', 'note-quick', 'note-task', 'note-call',
+    ]);
+    assert.deepEqual(shared['note-task'].noteTemplates, [
+      { id: 'source-task', subType: 'task', name: 'Quick Task follow-up' },
+    ]);
+
+    storageState.templates = [{ id: 'local-email', type: 'contact', name: 'Keep local email' }];
+    storageState.templateFolders = [{ id: 'local-email-folder', name: 'Keep local email folder' }];
+    storageState.noteTemplates = [{ id: 'local-task', subType: 'task', name: 'Keep local task' }];
+    storageState.noteFolders = [{ id: 'local-note-folder', name: 'Keep local note folder' }];
+
+    await applyScopes(shared);
+
+    assert.deepEqual(
+      storageState.noteTemplates.map((item) => item.id),
+      ['local-task', 'source-note', 'source-task', 'source-call'],
+      'every activity subtype must compose into the shared noteTemplates array',
+    );
+    assert.deepEqual(
+      storageState.templates.map((item) => item.id),
+      ['local-email', 'source-order', 'source-case'],
+      'email subtype scopes must compose into the shared templates array too',
+    );
+    assert.deepEqual(
+      storageState.noteFolders.map((item) => item.id),
+      ['local-note-folder', 'activity-folder'],
+    );
+  });
+
   it('keeps Page Engine indexing and Territory identity installation-local', async () => {
     const storageState = {
       devSettings: {

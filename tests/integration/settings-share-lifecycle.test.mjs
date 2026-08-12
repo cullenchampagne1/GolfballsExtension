@@ -17,6 +17,11 @@ import {
 const SHARE_ID = 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6';
 const CLIENT_BASE = `${API_ORIGIN}/projects/golfballs-extension/client`;
 const SHARE_URL = `${CLIENT_BASE}/settings-shares/${SHARE_ID}`;
+const CATEGORIZED_SCOPE_IDS = [
+  'settings-preferences', 'settings-appearance', 'settings-email',
+  'tpl-order', 'tpl-case', 'tpl-account', 'tpl-contact',
+  'note-quick', 'note-task', 'note-call',
+];
 
 const serverShare = {
   id: SHARE_ID,
@@ -105,6 +110,19 @@ describe('settings-share lifecycle', () => {
     assert.equal(request.url, `${SHARE_URL}/imports`);
     assert.equal(request.method, 'POST');
     assert.deepEqual(JSON.parse(request.options.body), { scope_ids: ['templates', 'flags'] });
+  });
+
+  it('retains every categorized server scope including Quick Task templates', async () => {
+    const response = await sendMessage({
+      action: 'settingsShareRecordImport',
+      shareId: SHARE_ID,
+      scopeIds: CATEGORIZED_SCOPE_IDS,
+    });
+
+    assert.equal(response.ok, true);
+    const request = requests.at(-1);
+    assert.equal(request.url, `${SHARE_URL}/imports`);
+    assert.deepEqual(JSON.parse(request.options.body), { scope_ids: CATEGORIZED_SCOPE_IDS });
   });
 
   it('revokes the share: POST …/revoke and echoes the share id', async () => {
