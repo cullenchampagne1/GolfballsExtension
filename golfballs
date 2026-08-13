@@ -12,9 +12,9 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import io
 import json
 import os
-import re
 import shutil
 import struct
 import subprocess
@@ -51,19 +51,7 @@ DEFAULT_CONFIG = {
     "keep_releases": 10,
     "build_command": "npm run check",
     "fast_build_command": "npm run build",
-    "pack_exclude": [
-        ".claude", ".git", ".github", ".gitignore", ".revstack", ".DS_Store",
-        "node_modules", "docs", "install", "scripts", "tests", "tools",
-        "companion-app", "build.js", "package.json", "package-lock.json",
-        "README.md", "revstack.project.json",
-    ],
 }
-
-# These paths are release-safety invariants, not user preferences. In particular,
-# load_config() intentionally allows local configuration to replace list values;
-# enforcing this set in build_zip() prevents an older or incomplete config.json
-# from leaking agent settings, companion binaries, or development sources.
-REQUIRED_PACK_EXCLUDE = frozenset(DEFAULT_CONFIG["pack_exclude"])
 
 
 class UI:
@@ -259,67 +247,53 @@ def checkout_ref(config: dict[str, Any], ref: str, ui: UI, log: Path) -> str:
     return run(["git", "rev-parse", "--short", "HEAD"], cwd=WORKSPACE).decode().strip()
 
 
-def collect_manifest_references(manifest: dict[str, Any]) -> set[str]:
-    refs: set[str] = set()
+def self_hosted_consumer_zip(store_path: Path,
+                             source_manifest: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
+    """Turn the leak-checked Web Store consumer ZIP into the signed-channel ZIP.
 
-    def add(value: Any) -> None:
-        if isinstance(value, str) and value and "*" not in value:
-            refs.add(value.lstrip("/"))
+    Both distributions must contain the exact same consumer runtime. The Web
+    Store manifest deliberately omits ``key`` and ``update_url``; the signed
+    self-hosted channel needs those two fields to preserve its extension ID and
+    update source. No source or full/admin build output is copied here.
+    """
+    with zipfile.ZipFile(store_path) as source:
+        infos = source.infolist()
+        if [info.filename for info in infos].count("manifest.json") != 1:
+            raise RuntimeError("consumer package must contain exactly one manifest.json")
+        for info in infos:
+            parts = Path(info.filename).parts
+            if info.filename.startswith("/") or ".." in parts or info.is_dir():
+                raise RuntimeError(f"unsafe consumer package entry: {info.filename}")
+        try:
+            consumer_manifest = json.loads(source.read("manifest.json"))
+        except (KeyError, json.JSONDecodeError) as exc:
+            raise RuntimeError("consumer package has an invalid manifest.json") from exc
+        if "key" in consumer_manifest or "update_url" in consumer_manifest:
+            raise RuntimeError("Web Store consumer manifest unexpectedly contains self-hosting fields")
+        if consumer_manifest.get("version") != source_manifest.get("version"):
+            raise RuntimeError(
+                "consumer package version does not match the release source "
+                f"({consumer_manifest.get('version')} != {source_manifest.get('version')})")
+        key = str(source_manifest.get("key") or "").strip()
+        update_url = str(source_manifest.get("update_url") or "").strip()
+        if not key or not update_url.startswith("https://"):
+            raise RuntimeError("release source is missing its self-hosting key or HTTPS update_url")
+        hosted_manifest = dict(consumer_manifest)
+        hosted_manifest["key"] = key
+        hosted_manifest["update_url"] = update_url
 
-    background = manifest.get("background") or {}
-    add(background.get("service_worker"))
-    for script in background.get("scripts") or []:
-        add(script)
-    for entry in manifest.get("content_scripts") or []:
-        for item in (entry.get("js") or []) + (entry.get("css") or []):
-            add(item)
-    for entry in manifest.get("web_accessible_resources") or []:
-        for item in entry.get("resources") or []:
-            add(item)
-    for value in (manifest.get("icons") or {}).values():
-        add(value)
-    action = manifest.get("action") or {}
-    add(action.get("default_popup"))
-    for value in (action.get("default_icon") or {}).values() \
-            if isinstance(action.get("default_icon"), dict) else []:
-        add(value)
-    add(manifest.get("options_page"))
-    for page in (manifest.get("sandbox") or {}).get("pages") or []:
-        add(page)
-    add((manifest.get("storage") or {}).get("managed_schema"))
-    return refs
-
-
-def build_zip(config: dict[str, Any]) -> tuple[bytes, dict[str, Any], list[str]]:
-    manifest = json.loads((WORKSPACE / "manifest.json").read_text())
-    excluded = REQUIRED_PACK_EXCLUDE | set(config.get("pack_exclude", []))
-    buffer_path = BASE / ".package.zip.tmp"
-    names: set[str] = set()
-    with zipfile.ZipFile(buffer_path, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(WORKSPACE.rglob("*")):
-            relative = path.relative_to(WORKSPACE)
-            parts = relative.parts
-            if not path.is_file() or any(part in excluded for part in parts):
-                continue
-            if path.name in {".DS_Store"} or str(relative) in excluded:
-                continue
-            # The built react-dist bundle IS the shipped app; the raw src/ tree
-            # is React SOURCE and must never ship. Only src/vanilla loads at
-            # runtime (it is referenced directly, not bundled), so ship that
-            # subtree and nothing else under src/. Mirrors the store packager's
-            # allowlist (RUNTIME_DIRECTORIES), which ships only src/vanilla.
-            if parts and parts[0] == "src" and (len(parts) < 2 or parts[1] != "vanilla"):
-                continue
-            # Source maps reconstruct original source — never ship them.
-            if path.name.endswith(".map"):
-                continue
-            archive.write(path, relative.as_posix())
-            names.add(relative.as_posix())
-    data = buffer_path.read_bytes()
-    buffer_path.unlink()
-    missing = sorted(ref for ref in collect_manifest_references(manifest)
-                     if ref not in names)
-    return data, manifest, missing
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as target:
+            for info in sorted(infos, key=lambda item: item.filename):
+                data = source.read(info.filename)
+                if info.filename == "manifest.json":
+                    data = (json.dumps(hosted_manifest, indent=2) + "\n").encode()
+                packaged = zipfile.ZipInfo(info.filename, date_time=(1980, 1, 1, 0, 0, 0))
+                packaged.compress_type = zipfile.ZIP_DEFLATED
+                packaged.external_attr = (0o100644 << 16)
+                packaged.flag_bits = 0x800
+                target.writestr(packaged, data)
+    return output.getvalue(), hosted_manifest
 
 
 def compare_versions(left: str, right: str) -> int:
@@ -550,11 +524,18 @@ def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
     ui.step(f"Building ({build_cmd})")
     run(build_cmd.split(), cwd=WORKSPACE, log=log)
 
-    ui.step("Packaging CRX3")
-    zip_bytes, manifest, missing = build_zip(config)
-    if missing:
-        raise RuntimeError(
-            "manifest references files missing from the package:\n  " + "\n  ".join(missing))
+    # One mandatory GB_ADMIN=0 package supplies both distribution channels.
+    # pack:store stages consumer bundles, removes admin files/manifest entries,
+    # strips raw @admin regions, and fails if any registered leak token remains.
+    ui.step("Packaging consumer build (GB_ADMIN=0)")
+    run(["npm", "run", "pack:store"], cwd=WORKSPACE, log=log)
+    store_file_name = f"{config['slug']}-{version}.zip"
+    workspace_store_zip = WORKSPACE / "dist" / "store" / store_file_name
+    if not workspace_store_zip.is_file():
+        raise RuntimeError(f"consumer packager did not create {store_file_name}")
+    zip_bytes, manifest = self_hosted_consumer_zip(workspace_store_zip, manifest)
+
+    ui.step("Packaging CRX3 from the consumer build")
     crx = pack_crx3(zip_bytes, KEY_PATH)
     file_name = f"{config['slug']}-{version}.crx"
     (RELEASES_DIR / file_name).write_bytes(crx)
@@ -562,6 +543,12 @@ def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
     checked = verify_crx3(RELEASES_DIR / file_name)
     if checked["extension_id"] != key["extension_id"] or checked["version"] != version:
         raise RuntimeError("packed crx failed self-verification")
+
+    # Refresh the admin-authenticated Web Store download from the same fetched
+    # commit and consumer staging run before making the update channel current.
+    STORE_DIR.mkdir(parents=True, exist_ok=True)
+    store_zip = STORE_DIR / store_file_name
+    shutil.copyfile(workspace_store_zip, store_zip)
 
     codebase = write_updates_xml(config, key["extension_id"], version, file_name)
     ledger["releases"] = [row for row in ledger["releases"] if row["version"] != version]
@@ -574,37 +561,11 @@ def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
     prune_releases(config, ledger, ui)
     save_ledger(ledger)
 
-    # Refresh BOTH distribution channels from this one publish: the signed
-    # self-hosted CRX above (updates.xml auto-update) AND the direct-download
-    # Chrome Web Store ZIP (consumer build — admin code + signing key +
-    # update_url stripped). Built from the SAME production checkout so both ship
-    # the same version. Non-fatal: the signed channel is already published, so a
-    # store-pack failure only warns.
-    # The store packager (scripts/package-store.mjs) ships in the dev tree, not
-    # the stripped production branch, so build it from ROOT (the repo the CLI
-    # runs in). It writes directly to STORE_DIR (= ROOT/dist/store), which the
-    # backend serves at GET .../store-package. It reads ROOT's package.json
-    # version, so both channels only line up when ROOT is at the published
-    # version (i.e. publish from main); otherwise the versioned zip is absent
-    # and we warn rather than serve a mismatched build.
-    store_zip = None
-    try:
-        ui.step("Packaging Chrome Web Store ZIP (pack:store)")
-        run(["npm", "run", "pack:store"], cwd=ROOT, log=log)
-        candidate = STORE_DIR / f"{config['slug']}-{version}.zip"
-        if candidate.is_file():
-            store_zip = candidate
-        else:
-            ui.warn(f"Web Store ZIP for v{version} not found after pack:store — "
-                    f"{ROOT.name} source is a different version than the published "
-                    f"branch; align them (publish from main) for both channels to match")
-    except Exception as exc:  # noqa: BLE001
-        ui.warn(f"Web Store ZIP not refreshed ({exc}); the signed CRX channel is published")
-
     if args.json:
-        payload = ledger["releases"][0] | {"codebase": codebase}
-        if store_zip:
-            payload["store_zip"] = store_zip.name
+        payload = ledger["releases"][0] | {
+            "codebase": codebase,
+            "store_zip": store_zip.name,
+        }
         print(json.dumps(payload, indent=2))
         return
     print_box(ui, f"Published v{version}", [
@@ -614,7 +575,7 @@ def cmd_publish(args: argparse.Namespace, ui: UI) -> None:
         ("Package", f"{file_name} · {len(crx):,} bytes"),
         ("SHA-256", short_hash(digest)),
         ("Serves at", codebase),
-        ("Store ZIP", store_zip.name if store_zip else "not refreshed"),
+        ("Store ZIP", store_zip.name),
     ], footer="Chrome polls every ~5h; force via chrome://extensions → Update")
     state, text = probe_backend(config)
     if state != "serving":

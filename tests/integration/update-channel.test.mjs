@@ -21,6 +21,8 @@ const PROJECT = JSON.parse(readFileSync(new URL('revstack.project.json', ROOT), 
 const PROD_PUBLIC = new URL('../.golfballs-extension-production/public/', ROOT);
 const UPDATES_URL = new URL('updates.xml', PROD_PUBLIC);
 const hasProduction = existsSync(UPDATES_URL);
+const PUBLISHER_PATH = fileURLToPath(new URL('golfballs', ROOT));
+const PUBLISHER_SOURCE = readFileSync(PUBLISHER_PATH, 'utf8');
 
 /** Chrome's extension id: sha256(DER public key), first 32 hex chars mapped 0-f → a-p. */
 function deriveExtensionId(manifestKey) {
@@ -46,13 +48,48 @@ print(json.dumps(module["load_config"]()))
 `;
   try {
     const result = spawnSync('python3', [
-      '-c', script, fileURLToPath(new URL('golfballs', ROOT)), configPath,
+      '-c', script, PUBLISHER_PATH, configPath,
     ], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr || 'release manager config probe failed');
     return JSON.parse(result.stdout);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+}
+
+function probeSelfHostedConsumerZip() {
+  const script = String.raw`
+import io, json, runpy, sys, tempfile, zipfile
+from pathlib import Path
+module = runpy.run_path(sys.argv[1])
+with tempfile.TemporaryDirectory() as directory:
+    store_path = Path(directory) / "store.zip"
+    with zipfile.ZipFile(store_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps({
+            "manifest_version": 3,
+            "name": "Consumer fixture",
+            "version": "1.2.3",
+            "permissions": ["storage"],
+        }))
+        archive.writestr("runtime.js", "globalThis.consumerOnly = true;")
+    data, _ = module["self_hosted_consumer_zip"](
+        store_path,
+        {
+            "version": "1.2.3",
+            "key": "pinned-public-key",
+            "update_url": "https://example.com/updates.xml",
+        },
+    )
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        print(json.dumps({
+            "manifest": json.loads(archive.read("manifest.json")),
+            "runtime": archive.read("runtime.js").decode(),
+            "names": sorted(archive.namelist()),
+        }))
+`;
+  const result = spawnSync('python3', ['-c', script, PUBLISHER_PATH], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || 'self-hosted package probe failed');
+  return JSON.parse(result.stdout);
 }
 
 function parseUpdatesXml(xml) {
@@ -67,6 +104,30 @@ describe('update channel', () => {
     assert.equal(loadPublisherConfig().branch, 'main');
     assert.equal(loadPublisherConfig({ branch: 'production' }).branch, 'main');
     assert.equal(loadPublisherConfig({ branch: 'release-candidate' }).branch, 'release-candidate');
+  });
+
+  it('makes the admin-stripped consumer target mandatory before signing either distribution', () => {
+    const start = PUBLISHER_SOURCE.indexOf('def cmd_publish');
+    const end = PUBLISHER_SOURCE.indexOf('\ndef cmd_releases', start);
+    const publish = PUBLISHER_SOURCE.slice(start, end);
+    const consumerIndex = publish.indexOf('run(["npm", "run", "pack:store"], cwd=WORKSPACE');
+    const hostedIndex = publish.indexOf('self_hosted_consumer_zip(workspace_store_zip, manifest)');
+    const signingIndex = publish.indexOf('pack_crx3(zip_bytes, KEY_PATH)');
+
+    assert.ok(consumerIndex >= 0, 'publish must run the GB_ADMIN=0 consumer packager');
+    assert.ok(hostedIndex > consumerIndex, 'the signed-channel ZIP must derive from that consumer package');
+    assert.ok(signingIndex > hostedIndex, 'CRX signing must happen only after consumer transformation');
+    assert.doesNotMatch(publish, /build_zip\(config\)/, 'the full/admin workspace must never be packed directly');
+  });
+
+  it('adds only self-hosting metadata back to the unchanged consumer runtime', () => {
+    const result = probeSelfHostedConsumerZip();
+    assert.deepEqual(result.names, ['manifest.json', 'runtime.js']);
+    assert.equal(result.runtime, 'globalThis.consumerOnly = true;');
+    assert.equal(result.manifest.version, '1.2.3');
+    assert.equal(result.manifest.key, 'pinned-public-key');
+    assert.equal(result.manifest.update_url, 'https://example.com/updates.xml');
+    assert.deepEqual(result.manifest.permissions, ['storage']);
   });
 
   it('pins the manifest key to the deterministic extension id used across the project', () => {
