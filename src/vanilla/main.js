@@ -345,7 +345,13 @@ function __gbAccessAllowed(st, now) {
         chrome.storage.local.set({ gbEmployeeId });
         return true;
       }
-      const updatedAt = Date.now();
+      const now = Date.now();
+      const suppliedUpdatedAt = Number(payload.updatedAt) || 0;
+      const updatedAt = suppliedUpdatedAt > 0
+        && suppliedUpdatedAt <= now + 5 * 60 * 1000
+        && now - suppliedUpdatedAt <= 5 * 60 * 1000
+        ? suppliedUpdatedAt
+        : now;
       const identity = Object.freeze({
         employeeId,
         employeeName,

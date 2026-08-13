@@ -164,7 +164,7 @@ function bindCommandBridge() {
     const d = (e && e.detail) || {};
     try {
       if (d.op === 'clear') clearSkin();
-      else if (d.op === 'named') { const s = _named.get(String(d.name)); if (s) setSkin(s); else console.warn(`[gb skin] unknown skin "${d.name}"`); }
+      else if (d.op === 'named') { const s = _named.get(String(d.name)); if (s) setSkin(s); }
       else if (d.op === 'apply') setSkin(d.skin);
     } catch { /* ignore malformed command */ }
   });
@@ -183,7 +183,7 @@ function installGlobals() {
   window.__gbRegisterSkinRoot = (root) => registerSkinRoot(root);
   window.__gbLoadSkin = (name) => {
     const s = _named.get(String(name));
-    if (!s) { console.warn(`[gb skin] unknown skin "${name}". Available: ${[..._named.keys()].join(', ') || '(none)'}`); return null; }
+    if (!s) return null;
     return setSkin(s);
   };
 }

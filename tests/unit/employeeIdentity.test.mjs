@@ -1,9 +1,12 @@
 /** Employee identity resolution from the CRM page and the cached fallback. */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
 import {
+  CACHED_IDENTITY_MAX_AGE_MS,
+  cachedEmployeeIdentity,
   employeeIdFromDocument,
   employeeNameFromDocument,
   resolveCurrentUserContext,
@@ -93,7 +96,7 @@ describe('employee identity', () => {
 });
 
 describe('global current-user context', () => {
-  it('publishes verified CRM identity and only bounded non-credential profile metadata', async () => {
+  it('restores a bounded CRM cache without claiming a live session', async () => {
     const page = new JSDOM('<iframe id="ccaiFrame" src="/toolbar?userId=48174"></iframe>');
     const storage = memoryStorage({
       gbEmployeeId: '48174',
@@ -117,10 +120,12 @@ describe('global current-user context', () => {
     assert.equal(currentUser.employeeId, '48174');
     assert.equal(currentUser.employeeName, 'Cullen Champagne');
     assert.equal(currentUser.name, 'Cullen Champagne');
-    assert.equal(currentUser.nameSource, 'crm_session');
+    assert.equal(currentUser.nameSource, 'crm_cache');
     assert.equal(currentUser.crmVerified, true);
-    assert.equal(currentUser.sessionVerified, true);
-    assert.deepEqual(sessionEmployeeIdentity(currentUser), {
+    assert.equal(currentUser.sessionVerified, false);
+    assert.equal(currentUser.cached, true);
+    assert.equal(sessionEmployeeIdentity(currentUser), null);
+    assert.deepEqual(cachedEmployeeIdentity(currentUser), {
       employeeId: '48174', employeeName: 'Cullen Champagne', updatedAt: currentUser.updatedAt,
     });
     assert.equal(currentUser.email.localPart, 'cullen.champagne');
@@ -132,6 +137,34 @@ describe('global current-user context', () => {
     assert.equal(page.window.__gbGetCurrentUser(), currentUser);
     assert.equal(Object.isFrozen(currentUser), true);
     assert.doesNotMatch(JSON.stringify(currentUser), /secret|password|authorization|apiKey/i);
+    page.window.close();
+  });
+
+  it('keeps a fresh in-memory session authoritative over the durable cache', async () => {
+    const page = new JSDOM('<iframe id="ccaiFrame" src="/toolbar?userId=48174"></iframe>');
+    const updatedAt = Date.now();
+    const storage = memoryStorage({
+      gbEmployeeId: '48174',
+      gbCurrentUser: {
+        employeeId: '48174', employeeName: 'Cached Name',
+        source: 'crm_session', updatedAt: updatedAt - 60_000,
+      },
+    });
+    globalThis.window = page.window;
+    page.window.__gbCurrentUser = {
+      employeeId: '48174', employeeName: 'Fresh Session Name',
+      nameSource: 'crm_session', updatedAt,
+    };
+
+    const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
+
+    assert.equal(currentUser.employeeName, 'Fresh Session Name');
+    assert.equal(currentUser.nameSource, 'crm_session');
+    assert.equal(currentUser.sessionVerified, true);
+    assert.equal(currentUser.cached, false);
+    assert.deepEqual(sessionEmployeeIdentity(currentUser), {
+      employeeId: '48174', employeeName: 'Fresh Session Name', updatedAt,
+    });
     page.window.close();
   });
 
@@ -158,6 +191,7 @@ describe('global current-user context', () => {
     assert.equal(currentUser.nameSource, 'crm_directory');
     assert.equal(currentUser.crmVerified, true);
     assert.equal(currentUser.sessionVerified, false);
+    assert.equal(currentUser.cached, false);
     assert.equal(sessionEmployeeIdentity(currentUser), null);
     assert.deepEqual(storage.data.gbCurrentUser, {
       employeeId: '42', employeeName: 'Taylor Signed In',
@@ -184,11 +218,12 @@ describe('global current-user context', () => {
     assert.equal(currentUser.nameSource, 'installation_profile');
     assert.equal(currentUser.crmVerified, false);
     assert.equal(currentUser.sessionVerified, false);
+    assert.equal(currentUser.cached, false);
     assert.equal(sessionEmployeeIdentity(currentUser), null);
     page.window.close();
   });
 
-  it('expires a cached session identity instead of presenting it as current', async () => {
+  it('uses a next-day identity cache while the toolbar refreshes it', async () => {
     const page = new JSDOM('<iframe id="ccaiFrame" src="/toolbar?userId=42"></iframe>');
     const storage = memoryStorage({
       gbCurrentUser: {
@@ -204,10 +239,54 @@ describe('global current-user context', () => {
     globalThis.window = page.window;
     const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
 
+    assert.equal(currentUser.employeeName, 'Previous Login');
+    assert.equal(currentUser.name, 'Previous Login');
+    assert.equal(currentUser.nameSource, 'crm_cache');
+    assert.equal(currentUser.sessionVerified, false);
+    assert.equal(currentUser.cached, true);
+    assert.equal(sessionEmployeeIdentity(currentUser), null);
+    page.window.close();
+  });
+
+  it('expires a month-old identity cache instead of presenting it forever', async () => {
+    const page = new JSDOM('<iframe id="ccaiFrame" src="/toolbar?userId=42"></iframe>');
+    const storage = memoryStorage({
+      gbCurrentUser: {
+        employeeId: '42', employeeName: 'Previous Login', source: 'crm_session',
+        updatedAt: Date.now() - CACHED_IDENTITY_MAX_AGE_MS - 1,
+      },
+      gbInstallationIdentity: {
+        registered: true,
+        installationId: '123e4567-e89b-12d3-a456-426614174000',
+        displayName: 'Registered Profile',
+      },
+    });
+    globalThis.window = page.window;
+    const currentUser = await resolveCurrentUserContext({ doc: page.window.document, storage });
+
     assert.equal(currentUser.employeeName, '');
     assert.equal(currentUser.name, 'Registered Profile');
     assert.equal(currentUser.sessionVerified, false);
-    assert.equal(sessionEmployeeIdentity(currentUser), null);
+    assert.equal(currentUser.cached, false);
+    assert.equal(cachedEmployeeIdentity(storage.data.gbCurrentUser), null);
     page.window.close();
+  });
+
+  it('loads the cache bootstrap before the page UI in static and runtime manifests', async () => {
+    const [manifestText, runtimeSource] = await Promise.all([
+      readFile(new URL('../../manifest.json', import.meta.url), 'utf8'),
+      readFile(new URL('../../lib/runtime-scripts.js', import.meta.url), 'utf8'),
+    ]);
+    const manifest = JSON.parse(manifestText);
+    const scripts = manifest.content_scripts.find((entry) => (
+      entry.matches?.includes('https://api.golfballs.com/*')
+      && entry.js?.includes('src/vanilla/main.js')
+    ))?.js || [];
+    const bootstrapIndex = scripts.indexOf('react-dist/vanilla/user-context.js');
+    const firstUiIndex = scripts.findIndex((file) => file.startsWith('react-dist/content/'));
+
+    assert.ok(bootstrapIndex >= 0, 'the static manifest must load the user-context cache');
+    assert.ok(firstUiIndex > bootstrapIndex, 'the cache must hydrate before UI bundles mount');
+    assert.match(runtimeSource, /react-dist\/vanilla\/user-context\.js/);
   });
 });

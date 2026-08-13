@@ -47,13 +47,13 @@ describe('crm detail · create reloads for real backend ids', () => {
 });
 
 describe('crm detail · sidebar current-user identity', () => {
-  it('uses the global signed-in user instead of the current record owner', () => {
+  it('uses a CRM-derived live or cached user instead of the current record owner', () => {
     const sidebar = slice('export function Sidebar', '\nexport function DetailPageFrame');
-    assert.match(source, /resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext/);
+    assert.match(source, /cachedEmployeeIdentity, resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext/);
     assert.match(sidebar, /sessionEmployeeIdentity\(currentUser\)/);
-    assert.match(sidebar, /sessionUser\?\.employeeName/);
-    assert.match(sidebar, /sessionUser\?\.employeeName \|\| 'Unknown'/);
-    assert.match(sidebar, /`ID: #\$\{sessionUser\.employeeId\}` : ''/);
+    assert.match(sidebar, /sessionUser \|\| cachedEmployeeIdentity\(currentUser\)/);
+    assert.match(sidebar, /displayedUser\?\.employeeName \|\| 'Unknown'/);
+    assert.match(sidebar, /`ID: #\$\{displayedUser\.employeeId\}\$\{sessionUser \? '' : ' · Cached'\}`/);
     assert.match(sidebar, /\{repDetail && <div/);
     assert.doesNotMatch(sidebar, /Session verified|Employee #|No registered-name fallback|CRM session name unavailable/);
     assert.doesNotMatch(sidebar, /currentUser\.name|installation\.displayName|D\.account|territoryName/);

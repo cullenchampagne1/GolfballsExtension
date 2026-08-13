@@ -197,7 +197,8 @@ describe('auth session broker · source guardrails', () => {
       readFile(new URL('../../background.js', import.meta.url), 'utf8'),
       readFile(new URL('../../src/vanilla/main.js', import.meta.url), 'utf8'),
     ]);
-    assert.match(toolbar, /post\('GB_EMPLOYEE_IDENTITY',\s*\{ employeeId, employeeName \}\)/);
+    assert.match(toolbar, /gbCurrentUser:\s*\{ employeeId, employeeName, source: 'crm_session', updatedAt \}/);
+    assert.match(toolbar, /post\('GB_EMPLOYEE_IDENTITY',[\s\S]*employeeId,[\s\S]*employeeName: hasSafeName \? employeeName : '',[\s\S]*updatedAt/);
     assert.match(toolbar, /GB_AUTH_IDENTITY_AVAILABLE/);
     assert.match(toolbar, /setTimeout\(\(\) => __gbBroadcastAuthenticatedIdentity\(true\), 1000\)/);
     assert.match(toolbar, /setInterval\(\(\) => __gbBroadcastAuthenticatedIdentity\(true\), 60_000\)/);

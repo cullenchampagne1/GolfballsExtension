@@ -26,7 +26,7 @@ import { submitCallLog } from './submitCallLog.js';
 import { loadCallTemplates } from './callLog.js';
 import { templateFollowUpActionError } from './templateFollowUpAction.js';
 import { chatTranscriptSummary, isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
-import { resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext } from './employeeIdentity.js';
+import { cachedEmployeeIdentity, resolveCurrentUserContext, sessionEmployeeIdentity, subscribeCurrentUserContext } from './employeeIdentity.js';
 import { ARMOR, AVATAR_COLOR, ActivityFilter, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, InlineSearch, KV, NAV, PAGE_ZOOM, QuickAddInput, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Spinner, Tag, TaskCheckbox, Td, Th, ThemeSelector, UI_CSS, accountHref, activityType, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
 
 export const PatchCtx = React.createContext(() => {});
@@ -1493,14 +1493,17 @@ function useCurrentUserContext() {
 export function Sidebar({ collapsed, setCollapsed, currentLabel, currentPage }) {
   const currentUser = useCurrentUserContext();
   const sessionUser = sessionEmployeeIdentity(currentUser);
+  const displayedUser = sessionUser || cachedEmployeeIdentity(currentUser);
   const [openIds, setOpenIds] = useState(['crm']);
   const toggle = (id) => setOpenIds((s) => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  // This footer is intentionally a session diagnostic. Never substitute the
-  // editable registered-extension profile or the open record's assigned rep:
-  // if session extraction fails, say so visibly.
-  const repName = sessionUser?.employeeName || 'Unknown';
-  const repDetail = sessionUser ? `ID: #${sessionUser.employeeId}` : '';
-  const repMark = !sessionUser
+  // A CRM-derived cache makes the footer immediate after a browser restart;
+  // the authenticated toolbar upgrades it to a live session automatically.
+  // Never substitute the editable installation profile or record owner.
+  const repName = displayedUser?.employeeName || 'Unknown';
+  const repDetail = displayedUser
+    ? `ID: #${displayedUser.employeeId}${sessionUser ? '' : ' · Cached'}`
+    : '';
+  const repMark = !displayedUser
     ? '?'
     : repName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 

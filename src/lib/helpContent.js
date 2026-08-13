@@ -4,8 +4,8 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.2",
-  "generatedAt": "2026-08-12",
+  "version": "3.4.3",
+  "generatedAt": "2026-08-13",
   "tree": [
     {
       "title": "Getting Started",

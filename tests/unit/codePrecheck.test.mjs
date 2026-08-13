@@ -6,6 +6,9 @@ import {
   staticCheckCodeBody,
 } from '../../src/lib/page-engine/code-precheck.js';
 
+// SECURITY-AUDITED: the wildcard below is inert source text in a negative
+// precheck fixture; this test never invokes window.postMessage.
+
 describe('code precheck · shared sandbox tripwires', () => {
   it('accepts an ordinary action body', () => {
     assert.equal(

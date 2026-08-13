@@ -255,11 +255,31 @@ function __gbRenderLegacyQuickNotes() {
     __gbIdentityRequestInFlight = true;
     try {
       const identity = await __gbGetAuthenticatedIdentity();
-      const employeeId = String(identity?.employeeId || '');
-      const employeeName = String(identity?.employeeName || '');
+      const employeeId = String(identity?.employeeId || '').trim();
+      const employeeName = String(identity?.employeeName || '').trim().replace(/\s+/g, ' ');
+      if (!/^\d{1,12}$/.test(employeeId) || Number(employeeId) < 1) return false;
+      const hasSafeName = !!employeeName && employeeName.length <= 120
+        && !/[\u0000-\u001f\u007f]/.test(employeeName)
+        && !/^(?:unknown|n\/?a)$/i.test(employeeName);
       const signature = `${employeeId}\n${employeeName}`;
-      if (!employeeId || (!forceBroadcast && signature === __gbLastIdentityBroadcast)) return !!employeeId;
-      window.__gbIframeBridge?.post('GB_EMPLOYEE_IDENTITY', { employeeId, employeeName });
+      if (!forceBroadcast && signature === __gbLastIdentityBroadcast) return true;
+      const updatedAt = Date.now();
+      if (hasSafeName) {
+        // Persist the bounded pair directly from the authenticated iframe.
+        // This succeeds even when the top-frame listener has not mounted yet,
+        // and the forced cadence below keeps the cache from going stale.
+        chrome.storage.local.set({
+          gbEmployeeId: employeeId,
+          gbCurrentUser: { employeeId, employeeName, source: 'crm_session', updatedAt },
+        });
+      } else {
+        chrome.storage.local.set({ gbEmployeeId: employeeId });
+      }
+      window.__gbIframeBridge?.post('GB_EMPLOYEE_IDENTITY', {
+        employeeId,
+        employeeName: hasSafeName ? employeeName : '',
+        updatedAt,
+      });
       __gbLastIdentityBroadcast = signature;
       return true;
     } catch (_) {

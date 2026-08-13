@@ -12,6 +12,7 @@
 export const CURRENT_USER_STORAGE_KEY = 'gbCurrentUser';
 export const CURRENT_USER_EVENT = 'gb:current-user-change';
 export const SESSION_IDENTITY_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+export const CACHED_IDENTITY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function validEmployeeId(value) {
   const id = String(value == null ? '' : value).trim();
@@ -46,11 +47,15 @@ function normalizeStoredCrmIdentity(value) {
   };
 }
 
-function sessionTimestampIsFresh(updatedAt, now = Date.now()) {
+function timestampIsFresh(updatedAt, maxAge, now = Date.now()) {
   const stamp = Number(updatedAt) || 0;
   return stamp > 0
     && stamp <= now + 5 * 60 * 1000
-    && now - stamp <= SESSION_IDENTITY_MAX_AGE_MS;
+    && now - stamp <= maxAge;
+}
+
+function sessionTimestampIsFresh(updatedAt, now = Date.now()) {
+  return timestampIsFresh(updatedAt, SESSION_IDENTITY_MAX_AGE_MS, now);
 }
 
 /** Return only an identity that was actually decoded from a recent
@@ -62,6 +67,20 @@ export function sessionEmployeeIdentity(value, now = Date.now()) {
   const employeeName = normalizeEmployeeName(raw.employeeName);
   if (source !== 'crm_session' || !employeeId || !employeeName
       || !sessionTimestampIsFresh(raw.updatedAt, now)) return null;
+  return Object.freeze({ employeeId, employeeName, updatedAt: Number(raw.updatedAt) });
+}
+
+/** Return a bounded CRM-derived identity that is safe for immediate display
+ * while the authenticated toolbar refreshes it. This deliberately does not
+ * imply that the current browser session has been verified. */
+export function cachedEmployeeIdentity(value, now = Date.now()) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const source = raw.nameSource || raw.source;
+  const employeeId = validEmployeeId(raw.employeeId);
+  const employeeName = normalizeEmployeeName(raw.employeeName);
+  if (!['crm_session', 'crm_directory', 'crm_cache'].includes(source)
+      || !employeeId || !employeeName
+      || !timestampIsFresh(raw.updatedAt, CACHED_IDENTITY_MAX_AGE_MS, now)) return null;
   return Object.freeze({ employeeId, employeeName, updatedAt: Number(raw.updatedAt) });
 }
 
@@ -222,10 +241,11 @@ function publishCurrentUserContext(context) {
 /**
  * Return the global safe current-user context.
  *
- * `employeeName` is populated only from a CRM-authenticated session or an
- * exact employee-id → sales-rep-directory match. `name` may fall back to the
- * installation profile for presentation. Consumers that specifically require
- * the session must check `sessionVerified` or call `sessionEmployeeIdentity`.
+ * `employeeName` is populated from a live CRM-authenticated session, an exact
+ * employee-id → sales-rep-directory match, or the bounded cache created by
+ * either source. `name` may fall back to the installation profile for
+ * presentation. Consumers that specifically require the current session must
+ * check `sessionVerified` or call `sessionEmployeeIdentity`.
  */
 export async function resolveCurrentUserContext({
   doc = globalThis.document,
@@ -241,21 +261,23 @@ export async function resolveCurrentUserContext({
     try { globalThis.window.__gbEmployeeId = employeeId; } catch { /* no window */ }
   }
 
-  const storedSession = sessionEmployeeIdentity({
+  const liveSession = sessionEmployeeIdentity(globalThis.window?.__gbCurrentUser);
+  const storedCache = cachedEmployeeIdentity({
     ...storedCrm,
     nameSource: storedCrm.source,
   });
-  const storedMatches = storedCrm.employeeId === employeeId
-    && !!storedCrm.employeeName
-    && (storedCrm.source !== 'crm_session' || !!storedSession);
+  const liveMatches = liveSession?.employeeId === employeeId;
+  const storedMatches = storedCache?.employeeId === employeeId;
   const directoryName = employeeNameFromDocument(doc, employeeId);
-  const employeeName = storedMatches ? storedCrm.employeeName : directoryName;
-  const directoryUpdatedAt = directoryName && !storedMatches ? Date.now() : 0;
-  const nameSource = employeeName
-    ? (storedMatches ? storedCrm.source : 'crm_directory')
-    : '';
+  const employeeName = liveMatches
+    ? liveSession.employeeName
+    : (storedMatches ? storedCache.employeeName : directoryName);
+  const directoryUpdatedAt = directoryName && !liveMatches && !storedMatches ? Date.now() : 0;
+  const nameSource = liveMatches
+    ? 'crm_session'
+    : (storedMatches ? 'crm_cache' : (directoryName ? 'crm_directory' : ''));
 
-  if (directoryName && !storedMatches) {
+  if (directoryName && !liveMatches && !storedMatches) {
     cacheCrmIdentity(storage, {
       employeeId,
       employeeName: directoryName,
@@ -273,7 +295,9 @@ export async function resolveCurrentUserContext({
   );
   const email = senderIdentity(localPart);
   const name = employeeName || installation.displayName;
-  const identityUpdatedAt = storedMatches ? storedCrm.updatedAt : directoryUpdatedAt;
+  const identityUpdatedAt = liveMatches
+    ? liveSession.updatedAt
+    : (storedMatches ? storedCache.updatedAt : directoryUpdatedAt);
   const context = Object.freeze({
     employeeId,
     employeeName,
@@ -282,6 +306,7 @@ export async function resolveCurrentUserContext({
     crmVerified: !!(employeeId && employeeName),
     sessionVerified: nameSource === 'crm_session'
       && sessionTimestampIsFresh(identityUpdatedAt),
+    cached: nameSource === 'crm_cache',
     email,
     installation,
     updatedAt: identityUpdatedAt,

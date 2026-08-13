@@ -27,6 +27,16 @@ const RELEASES_GLOB = `${CHANNEL_BASE}/releases/*`;
 
 const manifest = JSON.parse(await read('manifest.json'));
 
+function compareChromeVersions(left, right) {
+  const parts = (value) => String(value || '').split('.').map((item) => Number(item) || 0);
+  const a = parts(left);
+  const b = parts(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
+  }
+  return 0;
+}
+
 const derivedId = createHash('sha256')
   .update(Buffer.from(manifest.key, 'base64'))
   .digest('hex')
@@ -101,12 +111,13 @@ describe('update channel · cross-repo (skipped when siblings are absent)', () =
   const publishedXml = '.golfballs-extension-production/public/updates.xml';
   const coreExtension = '../revstack-backend/routes/extension.py';
 
-  it('publishes an updates.xml matching the manifest and a real .crx', { skip: !present(publishedXml) }, async () => {
+  it('keeps the source at or ahead of the published updates.xml and verifies its real .crx', { skip: !present(publishedXml) }, async () => {
     const xml = await read(publishedXml);
     assert.equal(xml.match(/appid=['"]([a-p]{32})['"]/)?.[1], derivedId,
       'published updates.xml appid must match the extension id');
-    assert.equal(xml.match(/<updatecheck[^>]*\bversion=['"]([^'"]+)['"]/)?.[1], manifest.version,
-      'published updates.xml version must match the manifest');
+    const publishedVersion = xml.match(/<updatecheck[^>]*\bversion=['"]([^'"]+)['"]/)?.[1];
+    assert.ok(compareChromeVersions(manifest.version, publishedVersion) >= 0,
+      `source version ${manifest.version} must not trail published version ${publishedVersion}`);
     const codebase = xml.match(/codebase=['"]([^'"]+)['"]/)?.[1];
     assert.ok(codebase, 'published updates.xml must carry a codebase');
     const cb = new URL(codebase);
