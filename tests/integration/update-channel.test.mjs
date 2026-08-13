@@ -9,8 +9,12 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MANIFEST, ROOT } from './helpers/harness.mjs';
 
 const PROJECT = JSON.parse(readFileSync(new URL('revstack.project.json', ROOT), 'utf8'));
@@ -29,6 +33,28 @@ function deriveExtensionId(manifestKey) {
 
 const extensionId = deriveExtensionId(MANIFEST.key);
 
+function loadPublisherConfig(localConfig) {
+  const fixture = mkdtempSync(resolve(tmpdir(), 'golfballs-publisher-config-'));
+  const configPath = resolve(fixture, 'config.json');
+  if (localConfig) writeFileSync(configPath, JSON.stringify(localConfig));
+  const script = String.raw`
+import json, runpy, sys
+from pathlib import Path
+module = runpy.run_path(sys.argv[1])
+module["load_config"].__globals__["CONFIG_PATH"] = Path(sys.argv[2])
+print(json.dumps(module["load_config"]()))
+`;
+  try {
+    const result = spawnSync('python3', [
+      '-c', script, fileURLToPath(new URL('golfballs', ROOT)), configPath,
+    ], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || 'release manager config probe failed');
+    return JSON.parse(result.stdout);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+}
+
 function parseUpdatesXml(xml) {
   const appid = (xml.match(/<app\s+appid='([^']*)'/) || [])[1] || '';
   const updatecheck = (xml.match(/<updatecheck\s+([^>]*)\/>/) || [])[1] || '';
@@ -37,6 +63,12 @@ function parseUpdatesXml(xml) {
 }
 
 describe('update channel', () => {
+  it('publishes from main and migrates the retired production-branch default', () => {
+    assert.equal(loadPublisherConfig().branch, 'main');
+    assert.equal(loadPublisherConfig({ branch: 'production' }).branch, 'main');
+    assert.equal(loadPublisherConfig({ branch: 'release-candidate' }).branch, 'release-candidate');
+  });
+
   it('pins the manifest key to the deterministic extension id used across the project', () => {
     assert.match(extensionId, /^[a-p]{32}$/);
     assert.ok(
