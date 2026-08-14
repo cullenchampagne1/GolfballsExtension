@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import {
   makeExecutor,
   mapEditFields,
+  mapOpportunityEditFields,
   mapTaskEditFields,
 } from '../../src/lib/codeEngine/executor.js';
 import { simulateProgram, asyncFunctionRunner } from '../../src/lib/codeEngine/simulate.js';
@@ -31,6 +32,19 @@ describe('executor · field mapping', () => {
       description: 'Follow up',
     });
   });
+
+  it('normalizes opportunity aliases, stages, dates, and values', () => {
+    assert.deepEqual(mapOpportunityEditFields({
+      stage: 'Closed-Lost',
+      estimated_close_date: '2026-09-13',
+      estimated_value: '2400.50',
+      actualValue: 999,
+    }), {
+      stageId: '5',
+      estimatedCloseDate: '09-13-2026',
+      estimatedValue: 2400.5,
+    });
+  });
 });
 
 describe('executor · routing', () => {
@@ -42,6 +56,11 @@ describe('executor · routing', () => {
     submitCallLog: (a) => { calls.push(['call', a.template.subject, a.context.phone]); },
     updateTaskById: (id, fields) => { calls.push(['updateTask', id, fields]); },
     completeTaskById: (id) => { calls.push(['complete', id]); },
+    updateOpportunityById: (id, fields, options) => { calls.push(['updateOpportunity', id, fields, options.contactId]); },
+    createOpportunity: (fields, options) => {
+      calls.push(['createOpportunity', fields.subject, options.contactId]);
+      return { ok: true, opportunityId: 'new-88' };
+    },
     updateContact: (id, payload) => { calls.push(['edit', id, payload]); },
   };
 
@@ -53,7 +72,10 @@ describe('executor · routing', () => {
     await ex.run('addNote', { subject: 'Reviewed', body: 'QA note' });
     await ex.run('updateTask', { id: 't8', fields: { live_date: '2026-08-01' } });
     await ex.run('completeTask', { id: 't9' });
+    await ex.run('updateOpportunity', { id: 'o7', fields: { stage: 'Closed - Lost' } });
+    const created = await ex.run('createOpportunity', { subject: 'August Order' });
     await ex.commitEdits({ jobTitle: 'VP', phone: '999' });
+    assert.equal(created.opportunityId, 'new-88');
     assert.deepEqual(calls, [
       ['sendEmail', 'Hi', '42'],
       ['task', 'Do it', '42'],
@@ -61,6 +83,8 @@ describe('executor · routing', () => {
       ['call', 'Reviewed', '555'],
       ['updateTask', 't8', { liveDate: '2026-08-01' }],
       ['complete', 't9'],
+      ['updateOpportunity', 'o7', { stageId: '5' }, '42'],
+      ['createOpportunity', 'August Order', '42'],
       ['edit', '42', { jobTitle: 'VP', phoneNumber: '999' }],
     ]);
   });

@@ -36,6 +36,23 @@ const TASK_LIST_PAGE = {
   },
 };
 
+const OPPORTUNITY_PAGE = {
+  ...PAGE,
+  opportunities: [
+    {
+      id: '71',
+      subject: 'Spring Order',
+      description: 'Existing forecast',
+      estimatedValue: 1800,
+      estimatedCloseDate: '08-01-2026',
+      stage: 'Open',
+      stageId: '1',
+      assignedToId: '7',
+      isClosed: false,
+    },
+  ],
+};
+
 for (const [label, run] of [['node', asyncFunctionRunner], ['sandbox', sandbox]]) {
   describe(`page control · ${label}`, () => {
     it('completes a task → a completeTask step', async () => {
@@ -107,6 +124,46 @@ for (const [label, run] of [['node', asyncFunctionRunner], ['sandbox', sandbox]]
       );
       assert.equal(ok, false);
       assert.match(error, /task\.contactId is not an editable field/);
+      assert.deepEqual(trace, []);
+    });
+
+    it('groups direct opportunity assignments into one update', async () => {
+      const { trace } = await simulateProgram(`
+        const opportunity = page.opportunities.find((row) => !row.isClosed);
+        opportunity.stage = "Closed - Lost";
+        opportunity.description = "Replaced by current monthly opportunity";
+      `, OPPORTUNITY_PAGE, { run });
+      assert.deepEqual(trace.map((entry) => entry.contract), ['updateOpportunity']);
+      assert.equal(trace[0].summary, 'Edit opportunity “Spring Order” — stageId, description');
+    });
+
+    it('commits an opportunity update before creating its replacement', async () => {
+      const { trace, result } = await simulateProgram(`
+        const opportunity = page.opportunities[0];
+        opportunity.stage = "Closed - Lost";
+        await opportunity.commit();
+        const created = await actions.createOpportunity({
+          subject: "August Order",
+          estimatedCloseDate: "2026-09-13",
+          estimatedValue: 2400
+        });
+        return created.opportunityId;
+      `, OPPORTUNITY_PAGE, { run });
+      assert.deepEqual(trace.map((entry) => entry.contract), [
+        'updateOpportunity',
+        'createOpportunity',
+      ]);
+      assert.match(String(result), /^__gb_action_result__:/);
+    });
+
+    it('rejects direct assignment to a read-only opportunity field', async () => {
+      const { ok, error, trace } = await simulateProgram(
+        'page.opportunities[0].actualValue = 999;',
+        OPPORTUNITY_PAGE,
+        { run },
+      );
+      assert.equal(ok, false);
+      assert.match(error, /opportunity\.actualValue is not an editable field/);
       assert.deepEqual(trace, []);
     });
   });

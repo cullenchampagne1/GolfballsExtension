@@ -99,8 +99,17 @@ export async function hydrateWorkflowContact(contact, audience, deps = {}) {
   if (contact?.contactUrl && context?.error) {
     throw new Error(`Could not load ${contact.contactName || contact.name || 'workflow record'}: ${context.error}`);
   }
+  const page = workflowPageFromContext(context, audience);
+  if (deps.hydrateOpportunities) {
+    const hydrate = deps.hydrateOpportunityRows
+      || (await import('../crmOpportunities.js')).hydrateOpportunityRows;
+    page.opportunities = await hydrate(
+      Array.isArray(page.opportunities) ? page.opportunities : [],
+      deps.opportunityOptions || {},
+    );
+  }
   return {
     context,
-    page: workflowPageFromContext(context, audience),
+    page,
   };
 }

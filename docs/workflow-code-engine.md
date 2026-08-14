@@ -6,7 +6,7 @@
 > action is a callable object‑oriented contract. The JSON payload API and this
 > engine are two front‑ends onto **one internal control surface**.
 
-## Implementation status — July 2026
+## Implementation status — August 2026
 
 The contact-level Phase 1 path is implemented. CRM Search and Task List pass
 compact audience records to Workflow Manager; each record is fetched and
@@ -15,12 +15,14 @@ suppression, pacing, pause/stop, and a run-wide action cap, while the content
 side replays allowlisted effects through the existing email, task, call-log,
 task-completion, and contact-update helpers.
 
-Available effects are `sendEmail`, `createTask`, `completeTask`, `logCall`,
-`addNote`, and grouped `page.contact` edits. Saved email evaluation resolves
-the current record's variables and recipient; saved task/call runtime fields
-survive the sandbox boundary. A created task's real id is replayed into a later
-`completeTask` call. The proposal/object-construction work described below
-remains future scope.
+Available effects are `sendEmail`, `createTask`, `updateTask`, `completeTask`,
+`logCall`, `addNote`, `createOpportunity`, `updateOpportunity`, and grouped
+`page.contact`, task, and opportunity edits. Saved-template evaluation works
+from both Workflow Manager and Action Shelf custom actions. Opportunity rows
+are hydrated through `Opportunity/Get`; updates use a fresh read-merge-write so
+untouched native fields survive. A created task/opportunity's real id is
+replayed into later calls. Proposal/item construction described below remains
+future scope.
 
 ---
 
@@ -185,7 +187,7 @@ your complex chain against reality:
 
 | Step | Status |
 |---|---|
-| create opportunity | **missing** — only `fetchOpportunitiesForAccount` (read); create is a UI toast stub (`GiftCatalog.jsx:3401`) |
+| create opportunity | ✅ `actions.createOpportunity(...)`; existing rows also support grouped edits and `actions.updateOpportunity(...)` |
 | build item objects | data shape exists; **no public constructor** — built inline in the catalog |
 | proposal builder | ✅ `buildProposalLines` / `assembleLine` |
 | execute on account | ✅ `saveProposalToOpportunity` → `{cartID}` |

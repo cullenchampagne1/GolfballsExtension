@@ -70,10 +70,65 @@ export function liveActionRunPolicy(page, plan = {}) {
   };
 }
 
+/** Build the template resolver context for the current live page. */
+export function liveTemplateContext(page, options = {}) {
+  const doc = options.doc || globalThis.document;
+  const base = ctxFromPage(page);
+  let sourceUrl = String(page?.contact?.contactUrl || '');
+  try { sourceUrl ||= doc?.location?.href || globalThis.location?.href || ''; } catch { /* empty */ }
+  let html = '';
+  try { html = doc?.documentElement?.outerHTML || ''; } catch { /* empty */ }
+  const contact = {
+    ...((page && page.contact) || {}),
+    ...base,
+    crmContactId: base.contactId,
+    contactUrl: sourceUrl,
+  };
+  return {
+    contact,
+    data: page || {},
+    doc,
+    html,
+    ...base,
+    contactId: base.contactId,
+    contactName: base.contactName,
+    email: base.email,
+    accountId: base.accountId,
+    dispatch: options.dispatch,
+  };
+}
+
+/**
+ * Prepare everything custom-action code receives beyond the page schema:
+ * saved user templates, live template evaluation, and (only when referenced)
+ * full Opportunity/Get records.
+ */
+export async function prepareLiveActionRuntime(page, source, options = {}) {
+  const [templateLibrary, evaluation, opportunities, background] = await Promise.all([
+    import('./templateLibrary.js'),
+    import('../workflow/templateEvaluation.js'),
+    import('../crmOpportunities.js'),
+    import('../backgroundMessage.js'),
+  ]);
+  if (opportunities.sourceUsesOpportunityRecords(source)) {
+    page.opportunities = await opportunities.hydrateOpportunityRows(
+      Array.isArray(page.opportunities) ? page.opportunities : [],
+      options.opportunityOptions || {},
+    );
+  }
+  const user = await templateLibrary.loadCodeTemplateLibrary(options.templateDeps || {});
+  const context = liveTemplateContext(page, {
+    doc: options.doc,
+    dispatch: options.dispatch || background.dispatchBackgroundMessage,
+  });
+  const evaluateRef = (reference) => evaluation.evaluateWorkflowTemplate(reference, context);
+  return { page, user, context, evaluateRef };
+}
+
 /** Build the real, gated executor for a live custom-action run. Mirrors the
  *  workflow runner's makeContactExecutor, but resolves its own email config +
  *  employee id and pulls the contact ctx from the live page. */
-export async function makeLiveExecutor(page) {
+export async function makeLiveExecutor(page, options = {}) {
   const [
     { makeExecutor },
     { readEmailConfig, sendEmail },
@@ -82,6 +137,7 @@ export async function makeLiveExecutor(page) {
     { submitCallLog },
     { completeTaskById, updateTaskById, getTaskContactId },
     { crmUpdateContact },
+    { updateOpportunityById, createOpportunity },
     { dispatchBackgroundMessage },
   ] = await Promise.all([
     import('./executor.js'),
@@ -91,6 +147,7 @@ export async function makeLiveExecutor(page) {
     import('../submitCallLog.js'),
     import('../crmTasks.js'),
     import('../crm-detail-shared.jsx'),
+    import('../crmOpportunities.js'),
     import('../backgroundMessage.js'),
   ]);
 
@@ -102,6 +159,17 @@ export async function makeLiveExecutor(page) {
 
   return makeExecutor({
     ctx: { ...base, employeeId },
+    prepareInput: async (contract, input) => {
+      if (input?.evaluated) return input;
+      const isSavedReference = input?.templateId || (input?.id && input?.name);
+      if (!isSavedReference && !input?.vars) return input;
+      if (typeof options.evaluateRef !== 'function') return input;
+      const kinds = { sendEmail: 'email', createTask: 'task', logCall: 'call' };
+      return options.evaluateRef({
+        ...input,
+        kind: input.kind || kinds[contract] || input.kind,
+      });
+    },
     sendEmail: async (outbound, ctx) => {
       const to = outbound.to || ctx.email;
       if (!to) throw new Error('no email address on this page for send');
@@ -125,5 +193,7 @@ export async function makeLiveExecutor(page) {
     completeTaskById,
     getTaskContactId,
     updateContact: crmUpdateContact,
+    updateOpportunityById,
+    createOpportunity,
   });
 }

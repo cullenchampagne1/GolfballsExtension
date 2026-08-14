@@ -76,6 +76,7 @@ export function buildTraceBody(instrumentedCode) {
     // workflow page.tasks.open/done.
     'const __approved = (ctx && ctx.approvedFields) || [];',
     'const __approvedTask = (ctx && ctx.approvedTaskFields) || {};',
+    'const __approvedOpportunity = (ctx && ctx.approvedOpportunityFields) || {};',
     'const __taskEdits = Object.create(null);',
     'const __taskById = Object.create(null);',
     'const __taskId = (task) => String((task && (task.id != null ? task.id : task.taskId)) || "").trim();',
@@ -106,6 +107,35 @@ export function buildTraceBody(instrumentedCode) {
     '    },',
     '  });',
     '};',
+    'const __opportunityEdits = Object.create(null);',
+    'const __opportunityById = Object.create(null);',
+    'const __opportunityId = (opportunity) => String((opportunity && (opportunity.id != null ? opportunity.id : opportunity.opportunityId)) || "").trim();',
+    'const __commitOpportunity = (opportunity) => {',
+    '  const id = __opportunityId(opportunity); const fields = __opportunityEdits[id];',
+    '  if (!id || !fields || !Object.keys(fields).length) return { ok: true, changed: [] };',
+    '  delete __opportunityEdits[id];',
+    '  __gbTrace.push({ kind: "opportunity-edit", id, subject: (opportunity && opportunity.subject) || "", fields: Object.assign({}, fields) });',
+    '  return { ok: true, dry: true, simulated: true };',
+    '};',
+    'const __commitAllOpportunityEdits = () => { for (const id of Object.keys(__opportunityEdits)) __commitOpportunity(__opportunityById[id] || { id }); };',
+    'const __wrapOpportunity = (opportunity) => {',
+    '  const target = Object.assign({}, opportunity || {}); const id = __opportunityId(target); if (id) __opportunityById[id] = target;',
+    '  return new Proxy(target, {',
+    '    set: (t, p, v) => {',
+    '      const canonical = typeof p === "string" ? __approvedOpportunity[p] : null;',
+    '      if (!canonical) throw new Error("opportunity." + String(p) + " is not an editable field. Editable: " + Object.keys(__approvedOpportunity).join(", ") + ".");',
+    '      const opportunityId = __opportunityId(t); if (!opportunityId) throw new Error("opportunity editing requires an opportunity id");',
+    '      const fields = __opportunityEdits[opportunityId] || (__opportunityEdits[opportunityId] = {}); fields[canonical] = v;',
+    '      t[canonical] = v; if (p !== canonical) t[p] = v; __opportunityById[opportunityId] = t; return true;',
+    '    },',
+    '    get: (t, p) => {',
+    '      if (p === "commit") return () => __commitOpportunity(t);',
+    '      const canonical = typeof p === "string" ? __approvedOpportunity[p] : null;',
+    '      if (canonical && !Object.prototype.hasOwnProperty.call(t, p)) return t[canonical];',
+    '      return t[p];',
+    '    },',
+    '  });',
+    '};',
     'const __rawTasks = page.tasks || {};',
     'const __openTasks = (__rawTasks.open || []).map(__wrapTask);',
     'const __doneTasks = (__rawTasks.done || []).map(__wrapTask);',
@@ -123,6 +153,7 @@ export function buildTraceBody(instrumentedCode) {
     '  get: (t, p) => { if (p === "commit") return () => { __gbTrace.push({ kind: "commit" }); }; return t[p]; },',
     '});',
     'page.tasks = { open: __openTasks, done: __doneTasks, items: __entryTasks.length ? __entryTasks : __openTasks.concat(__doneTasks), completeAll: () => { __openTasks.forEach((t) => t.complete()); }, completeLatest: () => { let b = null; for (const t of __openTasks) { if (!b || String(t.dueDate || "") > String(b.dueDate || "")) b = t; } if (b) b.complete(); } };',
+    'page.opportunities = (Array.isArray(page.opportunities) ? page.opportunities : []).map(__wrapOpportunity);',
     // Progress API (mirror of simulate.js progressApi). Records markers into
     // the trace; the content-side replay fires the live run-modal callback and
     // turns a checkpoint into a cancel point.
@@ -141,12 +172,14 @@ export function buildTraceBody(instrumentedCode) {
     '  __gbTrace.push({ id, contract: name, input: input === undefined ? null : input });',
     '  const result = { ok: true, dry: true, simulated: true };',
     '  if (name === "createTask") result.taskId = "__gb_action_result__:" + String(id) + ":taskId";',
+    '  if (name === "createOpportunity") result.opportunityId = "__gb_action_result__:" + String(id) + ":opportunityId";',
     '  return result;',
     '} };',
     'const __gbRet = await (async () => {',
     String(instrumentedCode ?? ''),
     '})();',
     '__commitAllTaskEdits();',
+    '__commitAllOpportunityEdits();',
     'return { __gbTrace, __gbRet };',
   ].join('\n');
 }
@@ -189,10 +222,18 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
     const pageRec = (scope && scope.__pageRecord) || {};
     const approvedFields = (scope && scope.__approvedFields) || [];
     const approvedTaskFields = (scope && scope.__approvedTaskFields) || {};
+    const approvedOpportunityFields = (scope && scope.__approvedOpportunityFields) || {};
     const evaluated = {};
     const runOnce = () => exec(
       buildTraceBody(code),
-      { page: pageData, user, approvedFields, approvedTaskFields, evaluated },
+      {
+        page: pageData,
+        user,
+        approvedFields,
+        approvedTaskFields,
+        approvedOpportunityFields,
+        evaluated,
+      },
       {},
       doc,
     );
@@ -235,6 +276,11 @@ export function makeSandboxRunner({ exec, doc, evaluateRef } = {}) {
       else if (e.kind === 'task-edit') {
         if (pageRec.taskEdit) {
           await pageRec.taskEdit({ id: e.id, subject: e.subject }, e.fields || {});
+        }
+      }
+      else if (e.kind === 'opportunity-edit') {
+        if (pageRec.opportunityEdit) {
+          await pageRec.opportunityEdit({ id: e.id, subject: e.subject }, e.fields || {});
         }
       }
       else if (e.kind === 'progress') { if (pageRec.progress) await pageRec.progress(e); }

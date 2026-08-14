@@ -20,6 +20,7 @@ import {
   ctxFromPage,
   liveActionContextCount,
   liveActionRunPolicy,
+  prepareLiveActionRuntime,
 } from '../../src/lib/codeEngine/liveActionRun.js';
 
 describe('customActions · normalize', () => {
@@ -306,5 +307,45 @@ describe('customActions · live run shaping', () => {
     assert.equal(ctx.contactId, '42');
     assert.equal(ctx.contactName, 'Ada Lovelace');
     assert.equal(ctx.accountId, 'a7');
+  });
+
+  it('prepares saved templates and full opportunities for a shelf action', async () => {
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '42' },
+        contact: { firstName: 'Ada', email: 'ada@example.test' },
+        opportunities: [{ id: '71', subject: 'Table subject', stage: 'Open' }],
+      },
+    });
+    const runtime = await prepareLiveActionRuntime(
+      page,
+      'const open = page.opportunities.find((row) => !row.isClosed);',
+      {
+        doc: {
+          location: { href: 'https://crm.test/?Page=240&customerID=42' },
+          documentElement: { outerHTML: '<html><body></body></html>' },
+        },
+        templateDeps: {
+          loadEmails: async () => [{
+            id: 'e1', name: 'Order Follow Up', subject: 'Hello', body: '<p>Body</p>',
+          }],
+          loadTasks: async () => [],
+          loadCalls: async () => [],
+        },
+        opportunityOptions: {
+          getOpportunity: async () => ({
+            opportunityId: '71', Subject: 'Full subject', Description: 'Full description',
+            EstimatedValue: 1200, OpportunityStageId: 1, contactId: 42,
+          }),
+        },
+      },
+    );
+
+    assert.equal(runtime.user.emails[0].name, 'Order Follow Up');
+    assert.equal(runtime.page.opportunities[0].description, 'Full description');
+    assert.equal(runtime.page.opportunities[0].isClosed, false);
+    const outbound = await runtime.evaluateRef(runtime.user.emails[0]);
+    assert.equal(outbound.to, 'ada@example.test');
+    assert.equal(outbound.evaluated, true);
   });
 });

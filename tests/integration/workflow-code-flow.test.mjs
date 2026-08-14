@@ -32,6 +32,14 @@ const QUARTERLY_REACH_OUT_ACTION = readFileSync(
   new URL('../../docs/examples/quarterly-reach-out-task-list-action.js', import.meta.url),
   'utf8',
 );
+const SAVED_EMAIL_ACTION = readFileSync(
+  new URL('../../docs/examples/send-saved-email-contact-action.js', import.meta.url),
+  'utf8',
+);
+const MONTHLY_OPPORTUNITY_ACTION = readFileSync(
+  new URL('../../docs/examples/monthly-opportunity-renewal-contact-action.js', import.meta.url),
+  'utf8',
+);
 
 /* ── Shared helpers for reconciliation expectations ──────────────
    These restate the workflow's DOCUMENTED rules (not its code) so the
@@ -280,6 +288,122 @@ describe('workflow code flow', () => {
     );
   });
 
+  it('ships a saved-email action that evaluates the template before sending it', async () => {
+    const sent = [];
+    const user = {
+      emails: [{
+        id: 'email-1',
+        name: 'Order Follow Up',
+        subject: 'Hi {{firstName}}',
+        body: '<p>Ready for another order?</p>',
+        vars: { firstName: { type: 'builtin', builtin: 'firstName' } },
+      }],
+    };
+    const evaluateRef = async (reference) => ({
+      name: reference.name,
+      templateId: reference.id,
+      subject: 'Hi Avery',
+      body: '<p>Ready for another order?</p>',
+      to: 'avery@example.test',
+      evaluated: true,
+    });
+    const result = await simulateProgram(SAVED_EMAIL_ACTION, {
+      contact: { contactName: 'Avery Buyer', email: 'avery@example.test' },
+    }, {
+      run: makeSandboxRunner({ exec: fakeSandbox, evaluateRef }),
+      user,
+      evaluateRef,
+      executor: {
+        async run(name, input) {
+          sent.push([name, input.templateId, input.subject, input.to]);
+          return { ok: true };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.trace.filter((entry) => entry.contract).map((entry) => entry.contract), [
+      'evaluate',
+      'sendEmail',
+    ]);
+    assert.deepEqual(sent, [['sendEmail', 'email-1', 'Hi Avery', 'avery@example.test']]);
+  });
+
+  it('ships a monthly opportunity action that closes first, then creates from average order value', async () => {
+    const writes = [];
+    const page = {
+      contact: { contactId: '42', contactName: 'Avery Buyer' },
+      stats: { avgOrderSize: 2450.25 },
+      orders: [
+        { number: '1', revenue: 1800 },
+        { number: '2', revenue: 2200 },
+      ],
+      opportunities: [
+        {
+          id: '71', subject: 'Spring Order', description: 'Prior forecast',
+          stage: 'Open', stageId: '1', isClosed: false,
+        },
+        {
+          id: '70', subject: 'Prior Order', stage: 'Closed - Won', stageId: '4',
+          isClosed: true, isWon: true,
+        },
+      ],
+      tasks: { open: [], done: [] },
+    };
+    const result = await simulateProgram(MONTHLY_OPPORTUNITY_ACTION, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox }),
+      executor: {
+        async run(name, input) {
+          writes.push([name, structuredClone(input)]);
+          if (name === 'createOpportunity') return { ok: true, opportunityId: '88' };
+          return { ok: true };
+        },
+        async commitEdits() { return { ok: true }; },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(writes.map(([name]) => name), ['updateOpportunity', 'createOpportunity']);
+    assert.deepEqual(writes[0][1].fields, { stageId: 'Closed - Lost' });
+    const created = writes[1][1];
+    const expectedMonth = new Date().toLocaleString('en-US', { month: 'long' });
+    assert.equal(created.subject, `${expectedMonth} Order`);
+    assert.equal(created.estimatedValue, 2450.25);
+    assert.equal(created.stage, 'Open');
+    const close = new Date(`${created.estimatedCloseDate}T12:00:00`);
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    assert.equal(Math.round((close.getTime() - today.getTime()) / 86400000), 30);
+  });
+
+  it('hydrates full opportunity records only when a workflow requests them', async () => {
+    const contact = { contactId: '42', _key: '42' };
+    let hydrations = 0;
+    const prepared = await hydrateWorkflowContact(contact, [contact], {
+      buildContext: async () => ({
+        ...contextFor(contact),
+        data: {
+          ...contextFor(contact).data,
+          opportunities: [{ id: '71', subject: 'Table subject', stage: 'Open' }],
+        },
+      }),
+      hydrateOpportunities: true,
+      hydrateOpportunityRows: async (rows) => {
+        hydrations += 1;
+        return rows.map((row) => ({
+          ...row,
+          description: 'Full description',
+          stageId: '1',
+          isClosed: false,
+        }));
+      },
+    });
+
+    assert.equal(hydrations, 1);
+    assert.equal(prepared.page.opportunities[0].description, 'Full description');
+  });
+
   it('creates missing quarterly tasks for every contact from one Task List snapshot', async () => {
     const now = new Date();
     now.setHours(12, 0, 0, 0);
@@ -407,6 +531,12 @@ describe('workflow code flow', () => {
       /blocked: ambient window access not allowed/,
       'real ambient window access must remain blocked',
     );
+  });
+
+  it('accepts the saved-email and opportunity examples through the live sandbox guard', () => {
+    for (const source of [SAVED_EMAIL_ACTION, MONTHLY_OPPORTUNITY_ACTION]) {
+      assert.equal(staticCheckCodeBody(buildTraceBody(instrument(source).code)), null);
+    }
   });
 
   it('initiates a brand-new record from its own page through the action surface', async () => {

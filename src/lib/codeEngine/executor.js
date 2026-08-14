@@ -11,6 +11,8 @@
      logCall          → submitCallLog({template,context})
      updateTask       → crmTasks.updateTaskById(id, fields)
      completeTask     → crmTasks.completeTaskById(id)
+     updateOpportunity→ Opportunity/Get → merge → Update
+     createOpportunity→ Opportunity/Create
      editContact      → crmUpdateContact(contactId, payload)  (grouped)
 
    One executor is built per contact (deps.ctx carries the contact's ids).
@@ -20,6 +22,9 @@ import {
   APPROVED_CONTACT_FIELDS,
   APPROVED_TASK_FIELDS,
 } from './contracts.js';
+import { mapOpportunityEditFields } from '../opportunityFields.js';
+
+export { mapOpportunityEditFields } from '../opportunityFields.js';
 
 /** Staged schema-name edits → crmUpdateContact payload keys (only approved). */
 export function mapEditFields(fields) {
@@ -189,6 +194,26 @@ export function makeExecutor(deps = {}) {
         const result = await deps.completeTaskById(i.id);
         assertHelperResult(result, 'task completion failed');
         return { ok: true, taskId: String(i.id), result };
+      }
+      if (contract === 'updateOpportunity') {
+        if (!deps.updateOpportunityById) throw new Error('opportunity editing is not configured');
+        if (!i.id) throw new Error('updateOpportunity needs an opportunity id');
+        const fields = mapOpportunityEditFields(i.fields);
+        if (!Object.keys(fields).length) throw new Error('updateOpportunity has no supported changes');
+        return assertHelperResult(
+          await deps.updateOpportunityById(i.id, fields, { contactId: ctx.contactId }),
+          'opportunity update failed',
+        );
+      }
+      if (contract === 'createOpportunity') {
+        if (!deps.createOpportunity) throw new Error('opportunity creation is not configured');
+        const result = await deps.createOpportunity(i, { contactId: i.contactId || ctx.contactId });
+        assertHelperResult(result, 'opportunity creation failed');
+        return {
+          ok: true,
+          opportunityId: String(result?.opportunityId || ''),
+          result,
+        };
       }
       if (contract === 'editContact') return commitEdits(i.fields);
       return null;

@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CONTRACTS, EFFECT_CLASSES, GATE_BY_EFFECT, APPROVED_CONTACT_FIELDS,
-  APPROVED_TASK_FIELDS,
+  APPROVED_TASK_FIELDS, APPROVED_OPPORTUNITY_FIELDS,
   contractFor, contractGate, describeContract, listContracts, validateContractInput,
 } from '../../src/lib/codeEngine/contracts.js';
 
@@ -62,6 +62,8 @@ describe('contracts · effect → gate is the safety spine', () => {
     assert.equal(contractGate('createTask'), 'confirm'); // remote
     assert.equal(contractGate('logCall'), 'confirm'); // remote
     assert.equal(contractGate('addNote'), 'confirm'); // remote
+    assert.equal(contractGate('updateOpportunity'), 'confirm'); // remote
+    assert.equal(contractGate('createOpportunity'), 'confirm'); // remote
     assert.equal(contractGate('unknown'), null);
   });
 });
@@ -135,6 +137,40 @@ describe('contracts · input validation (template OR custom object)', () => {
     assert.equal(
       describeContract('addNote', { subject: 'Workflow QA' }),
       'Add activity note “Workflow QA”',
+    );
+  });
+
+  it('validates full opportunity edits and creation', () => {
+    assert.equal(validateContractInput('updateOpportunity', {
+      id: '71',
+      fields: {
+        subject: 'Renewal',
+        estimated_close_date: '2026-09-13',
+        stage: 'Closed-Lost',
+        assignedToId: '7',
+      },
+    }).ok, true);
+    assert.equal(APPROVED_OPPORTUNITY_FIELDS.stage, 'stageId');
+    assert.equal(validateContractInput('updateOpportunity', {
+      id: '71', fields: { actualValue: 500 },
+    }).ok, false);
+    assert.equal(validateContractInput('createOpportunity', {
+      subject: 'August Order', estimatedValue: 2400, stage: 'Open',
+    }).ok, true);
+    assert.equal(validateContractInput('createOpportunity', {
+      subject: 'August Order', stage: 'Definitely Closed',
+    }).ok, false);
+    assert.equal(
+      describeContract('updateOpportunity', {
+        id: '71', subject: 'Renewal', fields: { stage: 'Closed - Lost' },
+      }),
+      'Edit opportunity “Renewal” — stageId',
+    );
+    assert.equal(
+      describeContract('createOpportunity', {
+        subject: 'August Order', estimatedValue: 2400,
+      }),
+      'Create opportunity “August Order” · $2,400',
     );
   });
 

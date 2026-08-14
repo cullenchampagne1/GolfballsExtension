@@ -27,6 +27,8 @@ export function buildCodeSpec(bindings = {}) {
         'page.tasks': '{ open[], done[], items[] } — workflow rows use open/done; a Task List entry point also exposes its complete row set as items',
         'page.tasks.items': 'the Task List entry-point rows when present, otherwise open + done; each row supports approved direct edits and complete()',
         'task.liveDate / dueDate / subject / description / categoryId / priority = value': 'edit an existing task; snake_case aliases are accepted and changes group into one write per task at run end (or task.commit())',
+        'page.opportunities': 'array of full Opportunity/Get records when referenced — { id, subject, description, estimatedValue, estimatedCloseDate, stage, stageId, assignedToId, isClosed, isWon, isLost }',
+        'opportunity.subject / description / estimatedValue / estimatedCloseDate / stage / stageId / assignedToId = value': 'edit an existing opportunity; changes group into one safe Get → merge → Update write at run end (or opportunity.commit())',
         'page.evaluate(ref)': 'render a saved-template REFERENCE into a sendable outbound object; await it — it is its own (slow) step',
       },
       user: {
@@ -62,6 +64,9 @@ export function buildCodeSpec(bindings = {}) {
       'actions.addNote({ subject, body }) adds a CRM activity note to the current audience record.',
       'Existing task rows are mutable through the same shared engine in workflows and custom actions. Approved edits are subject, description/body, liveDate/live_date, dueDate/due_date/due, categoryId/category_id, and priority.',
       'Task edits are grouped into one confirm-gated write per task at run end. Use await task.commit() only when later code must create a separate update.',
+      'Opportunity rows are hydrated with Opportunity/Get before code runs. Direct edits are grouped and the writer GETs the latest record again before merging and updating it.',
+      'Editable opportunity fields are subject, description, estimatedValue, estimatedCloseDate, stage/stageId, and assignedToId. Closed - Won is stage 4; Closed - Lost is stage 5.',
+      'actions.createOpportunity({ subject, estimatedCloseDate, estimatedValue, stage? }) creates against page.contact by default; contactId can be supplied explicitly.',
       'The workflow body already runs once per audience record. Do not loop page.contacts unless you intentionally want nested audience work.',
       'Recipient defaults to page.contact; the signature is appended by the send engine — never include it.',
       'Guard on data you use, e.g. `if (page.contact.email) …`.',
@@ -71,6 +76,7 @@ export function buildCodeSpec(bindings = {}) {
       'const c = page.contact;\nif (c.email && c.value > 1000) {\n  const email = await page.evaluate(user.email("VIP thank-you"));\n  await actions.sendEmail(email);\n  await actions.createTask(user.task("Confirm VIP touch"));\n} else {\n  await actions.createTask(user.task("Re-engage"));\n}\nreturn c.value > 1000 ? "vip" : "nurture";',
       'const task = await actions.createTask({ subject: "Workflow test", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: "Workflow test", body: "Non-email workflow verified." });\nreturn "verified";',
       'for (const task of page.tasks.items) {\n  const due = new Date(task.dueDate + "T12:00:00");\n  const live = new Date(due);\n  live.setDate(live.getDate() - 7);\n  task.liveDate = live;\n}\nreturn "rescheduled";',
+      'const open = page.opportunities.find((opportunity) => !opportunity.isClosed);\nif (open) open.stage = "Closed - Lost";\nawait actions.createOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13", estimatedValue: page.stats.avgOrderSize });\nreturn "opportunity renewed";',
     ],
   };
 }

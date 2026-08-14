@@ -9,6 +9,7 @@ import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
 import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
 import { samplePageFor } from '../lib/codeEngine/samplePages.js';
+import { loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
 import { normalizeCustomAction, defaultPagesFor, ACTION_PAGE_TYPES } from '../lib/customActions.js';
 import { normalizeEntryPoints } from '../lib/customActionEntryPoints.js';
 
@@ -99,10 +100,11 @@ export function CustomActionEditor({ action }) {
   const startSim = async () => {
     setSimBusy(true);
     try {
+      const user = await loadCodeTemplateLibrary();
       const res = await simulateProgram(
         source || '',
         samplePageFor(pageType, { entryPoints: normalizeEntryPoints(entryPointsText) }),
-        { run: makeSandboxRunner({ exec: runInSandbox }), user: {} },
+        { run: makeSandboxRunner({ exec: runInSandbox }), user },
       );
       if (res.error) {
         toast?.error?.('Simulate: ' + res.error, { duration: 5000 });

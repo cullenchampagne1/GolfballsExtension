@@ -10,6 +10,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildUserBinding, userBindingData } from '../../src/lib/codeEngine/userBinding.js';
+import {
+  loadCodeTemplateLibrary,
+  normalizeCodeTemplateLibrary,
+} from '../../src/lib/codeEngine/templateLibrary.js';
 import { simulateProgram, asyncFunctionRunner } from '../../src/lib/codeEngine/simulate.js';
 import { makeSandboxRunner, buildTraceBody } from '../../src/lib/codeEngine/sandboxRunner.js';
 
@@ -80,6 +84,37 @@ describe('userBinding · shape + lookups', () => {
     assert.deepEqual(Object.keys(d).sort(), ['calls', 'emails', 'tasks']);
     assert.equal(typeof d.email, 'undefined');
     assert.ok(d.emails.WinBack);
+  });
+});
+
+describe('userBinding · shared workflow/action template loader', () => {
+  it('projects the same enabled template fields for every code surface', async () => {
+    const raw = {
+      emails: [
+        {
+          id: 'e1', name: 'Order Follow Up', type: 'account', subject: 'Hi {{firstName}}',
+          body: '<p>Body</p>', vars: { firstName: { type: 'builtin' } },
+          toField: { type: 'auto' }, senderAccount: 'golfballs', senderRandomize: true,
+          variations: [{ id: 'short', subject: 'Quick hello' }],
+        },
+        { id: 'disabled', name: 'Hidden', enabled: false },
+      ],
+      tasks: [{ id: 't1', name: 'Follow up', priority: 1, categoryId: 14 }],
+      calls: [{ id: 'c1', name: 'Call', callDirection: 0, callCategory: 35 }],
+    };
+    const projected = normalizeCodeTemplateLibrary(raw);
+    assert.equal(projected.emails.length, 1);
+    assert.equal(projected.emails[0].variations[0].id, 'short');
+    assert.equal(projected.emails[0].senderRandomize, true);
+    assert.equal(projected.tasks[0].categoryId, 14);
+    assert.equal(projected.calls[0].callCategory, 35);
+
+    const loaded = await loadCodeTemplateLibrary({
+      loadEmails: async () => raw.emails,
+      loadTasks: async () => raw.tasks,
+      loadCalls: async () => raw.calls,
+    });
+    assert.deepEqual(loaded, projected);
   });
 });
 

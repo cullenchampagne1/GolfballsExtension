@@ -211,11 +211,23 @@ export async function runCustomActionAgainstPage({ action, page, document: sourc
     entryPoints: [],
     entryPoint: null,
   };
-  const executor = await live.makeLiveExecutor(executionPage);
+  const runtime = await live.prepareLiveActionRuntime(
+    executionPage,
+    action?.source || '',
+    { doc: sourceDocument },
+  );
+  const executor = await live.makeLiveExecutor(executionPage, {
+    evaluateRef: runtime.evaluateRef,
+  });
   const result = await sim.simulateProgram(action?.source || '', executionPage, {
-    run: sandbox.makeSandboxRunner({ exec: bridge.runInSandbox, doc: sourceDocument }),
-    user: {},
+    run: sandbox.makeSandboxRunner({
+      exec: bridge.runInSandbox,
+      doc: sourceDocument,
+      evaluateRef: runtime.evaluateRef,
+    }),
+    user: runtime.user,
     executor,
+    evaluateRef: runtime.evaluateRef,
   });
   const trace = Array.isArray(result?.trace) ? result.trace : [];
   const failed = trace.filter((entry) => entry?.contract && entry.status === 'failed');

@@ -11,6 +11,8 @@ const CONTRACT_LABELS = Object.freeze({
   createTask: 'Create task',
   updateTask: 'Edit task',
   completeTask: 'Complete task',
+  updateOpportunity: 'Edit opportunity',
+  createOpportunity: 'Create opportunity',
   logCall: 'Log call',
   addNote: 'Add note',
   editContact: 'Edit contact',

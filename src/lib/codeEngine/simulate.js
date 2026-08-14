@@ -23,6 +23,7 @@ import {
   describeContract,
   APPROVED_CONTACT_FIELDS,
   APPROVED_TASK_FIELDS,
+  APPROVED_OPPORTUNITY_FIELDS,
 } from './contracts.js';
 import { buildUserBinding } from './userBinding.js';
 import { hydrateOutbound, makeOutbound } from './runtime.js';
@@ -52,7 +53,8 @@ export function asyncFunctionRunner(code, scope) {
  */
 /* Contracts that perform a real effect (routed to the executor on a live run). */
 export const EFFECT_CONTRACTS = new Set([
-  'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask', 'editContact',
+  'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask',
+  'updateOpportunity', 'createOpportunity', 'editContact',
 ]);
 
 /* Count the real-write steps in a trace — the denominator for the run
@@ -250,8 +252,9 @@ export async function simulateProgram(
 
     // A sandbox executes before effects replay. Give createTask a serializable
     // future result so later code can complete that exact task in trace order.
-    if (!executor && check.ok && name === 'createTask') {
-      result.taskId = actionResultRef(id, 'taskId');
+    if (!executor && check.ok && (name === 'createTask' || name === 'createOpportunity')) {
+      const resultField = name === 'createTask' ? 'taskId' : 'opportunityId';
+      result[resultField] = actionResultRef(id, resultField);
     }
     actionResults.set(String(id), result);
     if (isEffect && typeof onEffect === 'function') {
@@ -362,6 +365,65 @@ export async function simulateProgram(
     });
   };
 
+  // Opportunity rows use the same grouped-assignment model as tasks. The
+  // production page is hydrated through Opportunity/Get before execution;
+  // the proxy stages only the native editor's approved fields and emits one
+  // updateOpportunity effect per changed opportunity.
+  const opportunityEdits = new Map();
+  const opportunityMeta = new Map();
+  const opportunityIdOf = (opportunity) => String(
+    opportunity?.id ?? opportunity?.opportunityId ?? '',
+  ).trim();
+  const stageOpportunityEdit = (opportunity, prop, value) => {
+    if (typeof prop !== 'string') return;
+    const canonical = APPROVED_OPPORTUNITY_FIELDS[prop];
+    if (!canonical) {
+      throw new Error(`opportunity.${prop} is not an editable field. Editable: ${Object.keys(APPROVED_OPPORTUNITY_FIELDS).join(', ')}.`);
+    }
+    const id = opportunityIdOf(opportunity);
+    if (!id) throw new Error('opportunity editing requires an opportunity id');
+    const current = opportunityEdits.get(id) || {};
+    current[canonical] = value;
+    opportunityEdits.set(id, current);
+    opportunityMeta.set(id, opportunity);
+  };
+  const commitOpportunityEdits = async (opportunity) => {
+    const id = opportunityIdOf(opportunity);
+    const fields = opportunityEdits.get(id);
+    if (!id || !fields || !Object.keys(fields).length) return { ok: true, changed: [] };
+    opportunityEdits.delete(id);
+    return record(`uo_${id}`, 'updateOpportunity', {
+      id,
+      subject: opportunity?.subject || opportunityMeta.get(id)?.subject || '',
+      fields: { ...fields },
+    });
+  };
+  const commitAllOpportunityEdits = async () => {
+    for (const id of [...opportunityEdits.keys()]) {
+      await commitOpportunityEdits(opportunityMeta.get(id) || { id });
+    }
+  };
+  const wrapOpportunity = (sourceOpportunity) => {
+    const target = { ...(sourceOpportunity || {}) };
+    const id = opportunityIdOf(target);
+    if (id) opportunityMeta.set(id, target);
+    return new Proxy(target, {
+      set(current, prop, value) {
+        stageOpportunityEdit(current, prop, value);
+        const canonical = APPROVED_OPPORTUNITY_FIELDS[prop];
+        current[canonical] = value;
+        if (prop !== canonical) current[prop] = value;
+        return true;
+      },
+      get(current, prop) {
+        if (prop === 'commit') return () => commitOpportunityEdits(current);
+        const canonical = typeof prop === 'string' ? APPROVED_OPPORTUNITY_FIELDS[prop] : null;
+        if (canonical && !Object.hasOwn(current, prop)) return current[canonical];
+        return current[prop];
+      },
+    });
+  };
+
   // Node-path `page` — the Proxy set-trap captures `page.contact.x = y`; each
   // task carries `.complete()`, `.commit()`, and approved editable fields.
   // The sandbox mirrors this inline.
@@ -401,6 +463,8 @@ export async function simulateProgram(
     completeAll: () => { openTasks.forEach((t) => t.complete()); },
     completeLatest: () => { const t = latestOpen(openTasks); if (t) t.complete(); },
   };
+  nodePage.opportunities = (Array.isArray(page.opportunities) ? page.opportunities : [])
+    .map(wrapOpportunity);
 
   // The action-facing progress API. Scripts call progress.total()/section()/
   // log()/checkpoint() to drive the run modal and to yield a cancel point.
@@ -432,12 +496,19 @@ export async function simulateProgram(
         }
         return commitTaskEdits(task);
       },
+      opportunityEdit: (opportunity, fields) => {
+        for (const [prop, value] of Object.entries(fields || {})) {
+          stageOpportunityEdit(opportunity, prop, value);
+        }
+        return commitOpportunityEdits(opportunity);
+      },
       // Browser replay: a recorded progress marker → fire the live callback
       // (and throw on a checkpoint if cancelled).
       progress: (entry) => emitProgress(entry && entry.op, entry || {}),
     },
     __approvedFields: Object.keys(APPROVED_CONTACT_FIELDS),
     __approvedTaskFields: APPROVED_TASK_FIELDS,
+    __approvedOpportunityFields: APPROVED_OPPORTUNITY_FIELDS,
     // The RAW (serializable, method-free) page data for the sandbox realm.
     __pageData: page,
   };
@@ -446,11 +517,13 @@ export async function simulateProgram(
     const result = await run(code, scope);
     await commitEdits(); // auto-commit any staged edits as one grouped step
     await commitAllTaskEdits();
+    await commitAllOpportunityEdits();
     await waitForTaskOperations();
     return { ok: true, trace, calls, error: null, result: result == null ? null : result };
   } catch (error) {
     await commitEdits(); // flush whatever was staged before the error
     await commitAllTaskEdits();
+    await commitAllOpportunityEdits();
     await waitForTaskOperations();
     // A thrown program error stops the trace where it happened — still useful.
     // A cancel sentinel is flagged so the caller shows "cancelled", not "failed".

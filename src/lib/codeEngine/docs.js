@@ -33,6 +33,10 @@ function actionDoc(c) {
           ? ['const task = await actions.createTask({ subject: "Test" });\nawait actions.completeTask({ id: task.taskId });', 'await page.tasks.open[0].complete()']
           : c.name === 'updateTask'
             ? ['await actions.updateTask({ id: task.id, fields: { liveDate: "2026-08-01" } })', 'task.live_date = newLiveDate;   // grouped automatically']
+          : c.name === 'updateOpportunity'
+            ? ['await actions.updateOpportunity({ id: opportunity.id, fields: { stage: "Closed - Lost" } })', 'opportunity.stage = "Closed - Lost";   // grouped automatically']
+          : c.name === 'createOpportunity'
+            ? ['await actions.createOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13", estimatedValue: 2400 })']
           : c.name === 'addNote'
             ? ['await actions.addNote({ subject: "Follow-up", body: "Reviewed account with customer." })']
             : ['await actions.logCall(user.call("Left VM"))'],
@@ -76,6 +80,11 @@ const STATIC = {
       ['task.commit()', 'flush this task’s grouped edits now'],
       ['page.tasks.open[i].complete()', 'complete a CRM task'],
       ['page.tasks.completeAll()', 'complete every open task'],
+      ['page.opportunities', 'full Opportunity/Get records (fetched only when referenced)'],
+      ['opportunity.subject / description = …', 'edit opportunity copy'],
+      ['opportunity.estimatedValue / estimatedCloseDate = …', 'edit forecast value/date'],
+      ['opportunity.stage / stageId / assignedToId = …', 'edit stage or assignment'],
+      ['opportunity.commit()', 'flush this opportunity’s grouped edits now'],
     ],
     examples: [
       'const c = page.contact;\nif (c.email) await actions.sendEmail(user.email("Win-back"));',
@@ -83,6 +92,7 @@ const STATIC = {
       'page.contact.jobTitle = "VP Sales";   // grouped, one write',
       'for (const task of page.tasks.items) {\n  task.liveDate = task.dueDate;\n}',
       'if (page.tasks.open.length) page.tasks.open[0].complete();',
+      'const open = page.opportunities.find((o) => !o.isClosed);\nif (open) open.stage = "Closed - Lost";',
     ],
   },
   helpers: {
@@ -133,6 +143,8 @@ const STATIC = {
       ['addNote(note)', 'add a CRM activity note'],
       ['completeTask({id})', 'complete a task returned by createTask'],
       ['updateTask({id, fields})', 'edit approved fields on an existing task'],
+      ['updateOpportunity({id, fields})', 'edit a CRM opportunity (safe Get → merge → Update)'],
+      ['createOpportunity(fields)', 'create an opportunity for the current contact'],
     ],
     examples: ['await actions.sendEmail(user.email("Win-back"))'],
   },

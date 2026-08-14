@@ -185,6 +185,10 @@
       "file": "tests/unit/opportunityProposals.test.mjs"
     },
     {
+      "name": "crm \u00b7 opportunity action hydration and read-merge-write",
+      "file": "tests/unit/crmOpportunities.test.mjs"
+    },
+    {
       "name": "ui \u00b7 custom pages lab fixtures and store",
       "file": "tests/unit/customPagesLab.test.mjs"
     },

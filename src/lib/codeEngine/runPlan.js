@@ -10,7 +10,10 @@
 import { contractGate } from './contracts.js';
 
 const GATE_RANK = { auto: 0, confirm: 1, hard: 2 };
-const EFFECT_CONTRACTS = ['sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask', 'editContact'];
+const EFFECT_CONTRACTS = [
+  'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask',
+  'updateOpportunity', 'createOpportunity', 'editContact',
+];
 
 function emptyCounts() {
   const counts = Object.create(null);
@@ -35,7 +38,8 @@ export function planRun(trace, audienceCount = 1) {
   }
   const outward = counts.sendEmail;
   const writes = counts.createTask + counts.logCall + counts.addNote
-    + counts.updateTask + counts.completeTask + counts.editContact;
+    + counts.updateTask + counts.completeTask + counts.updateOpportunity
+    + counts.createOpportunity + counts.editContact;
   const perContact = outward + writes;
   return {
     counts,
@@ -59,6 +63,8 @@ export function planSummary(plan) {
   if (c.updateTask) parts.push(plural(c.updateTask, 'task edit'));
   if (c.completeTask) parts.push(`${plural(c.completeTask, 'task')} completed`);
   if (c.createTask) parts.push(`${plural(c.createTask, 'task')} created`);
+  if (c.updateOpportunity) parts.push(plural(c.updateOpportunity, 'opportunity edit'));
+  if (c.createOpportunity) parts.push(`${plural(c.createOpportunity, 'opportunity')} created`);
   if (c.logCall) parts.push(plural(c.logCall, 'call log'));
   if (c.addNote) parts.push(plural(c.addNote, 'activity note'));
   return parts.join(' · ') || 'no effects';
@@ -102,6 +108,8 @@ export function pipelinePlanSummary(plan) {
   if (c.updateTask) parts.push(plural(c.updateTask, 'task-edit step'));
   if (c.completeTask) parts.push(plural(c.completeTask, 'task-completion step'));
   if (c.createTask) parts.push(plural(c.createTask, 'task-create step'));
+  if (c.updateOpportunity) parts.push(plural(c.updateOpportunity, 'opportunity-edit step'));
+  if (c.createOpportunity) parts.push(plural(c.createOpportunity, 'opportunity-create step'));
   if (c.logCall) parts.push(plural(c.logCall, 'call-log step'));
   if (c.addNote) parts.push(plural(c.addNote, 'activity-note step'));
   return parts.join(' · ') || 'no CRM write paths';

@@ -47,6 +47,23 @@ const SAMPLE_ITEMS = Object.freeze([
   { name: 'Vice Drive Custom Logo Golf Balls', quantity: 1, revenue: 234.5 },
 ]);
 
+const SAMPLE_OPPORTUNITIES = Object.freeze([
+  {
+    id: 'sample-opportunity-1',
+    opportunityId: 'sample-opportunity-1',
+    subject: 'Spring Order',
+    description: 'Seasonal reorder forecast',
+    estimatedValue: 2100,
+    estimatedCloseDate: '05-15-2026',
+    stage: 'Open',
+    stageId: '1',
+    assignedToId: '0',
+    isClosed: false,
+    isWon: false,
+    isLost: false,
+  },
+]);
+
 const TASK_LIST_ENTRY_ALIASES = new Set([
   'task-list',
   'modal:task-list',
@@ -130,8 +147,10 @@ export function samplePageFor(pageType, { entryPoints = [] } = {}) {
     count: 1,
     tasks,
     account: { name: 'Fairway Supply Co', type: 'Wholesale' },
+    stats: { avgOrderSize: 101.82, orderCount: SAMPLE_ORDERS.length },
     orders,
     items,
+    opportunities: SAMPLE_OPPORTUNITIES.map((opportunity) => ({ ...opportunity })),
   };
 
   let page = base;

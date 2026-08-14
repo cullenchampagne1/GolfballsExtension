@@ -59,6 +59,7 @@ page.relatedContacts // contacts listed on an account page
 page.tasks.open   // current record's open tasks
 page.tasks.done   // current record's completed tasks
 page.tasks.items  // Task List entry-point rows; otherwise open + done
+page.opportunities // full Opportunity/Get records when referenced
 ```
 
 `page` retains the parsed schema for whichever record was selected. A contact
@@ -116,9 +117,33 @@ Approved fields are `subject`, `description`/`body`, `liveDate`/`live_date`,
 Task List custom actions receive every loaded row through `page.tasks.items`;
 workflows receive the same mutable task objects through `open` and `done`.
 
+Opportunity records are hydrated on demand: a program that references
+`page.opportunities` calls `Opportunity/Get` for every table row before it
+runs. The normalized record includes `id`, `subject`, `description`,
+`estimatedValue`, `estimatedCloseDate`, `stage`, `stageId`, `assignedToId`,
+and `isClosed`/`isWon`/`isLost`. All native editor fields are mutable:
+
+```js
+const open = page.opportunities.find((opportunity) => !opportunity.isClosed);
+if (open) {
+  open.stage = "Closed - Lost";
+  open.estimatedCloseDate = "2026-09-13";
+  await open.commit(); // optional early flush
+}
+```
+
+Assignments group into one remote-gated write per opportunity. Every update
+performs a fresh `Opportunity/Get`, merges only approved fields, and then sends
+the complete `Opportunity/Update` payload; this prevents a partial action from
+erasing fields it did not edit. Approved fields/aliases are `subject`,
+`description`, `estimatedValue`/`estimated_value`,
+`estimatedCloseDate`/`estimated_close_date`/`closeDate`,
+`stage`/`stageId`, and `assignedToId`/`ownerId`.
+
 ## Saved templates
 
-Saved templates are available by generated code id or name/id lookup:
+Saved templates are available by generated code id or name/id lookup in both
+Workflow Manager and Action Shelf custom actions:
 
 ```js
 user.emails.WinBack
@@ -187,6 +212,21 @@ await actions.addNote({
   body,
   categoryId?: number
 });
+
+await actions.updateOpportunity({
+  id: page.opportunities[0].id,
+  fields: { stage: "Closed - Lost", description: "Superseded" }
+});
+
+const opportunity = await actions.createOpportunity({
+  subject: "August Order",
+  description?: "Monthly reorder forecast",
+  estimatedCloseDate?: "2026-09-13",
+  estimatedValue?: 2450.25,
+  stage?: "Open",       // or stageId: "1"
+  assignedToId?: "7",
+  contactId?: "42"      // defaults to the current record's contact
+});
 ```
 
 Saved task and call references retain their CRM priority, due date, category,
@@ -204,6 +244,20 @@ The optional contact/account routing fields are intended for registered
 modal-entry contexts, where one sandboxed custom action can safely schedule
 tasks for several contacts without loading each profile. If `contactId` is
 omitted, task creation retains the current-record behavior.
+
+## Copy/paste email and opportunity actions
+
+[`docs/examples/send-saved-email-contact-action.js`](examples/send-saved-email-contact-action.js)
+is the minimal saved-email pattern. It looks up an enabled template by exact
+name, evaluates it against the one live contact, and sends the generated
+outbound object through the normal transport/tracking path.
+
+[`docs/examples/monthly-opportunity-renewal-contact-action.js`](examples/monthly-opportunity-renewal-contact-action.js)
+fetches the contact's full opportunities, finds one that is not Closed - Won
+or Closed - Lost, marks it Closed - Lost, waits for that update, and creates a
+new `<current month> Order` opportunity due 30 days out. Its estimated value
+uses the CRM's average-order-size statistic, with the visible order-history
+average as a fallback.
 
 ## Control flow
 

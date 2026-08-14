@@ -14,6 +14,13 @@
    executor uses.
 ─────────────────────────────────────────────────────────────── */
 
+import {
+  APPROVED_OPPORTUNITY_FIELDS,
+  normalizeOpportunityStageId,
+} from '../opportunityFields.js';
+
+export { APPROVED_OPPORTUNITY_FIELDS } from '../opportunityFields.js';
+
 /** How reversible/outward a contract is — this, not the caller, sets the gate. */
 export const EFFECT_CLASSES = Object.freeze(['read', 'local', 'remote', 'outward', 'money']);
 
@@ -216,6 +223,92 @@ export const CONTRACTS = Object.freeze({
     describe: (i) => {
       const s = clip(i?.subject, 55);
       return s ? `Complete task “${s}”` : 'Complete a task';
+    },
+  },
+  updateOpportunity: {
+    name: 'updateOpportunity',
+    verb: 'update_opportunity',
+    object: 'opportunity',
+    effect: 'remote',
+    summary: 'Edit an existing CRM opportunity',
+    accepts: 'an opportunity id plus editable fields, or direct opportunity.field assignments followed by opportunity.commit()',
+    params: {
+      id: { type: 'string' },
+      subject: { type: 'string', max: 500 },
+      fields: { type: 'object' },
+    },
+    validate: (i) => {
+      const fields = i && i.fields && typeof i.fields === 'object' ? i.fields : {};
+      const keys = Object.keys(fields);
+      const errors = [];
+      if (!i || !str(i.id)) errors.push('updateOpportunity needs an opportunity id');
+      if (!keys.length) errors.push('updateOpportunity has no changes');
+      for (const key of keys) {
+        if (!Object.hasOwn(APPROVED_OPPORTUNITY_FIELDS, key)) {
+          errors.push(`“${key}” is not an editable opportunity field`);
+        }
+      }
+      const stage = fields.stage ?? fields.stageId ?? fields.stage_id;
+      if (stage != null && !normalizeOpportunityStageId(stage)) {
+        errors.push(`“${stage}” is not a recognized opportunity stage`);
+      }
+      const estimatedValue = fields.estimatedValue ?? fields.estimated_value;
+      if (estimatedValue != null && (!Number.isFinite(Number(estimatedValue)) || Number(estimatedValue) < 0)) {
+        errors.push('opportunity estimatedValue must be a non-negative number');
+      }
+      return { errors, value: i };
+    },
+    describe: (i) => {
+      const fields = i && i.fields && typeof i.fields === 'object' ? i.fields : {};
+      const keys = [...new Set(Object.keys(fields).map((key) => APPROVED_OPPORTUNITY_FIELDS[key] || key))];
+      const label = clip(i?.subject || i?.id, 44);
+      if (!keys.length) return label ? `Edit opportunity “${label}”` : 'Edit an opportunity';
+      return `Edit opportunity${label ? ` “${label}”` : ''} — ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? ` +${keys.length - 3}` : ''}`;
+    },
+  },
+  createOpportunity: {
+    name: 'createOpportunity',
+    verb: 'create_opportunity',
+    object: 'opportunity',
+    effect: 'remote',
+    summary: 'Create a CRM opportunity for the current contact',
+    accepts: '{ subject, description?, estimatedValue?, estimatedCloseDate?, stage|stageId?, assignedToId?, contactId? }',
+    params: {
+      subject: { type: 'string', max: 500 },
+      description: { type: 'string', max: 10_000 },
+      estimatedValue: { type: 'number', min: 0, max: 1_000_000_000 },
+      estimatedCloseDate: { type: 'string', max: 40 },
+      stage: { type: 'string', max: 80 },
+      stageId: { type: 'string', max: 8 },
+      assignedToId: { type: 'string', max: 40 },
+      contactId: { type: 'string', max: 40 },
+    },
+    validate: (i) => {
+      const input = i && typeof i === 'object' ? i : {};
+      const errors = [];
+      if (!str(input.subject)) errors.push('createOpportunity needs a subject');
+      for (const key of Object.keys(input)) {
+        if (!Object.hasOwn(CONTRACTS.createOpportunity.params, key)) {
+          errors.push(`Unknown parameter "${key}" for createOpportunity`);
+        }
+      }
+      if (input.estimatedValue != null
+        && (!Number.isFinite(Number(input.estimatedValue)) || Number(input.estimatedValue) < 0)) {
+        errors.push('createOpportunity estimatedValue must be a non-negative number');
+      }
+      const stage = input.stageId ?? input.stage;
+      if (stage != null && !normalizeOpportunityStageId(stage)) {
+        errors.push(`“${stage}” is not a recognized opportunity stage`);
+      }
+      return { errors, value: input };
+    },
+    describe: (i) => {
+      const label = clip(i?.subject, 56);
+      const amount = Number(i?.estimatedValue);
+      const value = Number.isFinite(amount) && amount > 0
+        ? ` · $${Math.round(amount).toLocaleString('en-US')}`
+        : '';
+      return label ? `Create opportunity “${label}”${value}` : 'Create an opportunity';
     },
   },
   // Apply grouped field edits to the current contact — the effect behind

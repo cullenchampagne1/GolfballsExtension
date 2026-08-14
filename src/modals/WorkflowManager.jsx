@@ -8,12 +8,11 @@ import { CodeDocsSidebar } from '../ui/components/CodeDocsSidebar.jsx';
 import { resolveDoc } from '../lib/codeEngine/docs.js';
 import { buildCodeSpec } from '../lib/codeEngine/spec.js';
 import { codeIdsFor } from '../lib/codeEngine/userBinding.js';
+import { loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadWorkflows, saveWorkflow, removeWorkflow, newWorkflow, subscribeWorkflows, writeWorkflowCode,
 } from '../lib/workflow/store.js';
-import { loadCallTemplates } from '../lib/callLog.js';
-import { loadTaskTemplates } from '../lib/quickTask.js';
 import { parseWorkflowBlob, importWorkflows } from '../lib/workflow/workflowImport.js';
 import { hydrateWorkflowContact } from '../lib/workflow/codeContext.js';
 import { runCodeWorkflow } from '../lib/workflow/codeRunner.js';
@@ -31,6 +30,11 @@ import { submitCallLog } from '../lib/submitCallLog.js';
 import { resolveEmployeeId } from '../lib/employeeIdentity.js';
 import { completeTaskById, updateTaskById } from '../lib/crmTasks.js';
 import { crmUpdateContact } from '../lib/crm-detail-shared.jsx';
+import {
+  createOpportunity,
+  sourceUsesOpportunityRecords,
+  updateOpportunityById,
+} from '../lib/crmOpportunities.js';
 import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
@@ -348,6 +352,8 @@ function makeContactExecutor(context, runDeps, dispatch) {
     updateTaskById,
     completeTaskById,
     updateContact: crmUpdateContact,
+    updateOpportunityById,
+    createOpportunity,
   });
 }
 
@@ -359,6 +365,7 @@ function prepareWorkflowContact(contact, audience, runDeps = {}) {
     emailConfig,
     signature: emailConfig.signature || '',
     fromLocalPart: emailConfig.localPart || '',
+    hydrateOpportunities: sourceUsesOpportunityRecords(runDeps.source || ''),
   });
 }
 
@@ -863,50 +870,9 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   // Load the rep's saved email / task / call templates for the user.* binding.
   useEffect(() => {
     let alive = true;
-    const emails = new Promise((res) => {
-      try {
-        chrome.storage.local.get('templates', (o) => res((o?.templates || [])
-          .filter((t) => t.enabled !== false && (!t.type || t.type === 'email' || t.type === 'account'))
-          .map((t) => ({
-            id: t.id,
-            name: t.name,
-            kind: 'email',
-            subject: t.subject || '',
-            body: t.body || '',
-            variations: Array.isArray(t.variations) ? t.variations : [],
-            vars: t.vars || {},
-            toField: t.toField || null,
-            replyMode: t.replyMode || 'standalone',
-            senderAccount: t.senderAccount,
-            senderRandomize: !!t.senderRandomize,
-          }))));
-      } catch { res([]); }
-    });
-    Promise.all([emails, loadTaskTemplates(), loadCallTemplates()]).then(([em, tasks, calls]) => {
+    loadCodeTemplateLibrary().then((library) => {
       if (!alive) return;
-      setUserData({
-        emails: em,
-        tasks: (tasks || []).map((t) => ({
-          id: t.id,
-          name: t.name,
-          kind: 'task',
-          subject: t.subject || '',
-          body: t.body || '',
-          priority: t.priority,
-          daysOut: t.daysOut,
-          categoryId: t.categoryId,
-        })),
-        calls: (calls || []).map((c) => ({
-          id: c.id,
-          name: c.name,
-          kind: 'call',
-          subject: c.subject || '',
-          body: c.body || '',
-          callDirection: c.callDirection,
-          callCategory: c.callCategory,
-          callVoicemail: c.callVoicemail,
-        })),
-      });
+      setUserData(library);
       setTemplatesLoaded(true);
     });
     return () => { alive = false; };
@@ -1025,7 +991,9 @@ export function WorkflowManager({ onClose, contacts = [] }) {
     setSim({ status: 'running', trace: [], replayIdx: -1, done: false, result: null, contactName: contact?.contactName || contact?.name || '(contact)' });
     let res;
     try {
-      const prepared = await prepareWorkflowContact(contact, audienceKeyed);
+      const prepared = await prepareWorkflowContact(contact, audienceKeyed, {
+        source: workflow.automation || '',
+      });
       const evaluateRef = (ref) => evaluateWorkflowTemplate(ref, prepared.context);
       res = await simulateProgram(workflow.automation || '', prepared.page, {
         run: makeSandboxRunner({
@@ -1080,7 +1048,9 @@ export function WorkflowManager({ onClose, contacts = [] }) {
       user: userData,
       dryRun: true,
       pipeline: program.pipeline,
-      prepareContact: (contact, ordered) => prepareWorkflowContact(contact, ordered),
+      prepareContact: (contact, ordered) => prepareWorkflowContact(contact, ordered, {
+        source: workflow.automation || '',
+      }),
     });
   };
 
@@ -1095,7 +1065,10 @@ export function WorkflowManager({ onClose, contacts = [] }) {
       user: userData,
       dryRun: false,
       pipeline: program.pipeline,
-      prepareContact: (contact, ordered) => prepareWorkflowContact(contact, ordered, rd),
+      prepareContact: (contact, ordered) => prepareWorkflowContact(contact, ordered, {
+        ...rd,
+        source: workflow.automation || '',
+      }),
       makeExec: (_contact, prepared) => makeContactExecutor(
         prepared.context,
         rd,

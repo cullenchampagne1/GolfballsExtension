@@ -117,11 +117,20 @@ export function CustomActionRunHost() {
         data: entryPoint.data ?? null,
       }));
       page.entryPoint = page.entryPoints[0] || null;
+      const runtime = await eng.live.prepareLiveActionRuntime(page, action.source || '', {
+        doc: document,
+      });
       // Count dry-run steps so the "analysing" phase shows it's progressing
       // rather than hung. No failures here (no executor). Cancel is honoured
       // even during analysis so a huge plan can be aborted before confirming.
       const onEffect = () => setProgress((pr) => ({ ...pr, done: pr.done + 1 }));
-      const dry = await eng.simulateProgram(action.source || '', page, { run: eng.makeSandboxRunner({ exec: eng.runInSandbox }), user: {}, onEffect, isCancelled: () => cancelRef.current });
+      const dry = await eng.simulateProgram(action.source || '', page, {
+        run: eng.makeSandboxRunner({ exec: eng.runInSandbox, evaluateRef: runtime.evaluateRef }),
+        user: runtime.user,
+        evaluateRef: runtime.evaluateRef,
+        onEffect,
+        isCancelled: () => cancelRef.current,
+      });
       if (dry.cancelled || cancelRef.current) { setBusy(false); return; }   // aborted during analysis
       if (dry.error) { toast?.error?.(`“${action.name}” error: ${dry.error}`, { duration: 5000 }); setBusy(false); return; }
       const plan = eng.planRun(dry.trace, 1);
@@ -149,6 +158,8 @@ export function CustomActionRunHost() {
         summary: eng.planSummary(plan),
         totalSteps,
         announceSuccess: policy.announceSuccess,
+        user: runtime.user,
+        evaluateRef: runtime.evaluateRef,
       };
       if (!policy.confirm) {
         // Clicking a shelf action on one live record is already an explicit
@@ -175,7 +186,7 @@ export function CustomActionRunHost() {
     setBusy(true);
     try {
       const eng = loadedEngine || await loadEngine();
-      const executor = await eng.live.makeLiveExecutor(p.page);
+      const executor = await eng.live.makeLiveExecutor(p.page, { evaluateRef: p.evaluateRef });
       // Per real write: advance the bar, count failures, and log the error so
       // it's visible AS IT HAPPENS (not only at the end).
       const onEffect = ({ status, entry, name }) => {
@@ -190,7 +201,8 @@ export function CustomActionRunHost() {
         else if (ev.op === 'log') pushLog(ev.level === 'error' ? 'error' : 'info', String(ev.message || ''));
       };
       const res = await eng.simulateProgram(p.action.source || '', p.page, {
-        run: eng.makeSandboxRunner({ exec: eng.runInSandbox }), user: {}, executor,
+        run: eng.makeSandboxRunner({ exec: eng.runInSandbox, evaluateRef: p.evaluateRef }),
+        user: p.user || {}, executor, evaluateRef: p.evaluateRef,
         onEffect, onProgress, isCancelled: () => cancelRef.current,
       });
       await customActionEntryPoints.notifyRunComplete(p.page.entryPoints, { action: p.action, result: res });
