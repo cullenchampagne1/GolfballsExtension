@@ -34,6 +34,7 @@ const SERVER_CAP = 200;
 
 let store = {};
 let loadCatalog;
+let normalizeCatalogDocs;
 
 before(async () => {
   store = {};
@@ -56,7 +57,7 @@ before(async () => {
       },
     },
   };
-  ({ loadCatalog } = await import('../../src/lib/giftCatalog.js'));
+  ({ loadCatalog, normalizeCatalogDocs } = await import('../../src/lib/giftCatalog.js'));
 });
 
 after(() => { delete globalThis.chrome; });
@@ -76,5 +77,33 @@ describe('gift catalog · pagination completeness', () => {
   it('caches the full pull so a reopen serves the complete set', async () => {
     const products = await loadCatalog({ force: false }); // served from cache written above
     assert.equal(products.length, TOTAL);
+  });
+
+  it('keeps stock and commissionable custom-logo documents that share one Solr id', () => {
+    const shared = {
+      id: 'taylormade-tp5-2026',
+      parentCode_s: 'P-TP5',
+      title_s: 'TaylorMade TP5 Golf Balls 2026 Model',
+      brand_s: 'TaylorMade',
+      price_d: 57.99,
+      itemType_ss: ['Consumer-Golf_Ball'],
+    };
+    const products = normalizeCatalogDocs([
+      { ...shared, product_url_s: '/Golf-Balls/TaylorMade-TP5-Golf-Balls-2026-Model' },
+      {
+        ...shared,
+        title_s: 'TaylorMade TP5 Custom Logo Golf Balls 2026 Model',
+        product_url_s: '/Golf-Balls/TaylorMade-TP5-Custom-Logo-Golf-Balls-2026-Model',
+        modificationName_ss: ['Custom Logo'],
+        customLogoPriceBreak_s: JSON.stringify({ PriceBreak: [{ Quantity: 12, Price: 49.99 }] }),
+      },
+      // An exact repeat from a shifted pagination boundary must still collapse.
+      { ...shared, product_url_s: '/Golf-Balls/TaylorMade-TP5-Golf-Balls-2026-Model' },
+    ]);
+    assert.equal(products.length, 2);
+    assert.equal(new Set(products.map((product) => product.id)).size, 2, 'React/proposal identities must remain unique');
+    assert.equal(products.filter((product) => product.customLogo).length, 1);
+    assert.equal(products.find((product) => product.customLogo).breaks[0].p, 49.99);
+    assert.equal(products.find((product) => product.customLogo).hasCustomLogoPriceBreaks, true);
   });
 });

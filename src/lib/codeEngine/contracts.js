@@ -311,6 +311,40 @@ export const CONTRACTS = Object.freeze({
       return label ? `Create opportunity “${label}”${value}` : 'Create an opportunity';
     },
   },
+  createProposalFromOrder: {
+    name: 'createProposalFromOrder',
+    verb: 'create_proposal_from_order',
+    object: 'proposal',
+    effect: 'remote',
+    summary: 'Create a current-catalog proposal from a previous order',
+    accepts: '{ order, opportunityId, name?, expiration? }',
+    params: {
+      order: { type: 'object' },
+      opportunityId: { type: 'string', max: 80 },
+      name: { type: 'string', max: 300 },
+      expiration: { type: 'string', max: 40 },
+    },
+    validate: (i) => {
+      const input = i && typeof i === 'object' ? i : {};
+      const errors = [];
+      const order = input.order && typeof input.order === 'object' ? input.order : null;
+      if (!order) errors.push('createProposalFromOrder needs an order from page.orders');
+      if (!str(input.opportunityId)) errors.push('createProposalFromOrder needs an opportunityId');
+      for (const key of Object.keys(input)) {
+        if (!Object.hasOwn(CONTRACTS.createProposalFromOrder.params, key)) {
+          errors.push(`Unknown parameter "${key}" for createProposalFromOrder`);
+        }
+      }
+      return { errors, value: input };
+    },
+    describe: (i) => {
+      const number = clip(i?.order?.number || i?.order?.orderId || i?.order?.url, 40);
+      const name = clip(i?.name, 46);
+      if (number && name) return `Create proposal “${name}” from order ${number}`;
+      if (number) return `Create current proposal from order ${number}`;
+      return 'Create a current proposal from a previous order';
+    },
+  },
   // Apply grouped field edits to the current contact — the effect behind
   // `page.contact.field = value` (+ commit). Executor: crmUpdateContact(id, edits)
   // (Contact/Update.ajax, one grouped write). Only approved fields (see

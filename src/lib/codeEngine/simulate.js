@@ -54,7 +54,7 @@ export function asyncFunctionRunner(code, scope) {
 /* Contracts that perform a real effect (routed to the executor on a live run). */
 export const EFFECT_CONTRACTS = new Set([
   'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask',
-  'updateOpportunity', 'createOpportunity', 'editContact',
+  'updateOpportunity', 'createOpportunity', 'createProposalFromOrder', 'editContact',
 ]);
 
 /* Count the real-write steps in a trace — the denominator for the run
@@ -87,12 +87,16 @@ export function actionResultRef(actionId, field) {
    `__gb_action_result__:<createId>:taskId` placeholder whose action stored an
    { ok:false } result. Returns that action's error string (so the dependent
    step is skipped with the REAL reason) or null when no dependency failed. */
+function actionRefsIn(value) {
+  const source = String(value || '');
+  const pattern = /__gb_action_result__:(n\d+_\d+):([A-Za-z][A-Za-z0-9]*)/g;
+  return [...source.matchAll(pattern)].map((match) => ({ token: match[0], actionId: match[1], field: match[2] }));
+}
+
 function findFailedDependency(value, results) {
-  if (typeof value === 'string' && value.startsWith(ACTION_RESULT_PREFIX)) {
-    const rest = value.slice(ACTION_RESULT_PREFIX.length);
-    const splitAt = rest.lastIndexOf(':');
-    if (splitAt > 0) {
-      const upstream = results.get(rest.slice(0, splitAt));
+  if (typeof value === 'string') {
+    for (const ref of actionRefsIn(value)) {
+      const upstream = results.get(ref.actionId);
       if (upstream && upstream.ok === false) return upstream.error || upstream.reason || 'a prior step failed';
     }
     return null;
@@ -108,16 +112,23 @@ function findFailedDependency(value, results) {
 }
 
 function resolveActionResults(value, results, preserveMissing) {
-  if (typeof value === 'string' && value.startsWith(ACTION_RESULT_PREFIX)) {
-    const rest = value.slice(ACTION_RESULT_PREFIX.length);
-    const splitAt = rest.lastIndexOf(':');
-    if (splitAt > 0) {
-      const actionId = rest.slice(0, splitAt);
-      const field = rest.slice(splitAt + 1);
-      const result = results.get(actionId);
-      if (result && Object.hasOwn(result, field)) return result[field];
+  if (typeof value === 'string') {
+    const refs = actionRefsIn(value);
+    if (!refs.length) return value;
+    // Preserve non-string values when the entire input is one result pointer
+    // (task/opportunity ids are strings today, but the resolver is generic).
+    if (refs.length === 1 && refs[0].token === value) {
+      const result = results.get(refs[0].actionId);
+      if (result && Object.hasOwn(result, refs[0].field)) return result[refs[0].field];
+      return preserveMissing ? value : null;
     }
-    return preserveMissing ? value : null;
+    let output = value;
+    for (const ref of refs) {
+      const result = results.get(ref.actionId);
+      if (result && Object.hasOwn(result, ref.field)) output = output.split(ref.token).join(String(result[ref.field] ?? ''));
+      else if (!preserveMissing) output = output.split(ref.token).join('');
+    }
+    return output;
   }
   if (Array.isArray(value)) {
     return value.map((item) => resolveActionResults(item, results, preserveMissing));
@@ -252,9 +263,13 @@ export async function simulateProgram(
 
     // A sandbox executes before effects replay. Give createTask a serializable
     // future result so later code can complete that exact task in trace order.
-    if (!executor && check.ok && (name === 'createTask' || name === 'createOpportunity')) {
-      const resultField = name === 'createTask' ? 'taskId' : 'opportunityId';
-      result[resultField] = actionResultRef(id, resultField);
+    if (!executor && check.ok && (name === 'createTask' || name === 'createOpportunity' || name === 'createProposalFromOrder')) {
+      const resultFields = name === 'createTask'
+        ? ['taskId']
+        : name === 'createOpportunity'
+          ? ['opportunityId']
+          : ['proposalId', 'cartID', 'proposalUrl', 'proposalUrlHtml', 'opportunityId', 'orderId', 'name'];
+      for (const resultField of resultFields) result[resultField] = actionResultRef(id, resultField);
     }
     actionResults.set(String(id), result);
     if (isEffect && typeof onEffect === 'function') {

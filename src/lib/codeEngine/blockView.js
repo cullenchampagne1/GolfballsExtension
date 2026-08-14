@@ -23,6 +23,7 @@ const CONTRACT_ICON = Object.freeze({
   completeTask: 'check',
   updateOpportunity: 'target',
   createOpportunity: 'target',
+  createProposalFromOrder: 'card',
   logCall: 'phone',
   addNote: 'edit',
   editContact: 'edit',

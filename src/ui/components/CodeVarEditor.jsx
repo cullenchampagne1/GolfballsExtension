@@ -170,6 +170,9 @@ const BINDING_OPTIONS = {
     { label: 'actions.completeTask', type: 'function', detail: '({id}) — complete an existing or newly created task' },
     { label: 'actions.logCall', type: 'function', detail: '(call) — saved or {subject,…}' },
     { label: 'actions.addNote', type: 'function', detail: '({subject,body}) — CRM activity note' },
+    { label: 'actions.updateOpportunity', type: 'function', detail: '({id,fields}) — edit an opportunity' },
+    { label: 'actions.createOpportunity', type: 'function', detail: '({subject,…}) — create an opportunity' },
+    { label: 'actions.createProposalFromOrder', type: 'function', detail: '({order,opportunityId,…}) — current-catalog reorder proposal' },
   ],
   user: [
     { label: 'user.emails', type: 'variable', detail: 'saved emails []' },
@@ -189,6 +192,7 @@ const BINDING_OPTIONS = {
     { label: 'page.relatedContacts', type: 'variable', detail: 'contacts listed on this account []' },
     { label: 'page.tasks', type: 'variable', detail: 'open/done CRM tasks — .open[i].complete()' },
     { label: 'page.evaluate', type: 'function', detail: '(ref) → outbound — renders a saved template (a step)' },
+    { label: 'page.opportunities', type: 'variable', detail: 'full editable opportunities [] when referenced' },
   ],
 };
 

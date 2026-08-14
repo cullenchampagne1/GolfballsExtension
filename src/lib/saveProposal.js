@@ -129,7 +129,10 @@ export async function buildProposalLines(proposal) {
     // The buyer's base-option picks → the right child/widgetSelections. Balls
     // carry them on the decoration (__base); other products on line.variant.
     const selValues = (decoration && decoration.baseSelection) || (line.variant && line.variant.values) || null;
-    const selection = selValues ? { values: selValues } : {};
+    const selIds = line.variant && Array.isArray(line.variant.propertyValueIDs)
+      ? line.variant.propertyValueIDs.filter((id) => id != null)
+      : [];
+    const selection = selValues ? { values: selValues } : (selIds.length ? { propertyValueIDs: selIds } : {});
     // Price ladder that matches the line. The discriminator is the PRODUCT,
     // not the presence of art: a custom-logo product keeps its commissionable
     // ladder (+ second-pole upcharge when a pole2 imprint exists) whether or
@@ -380,7 +383,7 @@ const _PROD_IMG = 'https://static.golfballs.com/C/300x300/';
 /* One cart line (itemsInCart[i]) → a proposal/saved line { product, decoration,
    variant, splits }. The cart carries the real qty + price, so margin/totals are
    exact; the imprint decoration isn't reverse-mapped (shown as a plain line). */
-function cartItemToLine(it, i) {
+export function cartItemToLine(it, i) {
   const breaks = (((it.ItemPriceBreak && it.ItemPriceBreak.PriceBreak) || [])
     .map((b) => ({ q: Number(b.Quantity) || 0, p: Number(b.Price) || 0 })).filter((b) => b.q > 0));
   const cd = it.CustomData || {};
@@ -432,7 +435,18 @@ function cartItemToLine(it, i) {
       minQty: (breaks[0] && breaks[0].q) || qty,
     },
     decoration,
-    variant: null,
+    // Preserve the selected child by its site-native property-value ids. Exact
+    // current products usually retain these ids, letting a duplicated apparel /
+    // accessory line keep its size, color, or pack choice. A generation
+    // replacement deliberately clears them in priorOrderEngine because ids are
+    // not portable between different parent products.
+    variant: (() => {
+      const child = Array.isArray(it.childList) ? it.childList[0] : null;
+      const ids = ((child && child.PropertyValueProduct) || [])
+        .map((property) => property && property.propertyValueProductID)
+        .filter((id) => id != null && id !== '');
+      return ids.length ? { propertyValueIDs: ids } : null;
+    })(),
     // CRITICAL: keep the cart's ORIGINAL itemGuid as the split id. On re-save the
     // saved itemGuid IS this id (buildProposalLines → assembleLine), and a
     // FREE_QUANTITY promotion references items by that exact guid
@@ -605,6 +619,12 @@ export async function saveProposalToOpportunity(proposal, {
   opportunityID, customerID = 0, name, expiration, proposalID = null, promotion = null,
 } = {}) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
+  const needsReview = proposal.filter((line) => line && (
+    line.unavailable || (line.refresh && line.refresh.status === 'review')
+  ));
+  if (needsReview.length) {
+    throw new Error(`${needsReview.length} prior-order item${needsReview.length === 1 ? '' : 's'} need review before this proposal can be saved`);
+  }
   if (opportunityID == null || opportunityID === '') throw new Error('Pick an opportunity to save to');
   if (!name || !name.trim()) throw new Error('Name the proposal');
   const { items, skipped } = await buildProposalLines(proposal);
@@ -631,6 +651,25 @@ export async function saveProposalToOpportunity(proposal, {
    ─────────────────────────────────────────────────────────────────────────── */
 const SAVED_KEY = 'gbSavedProposals';
 const _rid = () => Math.random().toString(36).slice(2, 9);
+const _refreshSnapshot = (value) => {
+  const source = value && typeof value === 'object' ? value : null;
+  if (!source || !['current', 'repriced', 'replaced', 'review'].includes(source.status)) return null;
+  const text = (field, max = 1_000) => String(source[field] == null ? '' : source[field]).slice(0, max);
+  const number = (field) => {
+    if (source[field] == null || source[field] === '') return null;
+    const parsed = Number(source[field]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return {
+    status: source.status,
+    previousTitle: text('previousTitle'),
+    currentTitle: text('currentTitle'),
+    previousPrice: number('previousPrice'),
+    currentPrice: number('currentPrice'),
+    score: number('score'),
+    reason: text('reason', 2_000),
+  };
+};
 
 export function loadSavedProposals() {
   return new Promise((resolve) => {
@@ -664,6 +703,8 @@ export async function saveProposalDraft(name, proposal, promotion = null) {
       decoration: l.decoration || null,
       variant: l.variant || null,
       free: !!l.free,
+      unavailable: !!l.unavailable,
+      refresh: _refreshSnapshot(l.refresh),
       // The site-authoritative full value of a free dozen, kept so the email's
       // HAR totals net it off at the right amount on reload. (The parent link is
       // rebuilt from product identity in linesFromSaved — see there.)
@@ -744,6 +785,8 @@ export function normalizeProposalEntry(entry = {}) {
       decoration: (l && l.decoration) || null,
       variant: (l && l.variant) || null,
       free: !!(l && l.free),
+      unavailable: !!(l && l.unavailable),
+      refresh: _refreshSnapshot(l && l.refresh),
       freeValue: (l && l.freeValue != null) ? l.freeValue : null,
       // priceEdited must round-trip: it marks a hand-quoted price, which both the
       // auto-reprice effect and the cart serializer honor as an override. Dropping
@@ -889,6 +932,8 @@ export function saveCurrentProposal(lines) {
     decoration: l.decoration || null,
     variant: l.variant || null,
     free: !!l.free,
+    unavailable: !!l.unavailable,
+    refresh: _refreshSnapshot(l.refresh),
     freeValue: l.freeValue != null ? l.freeValue : null,
     parentLineId: l.parentLineId || null,
     splits: (l.splits || []).map((s) => ({ ...s })),
@@ -914,6 +959,8 @@ export function linesFromSaved(entry, ridFn) {
     decoration: l.decoration || undefined,
     variant: l.variant || undefined,
     free: !!l.free,
+    unavailable: !!l.unavailable,
+    refresh: _refreshSnapshot(l.refresh) || undefined,
     freeValue: l.freeValue != null ? l.freeValue : undefined,
     // Keep priceEdited so a loaded draft's hand-quoted prices survive: it stops
     // the auto-reprice effect from resetting them AND flags the cart override.

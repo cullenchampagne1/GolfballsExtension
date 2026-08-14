@@ -66,7 +66,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v8'; // bumped: pagination stride fix — the old start+=PAGE_ROWS(500) stride over a 200-capped page dropped ~60% of the catalog (3,553→~1,378), and that truncated set got cached as "complete"; v7 and earlier caches hold the partial list, so force a one-time full re-index
+const CACHE_KEY = 'gbGiftCatalogCache_v9'; // bumped: preserve stock + commissionable variants that share one Solr id (v8 kept only the first, hiding products such as custom-logo TP5)
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -238,11 +238,13 @@ export function normalizeDoc(doc) {
   if (!doc) return null;
   let breaks = [];
   let productionTime = null;
+  let hasCustomLogoPriceBreaks = false;
   try {
     const pb = JSON.parse(doc.customLogoPriceBreak_s || '{}');
     breaks = (pb.PriceBreak || [])
       .filter((b) => b && b.Quantity != null)
       .map((b) => ({ q: b.Quantity, p: round2(b.Price) }));
+    hasCustomLogoPriceBreaks = breaks.some((entry) => Number(entry.p) > 0);
     if (pb.ProductionTime != null) productionTime = pb.ProductionTime;
   } catch { /* no break ladder */ }
 
@@ -254,8 +256,10 @@ export function normalizeDoc(doc) {
   if (!breaks.length && price != null) breaks = [{ q: 1, p: round2(price) }];
   const orig = num(doc.originalPrice_d);
 
+  const sourceId = doc.id || doc.parentCode_s || '';
   return {
-    id:      doc.id || doc.parentCode_s || '',
+    id:      sourceId,
+    sourceId,                                             // raw Solr identity; multiple sellable variants may share it
     parentCode: doc.parentCode_s || '',                 // order line items reference this; keep it for by-id matching
     sku:     customData.parentSku || doc.parentCode_s || '', // human SKU (parentSku, e.g. "M6594"); falls back to the product code
     title:   cleanTitle(doc.title_s || doc.title_txt_en || ''),
@@ -263,6 +267,10 @@ export function normalizeDoc(doc) {
     cat:     deriveCat(doc),                             // custom-logo "Shop by Type" bucket
     dept:    deriveDept(doc),                            // full-catalog department bucket
     customLogo: isCustomLogo(doc),                       // in the old custom-logo catalog? (drives the $ badge)
+    // `breaks` can fall back to the stock price below. Keep the source explicit
+    // so prior-order automation never mistakes that fallback for a real,
+    // commissionable custom-logo ladder.
+    hasCustomLogoPriceBreaks,
     // Customizable = carries ANY decoration modification (Custom Logo,
     // Personalized, Monogram, Photo, Ball Marker, …) — broader than customLogo.
     // Drives whether the detail panel shows the customization UI (e.g. a
@@ -301,6 +309,53 @@ export function normalizeDoc(doc) {
   };
 }
 
+/* A Solr parent can legitimately have two sellable documents with the SAME id:
+   the stock URL and the commissionable custom-logo URL. Deduping on `id` alone
+   erased whichever arrived second. The source id + sellable URL + logo mode is
+   the stable document identity; exact repeats from overlapping/deep pages still
+   collapse. */
+export function catalogProductKey(product) {
+  const p = product || {};
+  const source = String(p.sourceId || p.id || '').trim().toLowerCase();
+  let path = String(p.urlPath || p.url || '').trim().toLowerCase();
+  try { path = new URL(path, 'https://www.golfballs.com').pathname.toLowerCase().replace(/\/$/, ''); }
+  catch { path = path.replace(/[?#].*$/, '').replace(/\/$/, ''); }
+  return `${source}|${p.customLogo ? 'logo' : 'stock'}|${path}`;
+}
+
+function variantProductId(product, usedIds) {
+  const base = String(product.id || product.sourceId || 'product');
+  let slug = String(product.urlPath || product.url || '')
+    .replace(/[?#].*$/, '').split('/').filter(Boolean).pop() || '';
+  slug = slug.replace(/\.html?$/i, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 72);
+  let candidate = `${base}::${product.customLogo ? 'logo' : 'stock'}${slug ? `::${slug}` : ''}`;
+  let suffix = 2;
+  while (usedIds.has(candidate)) { candidate = `${base}::${product.customLogo ? 'logo' : 'stock'}::${suffix}`; suffix += 1; }
+  return candidate;
+}
+
+function addCatalogProduct(out, product, seenKeys, usedIds) {
+  if (!product || !product.id) return false;
+  const key = catalogProductKey(product);
+  if (seenKeys.has(key)) return false;
+  seenKeys.add(key);
+  if (usedIds.has(product.id)) product = { ...product, id: variantProductId(product, usedIds) };
+  usedIds.add(product.id);
+  out.push(product);
+  return true;
+}
+
+/** Pure batch normalizer used by tests and imports. */
+export function normalizeCatalogDocs(docs) {
+  const out = [];
+  const seenKeys = new Set();
+  const usedIds = new Set();
+  for (const doc of (Array.isArray(docs) ? docs : [])) {
+    addCatalogProduct(out, normalizeDoc(doc), seenKeys, usedIds);
+  }
+  return out;
+}
+
 function fetchPage(searchTerm, start, rows) {
   return new Promise((resolve) => {
     try {
@@ -333,7 +388,7 @@ function setCache(payload) {
  *  rebuild truly clears stale data instead of falling back to the old cache. */
 export function clearCatalogCache() {
   return new Promise((resolve) => {
-    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5'], resolve); }
+    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5', 'gbGiftCatalogCache_v6', 'gbGiftCatalogCache_v7', 'gbGiftCatalogCache_v8'], resolve); }
     catch { resolve(); }
   });
 }
@@ -380,7 +435,8 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
   // everything fetched so far AND cached that partial set, silently dropping
   // every product after the failure point. We now only cache a COMPLETE pull.
   const out = [];
-  const seenIds = new Set();
+  const seenKeys = new Set();
+  const usedIds = new Set();
   const MAX_PAGE_RETRIES = 4;
   let start = 0;
   let lastError = null;
@@ -401,7 +457,7 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
     if (!page.docs.length) { complete = true; break; }   // genuine end of results
     for (const d of page.docs) {
       const p = normalizeDoc(d);
-      if (p && p.id && !seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
+      addCatalogProduct(out, p, seenKeys, usedIds);
     }
     // Advance by the number of docs the service ACTUALLY returned, never by a
     // constant PAGE_ROWS — if the gateway hands back fewer rows than requested

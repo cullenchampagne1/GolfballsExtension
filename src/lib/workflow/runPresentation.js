@@ -13,6 +13,7 @@ const CONTRACT_LABELS = Object.freeze({
   completeTask: 'Complete task',
   updateOpportunity: 'Edit opportunity',
   createOpportunity: 'Create opportunity',
+  createProposalFromOrder: 'Create reorder proposal',
   logCall: 'Log call',
   addNote: 'Add note',
   editContact: 'Edit contact',

@@ -35,6 +35,7 @@ import {
   updateOpportunityById,
 } from '../lib/crmOpportunities.js';
 import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
+import { createProposalFromOrder } from '../lib/priorOrderEngine.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   WORKFLOW_MANAGER_HEIGHT,
@@ -353,6 +354,7 @@ function makeContactExecutor(context, runDeps, dispatch) {
     updateContact: crmUpdateContact,
     updateOpportunityById,
     createOpportunity,
+    createProposalFromOrder,
   });
 }
 

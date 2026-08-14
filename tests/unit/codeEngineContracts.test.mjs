@@ -64,6 +64,7 @@ describe('contracts · effect → gate is the safety spine', () => {
     assert.equal(contractGate('addNote'), 'confirm'); // remote
     assert.equal(contractGate('updateOpportunity'), 'confirm'); // remote
     assert.equal(contractGate('createOpportunity'), 'confirm'); // remote
+    assert.equal(contractGate('createProposalFromOrder'), 'confirm'); // remote
     assert.equal(contractGate('unknown'), null);
   });
 });
@@ -171,6 +172,20 @@ describe('contracts · input validation (template OR custom object)', () => {
         subject: 'August Order', estimatedValue: 2400,
       }),
       'Create opportunity “August Order” · $2,400',
+    );
+  });
+
+  it('requires both a prior order and destination opportunity for a reorder proposal', () => {
+    assert.equal(validateContractInput('createProposalFromOrder', {
+      order: { number: '1001', url: '91' }, opportunityId: '88', name: 'August reorder',
+    }).ok, true);
+    assert.equal(validateContractInput('createProposalFromOrder', { opportunityId: '88' }).ok, false);
+    assert.equal(validateContractInput('createProposalFromOrder', { order: { url: '91' } }).ok, false);
+    assert.equal(
+      describeContract('createProposalFromOrder', {
+        order: { number: '1001' }, opportunityId: '88', name: 'August reorder',
+      }),
+      'Create proposal “August reorder” from order 1001',
     );
   });
 

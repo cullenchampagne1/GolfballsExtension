@@ -8,6 +8,7 @@ import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '
 import { loadScales } from '../lib/scales.js';
 import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, savedProposalsForSelection, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail, createProposalStore, importProposalStore, buildProposalStoreFile, importProposalStoreFile } from '../lib/saveProposal.js';
+import { loadPriorOrderEntries } from '../lib/priorOrderEngine.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
@@ -763,17 +764,6 @@ function CatRow({ glyph, label, count, active, onClick, indent = false, chevron,
   );
 }
 
-/* Placeholder row for an upcoming saved view (disabled until built). */
-function SavedStub({ label, icon }) {
-  return (
-    <div title="Coming soon" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'default', opacity: .55 }}>
-      <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex', flexShrink: 0 }}>{icon}</span>
-      <span style={{ flex: 1, fontSize: 11.5, fontWeight: 500, color: 'var(--gb-text-tertiary)' }}>{label}</span>
-      <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)', padding: '1px 5px' }}>Soon</span>
-    </div>
-  );
-}
-
 /* A clickable saved-view nav row (active-aware, with a count badge). */
 function SavedNavRow({ label, icon, count, active, onClick }) {
   const [hover, setHover] = useState(false);
@@ -788,7 +778,7 @@ function SavedNavRow({ label, icon, count, active, onClick }) {
   );
 }
 
-function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, dock, view, onSetView, savedCount, customCount, currentCount }) {
+function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, dock, view, onSetView, savedCount, customCount, currentCount, orderCount }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: '5px 12px 12px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '0 10px 3px', flexShrink: 0 }}>Browse</div>
@@ -825,7 +815,8 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, favoriteCount, 
             from the CRM), distinct from local saved drafts. */}
         <SavedNavRow label="Current Proposals" icon={<I.card size={14} />} count={currentCount || 0}
           active={view === 'current'} onClick={() => onSetView('current')} />
-        <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
+        <SavedNavRow label="Previous Orders" icon={<I.refresh size={14} />} count={orderCount || 0}
+          active={view === 'orders'} onClick={() => onSetView('orders')} />
       </div>
       {/* AnimatePresence so the dock plays its exit when the proposal opens
           (it carries marginTop/flexShrink itself now). */}
@@ -1097,7 +1088,16 @@ function resolveSavedEntry(entry) {
   // lines are filtered out here).
   const entries = [];
   (entry.lines || []).forEach((l, srcIndex) => {
-    if (l && l.product) entries.push({ product: l.product, decoration: l.decoration, splits: l.splits || [], free: !!l.free, srcIndex });
+    if (l && l.product) entries.push({
+      id: l.id,
+      product: l.product,
+      decoration: l.decoration,
+      splits: l.splits || [],
+      free: !!l.free,
+      refresh: l.refresh || null,
+      unavailable: !!l.unavailable,
+      srcIndex,
+    });
   });
   const units = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0), 0), 0);
   const total = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0), 0);
@@ -1262,6 +1262,17 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
   const chips = decoImprints(e.decoration);
   const editable = typeof onEditPrice === 'function' && !e.free;   // free giveaway lines aren't editable
   const star = estimated ? <sup title="No cost on file — estimated" style={{ color: 'var(--gb-warning-fg, #b6830a)', fontWeight: 800, marginLeft: 1 }}>*</sup> : null;
+  const refresh = e.refresh || null;
+  const refreshText = refresh && refresh.status === 'review'
+    ? `Needs review · ${refresh.reason || 'No unambiguous current item found'}`
+    : refresh && refresh.status === 'replaced'
+      ? `Current generation · replaces ${refresh.previousTitle || 'the prior item'}`
+      : refresh && refresh.status === 'repriced'
+        ? `Price refreshed · ${usd(refresh.previousPrice)} → ${usd(refresh.currentPrice)}`
+        : '';
+  const refreshColor = refresh && refresh.status === 'review'
+    ? 'var(--gb-warning-fg, #b6830a)'
+    : 'var(--gb-brand-label)';
   return (
     <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1272,6 +1283,7 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</span>
             {e.free && <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>}
           </div>
+          {refreshText && <div title={refreshText} style={{ marginTop: 2, fontSize: 9.5, fontWeight: 650, color: refreshColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{refreshText}</div>}
         </div>
         <span style={{ width: 50, textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{e.units}</span>
         <span style={{ width: 80, textAlign: 'right', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{money(e.lineRev)}</span>
@@ -1715,7 +1727,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim, readOnly, subtitle, selected, onToggleSelect }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim, readOnly, readOnlyLabel = 'Current', subtitle, selected, onToggleSelect }) {
   const [hover, setHover] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const cardRef = useRef(null);
@@ -1748,7 +1760,7 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
         {readOnly ? (
           /* Live CRM proposal — a static "Current" tag (no delete). */
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 9px', borderRadius: 999, fontSize: 10, fontWeight: 700, letterSpacing: .2, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)' }}>
-            <I.card size={9} /> Current
+            {readOnlyLabel === 'Previous' ? <I.refresh size={9} /> : <I.card size={9} />} {readOnlyLabel}
           </span>
         ) : (
           /* Deletion is deliberately persistent and two-step. The old control
@@ -1810,10 +1822,10 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
             <Checkbox checked={selected} onChange={() => onToggleSelect(item)} />
           </span>
         )}
-        <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title={loaded ? 'Added to proposal' : 'Load these items into the proposal'}
+        {onLoad && <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title={loaded ? 'Added to proposal' : 'Load these items into the proposal'}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, flexShrink: 0, background: loaded ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-medium)', color: loaded ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', transition: 'all var(--gb-anim)' }}>
           {loaded ? <><I.check size={12} strokeWidth={3} /> Added</> : <><I.plus size={12} /> Load</>}
-        </button>
+        </button>}
       </div>
     </motion.div>
   );
@@ -1874,7 +1886,7 @@ function GalleryNotice({ icon, title, message }) {
 
 function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail,
   title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, notice, error, onRefresh, emptyTitle, emptyText, subtitleOf,
-  selectedIds, onToggleSelect, onOpenMulti, onClearSelection, headerAction }) {
+  selectedIds, onToggleSelect, onOpenMulti, onClearSelection, headerAction, readOnlyLabel, loadingText = 'Loading proposals…' }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1928,7 +1940,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
         {!hideCurrent && current && current.length > 0 && <CurrentProposalCard entries={current} onOpen={onOpenCurrent} />}
         {loading && items.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 0' }}>
-            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading proposals…
+            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> {loadingText}
           </div>
         ) : notice ? (
           <GalleryNotice icon={notice.icon} title={notice.title} message={notice.message} />
@@ -1955,7 +1967,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight} moveAnim={moveAnim}
-                  readOnly={readOnly} subtitle={subtitleOf ? subtitleOf(it) : undefined}
+                  readOnly={readOnly} readOnlyLabel={readOnlyLabel} subtitle={subtitleOf ? subtitleOf(it) : undefined}
                   selected={selectedIds ? selectedIds.has(it.id) : false} onToggleSelect={onToggleSelect}
                   onOpen={onOpen} onLoad={onLoad} onDelete={onDelete} />
               ))}
@@ -3241,8 +3253,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   }, [proposal]);
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
-  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom' | 'current'
-  useEffect(() => { if (view !== 'proposals' && view !== 'current') setDetail(null); setSelProps([]); }, [view]);  // close breakdown + clear multi-select on view change
+  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom' | 'current' | 'orders'
+  useEffect(() => { if (view !== 'proposals' && view !== 'current' && view !== 'orders') setDetail(null); setSelProps([]); }, [view]);  // close breakdown + clear multi-select on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const selectedSavedProposals = useMemo(
     () => savedProposalsForSelection(savedProposals, selPropIds),
@@ -3266,6 +3278,25 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       .finally(() => { if (aliveRef.current) setCurrentLoading(false); });
   }, [pageContext.accountId, pageContext.opportunities]);
   useEffect(() => { if (view === 'current' && !currentLoaded) loadCurrentProposals(); }, [view, currentLoaded, loadCurrentProposals]);
+  // Previous Orders — each visible contact/account order is followed through its
+  // real Duplicate Order cart in the background, then reconciled to THIS live
+  // catalog. No navigation and no raw checkout/account data crosses into React.
+  const pageOrders = Array.isArray(pageContext.orders) ? pageContext.orders : [];
+  const [previousOrders, setPreviousOrders] = useState([]);
+  const [previousLoading, setPreviousLoading] = useState(false);
+  const [previousLoaded, setPreviousLoaded] = useState(false);
+  const [previousError, setPreviousError] = useState('');
+  const loadPreviousOrders = useCallback(() => {
+    if (!pageOrders.length) { setPreviousLoaded(true); setPreviousOrders([]); return; }
+    setPreviousLoading(true); setPreviousError(''); setPreviousLoaded(true);
+    loadPriorOrderEntries(pageOrders, { catalog })
+      .then((list) => { if (aliveRef.current) setPreviousOrders(list); })
+      .catch((error) => { if (aliveRef.current) setPreviousError((error && error.message) || 'Could not load previous orders'); })
+      .finally(() => { if (aliveRef.current) setPreviousLoading(false); });
+  }, [pageOrders, catalog]);
+  useEffect(() => {
+    if (view === 'orders' && !previousLoaded && !loading) loadPreviousOrders();
+  }, [view, previousLoaded, loading, loadPreviousOrders]);
   // Custom items (SERVICEITEM) — rep-defined products in chrome.storage; editingCustom
   // holds the record being created/edited in the form ({} = new, null = closed).
   const [customItems, setCustomItems] = useState([]);
@@ -3902,7 +3933,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail sel={sel} onSelect={(s) => { const alreadyBrowsing = view === 'catalog'; setView('catalog'); setSelFromCmd(false); setSel((cur) => (alreadyBrowsing && cur === s ? 'all' : s)); }} total={catalog.length}
             depts={depts} deptCounts={deptCounts} favoriteCount={favoriteCount}
-            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length} currentCount={currentProposals.length}
+            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length} currentCount={currentProposals.length} orderCount={pageOrders.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <AnimatePresence mode="wait" initial={false}>
           {view === 'proposals' ? (
@@ -3945,6 +3976,30 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               selectedIds={selPropIds} onToggleSelect={toggleSelProp} onClearSelection={() => setSelProps([])}
               onOpenMulti={() => { if (selProps.length) setDetail({ kind: 'multi', items: selProps }); }} />
           </motion.div>
+          ) : view === 'orders' ? (
+            <motion.div key="orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+              <SavedGallery items={previousOrders} loadedId={loadedId} hideCurrent readOnly readOnlyLabel="Previous"
+                title="Previous Orders" headerIcon={<I.refresh size={16} />}
+                subtitleText={pageOrders.length ? <>Duplicated invisibly, then updated to current products and pricing</> : 'Open from a CRM contact or account to see its orders'}
+                loading={previousLoading} loadingText="Refreshing previous orders…"
+                notice={!pageOrders.length ? { title: 'No orders in this page context', message: 'Open Gift Catalog from a contact or account whose Orders table contains at least one order.', icon: <I.user size={15} /> } : undefined}
+                error={pageOrders.length ? previousError : undefined}
+                onRefresh={pageOrders.length ? loadPreviousOrders : undefined}
+                emptyTitle="No reusable orders" emptyText="No previous order on this page exposed a reusable Duplicate Order cart."
+                subtitleOf={(it) => {
+                  if (it.loadError) return `Could not load · ${it.loadError}`;
+                  const counts = it.refreshCounts || {};
+                  const changes = [counts.replaced ? `${counts.replaced} current-gen` : '', counts.repriced ? `${counts.repriced} repriced` : '', counts.review ? `${counts.review} review` : ''].filter(Boolean).join(' · ');
+                  return [it.orderStatus || it.orderSummary, changes].filter(Boolean).join(' · ');
+                }}
+                onOpen={(item) => item.loadError ? toast?.error?.(item.loadError) : setDetail({ kind: 'order', item })}
+                onLoad={(item) => {
+                  if (item.loadError) { toast?.error?.(item.loadError); return; }
+                  const review = Number(item.refreshCounts && item.refreshCounts.review) || 0;
+                  if (review) toast?.warning?.(`${review} item${review === 1 ? '' : 's'} need review before saving`, { duration: 6000 });
+                  loadSaved(item);
+                }} />
+            </motion.div>
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin} search={query}
@@ -4016,7 +4071,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           {/* Proposal breakdown drill-in — margin + order items. Overlays the
               gallery when a saved card or the current-proposal card is clicked. */}
           <AnimatePresence>
-            {(view === 'proposals' || view === 'current') && detail && (() => {
+            {(view === 'proposals' || view === 'current' || view === 'orders') && detail && (() => {
               const close = () => setDetail(null);
               if (detail.kind === 'multi') {
                 const its = detail.items || [];
@@ -4052,6 +4107,28 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     onLoad={() => { close(); loadSaved(it); }} />
                 );
               }
+              if (detail.kind === 'order') {
+                const it = detail.item; const r = resolveSavedEntry(it);
+                const counts = it.refreshCounts || {};
+                const updateText = [
+                  counts.replaced ? `${counts.replaced} current-generation replacement${counts.replaced === 1 ? '' : 's'}` : '',
+                  counts.repriced ? `${counts.repriced} repriced` : '',
+                  counts.review ? `${counts.review} need review` : '',
+                ].filter(Boolean).join(' · ') || 'Every item is current';
+                return (
+                  <SavedDetail key={'bd-' + it.id} title={it.name}
+                    subtitle={`${fmtSavedDate(it.date)} · ${r.units} units · ${updateText}`}
+                    badge={<Tag tone={counts.review ? 'warning' : 'brand'} size="sm" icon={<I.refresh size={9} />}>Previous</Tag>}
+                    entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                    buildEmailSource={counts.review ? undefined : () => proposalToEmailSource(linesFromSaved(it, rid), `${it.name} reorder`)}
+                    buildCheckoutSource={counts.review ? undefined : () => checkoutSourceFromEntries(r.entries, `${it.name} reorder`, pageContext.accountName || '')}
+                    onLoad={() => {
+                      const review = Number(counts.review) || 0;
+                      if (review) toast?.warning?.(`${review} item${review === 1 ? '' : 's'} need review before saving`, { duration: 6000 });
+                      close(); loadSaved(it);
+                    }} />
+                );
+              }
               if (detail.kind === 'current') {
                 return (
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
@@ -4083,7 +4160,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           {/* Item details stay an overlay INSIDE the catalog card, so they
               coexist with the proposal side card (both visible at once). */}
           <AnimatePresence>
-            {selected && view !== 'proposals' && (
+            {selected && view !== 'proposals' && view !== 'current' && view !== 'orders' && (
               <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
                 onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)}
                 onEdit={(ci) => { setSelected(null); setEditingCustom(ci); }} />

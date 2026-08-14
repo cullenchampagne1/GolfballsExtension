@@ -138,6 +138,7 @@ export async function makeLiveExecutor(page, options = {}) {
     { completeTaskById, updateTaskById, getTaskContactId },
     { crmUpdateContact },
     { updateOpportunityById, createOpportunity },
+    { createProposalFromOrder },
     { dispatchBackgroundMessage },
   ] = await Promise.all([
     import('./executor.js'),
@@ -148,6 +149,7 @@ export async function makeLiveExecutor(page, options = {}) {
     import('../crmTasks.js'),
     import('../crm-detail-shared.jsx'),
     import('../crmOpportunities.js'),
+    import('../priorOrderEngine.js'),
     import('../backgroundMessage.js'),
   ]);
 
@@ -195,5 +197,6 @@ export async function makeLiveExecutor(page, options = {}) {
     updateContact: crmUpdateContact,
     updateOpportunityById,
     createOpportunity,
+    createProposalFromOrder,
   });
 }

@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -8,6 +8,8 @@ importScripts('lib/bounce-queue.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
+const GB_PRIOR_ORDER = globalThis.GBPriorOrder;
+if (!GB_PRIOR_ORDER) throw new Error('Prior-order parser failed to initialize');
 const GB_CALENDAR_FORM = globalThis.GBCalendarForm;
 if (!GB_CALENDAR_FORM) throw new Error('Calendar form-state helper failed to initialize');
 const GB_HELP_ASSISTANT = globalThis.GBHelpAssistant?.createController();
@@ -2179,6 +2181,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       sendResponse({ ok: false, error: String(lastErr) });
     })();
+    return true;
+  }
+
+  // ── Historical order → sanitized duplicate-cart lines ──────────────────
+  // The CRM order page owns the real "Duplicate Order" checkout UUID.  Fetch
+  // that page invisibly, follow only its validated golfballs.com cart link, and
+  // project CheckoutObject down to product/cart fields BEFORE replying.  The
+  // raw object also contains addresses, authorization, and payment state; those
+  // fields never cross the service-worker boundary or enter extension storage.
+  if (msg.action === 'giftLoadPriorOrder' && msg.orderId != null) {
+    const orderId = String(msg.orderId).trim();
+    if (!/^\d{1,12}$/.test(orderId) || Number(orderId) <= 0) {
+      sendResponse({ ok: false, error: 'Invalid order identifier' });
+      return true;
+    }
+    (async () => {
+      const orderUrl = `https://api.golfballs.com/golfballs/adminnew/default.aspx?folder=Orders&page=ViewOrder&orderID=${encodeURIComponent(orderId)}`;
+      const orderResponse = await fetch(orderUrl, {
+        method: 'GET',
+        credentials: 'include',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { Accept: 'text/html,application/xhtml+xml' },
+      });
+      if (!orderResponse.ok) throw new Error(`Order page returned HTTP ${orderResponse.status}`);
+      const orderHtml = await gbReadTextLimited(orderResponse, 10_000_000);
+      const checkoutId = GB_PRIOR_ORDER.findDuplicateCheckoutId(orderHtml);
+      if (!checkoutId) throw new Error('This order does not expose a Duplicate Order cart');
+
+      const checkoutUrl = 'https://api.golfballs.com/golfballs/WebServices/Private/CheckoutObject.asmx/GetCheckoutObjectByMessageId?MessageId='
+        + encodeURIComponent(checkoutId);
+      const checkoutResponse = await fetch(checkoutUrl, {
+        method: 'GET',
+        credentials: 'include',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { Accept: 'application/xml,text/xml,*/*' },
+      });
+      if (!checkoutResponse.ok) throw new Error(`Duplicate-order checkout returned HTTP ${checkoutResponse.status}`);
+      const checkoutXml = await gbReadTextLimited(checkoutResponse, 10_000_000);
+      return GB_PRIOR_ORDER.parseCheckoutEnvelope(checkoutXml);
+    })()
+      .then((order) => sendResponse({ ok: true, order: { orderId, ...order } }))
+      .catch((error) => sendResponse({ ok: false, error: String((error && error.message) || error) }));
     return true;
   }
 

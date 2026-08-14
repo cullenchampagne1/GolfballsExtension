@@ -163,4 +163,46 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
     assert.equal(fired[1][1].id, '8842');
     assert.deepEqual(trace.map((entry) => entry.status), ['ran', 'ran']);
   });
+
+  it('resolves a generated proposal URL embedded in an evaluated email body', async () => {
+    const fired = [];
+    const executor = {
+      async run(name, input) {
+        fired.push([name, structuredClone(input)]);
+        if (name === 'createOpportunity') return { ok: true, opportunityId: '88' };
+        if (name === 'createProposalFromOrder') {
+          assert.equal(input.opportunityId, '88');
+          return { ok: true, proposalId: 'cart-9', cartID: 'cart-9', proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=88&cartID=cart-9', proposalUrlHtml: 'https://www.golfballs.com/cart?proposalMode=true&amp;opportunityID=88&amp;cartID=cart-9' };
+        }
+        return { ok: true };
+      },
+      async commitEdits() { return { ok: true }; },
+    };
+    const user = {
+      emails: {
+        Reorder: { id: 'email-1', name: 'Reorder', kind: 'email', subject: 'Updated proposal', body: '<p>Hello</p>' },
+      },
+    };
+    const evaluateRef = async () => ({
+      id: 'email-1', name: 'Reorder', templateId: 'email-1', subject: 'Updated proposal', body: '<p>Hello</p>', evaluated: true,
+    });
+    const source = `
+      const opportunity = await actions.createOpportunity({ subject: "August Order" });
+      const proposal = await actions.createProposalFromOrder({ order: page.orders[0], opportunityId: opportunity.opportunityId });
+      const email = await page.evaluate(user.emails.Reorder);
+      email.attachProposal(proposal, "View proposal");
+      await actions.sendEmail(email);
+    `;
+    const result = await simulateProgram(source, { orders: [{ number: '1001', url: '91' }] }, {
+      run: makeSandboxRunner({ exec: fakeExec, evaluateRef }),
+      user,
+      evaluateRef,
+      executor,
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(fired.map(([name]) => name), ['createOpportunity', 'createProposalFromOrder', 'sendEmail']);
+    assert.match(fired[2][1].body, /opportunityID=88&amp;cartID=cart-9/);
+    assert.equal(fired[2][1].body.includes('__gb_action_result__'), false);
+  });
 });

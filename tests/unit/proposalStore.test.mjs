@@ -12,6 +12,7 @@ import {
   normalizeProposalEntry, buildProposalStoreFile, parseProposalStoreFile,
   saveProposalDraft, removeSavedProposal, savedProposalsForSelection,
   linesFromSaved, saveCurrentProposal, loadCurrentProposal,
+  saveProposalToOpportunity,
   buildProposalEmailCreatePayload, buildProposedOpportunityUpdate,
   submitProposalEmail,
   PROPOSAL_STORE_FILE_KIND, PROPOSAL_STORE_FILE_VERSION,
@@ -74,6 +75,28 @@ describe('proposal store · normalize', () => {
       if (priorChrome === undefined) delete globalThis.chrome;
       else globalThis.chrome = priorChrome;
     }
+  });
+
+  it('keeps prior-order review state through reload and blocks an unresolved CRM save', async () => {
+    const review = {
+      status: 'review',
+      previousTitle: 'Discontinued hat',
+      currentTitle: '',
+      previousPrice: 18.5,
+      currentPrice: null,
+      score: 0,
+      reason: 'No unambiguous current item was found.',
+    };
+    const [restored] = linesFromSaved({
+      lines: [{ ...entry().lines[0], unavailable: true, refresh: review }],
+    }, () => 'fresh-id');
+
+    assert.equal(restored.unavailable, true);
+    assert.deepEqual(restored.refresh, review);
+    await assert.rejects(
+      saveProposalToOpportunity([restored], { opportunityID: '88', name: 'Unsafe reorder' }),
+      /1 prior-order item need review/,
+    );
   });
 });
 

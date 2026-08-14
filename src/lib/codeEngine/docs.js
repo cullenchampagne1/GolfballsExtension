@@ -37,6 +37,8 @@ function actionDoc(c) {
             ? ['await actions.updateOpportunity({ id: opportunity.id, fields: { stage: "Closed - Lost" } })', 'opportunity.stage = "Closed - Lost";   // grouped automatically']
           : c.name === 'createOpportunity'
             ? ['await actions.createOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13", estimatedValue: 2400 })']
+          : c.name === 'createProposalFromOrder'
+            ? ['const proposal = await actions.createProposalFromOrder({ order: page.orders[0], opportunityId: created.opportunityId });\nconst email = await page.evaluate(user.emails.ReorderProposal);\nemail.attachProposal(proposal);']
           : c.name === 'addNote'
             ? ['await actions.addNote({ subject: "Follow-up", body: "Reviewed account with customer." })']
             : ['await actions.logCall(user.call("Left VM"))'],
@@ -51,7 +53,7 @@ const STATIC = {
     rows: [
       ['page', 'the contact being run'],
       ['user', 'your saved emails / tasks / calls'],
-      ['actions', 'send email · create task · log call'],
+      ['actions', 'email · tasks · opportunities · reorder proposals · activity'],
     ],
     examples: ['if (page.contact.daysCold > 30)\n  await actions.sendEmail(user.email("Win-back"))'],
   },
@@ -145,6 +147,7 @@ const STATIC = {
       ['updateTask({id, fields})', 'edit approved fields on an existing task'],
       ['updateOpportunity({id, fields})', 'edit a CRM opportunity (safe Get → merge → Update)'],
       ['createOpportunity(fields)', 'create an opportunity for the current contact'],
+      ['createProposalFromOrder(fields)', 'refresh an old order and attach its proposal to an opportunity'],
     ],
     examples: ['await actions.sendEmail(user.email("Win-back"))'],
   },

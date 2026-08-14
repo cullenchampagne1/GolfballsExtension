@@ -40,6 +40,10 @@ const MONTHLY_OPPORTUNITY_ACTION = readFileSync(
   new URL('../../docs/examples/monthly-opportunity-renewal-contact-action.js', import.meta.url),
   'utf8',
 );
+const REORDER_PROPOSAL_ACTION = readFileSync(
+  new URL('../../docs/examples/reorder-proposal-contact-action.js', import.meta.url),
+  'utf8',
+);
 
 /* ── Shared helpers for reconciliation expectations ──────────────
    These restate the workflow's DOCUMENTED rules (not its code) so the
@@ -534,7 +538,7 @@ describe('workflow code flow', () => {
   });
 
   it('accepts the saved-email and opportunity examples through the live sandbox guard', () => {
-    for (const source of [SAVED_EMAIL_ACTION, MONTHLY_OPPORTUNITY_ACTION]) {
+    for (const source of [SAVED_EMAIL_ACTION, MONTHLY_OPPORTUNITY_ACTION, REORDER_PROPOSAL_ACTION]) {
       assert.equal(staticCheckCodeBody(buildTraceBody(instrument(source).code)), null);
     }
   });

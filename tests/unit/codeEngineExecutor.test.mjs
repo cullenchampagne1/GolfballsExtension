@@ -61,6 +61,10 @@ describe('executor · routing', () => {
       calls.push(['createOpportunity', fields.subject, options.contactId]);
       return { ok: true, opportunityId: 'new-88' };
     },
+    createProposalFromOrder: (input, ctx) => {
+      calls.push(['createProposal', input.order.number, input.opportunityId, ctx.contactId]);
+      return { ok: true, cartID: 'cart-9', proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&cartID=cart-9', lineCount: 2 };
+    },
     updateContact: (id, payload) => { calls.push(['edit', id, payload]); },
   };
 
@@ -74,8 +78,11 @@ describe('executor · routing', () => {
     await ex.run('completeTask', { id: 't9' });
     await ex.run('updateOpportunity', { id: 'o7', fields: { stage: 'Closed - Lost' } });
     const created = await ex.run('createOpportunity', { subject: 'August Order' });
+    const proposal = await ex.run('createProposalFromOrder', { order: { number: '1001' }, opportunityId: created.opportunityId });
     await ex.commitEdits({ jobTitle: 'VP', phone: '999' });
     assert.equal(created.opportunityId, 'new-88');
+    assert.equal(proposal.proposalId, 'cart-9');
+    assert.equal(proposal.lineCount, 2);
     assert.deepEqual(calls, [
       ['sendEmail', 'Hi', '42'],
       ['task', 'Do it', '42'],
@@ -85,6 +92,7 @@ describe('executor · routing', () => {
       ['complete', 't9'],
       ['updateOpportunity', 'o7', { stageId: '5' }, '42'],
       ['createOpportunity', 'August Order', '42'],
+      ['createProposal', '1001', 'new-88', '42'],
       ['edit', '42', { jobTitle: 'VP', phoneNumber: '999' }],
     ]);
   });

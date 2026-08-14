@@ -725,6 +725,14 @@
       "file": "tests/unit/giftCatalogPagination.test.mjs"
     },
     {
+      "name": "catalog \u00b7 prior-order checkout privacy boundary",
+      "file": "tests/unit/priorOrderEnvelope.test.mjs"
+    },
+    {
+      "name": "catalog \u00b7 prior orders \u2192 current products and pricing",
+      "file": "tests/unit/priorOrderEngine.test.mjs"
+    },
+    {
       "name": "catalog \u00b7 proposal persistence, sharing & send lifecycle",
       "file": "tests/unit/proposalStore.test.mjs"
     },

@@ -13,6 +13,7 @@
      completeTask     → crmTasks.completeTaskById(id)
      updateOpportunity→ Opportunity/Get → merge → Update
      createOpportunity→ Opportunity/Create
+     createProposalFromOrder → duplicate order → current catalog → proposal
      editContact      → crmUpdateContact(contactId, payload)  (grouped)
 
    One executor is built per contact (deps.ctx carries the contact's ids).
@@ -212,6 +213,26 @@ export function makeExecutor(deps = {}) {
         return {
           ok: true,
           opportunityId: String(result?.opportunityId || ''),
+          result,
+        };
+      }
+      if (contract === 'createProposalFromOrder') {
+        if (!deps.createProposalFromOrder) throw new Error('prior-order proposal creation is not configured');
+        const result = await deps.createProposalFromOrder(i, ctx);
+        assertHelperResult(result, 'prior-order proposal creation failed');
+        return {
+          ok: true,
+          cartID: String(result?.cartID || ''),
+          proposalId: String(result?.proposalId || result?.cartID || ''),
+          proposalUrl: String(result?.proposalUrl || ''),
+          proposalUrlHtml: String(result?.proposalUrlHtml || ''),
+          opportunityId: String(result?.opportunityId || i.opportunityId || ''),
+          orderId: String(result?.orderId || ''),
+          name: String(result?.name || i.name || ''),
+          lineCount: Number(result?.lineCount) || 0,
+          replaced: Number(result?.replaced) || 0,
+          repriced: Number(result?.repriced) || 0,
+          skipped: Number(result?.skipped) || 0,
           result,
         };
       }

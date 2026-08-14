@@ -27,6 +27,7 @@ function resolvePageContext() {
       contactName: (ctx.data.contact && (ctx.data.contact.name || ctx.data.contact.fullName))
         || (ctx.data.account && ctx.data.account.name) || null,
       opportunities: Array.isArray(ctx.data.opportunities) ? ctx.data.opportunities : [],
+      orders: Array.isArray(ctx.data.orders) ? ctx.data.orders : [],
     };
   } catch { return {}; }
 }

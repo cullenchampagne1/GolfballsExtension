@@ -28,6 +28,7 @@ export function buildCodeSpec(bindings = {}) {
         'page.tasks.items': 'the Task List entry-point rows when present, otherwise open + done; each row supports approved direct edits and complete()',
         'task.liveDate / dueDate / subject / description / categoryId / priority = value': 'edit an existing task; snake_case aliases are accepted and changes group into one write per task at run end (or task.commit())',
         'page.opportunities': 'array of full Opportunity/Get records when referenced — { id, subject, description, estimatedValue, estimatedCloseDate, stage, stageId, assignedToId, isClosed, isWon, isLost }',
+        'page.orders': 'array of recent CRM orders — pass one directly to actions.createProposalFromOrder',
         'opportunity.subject / description / estimatedValue / estimatedCloseDate / stage / stageId / assignedToId = value': 'edit an existing opportunity; changes group into one safe Get → merge → Update write at run end (or opportunity.commit())',
         'page.evaluate(ref)': 'render a saved-template REFERENCE into a sendable outbound object; await it — it is its own (slow) step',
       },
@@ -39,6 +40,7 @@ export function buildCodeSpec(bindings = {}) {
       outbound: {
         'outbound.subject / body': 'read or assign to override before sending',
         'outbound.append(text) / appendSubject(t)': 'append (chainable)',
+        'outbound.attachProposal(result, label?)': 'append a safe customer proposal link returned by actions.createProposalFromOrder',
         custom: 'a custom object of the same shape works too: { subject, body } (email) / { subject, priority, daysOut } (task)',
       },
       h: 'read-only helpers: h.fmt.title/upper/lower/currency/number/date, h.coalesce(...)',
@@ -67,6 +69,7 @@ export function buildCodeSpec(bindings = {}) {
       'Opportunity rows are hydrated with Opportunity/Get before code runs. Direct edits are grouped and the writer GETs the latest record again before merging and updating it.',
       'Editable opportunity fields are subject, description, estimatedValue, estimatedCloseDate, stage/stageId, and assignedToId. Closed - Won is stage 4; Closed - Lost is stage 5.',
       'actions.createOpportunity({ subject, estimatedCloseDate, estimatedValue, stage? }) creates against page.contact by default; contactId can be supplied explicitly.',
+      'actions.createProposalFromOrder({ order, opportunityId, name? }) follows Duplicate Order without page navigation, replaces only high-confidence discontinued products, reprices from the current catalog, and fails if any line needs review.',
       'The workflow body already runs once per audience record. Do not loop page.contacts unless you intentionally want nested audience work.',
       'Recipient defaults to page.contact; the signature is appended by the send engine — never include it.',
       'Guard on data you use, e.g. `if (page.contact.email) …`.',
@@ -77,6 +80,7 @@ export function buildCodeSpec(bindings = {}) {
       'const task = await actions.createTask({ subject: "Workflow test", daysOut: 0 });\nawait actions.completeTask({ id: task.taskId });\nawait actions.addNote({ subject: "Workflow test", body: "Non-email workflow verified." });\nreturn "verified";',
       'for (const task of page.tasks.items) {\n  const due = new Date(task.dueDate + "T12:00:00");\n  const live = new Date(due);\n  live.setDate(live.getDate() - 7);\n  task.liveDate = live;\n}\nreturn "rescheduled";',
       'const open = page.opportunities.find((opportunity) => !opportunity.isClosed);\nif (open) open.stage = "Closed - Lost";\nawait actions.createOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13", estimatedValue: page.stats.avgOrderSize });\nreturn "opportunity renewed";',
+      'const created = await actions.createOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13" });\nconst proposal = await actions.createProposalFromOrder({ order: page.orders[0], opportunityId: created.opportunityId });\nconst email = await page.evaluate(user.emails.ReorderProposal);\nemail.attachProposal(proposal);\nawait actions.sendEmail(email);',
     ],
   };
 }
