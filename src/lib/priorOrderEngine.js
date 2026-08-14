@@ -29,6 +29,13 @@ const str = (value) => String(value == null ? '' : value).replace(/\s+/g, ' ').t
 const lowerId = (value) => str(value).toLowerCase();
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
+export const PRIOR_ORDER_NO_DUPLICATE_CART = 'PRIOR_ORDER_NO_DUPLICATE_CART';
+
+export function isPriorOrderWithoutDuplicateCart(error) {
+  return str(error && error.code) === PRIOR_ORDER_NO_DUPLICATE_CART
+    || str(error && error.message) === 'This order does not expose a Duplicate Order cart';
+}
+
 export function orderIdOf(order) {
   const source = order && typeof order === 'object' ? order : {};
   const direct = [source.orderId, source.orderID, source.url, source.id]
@@ -298,15 +305,23 @@ export async function loadPriorOrderEntry(order, options = {}) {
 export async function loadPriorOrderEntries(orders, options = {}) {
   const source = (Array.isArray(orders) ? orders : []).filter((order) => orderIdOf(order));
   const catalog = Array.isArray(options.catalog) ? options.catalog : await loadCatalog();
+  const loadEntry = typeof options.loadEntry === 'function' ? options.loadEntry : loadPriorOrderEntry;
   const results = new Array(source.length);
   let cursor = 0;
+  let completed = 0;
   const worker = async () => {
     while (cursor < source.length) {
       const index = cursor;
       cursor += 1;
       const order = source[index];
-      try { results[index] = await loadPriorOrderEntry(order, { catalog }); }
+      try { results[index] = await loadEntry(order, { catalog }); }
       catch (error) {
+        if (isPriorOrderWithoutDuplicateCart(error)) {
+          results[index] = null;
+          completed += 1;
+          if (typeof options.onProgress === 'function') options.onProgress(completed, source.length);
+          continue;
+        }
         const orderId = orderIdOf(order);
         results[index] = {
           id: `order-${orderId}`,
@@ -321,12 +336,13 @@ export async function loadPriorOrderEntries(orders, options = {}) {
           refreshCounts: { current: 0, repriced: 0, replaced: 0, review: 0 },
         };
       }
-      if (typeof options.onProgress === 'function') options.onProgress(results.filter(Boolean).length, source.length);
+      completed += 1;
+      if (typeof options.onProgress === 'function') options.onProgress(completed, source.length);
     }
   };
   const concurrency = Math.max(1, Math.min(3, Number(options.concurrency) || 2, source.length || 1));
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  return results;
+  return results.filter(Boolean);
 }
 
 /** Action-engine writer: rebuild an order against today's catalog, then save it

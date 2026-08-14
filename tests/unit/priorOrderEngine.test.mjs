@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  loadPriorOrderEntries,
   orderIdOf,
+  PRIOR_ORDER_NO_DUPLICATE_CART,
   refreshPriorOrderCart,
   replacementScore,
 } from '../../src/lib/priorOrderEngine.js';
@@ -51,6 +53,34 @@ function product(overrides = {}) {
 describe('prior order engine · order identity', () => {
   it('uses the CRM orderID query parameter rather than the visible order label', () => {
     assert.equal(orderIdOf({ number: 'GB-100', href: 'https://api.golfballs.com/default.aspx?page=ViewOrder&orderID=9182' }), '9182');
+  });
+
+  it('omits orders without a Duplicate Order cart but retains real load failures', async () => {
+    const orders = [
+      { orderId: '101', number: 'GB-101' },
+      { orderId: '102', number: 'GB-102' },
+      { orderId: '103', number: 'GB-103' },
+    ];
+    const progress = [];
+    const entries = await loadPriorOrderEntries(orders, {
+      catalog: [],
+      concurrency: 1,
+      onProgress: (completed, total) => progress.push([completed, total]),
+      loadEntry: async (order) => {
+        if (order.orderId === '101') {
+          const error = new Error('This order does not expose a Duplicate Order cart');
+          error.code = PRIOR_ORDER_NO_DUPLICATE_CART;
+          throw error;
+        }
+        if (order.orderId === '102') throw new Error('Order page returned HTTP 401');
+        return { id: 'order-103', orderId: '103', name: 'Order GB-103', lines: [{}] };
+      },
+    });
+
+    assert.deepEqual(entries.map((entry) => entry.orderId), ['102', '103']);
+    assert.equal(entries[0].loadError, 'Order page returned HTTP 401');
+    assert.equal(entries[1].loadError, undefined);
+    assert.deepEqual(progress.at(-1), [3, 3]);
   });
 });
 

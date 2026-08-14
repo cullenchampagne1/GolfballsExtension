@@ -41,14 +41,18 @@ describe('background message · dispatcher compatibility', () => {
       runtime: {
         lastError: null,
         sendMessage(_message, done) {
-          done({ ok: false, error: 'blocked' });
+          done({ ok: false, error: 'blocked', errorCode: 'BLOCKED_BY_TEST' });
         },
       },
     };
     try {
       await assert.rejects(
         () => sendBackgroundMessage('fetchRaw', { url: 'https://example.test' }),
-        /blocked/,
+        (error) => {
+          assert.match(error.message, /blocked/);
+          assert.equal(error.code, 'BLOCKED_BY_TEST');
+          return true;
+        },
       );
     } finally {
       globalThis.chrome = prior;

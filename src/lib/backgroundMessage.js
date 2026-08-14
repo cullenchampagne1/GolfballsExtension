@@ -21,7 +21,9 @@ export function sendBackgroundMessage(action, payload = {}) {
           return;
         }
         if (!response || response.ok !== true) {
-          reject(new Error(response?.error || `${action} failed`));
+          const error = new Error(response?.error || `${action} failed`);
+          if (response?.errorCode) error.code = String(response.errorCode);
+          reject(error);
           return;
         }
         resolve(response);

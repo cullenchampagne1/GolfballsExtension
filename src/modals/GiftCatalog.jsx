@@ -3933,7 +3933,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail sel={sel} onSelect={(s) => { const alreadyBrowsing = view === 'catalog'; setView('catalog'); setSelFromCmd(false); setSel((cur) => (alreadyBrowsing && cur === s ? 'all' : s)); }} total={catalog.length}
             depts={depts} deptCounts={deptCounts} favoriteCount={favoriteCount}
-            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length} currentCount={currentProposals.length} orderCount={pageOrders.length}
+            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length} currentCount={currentProposals.length} orderCount={previousLoaded && !previousLoading ? previousOrders.length : pageOrders.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <AnimatePresence mode="wait" initial={false}>
           {view === 'proposals' ? (

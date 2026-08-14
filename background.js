@@ -2208,7 +2208,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!orderResponse.ok) throw new Error(`Order page returned HTTP ${orderResponse.status}`);
       const orderHtml = await gbReadTextLimited(orderResponse, 10_000_000);
       const checkoutId = GB_PRIOR_ORDER.findDuplicateCheckoutId(orderHtml);
-      if (!checkoutId) throw new Error('This order does not expose a Duplicate Order cart');
+      if (!checkoutId) {
+        const error = new Error('This order does not expose a Duplicate Order cart');
+        error.code = 'PRIOR_ORDER_NO_DUPLICATE_CART';
+        throw error;
+      }
 
       const checkoutUrl = 'https://api.golfballs.com/golfballs/WebServices/Private/CheckoutObject.asmx/GetCheckoutObjectByMessageId?MessageId='
         + encodeURIComponent(checkoutId);
@@ -2224,7 +2228,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return GB_PRIOR_ORDER.parseCheckoutEnvelope(checkoutXml);
     })()
       .then((order) => sendResponse({ ok: true, order: { orderId, ...order } }))
-      .catch((error) => sendResponse({ ok: false, error: String((error && error.message) || error) }));
+      .catch((error) => sendResponse({
+        ok: false,
+        error: String((error && error.message) || error),
+        ...(error && error.code ? { errorCode: String(error.code) } : {}),
+      }));
     return true;
   }
 
