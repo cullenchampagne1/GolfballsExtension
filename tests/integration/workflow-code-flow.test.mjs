@@ -18,6 +18,8 @@ import { instrument } from '../../src/lib/codeEngine/instrument.js';
 import { buildTraceBody, makeSandboxRunner } from '../../src/lib/codeEngine/sandboxRunner.js';
 import { simulateProgram } from '../../src/lib/codeEngine/simulate.js';
 import { staticCheckCodeBody } from '../../src/lib/page-engine/code-precheck.js';
+import { ensureOpenOpportunity } from '../../src/lib/crmOpportunities.js';
+import { SKU_PROPOSAL_SOURCE } from '../../src/lib/customActionRecipes.js';
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const RECONCILIATION_WORKFLOW = readFileSync(
@@ -381,6 +383,91 @@ describe('workflow code flow', () => {
     assert.equal(Math.round((close.getTime() - today.getTime()) / 86400000), 30);
   });
 
+  it('runs the Prior Year recipe through open-opportunity reuse, latest-order proposal, and email link', async () => {
+    const page = {
+      contact: { contactId: '42', contactName: 'Avery Buyer', email: 'avery@example.test' },
+      stats: { avgOrderSize: 2450.25 },
+      orders: [
+        { orderId: '1002', number: '1002', date: '2026-08-01' },
+        { orderId: '1001', number: '1001', date: '2026-05-01' },
+      ],
+      opportunities: [
+        { id: '71', opportunityId: '71', subject: 'Existing Order', stage: 'Open', stageId: '1', isClosed: false },
+      ],
+      tasks: { open: [], done: [] },
+    };
+    const calls = [];
+    const executor = makeExecutor({
+      ctx: {
+        contactId: '42',
+        email: 'avery@example.test',
+        orders: page.orders,
+        opportunities: page.opportunities,
+      },
+      ensureOpenOpportunity: (input, ctx) => ensureOpenOpportunity(input, {
+        contactId: ctx.contactId,
+        opportunities: ctx.opportunities,
+        createOpportunity: async () => {
+          throw new Error('the existing open opportunity should be reused');
+        },
+      }),
+      createProposalFromOrder: async (input, ctx) => {
+        calls.push(['proposal', input.opportunityId, ctx.orders.map((order) => order.orderId)]);
+        return {
+          ok: true,
+          cartID: 'cart-9',
+          proposalId: 'cart-9',
+          proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-9',
+          proposalUrlHtml: 'https://www.golfballs.com/cart?proposalMode=true&amp;opportunityID=71&amp;cartID=cart-9',
+          opportunityId: '71',
+          orderId: '1002',
+          lineCount: 2,
+        };
+      },
+      sendEmail: async (email, ctx) => {
+        calls.push(['email', email.subject, email.body, ctx.email]);
+        return { ok: true };
+      },
+    });
+    const user = {
+      emails: {
+        PriorYear: {
+          id: 'email-prior-year', name: 'Prior Year', kind: 'email',
+          subject: 'Your updated order', body: '<p>Hello Avery</p>',
+        },
+      },
+    };
+    const evaluateRef = async () => ({
+      id: 'email-prior-year',
+      templateId: 'email-prior-year',
+      name: 'Prior Year',
+      subject: 'Your updated order',
+      body: '<p>Hello Avery</p>',
+      evaluated: true,
+    });
+
+    const result = await simulateProgram(REORDER_PROPOSAL_ACTION, page, {
+      run: makeSandboxRunner({ exec: fakeSandbox, evaluateRef }),
+      user,
+      evaluateRef,
+      executor,
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.trace.filter((entry) => entry.contract).map((entry) => entry.contract), [
+      'ensureOpenOpportunity',
+      'createProposalFromOrder',
+      'evaluate',
+      'sendEmail',
+    ]);
+    assert.deepEqual(calls[0], ['proposal', '71', ['1002', '1001']]);
+    assert.equal(calls[1][0], 'email');
+    assert.equal(calls[1][3], 'avery@example.test');
+    assert.match(calls[1][2], /opportunityID=71&amp;cartID=cart-9/);
+    assert.equal(calls[1][2].includes('__gb_action_result__'), false);
+    assert.equal(result.result, 'Prior Year proposal created and email sent');
+  });
+
   it('hydrates full opportunity records only when a workflow requests them', async () => {
     const contact = { contactId: '42', _key: '42' };
     let hydrations = 0;
@@ -538,7 +625,7 @@ describe('workflow code flow', () => {
   });
 
   it('accepts the saved-email and opportunity examples through the live sandbox guard', () => {
-    for (const source of [SAVED_EMAIL_ACTION, MONTHLY_OPPORTUNITY_ACTION, REORDER_PROPOSAL_ACTION]) {
+    for (const source of [SAVED_EMAIL_ACTION, MONTHLY_OPPORTUNITY_ACTION, REORDER_PROPOSAL_ACTION, SKU_PROPOSAL_SOURCE]) {
       assert.equal(staticCheckCodeBody(buildTraceBody(instrument(source).code)), null);
     }
   });

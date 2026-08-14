@@ -25,6 +25,8 @@
    browser dependency and the wrap+replay path is unit-testable directly.
 ─────────────────────────────────────────────────────────────── */
 
+import { ACTION_RESULT_FIELDS } from './actionResultFields.js';
+
 /**
  * Wrap instrumented code into a sandbox body that records each traced call
  * locally and returns the ordered raw trace. The sandbox exposes the page
@@ -35,6 +37,7 @@
  * The body ends in `return`, so the sandbox's wrapBody leaves it verbatim.
  */
 export function buildTraceBody(instrumentedCode) {
+  const resultFields = JSON.stringify(ACTION_RESULT_FIELDS);
   return [
     'const page = (ctx && ctx.page) || {};',
     // Rebuild the user binding (functions can\'t cross the realm) from the
@@ -55,7 +58,7 @@ export function buildTraceBody(instrumentedCode) {
     '  o.appendSubject = function (t) { this.subject = (this.subject || "") + String(t == null ? "" : t); return this; };',
     '  o.attachProposal = function (proposal, label) {',
     '    const url = String((proposal && (proposal.proposalUrl || proposal.url)) || "");',
-    '    if (!/^https:\\/\\/(?:www\\.)?golfballs\\.com\\/cart\\?/i.test(url) && !/^__gb_action_result__:n\\d+_\\d+:proposalUrl$/.test(url)) throw new Error("attachProposal needs the result from actions.createProposalFromOrder");',
+    '    if (!/^https:\\/\\/(?:www\\.)?golfballs\\.com\\/cart\\?/i.test(url) && !/^__gb_action_result__:n\\d+_\\d+:proposalUrl$/.test(url)) throw new Error("attachProposal needs a result from actions.createProposalFromOrder or actions.createProposal");',
     '    const esc = (v) => String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;");',
     '    const htmlUrl = String((proposal && proposal.proposalUrlHtml) || "");',
     '    const href = /^__gb_action_result__:n\\d+_\\d+:proposalUrlHtml$/.test(htmlUrl) || htmlUrl === esc(url) ? htmlUrl : esc(url);',
@@ -183,9 +186,8 @@ export function buildTraceBody(instrumentedCode) {
     '  const plainInput = input === undefined ? null : JSON.parse(JSON.stringify(input, (_key, value) => typeof value === "function" ? undefined : value));',
     '  __gbTrace.push({ id, contract: name, input: plainInput });',
     '  const result = { ok: true, dry: true, simulated: true };',
-    '  if (name === "createTask") result.taskId = "__gb_action_result__:" + String(id) + ":taskId";',
-    '  if (name === "createOpportunity") result.opportunityId = "__gb_action_result__:" + String(id) + ":opportunityId";',
-    '  if (name === "createProposalFromOrder") { for (const field of ["proposalId","cartID","proposalUrl","proposalUrlHtml","opportunityId","orderId","name"]) result[field] = "__gb_action_result__:" + String(id) + ":" + field; }',
+    `  const fields = (${resultFields})[name] || [];`,
+    '  for (const field of fields) result[field] = "__gb_action_result__:" + String(id) + ":" + field;',
     '  return result;',
     '} };',
     'const __gbRet = await (async () => {',

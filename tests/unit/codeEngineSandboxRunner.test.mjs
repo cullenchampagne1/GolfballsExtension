@@ -169,9 +169,10 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
     const executor = {
       async run(name, input) {
         fired.push([name, structuredClone(input)]);
-        if (name === 'createOpportunity') return { ok: true, opportunityId: '88' };
+        if (name === 'ensureOpenOpportunity') return { ok: true, opportunityId: '88', created: false };
         if (name === 'createProposalFromOrder') {
           assert.equal(input.opportunityId, '88');
+          assert.equal(input.order, undefined);
           return { ok: true, proposalId: 'cart-9', cartID: 'cart-9', proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=88&cartID=cart-9', proposalUrlHtml: 'https://www.golfballs.com/cart?proposalMode=true&amp;opportunityID=88&amp;cartID=cart-9' };
         }
         return { ok: true };
@@ -180,16 +181,16 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
     };
     const user = {
       emails: {
-        Reorder: { id: 'email-1', name: 'Reorder', kind: 'email', subject: 'Updated proposal', body: '<p>Hello</p>' },
+        PriorYear: { id: 'email-1', name: 'Prior Year', kind: 'email', subject: 'Updated proposal', body: '<p>Hello</p>' },
       },
     };
     const evaluateRef = async () => ({
-      id: 'email-1', name: 'Reorder', templateId: 'email-1', subject: 'Updated proposal', body: '<p>Hello</p>', evaluated: true,
+      id: 'email-1', name: 'Prior Year', templateId: 'email-1', subject: 'Updated proposal', body: '<p>Hello</p>', evaluated: true,
     });
     const source = `
-      const opportunity = await actions.createOpportunity({ subject: "August Order" });
-      const proposal = await actions.createProposalFromOrder({ order: page.orders[0], opportunityId: opportunity.opportunityId });
-      const email = await page.evaluate(user.emails.Reorder);
+      const opportunity = await actions.ensureOpenOpportunity({ subject: "August Order" });
+      const proposal = await actions.createProposalFromOrder({ opportunityId: opportunity.opportunityId });
+      const email = await page.evaluate(user.emails.PriorYear);
       email.attachProposal(proposal, "View proposal");
       await actions.sendEmail(email);
     `;
@@ -201,8 +202,54 @@ describe('sandboxRunner · executes in the (fake) sandbox and replays', () => {
     });
 
     assert.equal(result.ok, true);
-    assert.deepEqual(fired.map(([name]) => name), ['createOpportunity', 'createProposalFromOrder', 'sendEmail']);
+    assert.deepEqual(fired.map(([name]) => name), ['ensureOpenOpportunity', 'createProposalFromOrder', 'sendEmail']);
     assert.match(fired[2][1].body, /opportunityID=88&amp;cartID=cart-9/);
     assert.equal(fired[2][1].body.includes('__gb_action_result__'), false);
+  });
+
+  it('passes a scratch SKU proposal result into the same safe email-link helper', async () => {
+    const fired = [];
+    const executor = {
+      async run(name, input) {
+        fired.push([name, structuredClone(input)]);
+        if (name === 'createProposal') {
+          return {
+            ok: true,
+            proposalId: 'cart-sku',
+            proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-sku',
+            proposalUrlHtml: 'https://www.golfballs.com/cart?proposalMode=true&amp;opportunityID=71&amp;cartID=cart-sku',
+          };
+        }
+        return { ok: true };
+      },
+      async commitEdits() { return { ok: true }; },
+    };
+    const source = `
+      const proposal = await actions.createProposal({
+        opportunityId: "71",
+        items: [{ sku: "B5338", quantity: 12, price: 62.99 }]
+      });
+      const email = await page.evaluate(user.emails.PriorYear);
+      email.attachProposal(proposal);
+      await actions.sendEmail(email);
+    `;
+    const user = {
+      emails: {
+        PriorYear: { id: 'email-1', name: 'Prior Year', kind: 'email', subject: 'Proposal', body: '<p>Hello</p>' },
+      },
+    };
+    const evaluateRef = async () => ({
+      id: 'email-1', name: 'Prior Year', templateId: 'email-1', subject: 'Proposal', body: '<p>Hello</p>', evaluated: true,
+    });
+    const result = await simulateProgram(source, {}, {
+      run: makeSandboxRunner({ exec: fakeExec, evaluateRef }),
+      user,
+      evaluateRef,
+      executor,
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(fired.map(([name]) => name), ['createProposal', 'sendEmail']);
+    assert.match(fired[1][1].body, /cartID=cart-sku/);
   });
 });

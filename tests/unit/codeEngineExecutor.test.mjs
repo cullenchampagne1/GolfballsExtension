@@ -102,6 +102,62 @@ describe('executor · routing', () => {
     await assert.rejects(() => ex.run('sendEmail', {}), /not configured/);
   });
 
+  it('routes find-or-create, latest-order, and scratch catalog proposal results in sequence', async () => {
+    const calls = [];
+    const ctx = {
+      contactId: '42',
+      orders: [{ number: '1002', orderId: '1002' }],
+      opportunities: [{ id: '71', stage: 'Open' }],
+    };
+    const ex = makeExecutor({
+      ctx,
+      ensureOpenOpportunity: async (input, receivedCtx) => {
+        calls.push(['ensure', input.subject, receivedCtx.opportunities[0].id]);
+        return { ok: true, opportunityId: '71', created: false, subject: 'Existing' };
+      },
+      createProposalFromOrder: async (input, receivedCtx) => {
+        calls.push(['reorder', input.opportunityId, receivedCtx.orders[0].number]);
+        return {
+          ok: true,
+          cartID: 'cart-order',
+          proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&cartID=cart-order',
+          orderId: '1002',
+          lineCount: 2,
+          total: 1400,
+        };
+      },
+      createProposal: async (input, receivedCtx) => {
+        calls.push(['scratch', input.items[0].sku, receivedCtx.contactId]);
+        return {
+          ok: true,
+          cartID: 'cart-sku',
+          proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&cartID=cart-sku',
+          itemCount: 1,
+          lineCount: 1,
+          total: 755.88,
+        };
+      },
+    });
+
+    const opportunity = await ex.run('ensureOpenOpportunity', { subject: 'August Order' });
+    const reorder = await ex.run('createProposalFromOrder', { opportunityId: opportunity.opportunityId });
+    const scratch = await ex.run('createProposal', {
+      opportunityId: opportunity.opportunityId,
+      items: [{ sku: 'B5338', quantity: 12 }],
+    });
+
+    assert.equal(opportunity.created, false);
+    assert.equal(reorder.proposalId, 'cart-order');
+    assert.equal(reorder.orderId, '1002');
+    assert.equal(scratch.proposalId, 'cart-sku');
+    assert.equal(scratch.total, 755.88);
+    assert.deepEqual(calls, [
+      ['ensure', 'August Order', '71'],
+      ['reorder', '71', '1002'],
+      ['scratch', 'B5338', '42'],
+    ]);
+  });
+
   it('surfaces a helper {ok:false} response as a failed action', async () => {
     const ex = makeExecutor({
       ctx: { contactId: '42', employeeId: '7' },

@@ -24,7 +24,14 @@ front (which scopes what `page.*` exposes, exactly like workflows).
 - `CodeAutomationPanel` is a **controlled display** — the parent owns code + sim state and feeds it `value/onChange`, `blocks/errors/blockCount` (from `translateProgram(source)`), `view/onView`, `onContext`, `bindings`, and the sim outputs `trace/runningId/done/result/error/simStatus`. It renders the Code⇆Blocks switch and cross-fades `CodeVarEditor`↔`BlocksView`.
 - `simulateProgram(source, page, { run, user, executor })` → `{ ok, trace, calls, error, result }`. Dry when `executor` is null; performs real writes when an executor is passed. Browser realm = `makeSandboxRunner({ exec: runInSandbox })` (opaque-origin iframe — works in the Manage window with **no CRM page present**).
 - `page` preserves the full schema extracted by `runEngine(document)` — including orders, items, activities, proofs, stats, account, ids, and future registered fields. Workflows and live custom actions share one page-model shaper; only `contact`, `contacts`, and `tasks` receive execution-control overlays. Authoring uses a representative sample fixture per page type. `page.tasks.open[i].complete()`, direct approved task-field assignment, and `page.contact.field = v` all use grouped, confirm-gated writes.
-- Contracts (all **confirm**-gated today): `sendEmail`, `createTask`, `logCall`, `completeTask`, `updateTask`, `editContact`. `APPROVED_CONTACT_FIELDS` and `APPROVED_TASK_FIELDS` are explicit allowlists. A custom action reuses the same `makeExecutor(deps)` and inherits these gates.
+- Contracts (all **confirm**-gated today) include email, task, call, contact,
+  opportunity, and catalog proposal operations. In particular,
+  `ensureOpenOpportunity`, `createProposalFromOrder`, and `createProposal`
+  let a contact action reuse or create an opportunity and save a fully editable
+  Gift Catalog proposal from either the newest reusable order or current SKUs.
+  `APPROVED_CONTACT_FIELDS` and `APPROVED_TASK_FIELDS` remain explicit
+  allowlists. A custom action reuses the same `makeExecutor(deps)` and inherits
+  these gates.
 - **No raw-DOM page context exists today.** Page types are fixed to order/contact/account/opportunity. A read-only DOM escape hatch (`h.dom/h.domAll/h.domText/h.doc`) exists in `page-engine/code-runtime.js` but is NOT on the workflow `page` surface — we'd wire a `page.dom` for the "custom" type.
 
 ---

@@ -227,6 +227,35 @@ const opportunity = await actions.createOpportunity({
   assignedToId?: "7",
   contactId?: "42"      // defaults to the current record's contact
 });
+
+const currentOpportunity = await actions.ensureOpenOpportunity({
+  subject: "August Order",             // required create-if-missing fallback
+  estimatedCloseDate: "2026-09-13",
+  estimatedValue: 2450.25,
+  stage: "Open"
+});
+
+// Without an explicit order, scans page.orders newest-first and skips orders
+// with no Duplicate Order cart or any current-catalog line needing review.
+const reorder = await actions.createProposalFromOrder({
+  opportunityId: currentOpportunity.opportunityId,
+  name: "August reorder proposal"
+});
+
+// A scratch proposal uses current SKU resolution and current quantity pricing.
+// price is an optional per-unit override; omit it for the catalog ladder.
+const scratch = await actions.createProposal({
+  opportunityId: currentOpportunity.opportunityId,
+  name: "Custom catalog proposal",
+  items: [
+    { sku: "B5338", quantity: 12 },
+    { sku: "M6428", quantity: 24, price: 29.95 }
+  ]
+});
+
+const email = await page.evaluate(user.emails.PriorYear);
+email.attachProposal(reorder, "View your updated proposal");
+await actions.sendEmail(email);
 ```
 
 Saved task and call references retain their CRM priority, due date, category,
@@ -258,6 +287,12 @@ or Closed - Lost, marks it Closed - Lost, waits for that update, and creates a
 new `<current month> Order` opportunity due 30 days out. Its estimated value
 uses the CRM's average-order-size statistic, with the visible order-history
 average as a fallback.
+
+[`docs/examples/reorder-proposal-contact-action.js`](examples/reorder-proposal-contact-action.js)
+reuses an open opportunity or creates one, scans for the newest prior order that
+can be duplicated without review, updates it to current products and pricing,
+saves it as an editable proposal, and appends its link to the generated
+`user.emails.PriorYear` email before sending.
 
 ## Control flow
 

@@ -12,7 +12,8 @@ import { contractGate } from './contracts.js';
 const GATE_RANK = { auto: 0, confirm: 1, hard: 2 };
 const EFFECT_CONTRACTS = [
   'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask',
-  'updateOpportunity', 'createOpportunity', 'editContact',
+  'updateOpportunity', 'createOpportunity', 'ensureOpenOpportunity',
+  'createProposalFromOrder', 'createProposal', 'editContact',
 ];
 
 function emptyCounts() {
@@ -39,7 +40,8 @@ export function planRun(trace, audienceCount = 1) {
   const outward = counts.sendEmail;
   const writes = counts.createTask + counts.logCall + counts.addNote
     + counts.updateTask + counts.completeTask + counts.updateOpportunity
-    + counts.createOpportunity + counts.editContact;
+    + counts.createOpportunity + counts.ensureOpenOpportunity
+    + counts.createProposalFromOrder + counts.createProposal + counts.editContact;
   const perContact = outward + writes;
   return {
     counts,
@@ -65,6 +67,9 @@ export function planSummary(plan) {
   if (c.createTask) parts.push(`${plural(c.createTask, 'task')} created`);
   if (c.updateOpportunity) parts.push(plural(c.updateOpportunity, 'opportunity edit'));
   if (c.createOpportunity) parts.push(`${plural(c.createOpportunity, 'opportunity')} created`);
+  if (c.ensureOpenOpportunity) parts.push(`${plural(c.ensureOpenOpportunity, 'opportunity')} resolved`);
+  if (c.createProposalFromOrder) parts.push(`${plural(c.createProposalFromOrder, 'reorder proposal')} created`);
+  if (c.createProposal) parts.push(`${plural(c.createProposal, 'catalog proposal')} created`);
   if (c.logCall) parts.push(plural(c.logCall, 'call log'));
   if (c.addNote) parts.push(plural(c.addNote, 'activity note'));
   return parts.join(' · ') || 'no effects';
@@ -110,6 +115,9 @@ export function pipelinePlanSummary(plan) {
   if (c.createTask) parts.push(plural(c.createTask, 'task-create step'));
   if (c.updateOpportunity) parts.push(plural(c.updateOpportunity, 'opportunity-edit step'));
   if (c.createOpportunity) parts.push(plural(c.createOpportunity, 'opportunity-create step'));
+  if (c.ensureOpenOpportunity) parts.push(plural(c.ensureOpenOpportunity, 'open-opportunity step'));
+  if (c.createProposalFromOrder) parts.push(plural(c.createProposalFromOrder, 'reorder-proposal step'));
+  if (c.createProposal) parts.push(plural(c.createProposal, 'catalog-proposal step'));
   if (c.logCall) parts.push(plural(c.logCall, 'call-log step'));
   if (c.addNote) parts.push(plural(c.addNote, 'activity-note step'));
   return parts.join(' · ') || 'no CRM write paths';

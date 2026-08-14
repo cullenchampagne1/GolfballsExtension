@@ -18,6 +18,7 @@ import {
   APPROVED_OPPORTUNITY_FIELDS,
   normalizeOpportunityStageId,
 } from '../opportunityFields.js';
+import { validateCatalogProposalItems } from '../catalogProposalSchema.js';
 
 export { APPROVED_OPPORTUNITY_FIELDS } from '../opportunityFields.js';
 
@@ -48,7 +49,7 @@ function templateOf(input) {
 }
 
 /**
- * The Phase-1 contracts (contact/order composer actions). Each is keyed by its
+ * Registered code-engine contracts. Each is keyed by its
  * camelCase code name; `verb` is the snake_case JSON-payload parity name.
  * `params` is the input schema the executor validates; `describe(input)` is a
  * pure summary shown on the block and in the confirmation card.
@@ -311,24 +312,74 @@ export const CONTRACTS = Object.freeze({
       return label ? `Create opportunity “${label}”${value}` : 'Create an opportunity';
     },
   },
+  ensureOpenOpportunity: {
+    name: 'ensureOpenOpportunity',
+    verb: 'ensure_open_opportunity',
+    object: 'opportunity',
+    effect: 'remote',
+    summary: 'Use an open opportunity or create one for the current contact',
+    accepts: '{ subject, description?, estimatedValue?, estimatedCloseDate?, stage|stageId?, assignedToId?, contactId? }',
+    params: {
+      subject: { type: 'string', max: 500 },
+      description: { type: 'string', max: 10_000 },
+      estimatedValue: { type: 'number', min: 0, max: 1_000_000_000 },
+      estimatedCloseDate: { type: 'string', max: 40 },
+      stage: { type: 'string', max: 80 },
+      stageId: { type: 'string', max: 8 },
+      assignedToId: { type: 'string', max: 40 },
+      contactId: { type: 'string', max: 40 },
+    },
+    validate: (i) => {
+      const input = i && typeof i === 'object' ? i : {};
+      const errors = [];
+      if (!str(input.subject)) errors.push('ensureOpenOpportunity needs a subject for the create-if-missing path');
+      for (const key of Object.keys(input)) {
+        if (!Object.hasOwn(CONTRACTS.ensureOpenOpportunity.params, key)) {
+          errors.push(`Unknown parameter "${key}" for ensureOpenOpportunity`);
+        }
+      }
+      if (input.estimatedValue != null
+        && (!Number.isFinite(Number(input.estimatedValue)) || Number(input.estimatedValue) < 0)) {
+        errors.push('ensureOpenOpportunity estimatedValue must be a non-negative number');
+      }
+      const stage = input.stageId ?? input.stage;
+      if (stage != null && !normalizeOpportunityStageId(stage)) {
+        errors.push(`“${stage}” is not a recognized opportunity stage`);
+      }
+      return { errors, value: input };
+    },
+    describe: (i) => {
+      const label = clip(i?.subject, 56);
+      return label
+        ? `Use an open opportunity or create “${label}”`
+        : 'Use or create an open opportunity';
+    },
+  },
   createProposalFromOrder: {
     name: 'createProposalFromOrder',
     verb: 'create_proposal_from_order',
     object: 'proposal',
     effect: 'remote',
     summary: 'Create a current-catalog proposal from a previous order',
-    accepts: '{ order, opportunityId, name?, expiration? }',
+    accepts: '{ opportunityId, order?|orders?, name?, expiration?, promoCode? }; without order, uses the newest reusable page order',
     params: {
       order: { type: 'object' },
+      orders: { type: 'array' },
       opportunityId: { type: 'string', max: 80 },
       name: { type: 'string', max: 300 },
       expiration: { type: 'string', max: 40 },
+      customerId: { type: 'string', max: 40 },
+      promoCode: { type: 'string', max: 80 },
     },
     validate: (i) => {
       const input = i && typeof i === 'object' ? i : {};
       const errors = [];
-      const order = input.order && typeof input.order === 'object' ? input.order : null;
-      if (!order) errors.push('createProposalFromOrder needs an order from page.orders');
+      if (input.order != null && (typeof input.order !== 'object' || Array.isArray(input.order))) {
+        errors.push('createProposalFromOrder order must come from page.orders');
+      }
+      if (input.orders != null && !Array.isArray(input.orders)) {
+        errors.push('createProposalFromOrder orders must be an array');
+      }
       if (!str(input.opportunityId)) errors.push('createProposalFromOrder needs an opportunityId');
       for (const key of Object.keys(input)) {
         if (!Object.hasOwn(CONTRACTS.createProposalFromOrder.params, key)) {
@@ -342,7 +393,43 @@ export const CONTRACTS = Object.freeze({
       const name = clip(i?.name, 46);
       if (number && name) return `Create proposal “${name}” from order ${number}`;
       if (number) return `Create current proposal from order ${number}`;
-      return 'Create a current proposal from a previous order';
+      if (name) return `Create proposal “${name}” from the latest reusable order`;
+      return 'Create a current proposal from the latest reusable order';
+    },
+  },
+  createProposal: {
+    name: 'createProposal',
+    verb: 'create_proposal',
+    object: 'proposal',
+    effect: 'remote',
+    summary: 'Create a current-catalog proposal from SKU instructions',
+    accepts: '{ opportunityId, items:[{ sku, quantity|splits, price?, customLogo?, decoration?, variant? }], name?, expiration?, promoCode? }',
+    params: {
+      opportunityId: { type: 'string', max: 80 },
+      items: { type: 'array' },
+      name: { type: 'string', max: 300 },
+      expiration: { type: 'string', max: 40 },
+      customerId: { type: 'string', max: 40 },
+      promoCode: { type: 'string', max: 80 },
+    },
+    validate: (i) => {
+      const input = i && typeof i === 'object' ? i : {};
+      const errors = [];
+      if (!str(input.opportunityId)) errors.push('createProposal needs an opportunityId');
+      errors.push(...validateCatalogProposalItems(input.items));
+      for (const key of Object.keys(input)) {
+        if (!Object.hasOwn(CONTRACTS.createProposal.params, key)) {
+          errors.push(`Unknown parameter "${key}" for createProposal`);
+        }
+      }
+      return { errors, value: input };
+    },
+    describe: (i) => {
+      const count = Array.isArray(i?.items) ? i.items.length : 0;
+      const name = clip(i?.name, 46);
+      if (name && count) return `Create proposal “${name}” from ${count} catalog item${count === 1 ? '' : 's'}`;
+      if (count) return `Create a proposal from ${count} catalog item${count === 1 ? '' : 's'}`;
+      return 'Create a current-catalog proposal';
     },
   },
   // Apply grouped field edits to the current contact — the effect behind

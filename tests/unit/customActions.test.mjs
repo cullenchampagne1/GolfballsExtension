@@ -22,6 +22,12 @@ import {
   liveActionRunPolicy,
   prepareLiveActionRuntime,
 } from '../../src/lib/codeEngine/liveActionRun.js';
+import {
+  CUSTOM_ACTION_RECIPES,
+  PRIOR_YEAR_REORDER_SOURCE,
+  SKU_PROPOSAL_SOURCE,
+  customActionRecipe,
+} from '../../src/lib/customActionRecipes.js';
 
 describe('customActions · normalize', () => {
   it('fills defaults and clamps an unknown page type to contact', () => {
@@ -72,6 +78,26 @@ describe('customActions · normalize', () => {
     assert.equal(b.pageType, 'order');
     assert.match(b.source, /actions\.createTask/);
     assert.match(starterSource('custom'), /Custom action/);
+  });
+});
+
+describe('customActions · catalog recipes', () => {
+  it('ships an end-to-end Prior Year contact recipe using generated template autocomplete', () => {
+    const recipe = customActionRecipe('prior-year-reorder');
+    assert.equal(recipe.pageType, 'contact');
+    assert.match(PRIOR_YEAR_REORDER_SOURCE, /actions\.ensureOpenOpportunity/);
+    assert.match(PRIOR_YEAR_REORDER_SOURCE, /actions\.createProposalFromOrder/);
+    assert.match(PRIOR_YEAR_REORDER_SOURCE, /user\.emails\.PriorYear/);
+    assert.match(PRIOR_YEAR_REORDER_SOURCE, /attachProposal/);
+    assert.match(PRIOR_YEAR_REORDER_SOURCE, /actions\.sendEmail/);
+  });
+
+  it('ships a scratch recipe with SKU, quantity, optional price, and current-catalog proposal action', () => {
+    assert.equal(CUSTOM_ACTION_RECIPES.length, 2);
+    assert.match(SKU_PROPOSAL_SOURCE, /actions\.createProposal/);
+    assert.match(SKU_PROPOSAL_SOURCE, /sku: "B5338", quantity: 12/);
+    assert.match(SKU_PROPOSAL_SOURCE, /sku: "M6428", quantity: 24, price: 29\.95/);
+    assert.match(SKU_PROPOSAL_SOURCE, /Current Proposals/);
   });
 });
 
@@ -272,6 +298,8 @@ describe('customActions · live run shaping', () => {
       phone: '',
       accountId: '902',
       email: 'avery@example.test',
+      orders: [],
+      opportunities: [],
     });
   });
 

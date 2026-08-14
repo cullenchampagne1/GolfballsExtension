@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, Field, Input, Segmented, EditorHeader, I } from '../ui/index.js';
+import { Btn, Dropdown, Field, Input, Segmented, EditorHeader, I } from '../ui/index.js';
 import { IconPicker } from '../ui/components/IconPicker.jsx';
 import { CustomLinkField } from '../ui/components/CustomLinkField.jsx';
 import { CodeVarEditor } from '../ui/components/CodeVarEditor.jsx';
@@ -12,6 +12,7 @@ import { samplePageFor } from '../lib/codeEngine/samplePages.js';
 import { codeTemplateBindings, loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
 import { normalizeCustomAction, defaultPagesFor, ACTION_PAGE_TYPES } from '../lib/customActions.js';
 import { normalizeEntryPoints } from '../lib/customActionEntryPoints.js';
+import { CUSTOM_ACTION_RECIPES, customActionRecipe } from '../lib/customActionRecipes.js';
 
 /* ───────────────────────────────────────────────────────────────
    CustomActionEditor — the Manage-window sub-page for authoring a custom
@@ -71,6 +72,7 @@ export function CustomActionEditor({ action }) {
   const [isNew, setIsNew] = useState(action.__isNew === true);
   const [userData, setUserData] = useState({ emails: [], tasks: [], calls: [] });
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [recipeId, setRecipeId] = useState('');
   // Shelf page scope isn't edited here (the Settings table owns it) but must
   // be persisted; reset to the type default when the page type changes.
   const pagesRef = useRef(action.pages && action.pages.length ? action.pages : defaultPagesFor(action.pageType || 'contact'));
@@ -141,6 +143,19 @@ export function CustomActionEditor({ action }) {
   };
 
   const changePageType = (pt) => { setPageType(pt); pagesRef.current = defaultPagesFor(pt); };
+  const loadRecipe = (id) => {
+    const recipe = customActionRecipe(id);
+    if (!recipe) return;
+    setRecipeId(id);
+    setName(recipe.name);
+    setDescription(recipe.description);
+    setIcon(recipe.icon);
+    setPageType(recipe.pageType);
+    setSource(recipe.source);
+    setEntryPointsText('');
+    setCustomUrl('');
+    pagesRef.current = defaultPagesFor(recipe.pageType);
+  };
 
   const build = () => normalizeCustomAction({
     ...action,
@@ -283,8 +298,17 @@ export function CustomActionEditor({ action }) {
         />
       </div>
 
-      {/* Footer — Simulate */}
+      {/* Footer — recipe starter + Simulate */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 20px' }}>
+        <div style={{ width: 205 }}>
+          <Dropdown
+            size="sm"
+            value={recipeId}
+            placeholder="Load action recipe…"
+            options={CUSTOM_ACTION_RECIPES.map((recipe) => ({ id: recipe.id, label: recipe.name }))}
+            onChange={loadRecipe}
+          />
+        </div>
         <Btn size="sm" variant="secondary" icon={<I.play />} onClick={startSim} disabled={simBusy}>Simulate</Btn>
         <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>
           Dry run against a sample {pageType === 'any' || pageType === 'custom' ? 'page' : `${pageType} page`} — no writes. The real, confirm-gated run happens from the Action Shelf.

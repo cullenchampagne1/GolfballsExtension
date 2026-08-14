@@ -13,7 +13,9 @@
      completeTask     → crmTasks.completeTaskById(id)
      updateOpportunity→ Opportunity/Get → merge → Update
      createOpportunity→ Opportunity/Create
+     ensureOpenOpportunity → reuse open row OR Opportunity/Create
      createProposalFromOrder → duplicate order → current catalog → proposal
+     createProposal → SKU instructions → current catalog → proposal
      editContact      → crmUpdateContact(contactId, payload)  (grouped)
 
    One executor is built per contact (deps.ctx carries the contact's ids).
@@ -81,6 +83,27 @@ function activityTemplate(input, { note = false } = {}) {
     callDirection: direction === 1 ? 1 : 0,
     callCategory: Number(value.callCategory ?? value.categoryId ?? 35) || 35,
     callVoicemail: value.callVoicemail ?? value.voicemail ?? false,
+  };
+}
+
+function proposalResult(result, input = {}) {
+  return {
+    ok: true,
+    cartID: String(result?.cartID || ''),
+    proposalId: String(result?.proposalId || result?.cartID || ''),
+    proposalUrl: String(result?.proposalUrl || ''),
+    proposalUrlHtml: String(result?.proposalUrlHtml || ''),
+    opportunityId: String(result?.opportunityId || input.opportunityId || ''),
+    orderId: String(result?.orderId || ''),
+    name: String(result?.name || input.name || ''),
+    lineCount: Number(result?.lineCount) || 0,
+    itemCount: Number(result?.itemCount) || 0,
+    total: Number(result?.total) || 0,
+    replaced: Number(result?.replaced) || 0,
+    repriced: Number(result?.repriced) || 0,
+    skipped: Number(result?.skipped) || 0,
+    promoCode: String(result?.promoCode || input.promoCode || ''),
+    result,
   };
 }
 
@@ -216,25 +239,29 @@ export function makeExecutor(deps = {}) {
           result,
         };
       }
+      if (contract === 'ensureOpenOpportunity') {
+        if (!deps.ensureOpenOpportunity) throw new Error('open-opportunity resolution is not configured');
+        const result = await deps.ensureOpenOpportunity(i, ctx);
+        assertHelperResult(result, 'open-opportunity resolution failed');
+        return {
+          ok: true,
+          opportunityId: String(result?.opportunityId || ''),
+          created: !!result?.created,
+          subject: String(result?.subject || i.subject || ''),
+          result,
+        };
+      }
       if (contract === 'createProposalFromOrder') {
         if (!deps.createProposalFromOrder) throw new Error('prior-order proposal creation is not configured');
         const result = await deps.createProposalFromOrder(i, ctx);
         assertHelperResult(result, 'prior-order proposal creation failed');
-        return {
-          ok: true,
-          cartID: String(result?.cartID || ''),
-          proposalId: String(result?.proposalId || result?.cartID || ''),
-          proposalUrl: String(result?.proposalUrl || ''),
-          proposalUrlHtml: String(result?.proposalUrlHtml || ''),
-          opportunityId: String(result?.opportunityId || i.opportunityId || ''),
-          orderId: String(result?.orderId || ''),
-          name: String(result?.name || i.name || ''),
-          lineCount: Number(result?.lineCount) || 0,
-          replaced: Number(result?.replaced) || 0,
-          repriced: Number(result?.repriced) || 0,
-          skipped: Number(result?.skipped) || 0,
-          result,
-        };
+        return proposalResult(result, i);
+      }
+      if (contract === 'createProposal') {
+        if (!deps.createProposal) throw new Error('catalog proposal creation is not configured');
+        const result = await deps.createProposal(i, ctx);
+        assertHelperResult(result, 'catalog proposal creation failed');
+        return proposalResult(result, i);
       }
       if (contract === 'editContact') return commitEdits(i.fields);
       return null;

@@ -733,6 +733,10 @@
       "file": "tests/unit/priorOrderEngine.test.mjs"
     },
     {
+      "name": "catalog \u00b7 action-built proposals use current products and pricing",
+      "file": "tests/unit/catalogProposalEngine.test.mjs"
+    },
+    {
       "name": "catalog \u00b7 proposal persistence, sharing & send lifecycle",
       "file": "tests/unit/proposalStore.test.mjs"
     },

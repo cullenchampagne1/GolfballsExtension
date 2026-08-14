@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import {
   buildOpportunityPayload,
   createOpportunity,
+  ensureOpenOpportunity,
+  findOpenOpportunity,
   hydrateOpportunityRows,
   sourceUsesOpportunityRecords,
   updateOpportunityById,
@@ -158,6 +160,36 @@ describe('crm opportunities · safe writes', () => {
     });
     assert.equal(result.opportunityId, '88');
   });
+
+  it('reuses an open opportunity and only creates when every existing row is closed', async () => {
+    const open = { id: '71', subject: 'Existing reorder', stageId: '2', isClosed: false };
+    const closed = { id: '70', subject: 'Won', stageId: '4', isClosed: true };
+    assert.equal(findOpenOpportunity([closed, open]), open);
+
+    let creates = 0;
+    const reused = await ensureOpenOpportunity({ subject: 'Fallback subject' }, {
+      contactId: '42',
+      opportunities: [closed, open],
+      createOpportunity: async () => { creates += 1; return { ok: true, opportunityId: 'new' }; },
+    });
+    assert.equal(reused.opportunityId, '71');
+    assert.equal(reused.created, false);
+    assert.equal(creates, 0);
+
+    const created = await ensureOpenOpportunity({ subject: 'August Order' }, {
+      contactId: '42',
+      opportunities: [closed],
+      createOpportunity: async (fields, options) => {
+        creates += 1;
+        assert.equal(fields.subject, 'August Order');
+        assert.equal(options.contactId, '42');
+        return { ok: true, opportunityId: '88' };
+      },
+    });
+    assert.equal(created.opportunityId, '88');
+    assert.equal(created.created, true);
+    assert.equal(creates, 1);
+  });
 });
 
 describe('crm opportunities · source hydration trigger', () => {
@@ -165,5 +197,6 @@ describe('crm opportunities · source hydration trigger', () => {
     assert.equal(sourceUsesOpportunityRecords('page.opportunities.find(Boolean)'), true);
     assert.equal(sourceUsesOpportunityRecords('page["opportunities"]'), true);
     assert.equal(sourceUsesOpportunityRecords('actions.createOpportunity({ subject: "x" })'), false);
+    assert.equal(sourceUsesOpportunityRecords('actions.ensureOpenOpportunity({ subject: "x" })'), true);
   });
 });

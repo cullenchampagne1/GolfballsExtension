@@ -37,8 +37,12 @@ function actionDoc(c) {
             ? ['await actions.updateOpportunity({ id: opportunity.id, fields: { stage: "Closed - Lost" } })', 'opportunity.stage = "Closed - Lost";   // grouped automatically']
           : c.name === 'createOpportunity'
             ? ['await actions.createOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13", estimatedValue: 2400 })']
+          : c.name === 'ensureOpenOpportunity'
+            ? ['const opportunity = await actions.ensureOpenOpportunity({ subject: "August Order", estimatedCloseDate: "2026-09-13" });\nreturn opportunity.opportunityId;']
           : c.name === 'createProposalFromOrder'
-            ? ['const proposal = await actions.createProposalFromOrder({ order: page.orders[0], opportunityId: created.opportunityId });\nconst email = await page.evaluate(user.emails.ReorderProposal);\nemail.attachProposal(proposal);']
+            ? ['const proposal = await actions.createProposalFromOrder({ opportunityId: opportunity.opportunityId });\nconst email = await page.evaluate(user.emails.PriorYear);\nemail.attachProposal(proposal);']
+          : c.name === 'createProposal'
+            ? ['const proposal = await actions.createProposal({\n  opportunityId: opportunity.opportunityId,\n  items: [{ sku: "B5338", quantity: 12 }, { sku: "M6428", quantity: 24, price: 29.95 }]\n});']
           : c.name === 'addNote'
             ? ['await actions.addNote({ subject: "Follow-up", body: "Reviewed account with customer." })']
             : ['await actions.logCall(user.call("Left VM"))'],
@@ -53,7 +57,7 @@ const STATIC = {
     rows: [
       ['page', 'the contact being run'],
       ['user', 'your saved emails / tasks / calls'],
-      ['actions', 'email · tasks · opportunities · reorder proposals · activity'],
+      ['actions', 'email · tasks · opportunities · catalog proposals · activity'],
     ],
     examples: ['if (page.contact.daysCold > 30)\n  await actions.sendEmail(user.email("Win-back"))'],
   },
@@ -147,7 +151,9 @@ const STATIC = {
       ['updateTask({id, fields})', 'edit approved fields on an existing task'],
       ['updateOpportunity({id, fields})', 'edit a CRM opportunity (safe Get → merge → Update)'],
       ['createOpportunity(fields)', 'create an opportunity for the current contact'],
-      ['createProposalFromOrder(fields)', 'refresh an old order and attach its proposal to an opportunity'],
+      ['ensureOpenOpportunity(fields)', 'reuse the first open opportunity, or create one when none exists'],
+      ['createProposalFromOrder(fields)', 'use the newest reusable old order, refresh it, and save it to an opportunity'],
+      ['createProposal(fields)', 'build and save an editable proposal from current catalog SKUs'],
     ],
     examples: ['await actions.sendEmail(user.email("Win-back"))'],
   },

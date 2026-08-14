@@ -31,6 +31,8 @@ export function ctxFromPage(page) {
     phone: c.phone || '',
     accountId: c.accountId || ids.account || '',
     email: c.email || '',
+    orders: Array.isArray(page?.orders) ? page.orders : [],
+    opportunities: Array.isArray(page?.opportunities) ? page.opportunities : [],
   };
 }
 
@@ -137,8 +139,9 @@ export async function makeLiveExecutor(page, options = {}) {
     { submitCallLog },
     { completeTaskById, updateTaskById, getTaskContactId },
     { crmUpdateContact },
-    { updateOpportunityById, createOpportunity },
+    { updateOpportunityById, createOpportunity, ensureOpenOpportunity },
     { createProposalFromOrder },
+    { createCatalogProposal },
     { dispatchBackgroundMessage },
   ] = await Promise.all([
     import('./executor.js'),
@@ -150,6 +153,7 @@ export async function makeLiveExecutor(page, options = {}) {
     import('../crm-detail-shared.jsx'),
     import('../crmOpportunities.js'),
     import('../priorOrderEngine.js'),
+    import('../catalogProposalEngine.js'),
     import('../backgroundMessage.js'),
   ]);
 
@@ -197,6 +201,11 @@ export async function makeLiveExecutor(page, options = {}) {
     updateContact: crmUpdateContact,
     updateOpportunityById,
     createOpportunity,
+    ensureOpenOpportunity: (input, ctx) => ensureOpenOpportunity(input, {
+      contactId: input.contactId || ctx.contactId,
+      opportunities: ctx.opportunities,
+    }),
     createProposalFromOrder,
+    createProposal: createCatalogProposal,
   });
 }

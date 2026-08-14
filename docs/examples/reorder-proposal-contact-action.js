@@ -1,9 +1,10 @@
-// Rebuild the contact's last order as a current proposal, then draft a saved email.
+// Rebuild the contact's newest reusable order as a current proposal, then send
+// the saved Prior Year email with the generated customer link appended.
 //
 // Setup:
 //   Runs on: Contact (Account works when it exposes a writer contact)
-//   Saved email required: "Reorder proposal"
-//   Type `user.emails.` and choose ReorderProposal from autocomplete. Saved
+//   Saved email required: "Prior Year"
+//   Type `user.emails.` and choose PriorYear from autocomplete. Saved
 //   names become code-safe properties (including names that begin with digits).
 //   Entry point: leave empty
 
@@ -11,25 +12,6 @@
 // CRM's Duplicate Order cart, resolves discontinued items to high-confidence
 // current-generation matches, applies current prices, and stops for review if a
 // line is ambiguous.
-
-const orders = (page.orders || []).filter((order) => order && (order.url || order.href || order.number));
-if (!orders.length) throw new Error("This contact has no previous order to reuse");
-
-const lastOrder = [...orders].sort((left, right) => {
-  const leftTime = Date.parse(left.date || "") || 0;
-  const rightTime = Date.parse(right.date || "") || 0;
-  return rightTime - leftTime;
-})[0];
-
-const currentOpportunity = (page.opportunities || []).find((opportunity) => (
-  !opportunity.isClosed
-  && !/^closed\s*-?\s*(?:won|lost)$/i.test(opportunity.stage || "")
-));
-
-if (currentOpportunity) {
-  currentOpportunity.stage = "Closed - Lost";
-  await currentOpportunity.commit();
-}
 
 const today = new Date();
 const closeDate = new Date(today);
@@ -44,7 +26,7 @@ function isoDate(value) {
 }
 
 const monthName = today.toLocaleString("en-US", { month: "long" });
-const visibleValues = orders
+const visibleValues = (page.orders || [])
   .map((order) => Number(order.revenue))
   .filter((value) => Number.isFinite(value) && value > 0);
 const visibleAverage = visibleValues.length
@@ -55,22 +37,21 @@ const estimatedValue = Math.round(
   (Number.isFinite(crmAverage) && crmAverage > 0 ? crmAverage : visibleAverage) * 100
 ) / 100;
 
-const created = await actions.createOpportunity({
+const opportunity = await actions.ensureOpenOpportunity({
   subject: `${monthName} Order`,
-  description: `Current-catalog reorder based on order ${lastOrder.number || lastOrder.url}.`,
+  description: "Current-catalog proposal built from the newest reusable prior order.",
   estimatedCloseDate: isoDate(closeDate),
   estimatedValue,
   stage: "Open"
 });
 
 const proposal = await actions.createProposalFromOrder({
-  order: lastOrder,
-  opportunityId: created.opportunityId,
+  opportunityId: opportunity.opportunityId,
   name: `${monthName} reorder proposal`
 });
 
-const email = await page.evaluate(user.emails.ReorderProposal);
+const email = await page.evaluate(user.emails.PriorYear);
 email.attachProposal(proposal, "View your updated reorder proposal");
 await actions.sendEmail(email);
 
-return `Created ${monthName} opportunity and a ${proposal.lineCount || "current"}-line reorder proposal`;
+return "Prior Year proposal created and email sent";

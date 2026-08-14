@@ -38,6 +38,10 @@ const customTargetingSource = editorSource.slice(
   editorSource.indexOf('{/* Custom targeting'),
   editorSource.indexOf('{/* Meta — name + description'),
 );
+const recipeLoaderSource = editorSource.slice(
+  editorSource.indexOf('const loadRecipe'),
+  editorSource.indexOf('const build ='),
+);
 
 describe('custom action editor presentation and lifecycle', () => {
   it('wraps the icon choices into a grid without a horizontal scroller', () => {
@@ -65,6 +69,14 @@ describe('custom action editor presentation and lifecycle', () => {
     assert.match(editorSource, /codeTemplateBindings\(userData, templatesLoaded\)/);
     assert.match(editorSource, /bindings=\{bindings\}/);
     assert.doesNotMatch(editorSource, /bindings=\{null\}/);
+  });
+
+  it('loads catalog automation recipes into the draft without saving or running them', () => {
+    assert.match(editorSource, /CUSTOM_ACTION_RECIPES/);
+    assert.match(editorSource, /customActionRecipe\(id\)/);
+    assert.match(editorSource, /placeholder="Load action recipe…"/);
+    assert.match(editorSource, /setSource\(recipe\.source\)/);
+    assert.doesNotMatch(recipeLoaderSource, /__gbSaveAction|startSim/);
   });
 
   it('authors modal/provider entry points and includes them in live simulation', () => {

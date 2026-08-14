@@ -16,8 +16,10 @@ import {
   defaultProposalExpiration,
   proposalCartUrl,
   saveProposalToOpportunity,
+  validatePromo,
 } from './saveProposal.js';
 import { linePriceAt } from './giftCatalogMath.js';
+import { blankLogoDecoration } from './giftImprints.js';
 
 const DISCONTINUED = /^(?:priorgen|clearance|excludestock|discontinued)$/i;
 const NOISE = new Set([
@@ -188,18 +190,6 @@ function bestReplacement(oldProduct, catalog) {
   return ranked[0];
 }
 
-function blankLogoDecoration(product) {
-  const ball = product && (product.dept === 'Golf Balls' || /golf.?balls/i.test(str(product.itemType)));
-  return {
-    engine: ball ? 'ballLogo' : 'logoOverlay',
-    baseColor: '#FFFFFF',
-    finish: { MFS: '279', SecondMFS: '279' },
-    dualPole: false,
-    pole2: null,
-    logo: null,
-  };
-}
-
 function applyCurrentProduct(line, product, { replaced = false, score = 100 } = {}) {
   const oldProduct = line.product || {};
   const decoration = line.decoration || (oldProduct.customLogo ? blankLogoDecoration(product) : null);
@@ -300,6 +290,45 @@ export async function loadPriorOrderEntry(order, options = {}) {
   };
 }
 
+function newestOrdersFirst(orders) {
+  return (Array.isArray(orders) ? orders : [])
+    .map((order, index) => ({ order, index, time: Date.parse(order && order.date || '') || 0 }))
+    .filter((entry) => orderIdOf(entry.order))
+    .sort((left, right) => (right.time - left.time) || (left.index - right.index))
+    .map((entry) => entry.order);
+}
+
+/** Find the newest order that can be saved without unattended substitutions.
+ * Orders with no Duplicate Order cart and orders whose current-generation
+ * mapping needs review are skipped; infrastructure/auth failures still stop
+ * the run instead of being silently mistaken for an unusable order. */
+export async function loadMostRecentReusableOrderEntry(orders, options = {}) {
+  const source = newestOrdersFirst(orders);
+  if (!source.length) throw new Error('This contact has no previous order to reuse');
+  const catalog = Array.isArray(options.catalog) ? options.catalog : await loadCatalog();
+  const loadEntry = typeof options.loadEntry === 'function' ? options.loadEntry : loadPriorOrderEntry;
+  let unavailable = 0;
+  let review = 0;
+  for (const order of source) {
+    let entry;
+    try { entry = await loadEntry(order, { catalog }); }
+    catch (error) {
+      if (isPriorOrderWithoutDuplicateCart(error)) { unavailable += 1; continue; }
+      throw error;
+    }
+    const reviewLines = (entry.lines || []).filter((line) => line && (
+      line.unavailable || (line.refresh && line.refresh.status === 'review')
+    ));
+    if (!entry.lines?.length || reviewLines.length) { review += 1; continue; }
+    return entry;
+  }
+  const details = [
+    unavailable ? `${unavailable} had no Duplicate Order cart` : '',
+    review ? `${review} needed item review` : '',
+  ].filter(Boolean).join('; ');
+  throw new Error(`No previous order can be reused automatically${details ? ` (${details})` : ''}`);
+}
+
 /** Load every visible order without navigating away. Concurrency stays low so
  * the authenticated CRM and legacy checkout endpoint are not stampeded. */
 export async function loadPriorOrderEntries(orders, options = {}) {
@@ -348,34 +377,51 @@ export async function loadPriorOrderEntries(orders, options = {}) {
 /** Action-engine writer: rebuild an order against today's catalog, then save it
  * directly to the newly/currently selected CRM opportunity. */
 export async function createProposalFromOrder(input = {}, context = {}) {
+  const opportunityID = str(input.opportunityId || input.opportunityID);
+  if (!opportunityID) throw new Error('createProposalFromOrder needs an opportunityId');
   const order = input.order || context.order;
-  const entry = await loadPriorOrderEntry(order, { catalog: input.catalog });
-  const review = entry.lines.filter((line) => line.refresh && line.refresh.status === 'review');
+  const entry = order
+    ? await loadPriorOrderEntry(order, { catalog: input.catalog })
+    : await loadMostRecentReusableOrderEntry(input.orders || context.orders, { catalog: input.catalog });
+  const review = entry.lines.filter((line) => line && (
+    line.unavailable || (line.refresh && line.refresh.status === 'review')
+  ));
   if (review.length) {
     throw new Error(`${review.length} prior-order item${review.length === 1 ? '' : 's'} need review before this proposal can be created`);
   }
   if (!entry.lines.length) throw new Error('The selected order has no reusable items');
-  const opportunityID = str(input.opportunityId || input.opportunityID);
   const name = str(input.name) || `${entry.name} reorder`;
+  const promoCode = str(input.promoCode);
+  const promotion = promoCode ? await validatePromo(entry.lines, promoCode) : null;
   const saved = await saveProposalToOpportunity(entry.lines, {
     opportunityID,
     customerID: input.customerId || context.contactId || 0,
     name,
     expiration: str(input.expiration) || defaultProposalExpiration(),
+    promotion,
   });
-  const url = proposalCartUrl(opportunityID, saved.cartID);
+  const cartID = str(saved && saved.cartID);
+  if (!cartID) throw new Error('The proposal save did not return a cart id');
+  const url = proposalCartUrl(opportunityID, cartID);
+  const counts = entry.refreshCounts || {};
   return {
     ok: true,
-    cartID: str(saved.cartID),
-    proposalId: str(saved.cartID),
+    cartID,
+    proposalId: cartID,
     proposalUrl: url,
     proposalUrlHtml: url.replace(/&/g, '&amp;').replace(/"/g, '&quot;'),
     opportunityId: opportunityID,
     orderId: entry.orderId,
     name,
-    lineCount: saved.savedLines,
-    replaced: entry.refreshCounts.replaced,
-    repriced: entry.refreshCounts.repriced,
+    lineCount: Number(saved.savedLines) || entry.lines.reduce((count, line) => count + (line.splits || []).length, 0),
+    itemCount: entry.lines.length,
+    total: round2(entry.lines.reduce((sum, line) => sum + (line.splits || []).reduce(
+      (lineSum, split) => lineSum + (Number(split.qty) || 0) * (Number(split.price) || 0),
+      0,
+    ), 0)),
+    replaced: Number(counts.replaced) || 0,
+    repriced: Number(counts.repriced) || 0,
     skipped: Array.isArray(saved.skipped) ? saved.skipped.length : 0,
+    promoCode,
   };
 }

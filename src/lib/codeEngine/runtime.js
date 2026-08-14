@@ -10,7 +10,7 @@
        outbound.body
        outbound.append(text)     append to the body   (chainable)
        outbound.appendSubject(t) append to the subject (chainable)
-       outbound.attachProposal(result, label?) append the generated proposal link
+       outbound.attachProposal(result, label?) append a generated proposal link
 
    A custom email/task is just an object of the same shape you build
    yourself: { subject, body } (email) or { subject, priority, daysOut }.
@@ -27,7 +27,7 @@ export function hydrateOutbound(value) {
     const url = String(proposal && (proposal.proposalUrl || proposal.url) || '');
     const allowed = /^https:\/\/(?:www\.)?golfballs\.com\/cart\?/i.test(url)
       || /^__gb_action_result__:n\d+_\d+:proposalUrl$/.test(url);
-    if (!allowed) throw new Error('attachProposal needs the result from actions.createProposalFromOrder');
+    if (!allowed) throw new Error('attachProposal needs a result from actions.createProposalFromOrder or actions.createProposal');
     const esc = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const htmlUrl = String(proposal && proposal.proposalUrlHtml || '');
     const htmlRef = /^__gb_action_result__:n\d+_\d+:proposalUrlHtml$/.test(htmlUrl);

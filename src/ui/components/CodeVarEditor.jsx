@@ -172,7 +172,9 @@ const BINDING_OPTIONS = {
     { label: 'actions.addNote', type: 'function', detail: '({subject,body}) — CRM activity note' },
     { label: 'actions.updateOpportunity', type: 'function', detail: '({id,fields}) — edit an opportunity' },
     { label: 'actions.createOpportunity', type: 'function', detail: '({subject,…}) — create an opportunity' },
-    { label: 'actions.createProposalFromOrder', type: 'function', detail: '({order,opportunityId,…}) — current-catalog reorder proposal' },
+    { label: 'actions.ensureOpenOpportunity', type: 'function', detail: '({subject,…}) — reuse an open opportunity or create one' },
+    { label: 'actions.createProposalFromOrder', type: 'function', detail: '({opportunityId,…}) — latest reusable order as a current proposal' },
+    { label: 'actions.createProposal', type: 'function', detail: '({opportunityId,items:[{sku,quantity,price?}]}) — proposal from SKUs' },
   ],
   user: [
     { label: 'user.emails', type: 'variable', detail: 'saved emails []' },

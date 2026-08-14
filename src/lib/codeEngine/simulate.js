@@ -27,6 +27,7 @@ import {
 } from './contracts.js';
 import { buildUserBinding } from './userBinding.js';
 import { hydrateOutbound, makeOutbound } from './runtime.js';
+import { ACTION_RESULT_FIELDS } from './actionResultFields.js';
 
 /** A runner that executes instrumented code via AsyncFunction (Node/tests).
  *  The browser passes its own sandbox-backed runner instead. */
@@ -54,7 +55,8 @@ export function asyncFunctionRunner(code, scope) {
 /* Contracts that perform a real effect (routed to the executor on a live run). */
 export const EFFECT_CONTRACTS = new Set([
   'sendEmail', 'createTask', 'logCall', 'addNote', 'updateTask', 'completeTask',
-  'updateOpportunity', 'createOpportunity', 'createProposalFromOrder', 'editContact',
+  'updateOpportunity', 'createOpportunity', 'ensureOpenOpportunity',
+  'createProposalFromOrder', 'createProposal', 'editContact',
 ]);
 
 /* Count the real-write steps in a trace — the denominator for the run
@@ -261,14 +263,11 @@ export async function simulateProgram(
       }
     }
 
-    // A sandbox executes before effects replay. Give createTask a serializable
-    // future result so later code can complete that exact task in trace order.
-    if (!executor && check.ok && (name === 'createTask' || name === 'createOpportunity' || name === 'createProposalFromOrder')) {
-      const resultFields = name === 'createTask'
-        ? ['taskId']
-        : name === 'createOpportunity'
-          ? ['opportunityId']
-          : ['proposalId', 'cartID', 'proposalUrl', 'proposalUrlHtml', 'opportunityId', 'orderId', 'name'];
+    // A sandbox executes before effects replay. Give result-producing actions
+    // serializable future fields so later steps can reference their real ids,
+    // links, and totals when the trace is replayed.
+    if (!executor && check.ok && ACTION_RESULT_FIELDS[name]) {
+      const resultFields = ACTION_RESULT_FIELDS[name];
       for (const resultField of resultFields) result[resultField] = actionResultRef(id, resultField);
     }
     actionResults.set(String(id), result);

@@ -31,11 +31,13 @@ import { completeTaskById, updateTaskById } from '../lib/crmTasks.js';
 import { crmUpdateContact } from '../lib/crm-detail-shared.jsx';
 import {
   createOpportunity,
+  ensureOpenOpportunity,
   sourceUsesOpportunityRecords,
   updateOpportunityById,
 } from '../lib/crmOpportunities.js';
 import { dispatchBackgroundMessage } from '../lib/backgroundMessage.js';
 import { createProposalFromOrder } from '../lib/priorOrderEngine.js';
+import { createCatalogProposal } from '../lib/catalogProposalEngine.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   WORKFLOW_MANAGER_HEIGHT,
@@ -306,13 +308,16 @@ function ImportWorkflowsModal({ onClose, onDone }) {
 /* Build the REAL executor for one contact — reuses the proven lib functions
    (emailSender.sendEmail accepts an arbitrary `to` + appends its own signature;
    crmUpdateContact / completeTaskById take explicit ids). */
-function makeContactExecutor(context, runDeps, dispatch) {
+function makeContactExecutor(context, page, runDeps, dispatch) {
   const c = context || {};
+  const model = page || {};
   const ec = runDeps.emailConfig || {};
   return makeExecutor({
     ctx: {
       contactId: c.contactId, contactName: c.contactName || c.name, phone: c.phone,
       employeeId: c.employeeId || runDeps.employeeId, accountId: c.accountId, email: c.email,
+      orders: Array.isArray(model.orders) ? model.orders : [],
+      opportunities: Array.isArray(model.opportunities) ? model.opportunities : [],
     },
     prepareInput: async (contract, input) => {
       if (input?.evaluated) return input;
@@ -354,7 +359,12 @@ function makeContactExecutor(context, runDeps, dispatch) {
     updateContact: crmUpdateContact,
     updateOpportunityById,
     createOpportunity,
+    ensureOpenOpportunity: (input, ctx) => ensureOpenOpportunity(input, {
+      contactId: input.contactId || ctx.contactId,
+      opportunities: ctx.opportunities,
+    }),
     createProposalFromOrder,
+    createProposal: createCatalogProposal,
   });
 }
 
@@ -1067,6 +1077,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
       }),
       makeExec: (_contact, prepared) => makeContactExecutor(
         prepared.context,
+        prepared.page,
         rd,
         dispatchBackgroundMessage,
       ),

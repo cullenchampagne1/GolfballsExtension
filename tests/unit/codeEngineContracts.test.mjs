@@ -64,7 +64,9 @@ describe('contracts · effect → gate is the safety spine', () => {
     assert.equal(contractGate('addNote'), 'confirm'); // remote
     assert.equal(contractGate('updateOpportunity'), 'confirm'); // remote
     assert.equal(contractGate('createOpportunity'), 'confirm'); // remote
+    assert.equal(contractGate('ensureOpenOpportunity'), 'confirm'); // remote
     assert.equal(contractGate('createProposalFromOrder'), 'confirm'); // remote
+    assert.equal(contractGate('createProposal'), 'confirm'); // remote
     assert.equal(contractGate('unknown'), null);
   });
 });
@@ -175,17 +177,49 @@ describe('contracts · input validation (template OR custom object)', () => {
     );
   });
 
-  it('requires both a prior order and destination opportunity for a reorder proposal', () => {
+  it('accepts newest-reusable or explicit-order proposals and validates scratch SKU lines', () => {
     assert.equal(validateContractInput('createProposalFromOrder', {
       order: { number: '1001', url: '91' }, opportunityId: '88', name: 'August reorder',
     }).ok, true);
-    assert.equal(validateContractInput('createProposalFromOrder', { opportunityId: '88' }).ok, false);
+    assert.equal(validateContractInput('createProposalFromOrder', { opportunityId: '88' }).ok, true);
     assert.equal(validateContractInput('createProposalFromOrder', { order: { url: '91' } }).ok, false);
     assert.equal(
       describeContract('createProposalFromOrder', {
         order: { number: '1001' }, opportunityId: '88', name: 'August reorder',
       }),
       'Create proposal “August reorder” from order 1001',
+    );
+
+    assert.equal(validateContractInput('ensureOpenOpportunity', {
+      subject: 'August Order', estimatedValue: 2400, stage: 'Open',
+    }).ok, true);
+    assert.equal(validateContractInput('ensureOpenOpportunity', {}).ok, false);
+    assert.equal(validateContractInput('ensureOpenOpportunity', {
+      subject: 'August Order', stage: 'Not a stage',
+    }).ok, false);
+    assert.equal(
+      describeContract('ensureOpenOpportunity', { subject: 'August Order' }),
+      'Use an open opportunity or create “August Order”',
+    );
+
+    assert.equal(validateContractInput('createProposal', {
+      opportunityId: '88',
+      items: [{ sku: 'B5338', quantity: 12 }, { sku: 'M6428', quantity: 24, price: 29.95 }],
+    }).ok, true);
+    assert.equal(validateContractInput('createProposal', {
+      opportunityId: '88', items: [{ sku: 'B5338', quantity: -1 }],
+    }).ok, false);
+    assert.equal(validateContractInput('createProposal', {
+      opportunityId: '88', items: [{ sku: 'B5338' }],
+    }).ok, false);
+    assert.equal(validateContractInput('createProposal', {
+      opportunityId: '88', items: [{ sku: 'B5338', quantity: 12, secret: true }],
+    }).ok, false);
+    assert.equal(
+      describeContract('createProposal', {
+        opportunityId: '88', name: 'Scratch', items: [{ sku: 'B5338', quantity: 12 }],
+      }),
+      'Create proposal “Scratch” from 1 catalog item',
     );
   });
 

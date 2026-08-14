@@ -16,13 +16,15 @@ side replays allowlisted effects through the existing email, task, call-log,
 task-completion, and contact-update helpers.
 
 Available effects are `sendEmail`, `createTask`, `updateTask`, `completeTask`,
-`logCall`, `addNote`, `createOpportunity`, `updateOpportunity`, and grouped
+`logCall`, `addNote`, `createOpportunity`, `ensureOpenOpportunity`,
+`updateOpportunity`, `createProposalFromOrder`, `createProposal`, and grouped
 `page.contact`, task, and opportunity edits. Saved-template evaluation works
 from both Workflow Manager and Action Shelf custom actions. Opportunity rows
 are hydrated through `Opportunity/Get`; updates use a fresh read-merge-write so
-untouched native fields survive. A created task/opportunity's real id is
-replayed into later calls. Proposal/item construction described below remains
-future scope.
+untouched native fields survive. Created task, opportunity, and proposal ids
+are replayed into later calls. Proposal creation uses the same current-catalog
+line and save engine as Gift Catalog, so action-built proposals reopen with the
+modal's complete editing controls.
 
 ---
 
@@ -181,25 +183,25 @@ from the current page: `account`, `contact`, `order` (+ `order.customer`,
 `activities[]`, `emails[]`. These become the first‑class objects code reads:
 `page.contact.email`, `page.order.totals.total`, `for (const o of page.opportunities)`.
 
-**But there is no object *construction* today.** The engine only projects a page
-into JSON; there is no builder/factory, no write path, no "new object." Mapping
-your complex chain against reality:
+The action registry now supplies the construction boundary that the read-only
+page engine intentionally does not. Mapping the full chain against reality:
 
 | Step | Status |
 |---|---|
-| create opportunity | ✅ `actions.createOpportunity(...)`; existing rows also support grouped edits and `actions.updateOpportunity(...)` |
-| build item objects | data shape exists; **no public constructor** — built inline in the catalog |
+| find/create opportunity | ✅ `actions.ensureOpenOpportunity(...)`; explicit create/update calls remain available |
+| build item objects | ✅ `actions.createProposal({items:[{sku,quantity,price?}]})` resolves against the current catalog |
 | proposal builder | ✅ `buildProposalLines` / `assembleLine` |
 | execute on account | ✅ `saveProposalToOpportunity` → `{cartID}` |
-| payment link | ✅ `cartLinkOf(cartId)` |
+| previous order | ✅ newest-first Duplicate Order scan, current-generation matching, and repricing |
+| payment link | ✅ proposal actions return `proposalUrl` |
 | proposal → email source | ✅ `buildEmailSourceFromCartIds` |
 | render template → HTML | ✅ pure `tpl*` builders, but **assembly + `{{CART_LINK}}` substitution live inside `ProposalEmailComposer`** — need extraction into `renderProposalEmail(source,{templateId}) → html` |
-| append proposal HTML to an email | **missing** — today it only copies to clipboard / server‑tracks; the insert‑into‑email seam is a placeholder (`savedProposalPlaceholder()` → "Not implemented yet") |
+| append proposal link to an email | ✅ `outbound.attachProposal(proposal, label?)` |
 | send | ✅ `sendEmail` |
 
-So the middle of the chain is already callable; the **two ends** (create
-opportunity, proposal‑HTML→email‑object) are net‑new. That work is **Phase 3**,
-not Phase 1.
+Every proposal save remains confirm-gated. Historical orders without a Duplicate
+Order cart, and orders requiring an ambiguous product substitution, are skipped
+by the unattended newest-reusable scan.
 
 ## 6. Security model
 
@@ -263,11 +265,11 @@ matchEngine condition trees with `if (page.order.count > 3)` in code (the `var`
 condition source already runs code, so the plumbing exists); full page‑engine
 object model available; `switch` over arrays.
 
-**Phase 3 — object construction & the proposal chain (net‑new).** Build
-`createOpportunity`, an item/proposal object constructor, extract
-`renderProposalEmail`, and the proposal‑HTML→email‑object seam — closing the two
-gaps in §5 so the full "opportunity → proposal → payment link → email → send"
-program runs.
+**Phase 3 — object construction & the proposal chain (implemented).**
+`ensureOpenOpportunity`, latest-reusable-order reconstruction,
+`createProposal({items})`, dependent action-result replay, and
+`outbound.attachProposal(...)` close the full
+"opportunity → proposal → payment link → email → send" program.
 
 **Phase 4 — bidirectional blocks** (edit a block → rewrite code) and persistence
 migration off the old `steps[]` model.

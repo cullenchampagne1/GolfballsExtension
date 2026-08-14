@@ -10,6 +10,7 @@
 import { API } from './constants.js';
 import {
   mapOpportunityEditFields,
+  isClosedOpportunityStage,
   normalizeOpportunityRecord,
   normalizeOpportunityStageId,
   toOpportunityDate,
@@ -143,6 +144,42 @@ export async function createOpportunity(fields = {}, options = {}) {
   };
 }
 
+/** First active opportunity in the CRM table's order. A closed boolean rejects
+ * immediately; stage remains the defensive check for compact or stale rows. */
+export function findOpenOpportunity(opportunities = []) {
+  return (Array.isArray(opportunities) ? opportunities : []).find((opportunity) => {
+    const id = String(opportunity?.id ?? opportunity?.opportunityId ?? '').trim();
+    if (!id || opportunity?.isClosed === true) return false;
+    return !isClosedOpportunityStage(opportunity?.stageId ?? opportunity?.stage);
+  }) || null;
+}
+
+/** Reuse an existing open opportunity or create one for the current contact. */
+export async function ensureOpenOpportunity(fields = {}, options = {}) {
+  const existing = findOpenOpportunity(options.opportunities);
+  if (existing) {
+    const opportunityId = String(existing.id ?? existing.opportunityId).trim();
+    return {
+      ok: true,
+      created: false,
+      opportunityId,
+      subject: String(existing.subject || ''),
+      opportunity: existing,
+    };
+  }
+  const create = options.createOpportunity || ((input, createOptions) => createOpportunity(input, createOptions));
+  const created = await create(fields, options);
+  const opportunityId = String(created?.opportunityId || '').trim();
+  if (!opportunityId) throw new Error('The CRM did not return an id for the created opportunity');
+  return {
+    ...created,
+    ok: true,
+    created: true,
+    opportunityId,
+    subject: String(fields.subject || ''),
+  };
+}
+
 /** Run a bounded fan-out while preserving table order. */
 async function mapLimit(items, limit, fn) {
   const source = Array.isArray(items) ? items : [];
@@ -172,5 +209,7 @@ export async function hydrateOpportunityRows(rows = [], options = {}) {
 
 /** Avoid an Opportunity/Get fan-out for scripts that never inspect rows. */
 export function sourceUsesOpportunityRecords(source) {
-  return /\bpage\s*(?:\.\s*opportunities\b|\[\s*['"]opportunities['"]\s*\])/m.test(String(source || ''));
+  const text = String(source || '');
+  return /\bpage\s*(?:\.\s*opportunities\b|\[\s*['"]opportunities['"]\s*\])/m.test(text)
+    || /\bactions\s*\.\s*ensureOpenOpportunity\s*\(/m.test(text);
 }

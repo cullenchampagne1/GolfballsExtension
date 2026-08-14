@@ -9,6 +9,7 @@ import { loadScales } from '../lib/scales.js';
 import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, savedProposalsForSelection, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail, createProposalStore, importProposalStore, buildProposalStoreFile, importProposalStoreFile } from '../lib/saveProposal.js';
 import { loadPriorOrderEntries } from '../lib/priorOrderEngine.js';
+import { proposalLineFromProduct } from '../lib/catalogProposalEngine.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
@@ -3350,16 +3351,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // blank custom-logo imprint (ballLogo/logoOverlay, no art yet) instead of
     // stock — the rep's common case. Drop a logo onto the sidebar later to fill
     // the art for every blank custom-logo line at once.
-    let deco = decoration || null;
-    if (!deco && supportsLogo(p)) {
-      deco = { engine: ballish(p) ? 'ballLogo' : 'logoOverlay', baseColor: '#FFFFFF',
-        finish: { MFS: '279', SecondMFS: '279' }, dualPole: false, pole2: null, logo: null, _localImageDataUrl: null };
-    }
-    const qty = p.minQty || 1;
-    // Accurate per-unit price: retail when no imprint, custom-logo ladder when
-    // imprinted, a chosen variant's price, + the second-pole upcharge if dual.
-    const startPrice = linePriceAt({ product: p, decoration: deco, variant }, qty);
-    return [...prev, { id: rid(), productId: p.id, product: p, decoration: deco, variant: variant || null, splits: [{ id: rid(), qty, price: startPrice }] }];
+    return [...prev, proposalLineFromProduct(p, { decoration, variant }, { idFactory: rid })];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { ...last, id: rid() }] }; }));

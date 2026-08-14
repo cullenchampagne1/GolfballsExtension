@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  loadMostRecentReusableOrderEntry,
   loadPriorOrderEntries,
   orderIdOf,
   PRIOR_ORDER_NO_DUPLICATE_CART,
@@ -81,6 +82,42 @@ describe('prior order engine · order identity', () => {
     assert.equal(entries[0].loadError, 'Order page returned HTTP 401');
     assert.equal(entries[1].loadError, undefined);
     assert.deepEqual(progress.at(-1), [3, 3]);
+  });
+
+  it('scans newest-first and returns the first order that can be reused unattended', async () => {
+    const seen = [];
+    const entry = await loadMostRecentReusableOrderEntry([
+      { orderId: '101', date: '2026-01-01' },
+      { orderId: '103', date: '2026-08-01' },
+      { orderId: '102', date: '2026-07-01' },
+    ], {
+      catalog: [],
+      loadEntry: async (order) => {
+        seen.push(order.orderId);
+        if (order.orderId === '103') {
+          const error = new Error('This order does not expose a Duplicate Order cart');
+          error.code = PRIOR_ORDER_NO_DUPLICATE_CART;
+          throw error;
+        }
+        if (order.orderId === '102') {
+          return { orderId: '102', lines: [{ unavailable: true, refresh: { status: 'review' } }] };
+        }
+        return { orderId: '101', lines: [{ refresh: { status: 'current' } }] };
+      },
+    });
+
+    assert.deepEqual(seen, ['103', '102', '101']);
+    assert.equal(entry.orderId, '101');
+  });
+
+  it('does not hide authentication or infrastructure failures while scanning orders', async () => {
+    await assert.rejects(
+      () => loadMostRecentReusableOrderEntry([{ orderId: '101', date: '2026-08-01' }], {
+        catalog: [],
+        loadEntry: async () => { throw new Error('Order page returned HTTP 401'); },
+      }),
+      /HTTP 401/,
+    );
   });
 });
 

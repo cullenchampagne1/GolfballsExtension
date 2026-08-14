@@ -62,4 +62,30 @@ describe('runPlan', () => {
       '1 email step · 1 task-create step',
     );
   });
+
+  it('counts opportunity resolution and both proposal writers as confirmed CRM effects', () => {
+    const tracePlan = planRun([
+      { contract: 'ensureOpenOpportunity', status: 'ran' },
+      { contract: 'createProposalFromOrder', status: 'ran' },
+      { contract: 'createProposal', status: 'ran' },
+    ], 1);
+    assert.equal(tracePlan.perContact, 3);
+    assert.equal(tracePlan.counts.ensureOpenOpportunity, 1);
+    assert.equal(tracePlan.counts.createProposalFromOrder, 1);
+    assert.equal(tracePlan.counts.createProposal, 1);
+    assert.match(planSummary(tracePlan), /opportunity resolved/);
+    assert.match(planSummary(tracePlan), /reorder proposal created/);
+    assert.match(planSummary(tracePlan), /catalog proposal created/);
+
+    const sourcePlan = planRunFromPipeline([
+      { contract: 'ensureOpenOpportunity' },
+      { contract: 'createProposalFromOrder' },
+      { contract: 'sendEmail' },
+    ], 40);
+    assert.equal(sourcePlan.effectSteps, 3);
+    assert.equal(
+      pipelinePlanSummary(sourcePlan),
+      '1 email step · 1 open-opportunity step · 1 reorder-proposal step',
+    );
+  });
 });

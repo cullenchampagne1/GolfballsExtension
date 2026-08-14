@@ -26,6 +26,21 @@ export const supportsDualPole = (p) => !!(p && !p.excludeDualPole && (ballish(p)
 // accessories — distinct from a ball monogram and from a printed Custom Logo.
 export const supportsEmbroidery = (p) => supportsMod(p, 'Golf Towel') || supportsMod(p, 'Golf Hat');
 
+/** The modal and action engine use the same blank commissionable-logo state.
+ * Art can be attached later in Gift Catalog; keeping this descriptor on the
+ * line selects the custom-logo ladder instead of the stock retail price. */
+export function blankLogoDecoration(product) {
+  return {
+    engine: ballish(product) ? 'ballLogo' : 'logoOverlay',
+    baseColor: '#FFFFFF',
+    finish: { MFS: '279', SecondMFS: '279' },
+    dualPole: false,
+    pole2: null,
+    logo: null,
+    _localImageDataUrl: null,
+  };
+}
+
 // Can `target` receive an imprint produced by `engine`? Each personalization
 // engine maps to the product capability it needs — this is how a tag "knows
 // what it can go on" (a logo is universal; ball text only lands on balls; tee
