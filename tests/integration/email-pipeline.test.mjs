@@ -24,6 +24,7 @@ const { parseEml } = await import('../../src/lib/emailParse.js');
 const { sanitizeHtml } = await import('../../src/lib/sanitizeHtml.js');
 const { htmlToPlainText, buildMailtoUrl, withSignature, sendEmail } = await import('../../src/lib/emailSender.js');
 const { sendThreadReply } = await import('../../src/lib/emailReply.js');
+const { evaluateWorkflowTemplate } = await import('../../src/lib/workflow/templateEvaluation.js');
 
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const RAW_HTML = '<div><p>Café pricing — see <img src="cid:logo123"> below.</p>'
@@ -239,5 +240,44 @@ describe('email pipeline', () => {
     assert.ok(body.includes('Café pricing — see  below.'));
     assert.equal(/<[^>]+>/.test(body), false, 'mailto body is plain text');
     assert.equal(body.includes('Rep Name'), false, 'the signature is dropped on the mailto path');
+  });
+
+  it('keeps evaluated action variables and generated proposal URLs in the Outlook window', async () => {
+    const outbound = await evaluateWorkflowTemplate({
+      id: 'prior-year',
+      name: 'Prior Year',
+      kind: 'email',
+      subject: '{{FirstName}}, your updated order',
+      body: '<p>Hello {{FirstName}},</p><p>Your current proposal is ready.</p>',
+      vars: { FirstName: { path: 'firstName' } },
+    }, {
+      contact: { firstName: 'Avery', email: 'avery@example.com' },
+      firstName: 'Avery',
+      email: 'avery@example.com',
+    });
+    outbound.attachProposal({
+      proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-9',
+      proposalUrlHtml: 'https://www.golfballs.com/cart?proposalMode=true&amp;opportunityID=71&amp;cartID=cart-9',
+    }, 'View your updated proposal');
+
+    const dispatched = [];
+    const result = await sendEmail({
+      from: 'rep@golfballs.com',
+      to: outbound.to,
+      subject: outbound.subject,
+      htmlBody: outbound.body,
+      config: { paReady: false },
+    }, { dispatch: async (message) => { dispatched.push(message); return { ok: true }; } });
+
+    assert.deepEqual(result, { state: 'opened', transport: 'mailto', error: null });
+    const [url] = dispatched.map((message) => message.url);
+    const query = new URL(url).searchParams;
+    assert.equal(query.get('subject'), 'Avery, your updated order');
+    assert.equal(
+      query.get('body'),
+      'Hello Avery,\r\n\r\nYour current proposal is ready.\r\n\r\n'
+        + 'View your updated proposal: https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-9',
+    );
+    assert.equal(query.get('body').includes('{{FirstName}}'), false);
   });
 });

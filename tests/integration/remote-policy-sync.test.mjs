@@ -12,7 +12,7 @@ import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   API_KEY, API_ORIGIN,
-  createChrome, createContext, createFetchMock, jsonResponse, loadScript,
+  createChrome, createContext, createFetchMock, jsonResponse, loadBackground, loadScript,
   settle, validInstallation,
 } from './helpers/harness.mjs';
 
@@ -148,6 +148,59 @@ describe('remote policy sync', () => {
     assert.equal(backup.devSettings['numberDisplay.durationMs'], 777);
     assert.equal(backup.devSettings['workflowManager.scale'], 0.75);
     assert.deepEqual(Array.from(backup.customPages.all), registry.customPageScopes.all.pageIds);
+  });
+
+  it('refreshes the effective installation policy when Settings requests it', async () => {
+    let configurationAvailable = false;
+    const freshConfiguration = buildConfiguration(registry);
+    freshConfiguration.features.powerAutomateEnabled = {
+      value: false, hidden: false, managed: true,
+    };
+    const liveStored = {
+      gbApiInstallation: validInstallation(),
+      featureFlags: { powerAutomateEnabled: false },
+      gbRemoteSettingsPolicy: {
+        schemaVersion: 1,
+        adminBypass: false,
+        revision: '1'.repeat(64),
+        appliedAt: 1,
+        hiddenFeatures: { powerAutomateEnabled: true },
+        hiddenDeveloperSettings: {},
+        hiddenCustomPages: false,
+        hiddenCustomPageScopes: {},
+        developerSectionHidden: false,
+        managedFeatures: { powerAutomateEnabled: false },
+        managedDeveloperSettings: {},
+        managedCustomPages: true,
+        managedCustomPageScopes: {},
+      },
+    };
+    const background = await loadBackground({
+      stored: liveStored,
+      fetchImpl: async (url) => {
+        if (String(url) === CONFIG_URL) {
+          if (!configurationAvailable) return jsonResponse({ detail: 'temporarily unavailable' }, 503);
+          return jsonResponse({
+            schema_version: 1,
+            admin_bypass: false,
+            revision: '2'.repeat(64),
+            configuration: freshConfiguration,
+          });
+        }
+        return jsonResponse({ detail: 'not found' }, 404);
+      },
+    });
+    assert.equal(liveStored.gbRemoteSettingsPolicy.hiddenFeatures.powerAutomateEnabled, true);
+
+    configurationAvailable = true;
+    const response = await background.sendMessage({ action: 'gbSyncRemoteSettingsPolicy' });
+
+    assert.equal(response.ok, true);
+    assert.equal(response.revision, '2'.repeat(64));
+    assert.equal(
+      Object.hasOwn(liveStored.gbRemoteSettingsPolicy.hiddenFeatures, 'powerAutomateEnabled'),
+      false,
+    );
   });
 
   it('rejects an invalid envelope without touching applied state', async () => {

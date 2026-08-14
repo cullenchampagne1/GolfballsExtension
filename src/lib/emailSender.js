@@ -59,16 +59,47 @@ export function withSignature(html, signature) {
   return signature ? `${html}<br><div>${signature}</div>` : (html || '');
 }
 
-/* HTML → Outlook-friendly plain text for the mailto fallback. Mirrors the
-   converter that lived in content/email-preview.jsx so that path's output
-   is unchanged. */
+/* HTML → Outlook-friendly plain text for the mailto fallback. Links need
+   their destinations written out because mailto bodies cannot carry HTML;
+   otherwise a rendered proposal/action link becomes only "View proposal" in
+   the compose window. Outlook also expects CRLF line endings, with paragraph
+   boundaries represented by one blank line. */
 export function htmlToPlainText(html) {
-  return String(html || '')
-    .replace(/<br\s*\/?>(?=)/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+  const source = String(html || '');
+  if (!source) return '';
+
+  let text = typeof document === 'undefined' ? source : sanitizeHtml(source);
+  if (typeof document !== 'undefined') {
+    const template = document.createElement('template');
+    template.innerHTML = text;
+    for (const anchor of template.content.querySelectorAll('a[href]')) {
+      const href = String(anchor.getAttribute('href') || '').trim();
+      if (!href) continue;
+      const label = String(anchor.textContent || '').replace(/\s+/g, ' ').trim();
+      anchor.replaceWith(document.createTextNode(
+        label && label !== href ? `${label}: ${href}` : href,
+      ));
+    }
+    text = template.innerHTML;
+  }
+
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/<br\b[^>]*>\s*<\/p>/gi, '</p>')
+    .replace(/<br\b[^>]*>/gi, '\n')
+    .replace(/<hr\b[^>]*>/gi, '\n\n')
+    .replace(/<li\b[^>]*>/gi, '• ')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/(div|address|blockquote|pre|h[1-6]|li|tr|table|ul|ol)>/gi, '\n')
+    .replace(/<\/(td|th)>/gi, '\t')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/\n{3,}/g, '\n\n').trim();
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#39;/gi, "'").replace(/&quot;/gi, '"')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .replace(/\n/g, '\r\n');
 }
 
 export function buildMailtoUrl(to, subject, plainBody) {

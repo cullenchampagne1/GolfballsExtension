@@ -1022,7 +1022,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── Backend origin ─────────────────────────────────────────────────────
+  // Effective settings policy
+  // Settings opens against the effective policy for this exact installation
+  // instead of waiting for the periodic alarm after an administrator edit.
+  if (msg.action === 'gbSyncRemoteSettingsPolicy') {
+    const policy = globalThis.GBRemoteSettingsPolicy;
+    if (!policy?.sync) {
+      sendResponse({ ok: false, error: 'Settings policy is unavailable' });
+      return true;
+    }
+    policy.sync()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: String(error?.message || error || 'Unable to refresh settings policy'),
+      }));
+    return true;
+  }
+
   // config.js owns the origin in the worker global; the 3D viewer (content
   // script) reads it here to fetch on-demand assets. Synchronous reply.
   if (msg.action === 'gbBackendOrigin') {

@@ -51,12 +51,22 @@ describe('withSignature', () => {
 });
 
 describe('htmlToPlainText', () => {
-  it('turns <br> and block-element closes into newlines', () => {
-    assert.equal(htmlToPlainText('<div>line one<br>line two</div><p>para</p>'), 'line one\nline two\npara');
+  it('turns breaks and paragraphs into Outlook-compatible CRLF spacing', () => {
+    assert.equal(
+      htmlToPlainText('<div>line one<br>line two</div><p>para one</p><p>para two</p>'),
+      'line one\r\nline two\r\npara one\r\n\r\npara two',
+    );
   });
 
-  it('strips tags but keeps link text', () => {
-    assert.equal(htmlToPlainText('See <a href="https://golfballs.com">our site</a> today'), 'See our site today');
+  it('keeps safe link destinations when HTML formatting is stripped', () => {
+    assert.equal(
+      htmlToPlainText('See <a href="https://golfballs.com/cart?proposalMode=true&amp;cartID=42">your proposal</a> today'),
+      'See your proposal: https://golfballs.com/cart?proposalMode=true&cartID=42 today',
+    );
+  });
+
+  it('does not expose an unsafe link destination in the plain-text body', () => {
+    assert.equal(htmlToPlainText('<a href="javascript:alert(1)">Open</a>'), 'Open');
   });
 
   it('decodes &nbsp; &amp; &lt; &gt; entities', () => {
@@ -64,7 +74,7 @@ describe('htmlToPlainText', () => {
   });
 
   it('collapses 3+ consecutive newlines to a blank line and trims the ends', () => {
-    assert.equal(htmlToPlainText('<p>a</p><p></p><p></p><p>b</p>'), 'a\n\nb');
+    assert.equal(htmlToPlainText('<p>a</p><p></p><p></p><p>b</p>'), 'a\r\n\r\nb');
   });
 });
 
@@ -77,8 +87,8 @@ describe('buildMailtoUrl', () => {
   });
 
   it('encodes newlines, ampersands, and unicode in the body', () => {
-    const url = buildMailtoUrl('a@b.com', 'S & P', 'line1\nCafé & co');
-    assert.equal(url, 'mailto:a%40b.com?subject=S%20%26%20P&body=line1%0ACaf%C3%A9%20%26%20co');
+    const url = buildMailtoUrl('a@b.com', 'S & P', 'line1\r\nCafé & co');
+    assert.equal(url, 'mailto:a%40b.com?subject=S%20%26%20P&body=line1%0D%0ACaf%C3%A9%20%26%20co');
   });
 });
 
@@ -234,7 +244,7 @@ describe('sendEmail', () => {
     }, { dispatch: async (msg) => { seen.push(msg); return { ok: true }; } });
     assert.deepEqual(r, { state: 'opened', transport: 'mailto', error: null });
     assert.equal(seen[0].action, 'openMailto');
-    assert.equal(seen[0].url, 'mailto:buyer%40example.com?subject=Order%20update&body=Hello%0Athere');
+    assert.equal(seen[0].url, 'mailto:buyer%40example.com?subject=Order%20update&body=Hello%0D%0Athere');
   });
 
   it('passes template tracking metadata with a mailto handoff', async () => {

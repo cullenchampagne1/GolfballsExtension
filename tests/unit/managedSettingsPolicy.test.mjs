@@ -9,6 +9,10 @@ import {
   featureIsManaged,
   normalizeRemotePolicy,
 } from '../../src/lib/managedSettingsPolicy.js';
+import {
+  REMOTE_POLICY_SYNC_ACTION,
+  requestRemoteSettingsPolicySync,
+} from '../../src/lib/remoteSettingsPolicy.js';
 
 const policy = normalizeRemotePolicy({
   schemaVersion: 1,
@@ -23,6 +27,29 @@ const policy = normalizeRemotePolicy({
 });
 
 describe('managed settings policy', () => {
+  it('requests an immediate effective-policy refresh from the worker', async () => {
+    const previousChrome = globalThis.chrome;
+    let message;
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(input, callback) {
+          message = input;
+          callback({ ok: true, revision: 'f'.repeat(64) });
+        },
+      },
+    };
+    try {
+      const response = await requestRemoteSettingsPolicySync();
+      assert.deepEqual(message, { action: REMOTE_POLICY_SYNC_ACTION });
+      assert.equal(response.ok, true);
+      assert.equal(response.revision, 'f'.repeat(64));
+    } finally {
+      if (previousChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = previousChrome;
+    }
+  });
+
   it('uses map membership as the lock state even when the managed value is false', () => {
     assert.equal(featureIsManaged(policy, 'copyIdsEnabled'), true);
     assert.equal(featureIsManaged(policy, 'workflowManagerEnabled'), false);

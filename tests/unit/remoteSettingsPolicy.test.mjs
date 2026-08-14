@@ -150,6 +150,20 @@ describe('remote settings policy', () => {
     assert.deepEqual(Array.from(stored.gbRemoteSettingsPolicy.managedCustomPageScopes.all), []);
   });
 
+  it('clears a stale hidden feature marker on the next effective-policy sync', async () => {
+    configuration.features.powerAutomateEnabled.hidden = true;
+    setPayload({ schema_version: 1, admin_bypass: false, revision: 'd'.repeat(64), configuration });
+    await context.GBRemoteSettingsPolicy.sync();
+    assert.equal(stored.gbRemoteSettingsPolicy.hiddenFeatures.powerAutomateEnabled, true);
+
+    configuration.features.powerAutomateEnabled.hidden = false;
+    setPayload({ schema_version: 1, admin_bypass: false, revision: 'e'.repeat(64), configuration });
+    const response = await context.GBRemoteSettingsPolicy.sync();
+
+    assert.equal(response.revision, 'e'.repeat(64));
+    assert.equal(Object.hasOwn(stored.gbRemoteSettingsPolicy.hiddenFeatures, 'powerAutomateEnabled'), false);
+  });
+
   it('restores the pre-policy values and drops the backup on admin bypass', async () => {
     setPayload({ schema_version: 1, admin_bypass: true, revision: 'b'.repeat(64), configuration: null });
     await context.GBRemoteSettingsPolicy.sync();

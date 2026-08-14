@@ -7,6 +7,7 @@ import { useDevSettings } from '../lib/devSettings.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
+import { htmlToPlainText } from '../lib/emailSender.js';
 import { popupFeatures } from '../lib/features/featureRegistry.js';
 import { loadFeatureConfig, normalizeFeatureConfig, featureShowsInPopup, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
 import {
@@ -113,20 +114,6 @@ const readAccessState = () => new Promise((resolve) => {
    smart.conditional sentence/line/paragraph drop working as before. */
 function renderStr(str, vars, defs) {
   return renderTemplate(str, vars, defs);
-}
-
-// Convert template HTML → Outlook-friendly plain text for mailto links.
-function toPlainText(html) {
-  if (!html) return '';
-  let text = html.replace(/<br\s*\/?>\s*<\/p>/gi, '</p>');
-  text = text.replace(/<br\s*\/?>/gi, '\r\n')
-             .replace(/<\/p>/gi, '\r\n\r\n')
-             .replace(/<\/li>/gi, '\r\n')
-             .replace(/<\/[ou]l>/gi, '\r\n');
-  text = text.replace(/<[^>]+>/g, '');
-  const decoder = document.createElement('textarea');
-  decoder.innerHTML = text;
-  return decoder.value.replace(/(\r\n|\n){3,}/g, '\r\n\r\n').trim();
 }
 
 /* ============================================================
@@ -966,7 +953,7 @@ function MainView({
     return {
       subject,
       rawBody,
-      plainBody: toPlainText(rawBody),
+      plainBody: htmlToPlainText(rawBody),
       variationId: variation?.id || '__original',
     };
   };
