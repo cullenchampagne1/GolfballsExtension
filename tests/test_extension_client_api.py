@@ -43,11 +43,16 @@ class FakeSession:
 
 
 class FakeSettingsPolicy:
-    def resolve(self, credential_id):
+    def __init__(self):
+        self.calls = []
+
+    def resolve_client(self, credential_id, extension_version):
+        self.calls.append((credential_id, extension_version))
+        registry = "current" if extension_version else "3.4.2"
         return ({
             "schema_version": 1,
             "credential_id": credential_id,
-        }, "database-revision")
+        }, "database-revision", registry)
 
 
 class ExtensionClientAccessTests(unittest.TestCase):
@@ -55,10 +60,11 @@ class ExtensionClientAccessTests(unittest.TestCase):
         FakeSession.rows = {}
         models = SimpleNamespace(ExtensionInstallationAccess=Access)
         auth = SimpleNamespace(engine=object())
+        self.settings_policy = FakeSettingsPolicy()
         self.api = client_api_module.ExtensionClientApi(
             auth_manager=auth,
             models=models,
-            settings_policy_store=FakeSettingsPolicy(),
+            settings_policy_store=self.settings_policy,
             settings_policy_error=RuntimeError,
             client_scope="client:extension",
             project_dir=ROOT,
@@ -80,8 +86,15 @@ class ExtensionClientAccessTests(unittest.TestCase):
     def tearDown(self):
         self.session_patch.stop()
 
-    def request(self):
-        return SimpleNamespace(state=SimpleNamespace(principal=self.principal))
+    def request(self, extension_version=None):
+        query_params = (
+            {"extension_version": extension_version}
+            if extension_version is not None else {}
+        )
+        return SimpleNamespace(
+            state=SimpleNamespace(principal=self.principal),
+            query_params=query_params,
+        )
 
     def test_legacy_chat_grant_is_used_only_until_a_database_choice_exists(self):
         initial = self.api.access(self.principal)
@@ -128,8 +141,17 @@ class ExtensionClientAccessTests(unittest.TestCase):
         response = self.api.configuration(self.request())
         payload = json.loads(response.body)
         self.assertEqual(payload["revision"], "database-revision")
+        self.assertEqual(payload["configuration_registry"], "3.4.2")
         self.assertEqual(payload["configuration"]["credential_id"], "install-1")
         self.assertFalse(payload["admin_bypass"])
+        self.assertEqual(self.settings_policy.calls[-1], ("install-1", None))
+
+    def test_configuration_negotiates_the_current_registry_by_client_version(self):
+        self.api.auth_manager.authenticate_session_cookie = lambda _request: None
+        response = self.api.configuration(self.request("3.4.6"))
+        payload = json.loads(response.body)
+        self.assertEqual(payload["configuration_registry"], "current")
+        self.assertEqual(self.settings_policy.calls[-1], ("install-1", "3.4.6"))
 
     def test_email_exchange_flow_creates_reply_drafts_without_sending(self):
         response = self.api.email_exchange_flow(self.request(), "cullen")

@@ -137,7 +137,10 @@ describe('installation auth · authenticated requests', () => {
   it('sends the dashboard cookie only for the configuration bridge', async () => {
     const configuration = await client.fetchConfiguration();
     assert.deepEqual(configuration, { ok: true });
-    assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/projects/golfballs-extension/client/configuration');
+    assert.equal(
+      requests.at(-1).url,
+      `https://api.cullenchampagne.com/projects/golfballs-extension/client/configuration?extension_version=${manifest.version}`,
+    );
     assert.equal(requests.at(-1).options.headers.Authorization, `Bearer ${API_KEY}`);
     assert.equal(requests.at(-1).options.credentials, 'include',
       'dashboard cookie must be available for admin bypass');
