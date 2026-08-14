@@ -26,9 +26,26 @@ function object(value) {
 export function shapeExtractedPage(extracted, overrides = {}) {
   const wrapped = object(extracted);
   const data = object(wrapped.data || wrapped);
+  const ids = object(data.ids);
   const recordContact = object(data.contact);
   const contactOverride = object(overrides.contact);
   const contact = { ...recordContact, ...contactOverride };
+
+  // The real contact/account schemas keep stable ids in `data.ids`, while
+  // workflow hydration historically copied them into `page.contact` itself.
+  // Do that at this shared model boundary so a live Action Shelf run receives
+  // the exact same writable contact shape as the Workflow Manager.
+  const contactId = contact.contactId || contact.id || contact.customerId || ids.contact;
+  const accountId = contact.accountId || ids.account;
+  if (contactId && !contact.contactId) contact.contactId = String(contactId);
+  if (accountId && !contact.accountId) contact.accountId = String(accountId);
+  if (!contact.contactName) {
+    const name = contact.name
+      || [contact.firstName, contact.lastName].filter(Boolean).join(' ').trim();
+    if (name) contact.contactName = name;
+  }
+  if (!contact.name && contact.contactName) contact.name = contact.contactName;
+
   const hasContact = Object.keys(contact).length > 0;
   const relatedContacts = Array.isArray(data.contacts) ? data.contacts : [];
   const contacts = Array.isArray(overrides.contacts)

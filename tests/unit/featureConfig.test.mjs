@@ -91,15 +91,31 @@ describe('featureConfig · defaults + queries', () => {
     const cfg = normalizeFeatureConfig({});
     assert.deepEqual(cfg.crmSearchEnabled, { showInPopup: true, showInShelf: true, pages: ['*'], customUrl: '' });
     // margin calc: cross-implemented, default pages from the registry
-    assert.deepEqual(cfg.marginCalcEnabled, { showInPopup: true, showInShelf: true, pages: ['order'], customUrl: '' });
+    assert.deepEqual(cfg.marginCalcEnabled, { showInPopup: false, showInShelf: true, pages: ['order'], customUrl: '' });
     // inline feature: both surfaces forced off, no pages, no custom link
     assert.deepEqual(cfg.emailPreviewEnabled, { showInPopup: false, showInShelf: false, pages: [], customUrl: '' });
     assert.equal(Object.keys(cfg).length, FEATURE_REGISTRY.length);
   });
 
+  it('defaults the popup to edit, watch, tasks, search, notifications, and submit proof only', () => {
+    const cfg = normalizeFeatureConfig({});
+    const visible = popupFeatures()
+      .filter((feature) => cfg[feature.key].showInPopup)
+      .map((feature) => feature.key)
+      .sort();
+    assert.deepEqual(visible, [
+      'crmSearchEnabled',
+      'imagePreviewEnabled',
+      'notificationsEnabled',
+      'orderEditEnabled',
+      'taskListEnabled',
+      'watchListEnabled',
+    ]);
+  });
+
   it('honors a saved override', () => {
-    const cfg = normalizeFeatureConfig({ callLogEnabled: { showInPopup: false, showInShelf: true, pages: ['contact'] } });
-    assert.equal(cfg.callLogEnabled.showInPopup, false);
+    const cfg = normalizeFeatureConfig({ callLogEnabled: { showInPopup: true, showInShelf: true, pages: ['contact'] } });
+    assert.equal(cfg.callLogEnabled.showInPopup, true);
     assert.deepEqual(cfg.callLogEnabled.pages, ['contact']);
   });
 

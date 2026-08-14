@@ -10,8 +10,8 @@ import { customActionEntryPoints } from '../../lib/customActionEntryPoints.js';
    Mounted once in the shelf tree. The shelf action handler fires a
    `gb-run-custom-action` window event with the action record; we:
      1. dry-simulate it against the LIVE page (no writes),
-     2. if it has remote/money effects, show a confirm with the plan,
-     3. on confirm, run it for REAL through the gated executor.
+     2. run one-record page actions immediately from that explicit shelf click,
+     3. confirm broad/modal audiences, then use the same gated executor.
 
    The heavy engine + writer libs are dynamic-imported on demand so the
    always-loaded shelf bundle stays lean.
@@ -142,7 +142,22 @@ export function CustomActionRunHost() {
         setBusy(false);
         return;
       }
-      setPending({ action, page, summary: eng.planSummary(plan), totalSteps });
+      const policy = eng.live.liveActionRunPolicy(page, plan);
+      const prepared = {
+        action,
+        page,
+        summary: eng.planSummary(plan),
+        totalSteps,
+        announceSuccess: policy.announceSuccess,
+      };
+      if (!policy.confirm) {
+        // Clicking a shelf action on one live record is already an explicit
+        // user instruction. Run it immediately and stay silent on success;
+        // broad/modal audiences still stop on the confirmation plan below.
+        await runPrepared(prepared, eng);
+        return;
+      }
+      setPending(prepared);
       setBusy(false);
     } catch (err) {
       toast?.error?.(`Could not prepare “${action?.name || 'action'}”: ${String(err?.message || err)}`, { duration: 5000 });
@@ -150,8 +165,7 @@ export function CustomActionRunHost() {
     }
   }
 
-  async function doRun() {
-    const p = pending;
+  async function runPrepared(p, loadedEngine = null) {
     setPending(null);
     if (!p) return;
     setBusyLabel('Running “' + (p.action?.name || 'action') + '”…');
@@ -160,7 +174,7 @@ export function CustomActionRunHost() {
     cancelRef.current = false;
     setBusy(true);
     try {
-      const eng = await loadEngine();
+      const eng = loadedEngine || await loadEngine();
       const executor = await eng.live.makeLiveExecutor(p.page);
       // Per real write: advance the bar, count failures, and log the error so
       // it's visible AS IT HAPPENS (not only at the end).
@@ -193,7 +207,7 @@ export function CustomActionRunHost() {
         const first = failed[0];
         const why = (first && (first.errors && first.errors[0])) || 'unknown error';
         toast?.error?.(`“${p.action.name}”: ${failed.length} of ${res.trace.filter((t) => t && t.contract).length} step(s) failed — ${why}`, { duration: 8000 });
-      } else {
+      } else if (p.announceSuccess !== false) {
         toast?.success?.(typeof res.result === 'string' && res.result ? res.result : `“${p.action.name}” done.`, { duration: 3600 });
       }
     } catch (err) {
@@ -202,6 +216,10 @@ export function CustomActionRunHost() {
     setBusy(false);
     setCancelling(false);
     cancelRef.current = false;
+  }
+
+  async function doRun() {
+    await runPrepared(pending);
   }
 
   const requestCancel = () => { cancelRef.current = true; setCancelling(true); };

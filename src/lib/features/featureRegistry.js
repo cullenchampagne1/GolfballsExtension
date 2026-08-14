@@ -19,9 +19,8 @@
                    rows, order id). Those keep their handcrafted handlers;
                    the registry only declares their surface + default pages.
 
-   The `pages` list governs BOTH surfaces through featureConfig.pageApplies,
-   so a rep can say "CRM Search on contact pages only" once and it holds for
-   the popup button and the shelf action alike.
+   The `pages` list scopes the Action Shelf. Popup placement is a separate
+   global choice, since the toolbar popup can be opened over any browser tab.
 
    Contextual/inline features (email preview, text preview, passive glows)
    have NO launcher — they surface inline on the page — so they get
@@ -82,6 +81,19 @@ const SURFACES = {
 
 const NO_SURFACES = Object.freeze({ popup: false, shelf: null });
 
+// Keep the toolbar popup deliberately small on a fresh install. Charge Card is
+// a popup-native feature outside this surface registry; these are the only
+// registry launchers that join it by default. Every other capable feature can
+// still be enabled for the popup from its Settings row.
+const DEFAULT_POPUP_KEYS = new Set([
+  'orderEditEnabled',
+  'watchListEnabled',
+  'taskListEnabled',
+  'crmSearchEnabled',
+  'notificationsEnabled',
+  'imagePreviewEnabled',
+]);
+
 /* Inline/passive/native features that have NO launcher → plain toggle:
    emailPreview (click email rows), textPreview (hover case notes),
    signifydGlow + autoPush (passive), actionsShelf (the shelf itself),
@@ -93,6 +105,7 @@ const NO_SURFACES = Object.freeze({ popup: false, shelf: null });
 export const FEATURE_REGISTRY = FEATURE_FLAGS.map((f) => ({
   ...f, // key, section, name, desc, icon
   surfaces: SURFACES[f.key] || NO_SURFACES,
+  defaultPopup: DEFAULT_POPUP_KEYS.has(f.key),
 }));
 
 export function featureByKey(key) {

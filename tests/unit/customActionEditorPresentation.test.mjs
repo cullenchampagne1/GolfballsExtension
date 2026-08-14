@@ -18,6 +18,10 @@ const bridgeSource = await readFile(
   new URL('../../src/content/editor-bridge.jsx', import.meta.url),
   'utf8',
 );
+const runHostSource = await readFile(
+  new URL('../../src/ui/components/CustomActionRunHost.jsx', import.meta.url),
+  'utf8',
+);
 const newActionSource = bridgeSource.slice(
   bridgeSource.indexOf('function newAction'),
   bridgeSource.indexOf('function openAction'),
@@ -100,5 +104,12 @@ describe('custom action editor presentation and lifecycle', () => {
     assert.match(deleteActionSource, /show\('ed-settings'\)/);
     assert.doesNotMatch(deleteActionSource, /show\('ed-empty'\)/);
     assert.doesNotMatch(editorSource, /from the sidebar/);
+  });
+
+  it('auto-runs a single live record and announces only actionable failures', () => {
+    assert.match(runHostSource, /liveActionRunPolicy\(page, plan\)/);
+    assert.match(runHostSource, /if \(!policy\.confirm\)/);
+    assert.match(runHostSource, /announceSuccess: policy\.announceSuccess/);
+    assert.match(runHostSource, /else if \(p\.announceSuccess !== false\)/);
   });
 });

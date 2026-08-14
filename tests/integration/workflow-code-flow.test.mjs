@@ -239,11 +239,8 @@ describe('workflow code flow', () => {
       data: {
         ids: { contact: '771', account: '902' },
         contact: {
-          id: '771',
-          contactId: '771',
           firstName: 'Avery',
           lastName: 'Buyer',
-          contactName: 'Avery Buyer',
         },
         account: { name: 'Northwind Golf' },
         orders: [
@@ -267,6 +264,9 @@ describe('workflow code flow', () => {
 
     assert.equal(page.orders.length, 2);
     assert.equal(page.items[0].quantity, 2);
+    assert.equal(page.contact.contactId, '771');
+    assert.equal(page.contact.accountId, '902');
+    assert.equal(page.contact.contactName, 'Avery Buyer');
     const result = await simulateProgram(RECONCILIATION_WORKFLOW, page, {
       run: makeSandboxRunner({ exec: fakeSandbox }),
     });
@@ -414,7 +414,7 @@ describe('workflow code flow', () => {
     const page = shapeLivePage({
       data: {
         ids: { contact: '909', account: '' },
-        contact: { id: '909', contactId: '909', contactName: 'New Account Buyer' },
+        contact: { firstName: 'New Account', lastName: 'Buyer' },
         orders: [],
         tasks: { open: [], done: [] },
       },

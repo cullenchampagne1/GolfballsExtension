@@ -25,7 +25,7 @@ const settingsFile = () => buildSettingsTemplateFile('Sales setup', {
 });
 
 const EXPECTED_CONFIGURATION_KEYS = [
-  'featureFlags', 'devSettings', 'keyboardShortcuts', 'customPages',
+  'featureFlags', 'featureConfig', 'devSettings', 'keyboardShortcuts', 'customPages',
   'themeColors', 'gbTheme', 'uiScales', 'emailSignature',
 ];
 
@@ -171,6 +171,47 @@ describe('sharing fallback · preset scopes', () => {
       storageState.noteFolders.map((item) => item.id),
       ['local-note-folder', 'activity-folder'],
     );
+  });
+
+  it('round-trips popup, shelf, page, and custom-link feature placement', async () => {
+    const sourcePlacement = {
+      crmSearchEnabled: {
+        showInPopup: false,
+        showInShelf: true,
+        pages: ['contact', 'account'],
+        customUrl: 'Page=240',
+      },
+      marginCalcEnabled: {
+        showInPopup: true,
+        showInShelf: false,
+        pages: ['order'],
+        customUrl: '',
+      },
+    };
+    const storageState = {
+      featureFlags: { crmSearchEnabled: true, marginCalcEnabled: true },
+      featureConfig: sourcePlacement,
+    };
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            const list = Array.isArray(keys) ? keys : [keys];
+            callback(Object.fromEntries(
+              list.filter((key) => key in storageState).map((key) => [key, storageState[key]]),
+            ));
+          },
+          set(value, callback) { Object.assign(storageState, value); callback?.(); },
+        },
+      },
+    };
+
+    const shared = await gatherScopes(['settings-preferences']);
+    assert.deepEqual(shared['settings-preferences'].featureConfig, sourcePlacement);
+
+    storageState.featureConfig = { crmSearchEnabled: { showInPopup: true } };
+    await applyScopes(shared);
+    assert.deepEqual(storageState.featureConfig, sourcePlacement);
   });
 
   it('keeps Page Engine indexing and Territory identity installation-local', async () => {

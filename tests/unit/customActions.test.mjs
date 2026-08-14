@@ -15,7 +15,12 @@ import {
 } from '../../src/lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../../src/lib/taskListActionContext.js';
 import { samplePageFor } from '../../src/lib/codeEngine/samplePages.js';
-import { shapeLivePage, ctxFromPage } from '../../src/lib/codeEngine/liveActionRun.js';
+import {
+  shapeLivePage,
+  ctxFromPage,
+  liveActionContextCount,
+  liveActionRunPolicy,
+} from '../../src/lib/codeEngine/liveActionRun.js';
 
 describe('customActions · normalize', () => {
   it('fills defaults and clamps an unknown page type to contact', () => {
@@ -247,6 +252,46 @@ describe('customActions · live run shaping', () => {
     assert.equal(page.ids.account, '7');
     assert.deepEqual(page.relatedContacts.map((contact) => contact.id), ['99', '100']);
     assert.equal(page.errors, undefined);
+  });
+
+  it('copies schema ids into the live contact just like workflow hydration', () => {
+    const page = shapeLivePage({
+      data: {
+        ids: { contact: '771', account: '902' },
+        contact: { firstName: 'Avery', lastName: 'Buyer', email: 'avery@example.test' },
+      },
+    });
+    assert.equal(page.contact.contactId, '771');
+    assert.equal(page.contact.accountId, '902');
+    assert.equal(page.contact.contactName, 'Avery Buyer');
+    assert.equal(page.contacts[0].contactId, '771');
+    assert.deepEqual(ctxFromPage(page), {
+      contactId: '771',
+      contactName: 'Avery Buyer',
+      phone: '',
+      accountId: '902',
+      email: 'avery@example.test',
+    });
+  });
+
+  it('runs one-record shelf actions directly and keeps broad actions confirmed', () => {
+    const single = shapeLivePage({
+      data: { ids: { contact: '42' }, contact: { firstName: 'Ada' } },
+    });
+    assert.equal(liveActionContextCount(single), 1);
+    assert.deepEqual(liveActionRunPolicy(single, { maxGate: 'confirm' }), {
+      contextCount: 1,
+      confirm: false,
+      announceSuccess: false,
+    });
+
+    const broad = {
+      ...single,
+      entryPoints: [{ data: { contacts: [{ contactId: '42' }, { contactId: '84' }] } }],
+    };
+    assert.equal(liveActionContextCount(broad), 2);
+    assert.equal(liveActionRunPolicy(broad, { maxGate: 'confirm' }).confirm, true);
+    assert.equal(liveActionRunPolicy(single, { maxGate: 'hard' }).confirm, true);
   });
 
   it('empty page → no contact, empty tasks', () => {

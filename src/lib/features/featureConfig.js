@@ -24,7 +24,9 @@ export function normalizeFeatureConfig(saved = {}) {
     const canPopup = !!f.surfaces.popup;
     const canShelf = !!f.surfaces.shelf;
     out[f.key] = {
-      showInPopup: canPopup ? (s.showInPopup !== false) : false,
+      showInPopup: canPopup
+        ? (Object.hasOwn(s, 'showInPopup') ? s.showInPopup !== false : !!f.defaultPopup)
+        : false,
       showInShelf: canShelf ? (s.showInShelf !== false) : false,
       pages: canShelf ? (Array.isArray(s.pages) && s.pages.length ? s.pages.slice() : (f.surfaces.shelf.pages || ['*']).slice()) : [],
       // Extra shelf matcher: a URL substring. When set, the shelf action also

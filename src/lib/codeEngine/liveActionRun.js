@@ -24,12 +24,49 @@ export function shapeLivePage(engineOut) {
 /** The executor ctx ids pulled off the shaped page's contact. Pure. */
 export function ctxFromPage(page) {
   const c = (page && page.contact) || {};
+  const ids = (page && page.ids) || {};
   return {
-    contactId: c.contactId || c.id || c.customerId || '',
+    contactId: c.contactId || c.id || c.customerId || ids.contact || '',
     contactName: c.contactName || c.name || [c.firstName, c.lastName].filter(Boolean).join(' ') || '',
     phone: c.phone || '',
-    accountId: c.accountId || '',
+    accountId: c.accountId || ids.account || '',
     email: c.email || '',
+  };
+}
+
+/** Number of records exposed by the live action's context. A contact/account
+ * page is one record; modal entry points can expose a broader contact set. */
+export function liveActionContextCount(page) {
+  const model = page && typeof page === 'object' ? page : {};
+  let count = Array.isArray(model.contacts) ? model.contacts.length : 0;
+  const entryPoints = Array.isArray(model.entryPoints)
+    ? model.entryPoints
+    : (model.entryPoint ? [model.entryPoint] : []);
+  for (const entryPoint of entryPoints) {
+    const contacts = entryPoint?.data?.contacts;
+    if (Array.isArray(contacts)) count = Math.max(count, contacts.length);
+  }
+  if (count > 0) return count;
+
+  const ids = model.ids && typeof model.ids === 'object' ? model.ids : {};
+  const hasSingleRecord = Object.keys(model.contact || {}).length > 0
+    || Object.keys(model.account || {}).length > 0
+    || Object.keys(model.order || {}).length > 0
+    || !!(ids.contact || ids.account || ids.order || ids.opportunity);
+  return hasSingleRecord ? 1 : 0;
+}
+
+/** A shelf click is the explicit approval for a normal single-record action.
+ * Broad/modal actions retain the plan confirmation, as do future hard-gated
+ * effects. Successful one-record runs stay silent; errors still surface. */
+export function liveActionRunPolicy(page, plan = {}) {
+  const contextCount = liveActionContextCount(page);
+  const singleContext = contextCount === 1;
+  const mustConfirm = plan.maxGate === 'hard' || !singleContext;
+  return {
+    contextCount,
+    confirm: mustConfirm,
+    announceSuccess: mustConfirm,
   };
 }
 
