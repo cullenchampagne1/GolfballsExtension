@@ -25,6 +25,8 @@ const { sanitizeHtml } = await import('../../src/lib/sanitizeHtml.js');
 const { htmlToPlainText, buildMailtoUrl, withSignature, sendEmail } = await import('../../src/lib/emailSender.js');
 const { sendThreadReply } = await import('../../src/lib/emailReply.js');
 const { evaluateWorkflowTemplate } = await import('../../src/lib/workflow/templateEvaluation.js');
+const { hydrateWorkflowContact } = await import('../../src/lib/workflow/codeContext.js');
+const { crmRowToWorkflowContact } = await import('../../src/lib/crmSearchSelection.js');
 
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const RAW_HTML = '<div><p>Café pricing — see <img src="cid:logo123"> below.</p>'
@@ -67,6 +69,60 @@ const EML = [
 
 let parsed;
 let sanitized;
+
+const CONTACT_URL = 'https://admin.example.test/Default.aspx?Page=240&customerID=42';
+const PROPOSAL_URL = 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-9';
+
+async function runHydratedOutlookAction(contact) {
+  const prepared = await hydrateWorkflowContact(contact, [contact], {
+    buildContext: async (selected) => ({
+      contact: selected,
+      contactId: '42',
+      accountId: '17',
+      contactName: 'Avery Buyer',
+      firstName: 'Avery',
+      lastName: 'Buyer',
+      email: 'avery@example.com',
+      html: '',
+      error: null,
+      data: {
+        ids: { contact: '42', account: '17' },
+        contact: {
+          id: '42', firstName: 'Avery', lastName: 'Buyer', email: 'avery@example.com',
+        },
+        tasks: { open: [], done: [] },
+      },
+    }),
+  });
+  const outbound = await evaluateWorkflowTemplate({
+    id: 'prior-year',
+    name: 'Prior Year',
+    kind: 'email',
+    subject: '{{FirstName}}, your updated order',
+    body: '<p>Hello {{FirstName}},</p><p>Your current proposal is ready.</p>',
+    vars: { FirstName: { path: 'firstName' } },
+  }, prepared.context);
+  outbound.attachProposal({
+    proposalUrl: PROPOSAL_URL,
+    proposalUrlHtml: PROPOSAL_URL.replaceAll('&', '&amp;'),
+  }, 'View your updated proposal');
+
+  const dispatched = [];
+  const result = await sendEmail({
+    from: 'rep@golfballs.com',
+    to: outbound.to,
+    subject: outbound.subject,
+    htmlBody: outbound.body,
+    config: { paReady: false },
+  }, { dispatch: async (message) => { dispatched.push(message); return { ok: true }; } });
+
+  return {
+    prepared,
+    result,
+    message: dispatched[0],
+    query: new URL(dispatched[0].url).searchParams,
+  };
+}
 
 before(() => {
   parsed = parseEml(EML);
@@ -242,41 +298,41 @@ describe('email pipeline', () => {
     assert.equal(body.includes('Rep Name'), false, 'the signature is dropped on the mailto path');
   });
 
-  it('keeps evaluated action variables and generated proposal URLs in the Outlook window', async () => {
-    const outbound = await evaluateWorkflowTemplate({
-      id: 'prior-year',
-      name: 'Prior Year',
-      kind: 'email',
-      subject: '{{FirstName}}, your updated order',
-      body: '<p>Hello {{FirstName}},</p><p>Your current proposal is ready.</p>',
-      vars: { FirstName: { path: 'firstName' } },
-    }, {
-      contact: { firstName: 'Avery', email: 'avery@example.com' },
-      firstName: 'Avery',
-      email: 'avery@example.com',
+  it('keeps Task List action variables and generated proposal URLs in the Outlook window', async () => {
+    const { prepared, result, message, query } = await runHydratedOutlookAction({
+      contactId: '42',
+      contactName: 'Task row label',
+      contactUrl: CONTACT_URL,
+      value: 0,
     });
-    outbound.attachProposal({
-      proposalUrl: 'https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-9',
-      proposalUrlHtml: 'https://www.golfballs.com/cart?proposalMode=true&amp;opportunityID=71&amp;cartID=cart-9',
-    }, 'View your updated proposal');
-
-    const dispatched = [];
-    const result = await sendEmail({
-      from: 'rep@golfballs.com',
-      to: outbound.to,
-      subject: outbound.subject,
-      htmlBody: outbound.body,
-      config: { paReady: false },
-    }, { dispatch: async (message) => { dispatched.push(message); return { ok: true }; } });
-
     assert.deepEqual(result, { state: 'opened', transport: 'mailto', error: null });
-    const [url] = dispatched.map((message) => message.url);
-    const query = new URL(url).searchParams;
+    assert.equal(prepared.page.contact.firstName, 'Avery');
+    assert.equal(message.action, 'openMailto');
     assert.equal(query.get('subject'), 'Avery, your updated order');
     assert.equal(
       query.get('body'),
       'Hello Avery,\r\n\r\nYour current proposal is ready.\r\n\r\n'
         + 'View your updated proposal: https://www.golfballs.com/cart?proposalMode=true&opportunityID=71&cartID=cart-9',
+    );
+    assert.equal(query.get('body').includes('{{FirstName}}'), false);
+  });
+
+  it('keeps CRM Search action variables and generated proposal URLs in the Outlook window', async () => {
+    const contact = crmRowToWorkflowContact({
+      id: 'contact_42',
+      contactName_t: 'Search row label',
+      emails_tps: ['stale-list-address@example.com'],
+      accountID_s: '17',
+    }, CONTACT_URL);
+    const { prepared, result, query } = await runHydratedOutlookAction(contact);
+
+    assert.deepEqual(result, { state: 'opened', transport: 'mailto', error: null });
+    assert.equal(prepared.context.email, 'avery@example.com');
+    assert.equal(query.get('subject'), 'Avery, your updated order');
+    assert.equal(
+      query.get('body'),
+      'Hello Avery,\r\n\r\nYour current proposal is ready.\r\n\r\n'
+        + `View your updated proposal: ${PROPOSAL_URL}`,
     );
     assert.equal(query.get('body').includes('{{FirstName}}'), false);
   });
