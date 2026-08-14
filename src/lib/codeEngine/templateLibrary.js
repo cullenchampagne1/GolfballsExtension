@@ -10,6 +10,7 @@
 
 import { loadTaskTemplates } from '../quickTask.js';
 import { loadCallTemplates } from '../callLog.js';
+import { codeIdsFor } from './userBinding.js';
 
 function enabledEmails(raw) {
   return (Array.isArray(raw) ? raw : [])
@@ -56,6 +57,26 @@ export function normalizeCodeTemplateLibrary({ emails = [], tasks = [], calls = 
       callCategory: template.callCategory,
       callVoicemail: template.callVoicemail,
     })),
+  };
+}
+
+/**
+ * Shape consumed by CodeVarEditor for saved-name and generated-id completion.
+ * Keeping this projection beside the loader makes the Workflow and Custom
+ * Action editors expose the exact same user.emails/tasks/calls namespace.
+ */
+export function codeTemplateBindings(library = {}, ready = true) {
+  const emails = Array.isArray(library.emails) ? library.emails : [];
+  const tasks = Array.isArray(library.tasks) ? library.tasks : [];
+  const calls = Array.isArray(library.calls) ? library.calls : [];
+  return {
+    ready,
+    emails: emails.map((template) => template.name).filter(Boolean),
+    tasks: tasks.map((template) => template.name).filter(Boolean),
+    calls: calls.map((template) => template.name).filter(Boolean),
+    emailIds: codeIdsFor(emails),
+    taskIds: codeIdsFor(tasks),
+    callIds: codeIdsFor(calls),
   };
 }
 

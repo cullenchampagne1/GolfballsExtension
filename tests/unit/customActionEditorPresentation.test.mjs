@@ -60,6 +60,13 @@ describe('custom action editor presentation and lifecycle', () => {
     assert.doesNotMatch(editorSource, /editorTypeIdFor/);
   });
 
+  it('feeds generated saved-template ids into custom-action autocomplete', () => {
+    assert.match(editorSource, /loadCodeTemplateLibrary\(\)/);
+    assert.match(editorSource, /codeTemplateBindings\(userData, templatesLoaded\)/);
+    assert.match(editorSource, /bindings=\{bindings\}/);
+    assert.doesNotMatch(editorSource, /bindings=\{null\}/);
+  });
+
   it('authors modal/provider entry points and includes them in live simulation', () => {
     assert.match(editorSource, /label="Entry points"/);
     assert.match(editorSource, /normalizeEntryPoints\(entryPointsText\)/);

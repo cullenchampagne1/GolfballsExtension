@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Btn, Field, Input, Segmented, EditorHeader, I } from '../ui/index.js';
 import { IconPicker } from '../ui/components/IconPicker.jsx';
@@ -9,7 +9,7 @@ import { simulateProgram } from '../lib/codeEngine/simulate.js';
 import { makeSandboxRunner } from '../lib/codeEngine/sandboxRunner.js';
 import { runInSandbox } from '../lib/page-engine/sandbox-bridge.js';
 import { samplePageFor } from '../lib/codeEngine/samplePages.js';
-import { loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
+import { codeTemplateBindings, loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
 import { normalizeCustomAction, defaultPagesFor, ACTION_PAGE_TYPES } from '../lib/customActions.js';
 import { normalizeEntryPoints } from '../lib/customActionEntryPoints.js';
 
@@ -69,6 +69,8 @@ export function CustomActionEditor({ action }) {
   const [customUrl, setCustomUrl] = useState(action.customUrl || '');
   const [simBusy, setSimBusy] = useState(false);
   const [isNew, setIsNew] = useState(action.__isNew === true);
+  const [userData, setUserData] = useState({ emails: [], tasks: [], calls: [] });
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
   // Shelf page scope isn't edited here (the Settings table owns it) but must
   // be persisted; reset to the type default when the page type changes.
   const pagesRef = useRef(action.pages && action.pages.length ? action.pages : defaultPagesFor(action.pageType || 'contact'));
@@ -96,6 +98,25 @@ export function CustomActionEditor({ action }) {
     entryPoints: normalizeEntryPoints(entryPointsText),
   });
   const dirty = isNew || draftSnapshot !== savedSnapshot;
+
+  // Populate the same generated user.emails.<Id> / tasks / calls namespace
+  // used by Workflow Manager. The runner already loaded these references;
+  // the editor also needs their names + ids for completion and linting.
+  useEffect(() => {
+    let alive = true;
+    loadCodeTemplateLibrary()
+      .then((library) => {
+        if (!alive) return;
+        setUserData(library);
+        setTemplatesLoaded(true);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const bindings = useMemo(
+    () => codeTemplateBindings(userData, templatesLoaded),
+    [userData, templatesLoaded],
+  );
 
   const startSim = async () => {
     setSimBusy(true);
@@ -255,7 +276,7 @@ export function CustomActionEditor({ action }) {
           value={source}
           onChange={setSource}
           typeId={null}
-          bindings={null}
+          bindings={bindings}
           hideActions
           fill
           placeholder={'// Write your action. Use actions.* (confirm-gated) and page.*\n// e.g. for (let i = 1; i <= 5; i++) actions.createTask({ subject: `Follow up ${i}` });'}

@@ -7,8 +7,7 @@ import { CodeAutomationPanel } from '../ui/components/CodeAutomationPanel.jsx';
 import { CodeDocsSidebar } from '../ui/components/CodeDocsSidebar.jsx';
 import { resolveDoc } from '../lib/codeEngine/docs.js';
 import { buildCodeSpec } from '../lib/codeEngine/spec.js';
-import { codeIdsFor } from '../lib/codeEngine/userBinding.js';
-import { loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
+import { codeTemplateBindings, loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadWorkflows, saveWorkflow, removeWorkflow, newWorkflow, subscribeWorkflows, writeWorkflowCode,
@@ -946,15 +945,10 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   const [docToken, setDocToken] = useState('');
   const activeDoc = useMemo(() => resolveDoc(docToken), [docToken]);
   // Saved-template names, fed to the editor for autocomplete + missing-dependency lint.
-  const bindings = useMemo(() => ({
-    ready: templatesLoaded,
-    emails: userData.emails.map((e) => e.name).filter(Boolean),
-    tasks: userData.tasks.map((t) => t.name).filter(Boolean),
-    calls: userData.calls.map((c) => c.name).filter(Boolean),
-    emailIds: codeIdsFor(userData.emails),
-    taskIds: codeIdsFor(userData.tasks),
-    callIds: codeIdsFor(userData.calls),
-  }), [userData, templatesLoaded]);
+  const bindings = useMemo(
+    () => codeTemplateBindings(userData, templatesLoaded),
+    [userData, templatesLoaded],
+  );
   const runner = useCodeRunner();
 
   // Expose the code API to an assistant so it can author/edit workflows:

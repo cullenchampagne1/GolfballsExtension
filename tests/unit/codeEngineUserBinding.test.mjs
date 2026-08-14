@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildUserBinding, userBindingData } from '../../src/lib/codeEngine/userBinding.js';
 import {
+  codeTemplateBindings,
   loadCodeTemplateLibrary,
   normalizeCodeTemplateLibrary,
 } from '../../src/lib/codeEngine/templateLibrary.js';
@@ -88,6 +89,20 @@ describe('userBinding · shape + lookups', () => {
 });
 
 describe('userBinding · shared workflow/action template loader', () => {
+  it('builds number-safe generated ids for editor dot-property completion', () => {
+    const bindings = codeTemplateBindings({
+      emails: [{ id: 'e3', name: '3 Month Check-in' }],
+      tasks: [{ id: 't2', name: 'Follow-up (v2)' }],
+      calls: [{ id: 'c2', name: '90 Day Review' }],
+    }, true);
+
+    assert.equal(bindings.ready, true);
+    assert.deepEqual(bindings.emailIds, ['ThreeMonthCheckIn']);
+    assert.deepEqual(bindings.taskIds, ['FollowUpVTwo']);
+    assert.deepEqual(bindings.callIds, ['NinetyDayReview']);
+    assert.deepEqual(bindings.emails, ['3 Month Check-in']);
+  });
+
   it('projects the same enabled template fields for every code surface', async () => {
     const raw = {
       emails: [
