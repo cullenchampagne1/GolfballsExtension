@@ -2,7 +2,7 @@
  * Integration flow — the self-hosted update channel.
  *
  * Chains manifest.json (public key → deterministic extension id) →
- * revstack.project.json (declared public routes / CORS) → the published
+ * local-only revstack.project.json (declared public routes / CORS) → the published
  * ../.golfballs-extension-production/public/updates.xml (appid / version /
  * codebase) → the .crx artifact on disk. Publication assertions skip
  * gracefully when the production folder is not checked out.
@@ -17,7 +17,9 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MANIFEST, ROOT } from './helpers/harness.mjs';
 
-const PROJECT = JSON.parse(readFileSync(new URL('revstack.project.json', ROOT), 'utf8'));
+const PROJECT_URL = new URL('revstack.project.json', ROOT);
+const hasProject = existsSync(PROJECT_URL);
+const PROJECT = hasProject ? JSON.parse(readFileSync(PROJECT_URL, 'utf8')) : null;
 const PROD_PUBLIC = new URL('../.golfballs-extension-production/public/', ROOT);
 const UPDATES_URL = new URL('updates.xml', PROD_PUBLIC);
 const hasProduction = existsSync(UPDATES_URL);
@@ -130,7 +132,9 @@ describe('update channel', () => {
     assert.deepEqual(result.manifest.permissions, ['storage']);
   });
 
-  it('pins the manifest key to the deterministic extension id used across the project', () => {
+  it('pins the manifest key to the deterministic extension id used across the project', {
+    skip: !hasProject && 'local-only RevStack project manifest is not present',
+  }, () => {
     assert.match(extensionId, /^[a-p]{32}$/);
     assert.ok(
       PROJECT.cors_origins.includes(`chrome-extension://${extensionId}`),
@@ -138,7 +142,9 @@ describe('update channel', () => {
     );
   });
 
-  it('declares the update endpoints as public revstack routes matching the manifest update_url', () => {
+  it('declares the update endpoints as public revstack routes matching the manifest update_url', {
+    skip: !hasProject && 'local-only RevStack project manifest is not present',
+  }, () => {
     const updateUrl = new URL(MANIFEST.update_url);
     assert.equal(updateUrl.origin, 'https://api.cullenchampagne.com');
     assert.ok(
@@ -155,7 +161,10 @@ describe('update channel', () => {
     );
   });
 
-  it('publishes updates.xml whose appid/version/codebase chain back to the manifest', { skip: !hasProduction && 'production folder not checked out' }, () => {
+  it('publishes updates.xml whose appid/version/codebase chain back to the manifest', {
+    skip: (!hasProduction && 'production folder not checked out')
+      || (!hasProject && 'local-only RevStack project manifest is not present'),
+  }, () => {
     const { appid, version, codebase } = parseUpdatesXml(readFileSync(UPDATES_URL, 'utf8'));
     assert.equal(appid, extensionId, 'updates.xml must target the derived extension id');
     assert.equal(version, MANIFEST.version, 'the published version must match the manifest');

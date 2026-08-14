@@ -4,7 +4,10 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
-import { buildStorePackage } from '../../scripts/package-store.mjs';
+import {
+  assertRequiredConsumerCapabilities,
+  buildStorePackage,
+} from '../../scripts/package-store.mjs';
 
 function writeFixture(root, path, contents = '') {
   const target = resolve(root, path);
@@ -78,6 +81,21 @@ function createFixture() {
 }
 
 describe('store packaging', () => {
+  it('fails closed if consumer stripping removes the Power Automate settings control', () => {
+    const settingsEntry = {
+      path: 'react-dist/content/editor-settings.js',
+      bytes: Buffer.from('powerAutomateEnabled; "Direct Send via Power Automate";'),
+    };
+    assert.doesNotThrow(() => assertRequiredConsumerCapabilities([settingsEntry]));
+    assert.throws(
+      () => assertRequiredConsumerCapabilities([{
+        ...settingsEntry,
+        bytes: Buffer.from('powerAutomateEnabled;'),
+      }]),
+      /Consumer package stripped Power Automate settings/,
+    );
+  });
+
   it('creates a deterministic root-level ZIP with a store-safe manifest and runtime files only', () => {
     const root = createFixture();
     const outputDirectory = resolve(root, 'dist/store');

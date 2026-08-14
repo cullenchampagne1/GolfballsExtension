@@ -5,6 +5,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 const { FEATURE_FLAGS } = await import('../../src/lib/flags.js');
@@ -17,10 +18,11 @@ const settingsPanelSource = await readFile(
   new URL('../../src/pages/SettingsPanel.jsx', import.meta.url),
   'utf8',
 );
-const projectRoutesSource = await readFile(
-  new URL('../../.revstack/routes.py', import.meta.url),
-  'utf8',
-);
+const projectRoutesUrl = new URL('../../.revstack/routes.py', import.meta.url);
+const hasProjectRoutes = existsSync(projectRoutesUrl);
+const projectRoutesSource = hasProjectRoutes
+  ? await readFile(projectRoutesUrl, 'utf8')
+  : '';
 const actionMenuSource = sidebarSource.slice(
   sidebarSource.indexOf('function ActionMenu'),
   sidebarSource.indexOf('function MenuItem'),
@@ -78,7 +80,9 @@ describe('settings menus', () => {
     assert.match(statCellSource, /icon=\{<I\.download \/>\}/);
   });
 
-  it('keeps management explicit in global and per-key dashboard editors', () => {
+  it('keeps management explicit in global and per-key dashboard editors', {
+    skip: !hasProjectRoutes && 'local-only RevStack project routes are not present',
+  }, () => {
     assert.match(projectRoutesSource, /"key": "managed"[\s\S]*"Managed by RevStack"/);
     assert.match(projectRoutesSource, /"key": "managed_mode"[\s\S]*"Managed for this user"/);
     assert.match(projectRoutesSource, /"visible_when": \{"field": "value_mode", "equals": "override"\}/);

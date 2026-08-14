@@ -60,6 +60,13 @@ const FORBIDDEN_SUFFIXES = [
 ];
 const ICON_SIZES = Object.freeze([16, 32, 48, 128]);
 const PRIVATE_KEY_MARKER = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/;
+const REQUIRED_CONSUMER_CAPABILITIES = Object.freeze([
+  {
+    path: 'react-dist/content/editor-settings.js',
+    label: 'Power Automate settings',
+    markers: ['powerAutomateEnabled', 'Direct Send via Power Automate'],
+  },
+]);
 
 function posixPath(path) {
   return path.split(sep).join('/');
@@ -292,6 +299,26 @@ export function collectStoreEntries(root, manifest, { stageRoot = null } = {}) {
   return entries;
 }
 
+/** Fail closed if a required consumer-facing control was removed by stripping
+ * or dead-code elimination. These checks inspect the staged bytes that are
+ * actually written to the ZIP, not the full/admin source tree. */
+export function assertRequiredConsumerCapabilities(entries) {
+  const byPath = new Map(entries.map((entry) => [entry.path, entry.bytes]));
+  for (const capability of REQUIRED_CONSUMER_CAPABILITIES) {
+    const bytes = byPath.get(capability.path);
+    if (!bytes) {
+      throw new Error(`Consumer package is missing ${capability.label}: ${capability.path}`);
+    }
+    const source = bytes.toString('utf8');
+    const missing = capability.markers.filter((marker) => !source.includes(marker));
+    if (missing.length) {
+      throw new Error(
+        `Consumer package stripped ${capability.label}: missing ${missing.join(', ')}`,
+      );
+    }
+  }
+}
+
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let index = 0; index < 256; index += 1) {
@@ -405,6 +432,7 @@ export function buildStorePackage({ root = DEFAULT_ROOT, outputDirectory = resol
   // The proof of "completely excluded": no admin token may survive into the
   // served package. A miss fails the build rather than silently shipping.
   if (!IS_ADMIN_BUILD) {
+    assertRequiredConsumerCapabilities(entries);
     for (const entry of entries) {
       const leak = findLeak(entry.path, entry.bytes);
       if (leak) throw new Error(`Admin leak in consumer package: token "${leak.token}" in ${leak.path}`);
