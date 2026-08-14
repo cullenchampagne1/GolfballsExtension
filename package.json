@@ -477,7 +477,7 @@
       "file": "tests/unit/runtimeBootstrap.test.mjs"
     },
     {
-      "name": "guard \u00b7 database-backed installation access",
+      "name": "guard \u00b7 installation access and draft-only email flow",
       "id": "guard-installation-access",
       "command": [
         "../.venv/bin/python",

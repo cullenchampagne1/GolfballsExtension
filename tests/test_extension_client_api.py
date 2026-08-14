@@ -1,8 +1,10 @@
-"""Database-backed extension access policy tests."""
+"""Database-backed extension access and consumer flow package tests."""
 
 import importlib.util
+import io
 import json
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -128,6 +130,84 @@ class ExtensionClientAccessTests(unittest.TestCase):
         self.assertEqual(payload["revision"], "database-revision")
         self.assertEqual(payload["configuration"]["credential_id"], "install-1")
         self.assertFalse(payload["admin_bypass"])
+
+    def test_email_exchange_flow_creates_reply_drafts_without_sending(self):
+        response = self.api.email_exchange_flow(self.request(), "cullen")
+        self.assertEqual(response.media_type, "application/zip")
+        self.assertNotIn(b"__USER_EMAIL__", response.body)
+
+        with zipfile.ZipFile(io.BytesIO(response.body)) as package:
+            definition_name = next(
+                name for name in package.namelist()
+                if name.endswith("/definition.json")
+            )
+            package_definition = json.loads(package.read(definition_name))
+
+        definition = package_definition["properties"]["definition"]
+        actions = definition["actions"]
+        reply_actions = (
+            actions["Apply_to_each"]["actions"]["Condition"]["actions"]
+            ["For_each"]["actions"]["Condition_1"]["actions"]
+            ["Condition_Thread_Found"]["actions"]
+        )
+
+        create_draft = reply_actions["Create_Reply_Draft"]
+        create_parameters = create_draft["inputs"]["parameters"]
+        self.assertEqual(create_parameters["Method"], "POST")
+        self.assertIn(
+            "/messages/@{encodeUriComponent(first(body('Parse_Thread_JSON')?['value'])?['id'])}/createReply",
+            create_parameters["Uri"],
+        )
+        self.assertEqual(
+            create_parameters["Body"],
+            "@{string(outputs('Compose_Reply_Body'))}",
+        )
+        self.assertEqual(
+            reply_actions["Compose_Reply_Body"]["inputs"],
+            {"comment": "@{items('Apply_to_each')?['htmlBody']}"},
+            "createReply must receive only the reply comment, not send-style message fields",
+        )
+
+        attachment_loop = reply_actions["For_each_Reply_Attachment"]
+        self.assertEqual(
+            attachment_loop["foreach"],
+            "@coalesce(items('Apply_to_each')?['attachments'], json('[]'))",
+        )
+        attachment_parameters = (
+            attachment_loop["actions"]["Add_Reply_Attachment"]
+            ["inputs"]["parameters"]
+        )
+        self.assertEqual(attachment_parameters["Method"], "POST")
+        self.assertIn(
+            "/messages/@{encodeUriComponent(body('Create_Reply_Draft')?['id'])}/attachments",
+            attachment_parameters["Uri"],
+        )
+        self.assertEqual(
+            attachment_parameters["Body"],
+            "@{string(items('For_each_Reply_Attachment'))}",
+        )
+
+        graph_actions = []
+
+        def collect_graph_actions(branch):
+            for action in branch.values():
+                parameters = action.get("inputs", {}).get("parameters", {})
+                if "Uri" in parameters:
+                    graph_actions.append(parameters)
+                collect_graph_actions(action.get("actions", {}))
+                collect_graph_actions(action.get("else", {}).get("actions", {}))
+
+        collect_graph_actions(actions)
+        graph_uris = [str(action["Uri"]) for action in graph_actions]
+        self.assertFalse(
+            any(uri.endswith("/reply") or uri.endswith("/send") for uri in graph_uris),
+            "the consumer flow may create drafts but must never send them",
+        )
+
+        inbox_values = actions["Initialize_DefaultInbox"]["inputs"]["variables"]
+        from_values = actions["Initialize_DefaultFrom"]["inputs"]["variables"]
+        self.assertEqual(inbox_values[0]["value"], "cullen@loyaltylogo.com")
+        self.assertEqual(from_values[0]["value"], "cullen@loyaltylogo.com")
 
 
 if __name__ == "__main__":
