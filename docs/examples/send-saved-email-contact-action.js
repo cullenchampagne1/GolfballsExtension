@@ -12,7 +12,6 @@
 // it resolves the saved template's variables, recipient rule, variation,
 // reply mode, and sender settings. actions.sendEmail(...) then sends that
 // generated result through the normal email transport and tracking pipeline.
-
 const email = await page.evaluate(user.emails.OrderFollowUp);
 
 // The generated message is mutable before it is sent. These are optional:

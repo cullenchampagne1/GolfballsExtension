@@ -90,13 +90,14 @@ const DYN_FIELDS = {
     { id: 'logoType',  type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Embroidery' },
     { id: 'decorator', type: 'select', label: 'Decorator', options: ['TM Works or Alphabroder (Isacord)', 'Ignite/Other (Madeira)', 'In-House (Venture Towels)'], default: 'TM Works or Alphabroder (Isacord)' },
     { id: 'method',    type: 'select', label: 'Decoration method', options: ['Embroidery', 'Heat Seal', 'Direct to Film Transfer (Ignite)', 'Screen Print', 'Sublimation', 'Other - See Special Instructions'], default: 'Embroidery' },
-    { id: 'color',     type: 'text',   label: 'Item color' },
-    { id: 'placement', type: 'text',   label: 'Logo placement', hint: 'Ex. Left Chest, Right Sleeve' },
+    { id: 'color',     type: 'text',   label: 'Item color', required: true },
+    { id: 'placement', type: 'text',   label: 'Logo placement', hint: 'Ex. Left Chest, Right Sleeve', required: true },
     { id: 'imprint',   type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed' },
+    { id: 'name',     type: 'text',   label: 'Item name' },
   ],
   poker: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
-    { id: 'color',    type: 'text',   label: 'Item color' },
+    { id: 'color',    type: 'text',   label: 'Item color', required: true },
     { id: 'imprint',  type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed' },
   ],
   tees: [
@@ -107,7 +108,7 @@ const DYN_FIELDS = {
   ],
   flags: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
-    { id: 'color',    type: 'text',   label: 'Item color' },
+    { id: 'color',    type: 'text',   label: 'Item color', required: true  },
   ],
   other: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
@@ -116,7 +117,7 @@ const DYN_FIELDS = {
     { id: 'imprint',  type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed' },
   ],
   giftset: [
-    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Gift Set' },
+    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Other' },
   ],
 };
 
@@ -436,6 +437,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
       return;
     }
 
+
     setSubmitting(true);
     setStage('submitting');
 
@@ -488,8 +490,15 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
     const out = [];
     for (let i = 0; i < selectedItems.length; i++) {
       const item = selectedItems[i];
-      const dyn = dynData[i] || {};
-      const logoType = dyn.logoType || 'Ball';
+      const rawDyn = dynData[i] || {};
+      const fields = getDynFieldsFor(item) || [];
+
+      const dyn = fields.reduce((acc, field) => {
+        acc[field.id] = rawDyn[field.id] ?? field.default ?? '';
+        return acc;
+      }, {});
+
+      const logoType = dyn.logoType || 'other';
       setSubmitProgress({ current: i + 1, total: selectedItems.length, item });
       const r = await sendOne({
         action:        'generateProofLink',

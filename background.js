@@ -2363,7 +2363,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         formData.append('ctl00$inputName', proofName);
         formData.append('ctl00$inputKeywords', '');
         formData.append('ctl00$inputNotes', notes);
-        formData.append('ctl00$inputLogoType', ['Ball', 'Other'].includes(msg.logoType) ? msg.logoType : 'Ball');
+        formData.append('ctl00$inputLogoType', String(msg.logoType || ''));
         formData.append('ctl00$inputCustomerID', customerId);
         formData.append('ctl00$DropDownSalesRep', /^\d{1,12}$/.test(String(msg.salesRepId || '')) ? String(msg.salesRepId) : '0');
         formData.append('ctl00$DropDownArtist', /^\d{1,12}$/.test(String(msg.artistId || '')) ? String(msg.artistId) : '42');
