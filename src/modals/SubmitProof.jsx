@@ -104,7 +104,7 @@ const DYN_FIELDS = {
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Other' },
     { id: 'size',     type: 'select', label: 'Tee size', options: ['2 3/4in', '3 1/4in'], default: '2 3/4in' },
     { id: 'imprint',  type: 'select', label: 'Imprint color (tees)', options: ['One Color', 'Two Color'], default: 'One Color', hint: 'Black tees: White, Silver, Gold only' },
-    { id: 'color',    type: 'text',   label: 'Item color' },
+    { id: 'color',    type: 'text',   label: 'Item color', required: true },
   ],
   flags: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Other' },
@@ -112,9 +112,9 @@ const DYN_FIELDS = {
   ],
   other: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
-    { id: 'name',     type: 'text',   label: 'Item name' },
-    { id: 'color',    type: 'text',   label: 'Item color' },
-    { id: 'imprint',  type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed' },
+     { id: 'link',     type: 'url',    label: 'Apparel link', hint: 'Paste the full product URL', full: true, required: true },
+    { id: 'color',    type: 'text',   label: 'Item color', required: true },
+    { id: 'imprint',  type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed', required: true },
   ],
   giftset: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Other' },
