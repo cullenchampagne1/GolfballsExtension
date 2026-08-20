@@ -93,7 +93,7 @@ const DYN_FIELDS = {
     { id: 'color',     type: 'text',   label: 'Item color', required: true },
     { id: 'placement', type: 'text',   label: 'Logo placement', hint: 'Ex. Left Chest, Right Sleeve', required: true },
     { id: 'imprint',   type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed' },
-    { id: 'name',     type: 'text',   label: 'Item name' },
+    { id: 'link',     type: 'url',    label: 'Apparel link', hint: 'Paste the full product URL', full: true },
   ],
   poker: [
     { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Other'], default: 'Other' },
@@ -293,6 +293,14 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const markTouched = (key) => () => setTouched((t) => (t[key] ? t : { ...t, [key]: true }));
   const showErr = (key, empty) => empty && (touched[key] || invalid[key]);
 
+  // Same pattern, but for the per-item dynamic fields (DYN_FIELDS).
+  // Keyed by `${itemIndex}:${fieldId}` since the same fieldId can repeat
+  // across multiple selected items (e.g. two "Ball" rows).
+  const [dynTouched, setDynTouched] = useState({});
+  const [dynInvalid, setDynInvalid] = useState({});
+  const markDynTouched = (key) => () => setDynTouched((t) => (t[key] ? t : { ...t, [key]: true }));
+  const showDynErr = (key, empty) => empty && (dynTouched[key] || dynInvalid[key]);
+
   // Loaded server data.
   const [reps, setReps]       = useState(null); // null = loading, [] = failed → fallback, [...] = ok
   const [artists, setArtists] = useState(null);
@@ -405,6 +413,21 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   // Dynamic field update for a specific item index.
   const updateDyn = (index, fieldId, value) => {
     setDynData((d) => ({ ...d, [index]: { ...(d[index] || {}), [fieldId]: value } }));
+    const key = `${index}:${fieldId}`;
+    if (String(value ?? '').trim()) {
+      setDynInvalid((i) => (i[key] ? { ...i, [key]: false } : i));
+      setDynTouched((t) => (t[key] ? { ...t, [key]: false } : t));
+    }
+  };
+
+  // A required dyn field counts as "missing" unless it has a value (or a
+  // non-empty default that hasn't been cleared), and it isn't currently
+  // hidden by its own dependsOn/dependsNotValue rule.
+  const isDynFieldMissing = (f, data) => {
+    if (!f.required) return false;
+    if (f.dependsOn && data[f.dependsOn] === f.dependsNotValue) return false;
+    const val = data[f.id] ?? f.default ?? '';
+    return !String(val).trim();
   };
 
   // ── Submit ─────────────────────────────────────────────────
@@ -416,12 +439,29 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
       salesRep:   !salesRepId.trim(),
       artist:     !artistId.trim(),
     };
+
+    // Walk every selected item's dyn fields and flag any required
+    // ones that are empty. Keyed by `${itemIndex}:${fieldId}` so
+    // duplicate items (two "Ball" rows, etc.) are tracked separately.
+    const nextDynInvalid = {};
+    selectedItems.forEach((item, idx) => {
+      const fields = getDynFieldsFor(item) || [];
+      const data = dynData[idx] || {};
+      fields.forEach((f) => {
+        if (isDynFieldMissing(f, data)) nextDynInvalid[`${idx}:${f.id}`] = true;
+      });
+    });
+    nextInvalid.dynFields = Object.keys(nextDynInvalid).length > 0;
+
     setInvalid(nextInvalid);
     setTouched((t) => ({
       ...t,
       proofName: true, items: true,
       customerId: true, salesRep: true, artist: true,
     }));
+    setDynInvalid(nextDynInvalid);
+    setDynTouched((t) => ({ ...t, ...nextDynInvalid }));
+
     const anyInvalid = Object.values(nextInvalid).some(Boolean);
     if (anyInvalid) {
       const msg = nextInvalid.items
@@ -432,7 +472,9 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             ? 'Sales rep is required'
             : nextInvalid.artist
               ? 'Artist is required'
-              : 'Required fields are missing';
+              : nextInvalid.dynFields
+                ? 'Fill in the required item details (highlighted below)'
+                : 'Required fields are missing';
       toast?.warning?.(msg);
       return;
     }
@@ -500,13 +542,13 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
 
       const logoType = dyn.logoType || 'other';
       setSubmitProgress({ current: i + 1, total: selectedItems.length, item });
-      await sendOne({
+      const r = await sendOne({
         action: 'generateProofLink',
         ...basePayload,
         proofName: proofNames[i],
         itemsSelected: item,
         multiProofs: selectedItems.length,
-        logoType: dyn.logoType,
+        logoType: logoType,
         dynamicFields: { [item]: dyn },
       });
       out.push({
@@ -646,6 +688,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         lbl('Placement',    dyn.placement),
         lbl('Tee Size',     dyn.size),
         lbl('Item Name',    dyn.name),
+        lbl('Apparel Link', dyn.link),
         '',
         lbl('Proof Link',   r.proofLink || '(generation failed)'),
         '',
@@ -1012,6 +1055,8 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             dynData={dynData}
             autoNames={autoProofNames}
             customNames={customNames}
+            showDynErr={showDynErr}
+            markDynTouched={markDynTouched}
             onUpdate={updateDyn}
             onRenameItem={(idx, name) => setCustomNames((m) => ({ ...m, [idx]: name }))}
             onRemove={(idx) => {
@@ -1435,6 +1480,7 @@ function ToggleTag({ on, onClick, icon, children }) {
    own delete button that pulls the item out of selectedItems. */
 function DynamicFieldsList({
   selectedItems, dynData, autoNames, customNames,
+  showDynErr, markDynTouched,
   onUpdate, onRenameItem, onRemove,
 }) {
   const counts = {};
@@ -1457,11 +1503,14 @@ function DynamicFieldsList({
           <DynamicItemBlock
             key={`${item}-${idx}`}
             item={item}
+            idx={idx}
             suffix={suffix}
             fields={fields}
             data={dynData[idx] || {}}
             autoName={autoNames?.[idx] || ''}
             customName={customNames?.[idx] || ''}
+            showDynErr={showDynErr}
+            markDynTouched={markDynTouched}
             onRename={(v) => onRenameItem?.(idx, v)}
             onChange={(fieldId, v) => onUpdate(idx, fieldId, v)}
             onRemove={() => onRemove(idx)}
@@ -1472,7 +1521,7 @@ function DynamicFieldsList({
   );
 }
 
-function DynamicItemBlock({ item, suffix, fields, data, autoName, customName, onRename, onChange, onRemove }) {
+function DynamicItemBlock({ item, idx, suffix, fields, data, autoName, customName, showDynErr, markDynTouched, onRename, onChange, onRemove }) {
   // Items without field groups (Pad to Digital Request) still get a
   // tiny chip-style block so the user sees the item is acknowledged
   // and has a delete affordance.
@@ -1543,21 +1592,35 @@ function DynamicItemBlock({ item, suffix, fields, data, autoName, customName, on
             {fields.map((f) => {
               if (f.dependsOn && data[f.dependsOn] === f.dependsNotValue) return null;
               const val = data[f.id] ?? f.default ?? '';
+              const key = `${idx}:${f.id}`;
+              const isMissing = !!f.required && !String(val).trim();
+              const err = showDynErr ? showDynErr(key, isMissing) : false;
               return (
-                <Field key={f.id} label={f.label} hint={f.hint}>
+                <Field
+                  key={f.id}
+                  label={f.label}
+                  hint={f.hint}
+                  required={!!f.required}
+                  error={err ? 'Required' : null}
+                  style={f.full ? { gridColumn: '1 / -1' } : undefined}
+                >
                   {f.type === 'select' ? (
                     <Dropdown
                       size="xs"
                       value={val}
                       onChange={(v) => onChange(f.id, v)}
                       options={f.options.map((o) => ({ id: o, label: o }))}
+                      error={err}
                     />
                   ) : (
                     <Input
                       size="xs"
+                      type={f.type === 'url' ? 'url' : 'text'}
                       value={val}
                       onChange={(v) => onChange(f.id, v)}
+                      onBlur={markDynTouched ? markDynTouched(key) : undefined}
                       placeholder={f.hint || ''}
+                      error={err}
                     />
                   )}
                 </Field>
