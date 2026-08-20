@@ -164,6 +164,38 @@ describe('remote settings policy', () => {
     assert.equal(Object.hasOwn(stored.gbRemoteSettingsPolicy.hiddenFeatures, 'powerAutomateEnabled'), false);
   });
 
+  it('ignores newer server-only registry rows instead of retaining a stale policy', async () => {
+    configuration.features.powerAutomateEnabled.hidden = false;
+    configuration.features.futureServerFeature = {
+      value: true, hidden: false, managed: true,
+    };
+    configuration.developer_settings['futureServer.setting'] = {
+      value: 'new', hidden: false, managed: true,
+    };
+    configuration.custom_pages.scopes.futureServerScope = {
+      value: true, hidden: false, managed: true,
+    };
+    stored.gbRemoteSettingsPolicy.hiddenFeatures = { powerAutomateEnabled: true };
+    setPayload({
+      schema_version: 1,
+      admin_bypass: false,
+      revision: 'f'.repeat(64),
+      configuration,
+    });
+
+    await context.GBRemoteSettingsPolicy.sync();
+
+    assert.equal(stored.gbRemoteSettingsPolicy.revision, 'f'.repeat(64));
+    assert.equal(
+      Object.hasOwn(stored.gbRemoteSettingsPolicy.hiddenFeatures, 'powerAutomateEnabled'),
+      false,
+      'a newer server registry must not strand an older hidden marker',
+    );
+    assert.equal(Object.hasOwn(stored.featureFlags, 'futureServerFeature'), false);
+    assert.equal(Object.hasOwn(stored.devSettings, 'futureServer.setting'), false);
+    assert.equal(Object.hasOwn(stored.customPages, 'futureServerScope'), false);
+  });
+
   it('restores the pre-policy values and drops the backup on admin bypass', async () => {
     setPayload({ schema_version: 1, admin_bypass: true, revision: 'b'.repeat(64), configuration: null });
     await context.GBRemoteSettingsPolicy.sync();

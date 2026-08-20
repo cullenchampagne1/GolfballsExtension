@@ -16,7 +16,7 @@ import {
   settle, validInstallation,
 } from './helpers/harness.mjs';
 
-const CONFIG_URL = `${API_ORIGIN}/projects/golfballs-extension/client/configuration`;
+const CONFIG_PATH = `${API_ORIGIN}/projects/golfballs-extension/client/configuration`;
 
 let context;
 let stored;
@@ -64,7 +64,7 @@ before(async () => {
   const chromeParts = createChrome({ stored });
   alarms = chromeParts.alarms;
   const mock = createFetchMock((url) => {
-    if (url === CONFIG_URL) return jsonResponse(payloadHolder);
+    if (url.startsWith(`${CONFIG_PATH}?`)) return jsonResponse(payloadHolder);
     return undefined;
   });
   requests = mock.requests;
@@ -91,9 +91,13 @@ before(async () => {
 describe('remote policy sync', () => {
   it('fetches project configuration with the installation Bearer key and dashboard cookies', async () => {
     await context.GBRemoteSettingsPolicy.sync();
-    const configRequests = requests.filter(({ url }) => url === CONFIG_URL);
+    const configRequests = requests.filter(({ url }) => url.startsWith(`${CONFIG_PATH}?`));
     assert.ok(configRequests.length >= 1);
     const request = configRequests.at(-1);
+    assert.equal(
+      new URL(request.url).searchParams.get('extension_version'),
+      context.chrome.runtime.getManifest().version,
+    );
     assert.equal(request.method, 'GET');
     assert.equal(request.options.headers.Authorization, `Bearer ${API_KEY}`);
     assert.equal(request.options.credentials, 'include', 'admin bypass needs the dashboard cookie');
@@ -178,7 +182,7 @@ describe('remote policy sync', () => {
     const background = await loadBackground({
       stored: liveStored,
       fetchImpl: async (url) => {
-        if (String(url) === CONFIG_URL) {
+        if (String(url).startsWith(`${CONFIG_PATH}?`)) {
           if (!configurationAvailable) return jsonResponse({ detail: 'temporarily unavailable' }, 503);
           return jsonResponse({
             schema_version: 1,

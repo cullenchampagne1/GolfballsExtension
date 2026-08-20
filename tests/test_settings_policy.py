@@ -193,6 +193,130 @@ class SettingsPolicyTests(unittest.TestCase):
         })
         self.assertEqual(self.legacy.read_count, 1)
 
+    def test_published_342_clients_receive_an_exact_compatible_projection(self):
+        source = (ROOT / "settings-registry.js").read_text(encoding="utf-8")
+        registry = json.loads(settings_policy._REGISTRY.search(source).group(1))
+
+        def entry(spec):
+            return {
+                "value": spec.get("default"),
+                "hidden": False,
+                "managed": spec.get("managedDefault", True) is True,
+                "label": spec.get("label", "Setting"),
+            }
+
+        document = {
+            "schema_version": 1,
+            "refresh_minutes": 15,
+            "developer_section": {"hidden": False},
+            "features": {
+                key: entry(spec) for key, spec in registry["features"].items()
+            },
+            "developer_settings": {
+                key: entry(spec)
+                for key, spec in registry["developerSettings"].items()
+            },
+            "custom_pages": {
+                **entry(registry["customPages"]),
+                "scopes": {
+                    key: entry(spec)
+                    for key, spec in registry["customPageScopes"].items()
+                },
+            },
+        }
+        document["features"]["powerAutomateEnabled"]["hidden"] = False
+        document["features"]["workflowManagerEnabled"]["hidden"] = True
+        document["developer_settings"]["workflowManager.scale"]["value"] = 0.5
+        document["developer_settings"][
+            "golfballViewer.printAreaScale"
+        ]["value"] = 0.1
+        document["custom_pages"]["scopes"]["all"]["hidden"] = True
+
+        projected, selected = self.store.project_client_document(document, None)
+
+        self.assertEqual(selected, "3.4.2")
+        self.assertEqual(set(projected["features"]), set(
+            settings_policy._LEGACY_342_FEATURE_KEYS
+        ))
+        self.assertEqual(len(projected["features"]), 23)
+        self.assertEqual(set(projected["developer_settings"]), set(
+            settings_policy._LEGACY_342_DEVELOPER_KEYS
+        ))
+        self.assertEqual(len(projected["developer_settings"]), 121)
+        self.assertEqual(set(projected["custom_pages"]["scopes"]), {"crm"})
+
+        legacy_feature_specs = {
+            key: (
+                {"type": "bool"}
+                if key == "submitProofEnabled"
+                else registry["features"][
+                    "workflowManagerEnabled"
+                    if key == "campaignManagerEnabled" else key
+                ]
+            ) for key in settings_policy._LEGACY_342_FEATURE_KEYS
+        }
+        legacy_developer_specs = {
+            key: (
+                {
+                    **registry["developerSettings"]["workflowManager.scale"],
+                    "min": 1,
+                }
+                if key == "campaignManager.scale"
+                else registry["developerSettings"][key]
+            ) for key in settings_policy._LEGACY_342_DEVELOPER_KEYS
+        }
+        legacy_developer_specs["golfballViewer.printAreaScale"] = {
+            **legacy_developer_specs["golfballViewer.printAreaScale"],
+            "min": 0.2, "max": 1.5,
+        }
+
+        def assert_legacy_value(spec, value):
+            kind = spec["type"]
+            if kind == "bool":
+                self.assertIs(type(value), bool)
+            elif kind == "string":
+                self.assertIsInstance(value, str)
+            elif kind == "number":
+                self.assertIn(type(value), {int, float})
+                self.assertGreaterEqual(value, spec.get("min", value))
+                self.assertLessEqual(value, spec.get("max", value))
+            elif kind == "select":
+                self.assertIn(value, spec["options"])
+            else:
+                self.fail(f"Unsupported legacy test type: {kind}")
+
+        for key, spec in legacy_feature_specs.items():
+            assert_legacy_value(spec, projected["features"][key]["value"])
+        for key, spec in legacy_developer_specs.items():
+            assert_legacy_value(
+                spec, projected["developer_settings"][key]["value"]
+            )
+        self.assertFalse(
+            projected["features"]["powerAutomateEnabled"]["hidden"],
+            "the global shown state must clear Clay's stale hidden snapshot",
+        )
+        self.assertTrue(
+            projected["features"]["campaignManagerEnabled"]["hidden"]
+        )
+        self.assertTrue(projected["features"]["submitProofEnabled"]["value"])
+        self.assertEqual(
+            projected["developer_settings"]["golfballViewer.printAreaScale"]["value"],
+            0.2,
+        )
+        self.assertEqual(
+            projected["developer_settings"]["campaignManager.scale"]["value"],
+            1,
+        )
+        self.assertTrue(projected["custom_pages"]["scopes"]["crm"]["hidden"])
+
+        current, current_selected = self.store.project_client_document(
+            document, "3.4.6",
+        )
+        self.assertEqual(current_selected, "current")
+        self.assertEqual(current, document)
+        self.assertIsNot(current, document)
+        self.assertEqual(self.store.client_registry("not-a-version"), "3.4.2")
+
     def test_renamed_settings_and_override_paths_keep_values_and_refresh_labels(self):
         legacy_document = json.loads(json.dumps(self.document))
         legacy_document["features"]["campaignManagerEnabled"] = {
