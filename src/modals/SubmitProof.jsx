@@ -80,14 +80,14 @@ const GROUP_MAP = {
 
 const DYN_FIELDS = {
   ball: [
-    { id: 'logoType',    type: 'select', label: 'Logo type',          options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Ball' },
+    { id: 'logoType',    type: 'select', label: 'Logo type',          options: ['Ball', 'Other', 'Square Ball'], default: 'Ball' },
     { id: 'color',       type: 'select', label: 'Ball color',         options: ['White','Gray','Yellow','Red','Orange','Green','Pink','Blue','Purple','Multi-Color'], default: 'White' },
     { id: 'imprint',     type: 'text',   label: 'Imprint color',      hint: 'Recommended: Black, Silver, Gold', dependsOn: 'color', dependsNotValue: 'White' },
     { id: 'dozens',      type: 'text',   label: 'Number of dozens',   hint: 'Pad=50dz+, Digital=49dz-' },
     { id: 'printMethod', type: 'select', label: 'Print method',       options: ['Digital', 'Pad'], default: 'Digital' },
   ],
   apparel: [
-    { id: 'logoType',  type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Embroidery' },
+    { id: 'logoType',  type: 'select', label: 'Logo type', options: ['Vinyl', 'Embroidery', 'Other'], default: 'Vinyl' },
     { id: 'decorator', type: 'select', label: 'Decorator', options: ['TM Works or Alphabroder (Isacord)', 'Ignite/Other (Madeira)', 'In-House (Venture Towels)'], default: 'TM Works or Alphabroder (Isacord)' },
     { id: 'method',    type: 'select', label: 'Decoration method', options: ['Embroidery', 'Heat Seal', 'Direct to Film Transfer (Ignite)', 'Screen Print', 'Sublimation', 'Other - See Special Instructions'], default: 'Embroidery' },
     { id: 'color',     type: 'text',   label: 'Item color', required: true },
@@ -96,18 +96,18 @@ const DYN_FIELDS = {
     { id: 'name',     type: 'text',   label: 'Item name' },
   ],
   poker: [
-    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
+    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Other'], default: 'Other' },
     { id: 'color',    type: 'text',   label: 'Item color', required: true },
     { id: 'imprint',  type: 'text',   label: 'Imprint color', hint: 'Notate if Pantone matching needed' },
   ],
   tees: [
-    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
+    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Other' },
     { id: 'size',     type: 'select', label: 'Tee size', options: ['2 3/4in', '3 1/4in'], default: '2 3/4in' },
     { id: 'imprint',  type: 'select', label: 'Imprint color (tees)', options: ['One Color', 'Two Color'], default: 'One Color', hint: 'Black tees: White, Silver, Gold only' },
     { id: 'color',    type: 'text',   label: 'Item color' },
   ],
   flags: [
-    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Vinyl' },
+    { id: 'logoType', type: 'select', label: 'Logo type', options: ['Ball', 'Vinyl', 'Embroidery', 'Gift Set', 'Square Ball'], default: 'Other' },
     { id: 'color',    type: 'text',   label: 'Item color', required: true  },
   ],
   other: [
@@ -500,12 +500,13 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
 
       const logoType = dyn.logoType || 'other';
       setSubmitProgress({ current: i + 1, total: selectedItems.length, item });
-      const r = await sendOne({
-        action:        'generateProofLink',
+      await sendOne({
+        action: 'generateProofLink',
         ...basePayload,
-        proofName:     proofNames[i],
+        proofName: proofNames[i],
         itemsSelected: item,
-        multiProofs:   selectedItems.length,
+        multiProofs: selectedItems.length,
+        logoType: dyn.logoType,
         dynamicFields: { [item]: dyn },
       });
       out.push({
