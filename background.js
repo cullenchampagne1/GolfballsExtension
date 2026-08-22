@@ -974,6 +974,28 @@ function gbEmailTemplateShareId(value) {
   } catch { return ''; }
 }
 
+/* Cross-context invalidation for the Settings window's owned/imported email
+   share table. Storage change events reach extension pages and content-script
+   worlds even when they were already open before the mutation completed. */
+function gbMarkEmailSharesChanged() {
+  try {
+    chrome.storage.local.set({ gbEmailShareRevision: Date.now() }, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch { /* settings will still refresh on its next open/manual refresh */ }
+}
+
+function gbEmailShareMutationError(error, fallback) {
+  const message = String(error?.message || '').trim();
+  // FastAPI's generic 404 means the project router has not loaded this new
+  // endpoint. A missing/revoked share has a specific project-owned message and
+  // must remain distinguishable from this deployment-state problem.
+  if (Number(error?.status) === 404 && /^not found$/i.test(message)) {
+    return 'Email template import route is not loaded in RevStack. Reload the Golfballs project and try again.';
+  }
+  return message || fallback;
+}
+
 function gbProductStoreId(value) {
   const raw = String(value || '').trim();
   if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
@@ -1567,7 +1589,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares`, {
         method: 'POST', body,
-      }).then((share) => sendResponse({ ok: true, share }))
+      }).then((share) => {
+        gbMarkEmailSharesChanged();
+        sendResponse({ ok: true, share });
+      })
         .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to share email template' }));
     });
     return true;
@@ -1645,15 +1670,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const shareId = gbEmailTemplateShareId(msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Invalid email template share' }); return true; }
     GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}/imports`, { method: 'POST' })
-      .then((share) => sendResponse({ ok: true, share }))
-      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to retain email template' }));
+      .then((share) => {
+        gbMarkEmailSharesChanged();
+        sendResponse({ ok: true, share });
+      })
+      .catch((error) => sendResponse({
+        ok: false,
+        error: gbEmailShareMutationError(error, 'Unable to retain email template'),
+      }));
     return true;
   }
   if (msg.action === 'emailTemplateShareImportRemove') {
     const shareId = gbEmailTemplateShareId(msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Invalid email template share' }); return true; }
     GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}/imports/remove`, { method: 'POST' })
-      .then((result) => sendResponse({ ok: true, removed: result?.removed === true, shareId }))
+      .then((result) => {
+        gbMarkEmailSharesChanged();
+        sendResponse({ ok: true, removed: result?.removed === true, shareId });
+      })
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to remove imported email template' }));
     return true;
   }
@@ -1661,7 +1695,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const shareId = /^[A-Za-z0-9_-]{32}$/.test(String(msg.shareId || '')) ? String(msg.shareId) : '';
     if (!shareId) { sendResponse({ ok: false, error: 'Invalid email link' }); return true; }
     GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}/revoke`, { method: 'POST' })
-      .then(() => sendResponse({ ok: true, shareId }))
+      .then(() => {
+        gbMarkEmailSharesChanged();
+        sendResponse({ ok: true, shareId });
+      })
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke email link' }));
     return true;
   }

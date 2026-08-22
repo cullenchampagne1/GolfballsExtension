@@ -1067,6 +1067,15 @@ function EmailLinksSection() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onShareChange = (changes, area) => {
+      if (area === 'local' && changes.gbEmailShareRevision) load();
+    };
+    try { chrome.storage.onChanged.addListener(onShareChange); } catch { /* */ }
+    return () => {
+      try { chrome.storage.onChanged.removeListener(onShareChange); } catch { /* */ }
+    };
+  }, [load]);
 
   const remove = async (link) => {
     setBusyId(link.id);

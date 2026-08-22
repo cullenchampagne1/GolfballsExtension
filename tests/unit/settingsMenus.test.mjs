@@ -43,6 +43,14 @@ const statCellSource = settingsPanelSource.slice(
   settingsPanelSource.indexOf('function StatCell'),
   settingsPanelSource.indexOf('function DevSettingRow'),
 );
+const importTemplatesModalSource = sidebarSource.slice(
+  sidebarSource.indexOf('function ImportTemplatesModal'),
+  sidebarSource.indexOf('function ShareEmailTemplateModal'),
+);
+const emailLinksSectionSource = settingsPanelSource.slice(
+  settingsPanelSource.indexOf('function EmailLinksSection'),
+  settingsPanelSource.indexOf('function ProductStoresSection'),
+);
 
 describe('settings menus', () => {
   it('animates managed template creation/import controls while leaving notes available', () => {
@@ -68,6 +76,19 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);
+  });
+
+  it('uses an accessible icon-only JSON import action', () => {
+    assert.match(importTemplatesModalSource, /<IconBtn[\s\S]*?icon=\{<I\.upload \/>\}/);
+    assert.match(importTemplatesModalSource, /aria-label="Import JSON file"/);
+    assert.doesNotMatch(importTemplatesModalSource, />Open JSON<|>Import JSON</);
+  });
+
+  it('refreshes an already-open Settings share table after a remote mutation', () => {
+    assert.match(emailLinksSectionSource, /changes\.gbEmailShareRevision/);
+    assert.match(emailLinksSectionSource, /if \(area === 'local'[\s\S]*load\(\)/);
+    assert.match(emailLinksSectionSource, /chrome\.storage\.onChanged\.addListener\(onShareChange\)/);
+    assert.match(emailLinksSectionSource, /chrome\.storage\.onChanged\.removeListener\(onShareChange\)/);
   });
 
   it('caps the template action menu height and scrolls it internally', () => {

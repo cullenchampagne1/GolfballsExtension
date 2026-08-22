@@ -664,7 +664,14 @@ function ImportTemplatesModal({ onClose, onDone }) {
             style={{ flex: 1 }}
           />
           <Btn variant="tinted" size="md" onClick={load} disabled={!url.trim() || busy}>Load link</Btn>
-          <Btn variant="ghost" size="md" icon={<I.download />} onClick={() => fileInputRef.current?.click()} disabled={busy}>Open JSON</Btn>
+          <IconBtn
+            size="md"
+            icon={<I.upload />}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy}
+            title="Import JSON file"
+            aria-label="Import JSON file"
+          />
           </div>
           {share && (
               <div style={{ padding: '11px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>

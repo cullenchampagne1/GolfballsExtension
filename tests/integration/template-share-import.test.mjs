@@ -17,6 +17,7 @@ import {
 
 const SETTINGS_ID = 'S1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p_';
 const TEMPLATE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
+const UNLOADED_ROUTE_ID = '0dQWIpXS5odoOjwJe0iczoKaGyeBEfUJ';
 const CLIENT_BASE = `${API_ORIGIN}/projects/golfballs-extension/client`;
 const SETTINGS_URL = `${CLIENT_BASE}/settings-shares/${SETTINGS_ID}`;
 const TEMPLATE_URL = `${CLIENT_BASE}/email-template-shares/${TEMPLATE_ID}`;
@@ -144,6 +145,7 @@ describe('template/settings share import', () => {
   });
 
   it('creates a template share for a valid template object only', async () => {
+    delete stored.gbEmailShareRevision;
     const created = await sendMessage({
       action: 'emailTemplateShareCreate',
       template: templateShare.template,
@@ -154,11 +156,33 @@ describe('template/settings share import', () => {
     assert.equal(request.url, `${CLIENT_BASE}/email-template-shares`);
     assert.equal(request.method, 'POST');
     assert.deepEqual(JSON.parse(request.options.body), { template: templateShare.template });
+    assert.equal(
+      typeof stored.gbEmailShareRevision,
+      'number',
+      'open Settings windows receive a storage-backed share-list invalidation',
+    );
 
     const marker = requests.length;
     const invalid = await sendMessage({ action: 'emailTemplateShareCreate', template: ['not', 'an', 'object'] });
     assert.deepEqual(invalid, { ok: false, error: 'Invalid email template' });
     assert.equal(requests.length, marker);
+  });
+
+  it('explains when RevStack has not loaded the email import POST route', async () => {
+    const response = await sendMessage({
+      action: 'emailTemplateShareImport',
+      shareId: UNLOADED_ROUTE_ID,
+    });
+
+    assert.deepEqual(response, {
+      ok: false,
+      error: 'Email template import route is not loaded in RevStack. Reload the Golfballs project and try again.',
+    });
+    assert.equal(
+      requests.at(-1).url,
+      `${CLIENT_BASE}/email-template-shares/${UNLOADED_ROUTE_ID}/imports`,
+    );
+    assert.equal(requests.at(-1).method, 'POST');
   });
 
   it('retains and removes the authenticated user import without revoking the owner share', async () => {
