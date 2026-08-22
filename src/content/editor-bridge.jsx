@@ -21,6 +21,10 @@
 
 import { migrateTemplates } from '../lib/templateMigration.js';
 import { blankCustomAction, normalizeCustomAction } from '../lib/customActions.js';
+import {
+  readEmailTemplateCapabilities,
+  resolveEmailTemplateCapabilities,
+} from '../lib/emailTemplateCapabilities.js';
 
 // ── State ──────────────────────────────────────────────────────
 let templates     = [];
@@ -31,6 +35,7 @@ let currentNoteId = null;
 let currentActionId = null;
 let currentActionDraft = null;
 let orderTabId    = null;
+let emailTemplateCapabilities = resolveEmailTemplateCapabilities();
 
 /* Mirror the active-template ids to window so the React sidebar's
    polling effect (editor-sidebar.jsx) can read them. The sidebar
@@ -87,7 +92,10 @@ function toast(msg, isError = false) {
 
 // ── Storage ────────────────────────────────────────────────────
 function loadStorage() {
-  return new Promise((res) => chrome.storage.local.get(['templates', 'noteTemplates', 'gbCustomActions', 'orderTabId', 'gbEditorLaunchIntent'], res));
+  return new Promise((res) => chrome.storage.local.get([
+    'templates', 'noteTemplates', 'gbCustomActions', 'orderTabId',
+    'gbEditorLaunchIntent', 'devSettings',
+  ], res));
 }
 async function saveTemplates() {
   return new Promise((res) => chrome.storage.local.set({ templates }, res));
@@ -101,6 +109,12 @@ async function saveCustomActions() {
 
 // ── Templates: open / new / delete ─────────────────────────────
 async function newTemplate() {
+  emailTemplateCapabilities = await readEmailTemplateCapabilities();
+  if (!emailTemplateCapabilities.allowCreation
+      || !emailTemplateCapabilities.allowLocalTemplateUsage) {
+    toast('Email template creation is disabled for this installation.', true);
+    return;
+  }
   if (!window.__gbOpenTemplate) {
     toast('Template editor failed to load — reload the editor.', true);
     return;
@@ -120,10 +134,15 @@ async function newTemplate() {
   hide('ed-action-form');
   show('ed-form');
   animateView('ed-form');
-  openTemplate(id);
+  await openTemplate(id);
 }
 
-function openTemplate(id) {
+async function openTemplate(id) {
+  emailTemplateCapabilities = await readEmailTemplateCapabilities();
+  if (!emailTemplateCapabilities.allowLocalTemplateUsage) {
+    toast('Local email template usage is disabled for this installation.', true);
+    return;
+  }
   if (currentId === id && !$('ed-form').classList.contains('hidden')) return;
   const tpl = templates.find((t) => t.id === id);
   if (!tpl) return;
@@ -243,6 +262,10 @@ async function deleteNoteTemplateById(id) {
  */
 async function applyTemplatePatch(tpl) {
   if (!tpl || !tpl.id) return;
+  if (!emailTemplateCapabilities.allowLocalTemplateUsage) {
+    toast('Local email template usage is disabled for this installation.', true);
+    return;
+  }
   setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
   if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);
@@ -405,7 +428,9 @@ window.__gbSaveTemplate = applyTemplatePatch;
 window.__gbSaveNote     = applyNotePatch;
 window.__gbSaveAction   = applyActionPatch;
 window.__gbResolveVars  = resolveVarsLive;
-window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
+window.__gbCurrentTemplate = () => emailTemplateCapabilities.allowLocalTemplateUsage
+  ? templates.find((t) => t.id === currentId) || null
+  : null;
 window.__gbCurrentNote     = () => noteTemplates.find((t) => t.id === currentNoteId) || null;
 window.__gbCurrentAction   = () => currentActionDraft
   || customActions.find((a) => a.id === currentActionId)
@@ -417,6 +442,16 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
   if (changes.gbCustomActions) customActions = changes.gbCustomActions.newValue || [];
   if (changes.orderTabId)    orderTabId    = changes.orderTabId.newValue    || null;
+  if (changes.devSettings) {
+    const prior = emailTemplateCapabilities;
+    emailTemplateCapabilities = resolveEmailTemplateCapabilities(changes.devSettings.newValue);
+    if (prior.allowLocalTemplateUsage && !emailTemplateCapabilities.allowLocalTemplateUsage) {
+      setCurrentId(null);
+      hide('ed-form');
+      show('ed-empty');
+      animateView('ed-empty');
+    }
+  }
   if (changes.gbEditorLaunchIntent?.newValue) consumeLaunchIntent(changes.gbEditorLaunchIntent.newValue);
 });
 
@@ -432,6 +467,7 @@ async function init() {
   noteTemplates = data.noteTemplates || [];
   customActions = data.gbCustomActions || [];
   orderTabId    = data.orderTabId    || null;
+  emailTemplateCapabilities = resolveEmailTemplateCapabilities(data.devSettings);
   /* One-version backwards-compat pass: lift legacy contact/account/order
      variables onto the page engine, and scratch legacy order auto-match
      rules so they're re-authored against the order schema. Persists +

@@ -10,6 +10,7 @@
 
 import { loadTaskTemplates } from '../quickTask.js';
 import { loadCallTemplates } from '../callLog.js';
+import { filterLocalEmailTemplates } from '../emailTemplateCapabilities.js';
 import { codeIdsFor } from './userBinding.js';
 
 function enabledEmails(raw) {
@@ -87,8 +88,8 @@ function loadStoredEmailTemplates() {
         resolve([]);
         return;
       }
-      chrome.storage.local.get('templates', (data) => {
-        resolve(Array.isArray(data?.templates) ? data.templates : []);
+      chrome.storage.local.get(['templates', 'devSettings'], (data) => {
+        resolve(filterLocalEmailTemplates(data?.templates, data?.devSettings));
       });
     } catch {
       resolve([]);

@@ -14,6 +14,10 @@ const sidebarSource = await readFile(
   new URL('../../src/content/editor-sidebar.jsx', import.meta.url),
   'utf8',
 );
+const editorBridgeSource = await readFile(
+  new URL('../../src/content/editor-bridge.jsx', import.meta.url),
+  'utf8',
+);
 const settingsPanelSource = await readFile(
   new URL('../../src/pages/SettingsPanel.jsx', import.meta.url),
   'utf8',
@@ -33,6 +37,16 @@ const statCellSource = settingsPanelSource.slice(
 );
 
 describe('settings menus', () => {
+  it('animates managed template creation/import controls while leaving notes available', () => {
+    assert.match(sidebarSource, /capabilities\.allowCreation/);
+    assert.match(sidebarSource, /capabilities\.allowLinkImport/);
+    assert.match(sidebarSource, /visible=\{isNote \|\| \(capabilities\.allowCreation && allowLocalTemplates\)\}/);
+    assert.match(sidebarSource, /slotKey="email-template-link-import"/);
+    assert.match(sidebarSource, /filterLocalEmailTemplates\(templates, devSettings\)/);
+    assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowCreation/);
+    assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowLocalTemplateUsage/);
+  });
+
   it('caps the template action menu height and scrolls it internally', () => {
     // With many folders the "Move to folder" list grew past the viewport and
     // pushed Share off-screen. The popover now carries a hard height cap with

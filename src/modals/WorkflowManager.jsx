@@ -881,12 +881,21 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   // Load the rep's saved email / task / call templates for the user.* binding.
   useEffect(() => {
     let alive = true;
-    loadCodeTemplateLibrary().then((library) => {
+    const reload = () => loadCodeTemplateLibrary().then((library) => {
       if (!alive) return;
       setUserData(library);
       setTemplatesLoaded(true);
     });
-    return () => { alive = false; };
+    reload();
+    const onStorageChanged = (changes, area) => {
+      if (area !== 'local' || (!changes.templates && !changes.devSettings)) return;
+      reload();
+    };
+    chrome?.storage?.onChanged?.addListener?.(onStorageChanged);
+    return () => {
+      alive = false;
+      chrome?.storage?.onChanged?.removeListener?.(onStorageChanged);
+    };
   }, []);
 
   const patchWorkflow = (next) => { setWorkflow(next); setDirty(true); };

@@ -30,6 +30,7 @@ import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { EngineCacheTag } from '../ui/components/EngineCacheTag.jsx';
 import { CacheQueryNotice } from '../ui/components/CacheQueryNotice.jsx';
+import { CapabilitySlot } from '../ui/components/CapabilitySlot.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { attachCachedPageEngineSnapshots } from '../lib/page-engine/cache-actions.js';
 import { cacheRuleTreeStatus } from '../lib/crmCacheQuery.js';
@@ -135,6 +136,7 @@ function SelectionBox({ checked, onChange, title }) {
 
 function SelectionActionRail({
   count, total, onWorkflow, onEmail, onExport,
+  allowEmail,
   cacheVisible, cacheActive, cacheBusy, onCacheChange,
 }) {
   return (
@@ -172,7 +174,9 @@ function SelectionActionRail({
             )}
             <div style={{ flex: 1 }} />
             <Btn size="sm" variant="ghost" icon={<I.target />} onClick={onWorkflow} disabled={cacheBusy}>Run workflow</Btn>
-            <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail} disabled={cacheBusy}>Email selected</Btn>
+            <CapabilitySlot visible={allowEmail} slotKey="custom-crm-search-email-selected">
+              <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={onEmail} disabled={cacheBusy}>Email selected</Btn>
+            </CapabilitySlot>
             <Btn size="sm" variant="ghost" icon={<I.download />} onClick={onExport}>Export CSV</Btn>
           </div>
         </div>
@@ -373,6 +377,7 @@ function ResultRow({ r, i, selected, onToggle }) {
 export function CrmSearchPageApp({ store, initialSearch = null, searchClient = crmSolrQuery }) {
   const [D, patch] = useDetailData(store);
   const modalHost = useModalHost();
+  const allowBulkSending = useDevSetting('emailTemplates.allowBulkSending') !== false;
   const engineIndexingEnabled = useDevSetting('pageEngine.indexingEnabled') === true;
   const engineTerritory = useDevSetting('pageEngine.territory');
   const cacheOptionVisible = engineIndexingEnabled && !!String(engineTerritory || '').trim();
@@ -412,6 +417,12 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerContacts, setEmailRunnerContacts] = useState([]);
+  useEffect(() => {
+    if (!allowBulkSending) {
+      setEmailRunnerOpen(false);
+      setEmailRunnerContacts([]);
+    }
+  }, [allowBulkSending]);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   const [focused, setFocused] = useState(false);   // input focus ring only
   const inputRef = useRef(null);
@@ -662,6 +673,10 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     }
   }, [workflowContacts, prepareActionContacts]);
   const openEmail = useCallback(async (event) => {
+    if (!allowBulkSending) {
+      gbToast('Bulk email sending is disabled for this installation', 'error');
+      return;
+    }
     if (!emailContacts.length) {
       gbToast('Select contacts or accounts first', 'info');
       return;
@@ -669,7 +684,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
     setEmailRunnerContacts(await prepareActionContacts(emailContacts));
     setEmailRunnerOpen(true);
-  }, [emailContacts, prepareActionContacts]);
+  }, [allowBulkSending, emailContacts, prepareActionContacts]);
   const exportSelection = useCallback(() => {
     if (!selectedResults.length) {
       gbToast('Select records first', 'info');
@@ -754,6 +769,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
                 total={rows.length}
                 onWorkflow={openWorkflow}
                 onEmail={openEmail}
+                allowEmail={allowBulkSending}
                 onExport={exportSelection}
                 cacheVisible={cacheOptionVisible}
                 cacheActive={useCachedPages}
@@ -870,7 +886,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
         />
       )}
       <EmailRunner
-        open={emailRunnerOpen}
+        open={allowBulkSending && emailRunnerOpen}
         cursor={emailRunnerCursor}
         contacts={emailRunnerContacts}
         onClose={() => { setEmailRunnerOpen(false); setEmailRunnerContacts([]); }}

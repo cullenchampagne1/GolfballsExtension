@@ -24,6 +24,8 @@ import { completeTaskById, getTaskContactId, updateTaskById } from '../lib/crmTa
 import { contactIdFromUrl, excludeReplacementTasks } from '../lib/replacementContacts.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
+import { CapabilitySlot } from '../ui/components/CapabilitySlot.jsx';
+import { useDevSetting } from '../lib/devSettings.js';
 import { FULL_HEIGHT_LIST_PAGE_CSS } from '../lib/customPageLayout.js';
 import {
   Btn, Card, DASH, DataCtx, DetailErrorBoundary, EmptyRow, I, IconBtn, ScrollArea, SectionTitle,
@@ -169,6 +171,7 @@ function TaskRow({ t, index, selected, onToggle, status, today, onEdit, onComple
 function TaskListApp({ store }) {
   const [D] = useDetailData(store);
   const modalHost = useModalHost();
+  const allowBulkSending = useDevSetting('emailTemplates.allowBulkSending') !== false;
 
   const [tasks, setTasks] = useState([]);
   const [loadState, setLoadState] = useState('loading');
@@ -185,6 +188,9 @@ function TaskListApp({ store }) {
   const [runActive, setRunActive] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
+  useEffect(() => {
+    if (!allowBulkSending) setEmailRunnerOpen(false);
+  }, [allowBulkSending]);
   const [renderCount, setRenderCount] = useState(50);   // progressive/lazy DOM render
   const contactToTasksRef = useRef(new Map());   // contactId → [taskId] for email callbacks
   const inputRef = useRef(null);
@@ -315,6 +321,7 @@ function TaskListApp({ store }) {
     return out.filter((c) => c.contactUrl);
   }, [selectedTasks]);
   const openEmail = () => {
+    if (!allowBulkSending) { gbToast('Bulk email sending is disabled for this installation', 'error'); return; }
     if (!emailContacts.length) { gbToast('Select tasks with a contact first', 'info'); return; }
     setStatusByRow({});
     setEmailRunnerCursor({ x: 0, y: 0 });
@@ -467,7 +474,9 @@ function TaskListApp({ store }) {
                         <Btn key={lb} size="xs" variant="ghost" onClick={() => pushSelected(d)} disabled={runActive}>{lb}</Btn>
                       ))}
                       <div style={{ flex: 1 }} />
-                      <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={openEmail} disabled={runActive}>Email selected</Btn>
+                      <CapabilitySlot visible={allowBulkSending} slotKey="custom-task-list-email-selected">
+                        <Btn size="sm" variant="ghost" icon={<I.mail />} onClick={openEmail} disabled={runActive}>Email selected</Btn>
+                      </CapabilitySlot>
                       <Btn size="sm" variant="ghost" icon={<I.plus />} onClick={quickTaskSelected} disabled={runActive}>Quick task</Btn>
                       <Btn size="sm" variant="ghost" icon={<I.check />} onClick={completeSelected} disabled={runActive}>Complete</Btn>
                       <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportCsv}>Export CSV</Btn>
@@ -529,7 +538,7 @@ function TaskListApp({ store }) {
       </DetailPageFrame>
 
       <EmailRunner
-        open={emailRunnerOpen}
+        open={allowBulkSending && emailRunnerOpen}
         cursor={emailRunnerCursor}
         contacts={emailContacts}
         onClose={() => setEmailRunnerOpen(false)}

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
+import { filterLocalEmailTemplates } from '../lib/emailTemplateCapabilities.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
@@ -165,7 +166,7 @@ function PopupApp() {
   // ── load state ──
   const [stage, setStage] = useState('loading');   // 'loading' | 'empty' | 'main'
   const [tab, setTab] = useState(null);
-  const [allTemplates, setAllTemplates] = useState([]);  // all enabled, non-case templates (full list, pre page-filter)
+  const [storedTemplates, setStoredTemplates] = useState([]); // enabled, non-case local templates before policy projection
   const [pageInfo, setPageInfo] = useState({});
   const [flags, setFlags] = useState({});
   // Per-feature surface config (which surfaces each feature shows on). Defaults
@@ -180,6 +181,10 @@ function PopupApp() {
   // bools, forceMatchedCount, etc.). The hook handles storage.onChanged so we
   // never need a manual subscription here.
   const [devSettings] = useDevSettings();
+  const allTemplates = useMemo(
+    () => filterLocalEmailTemplates(storedTemplates, devSettings),
+    [storedTemplates, devSettings],
+  );
   const ignorePageContext = !!devSettings['popup.ignorePageContext'];
   const ignoreCharge      = !!devSettings['popup.ignoreContext.charge'];
   const ignoreOrderEdit   = !!devSettings['popup.ignoreContext.orderEdit'];
@@ -247,28 +252,29 @@ function PopupApp() {
         catch { res({}); }
       });
       const ignoreCtx = !!initialDev['popup.ignorePageContext'];
+      const usableTpls = filterLocalEmailTemplates(tpls, initialDev);
       if (cancelled) return;
       setTab(currentTab);
-      setAllTemplates(tpls);
+      setStoredTemplates(tpls);
       setWatchList(data.watchList || []);
       setNotifications(data.gbNotifications || []);
       setFlags(mergedFlags);
       loadFeatureConfig().then((c) => { if (!cancelled) setFeatureCfg(c); });
       setPaConfigured(isPowerAutomateUrl(credentials.powerAutomateUrl));
 
-      if (tpls.length === 0) { setStage('empty'); return; }
+      if (usableTpls.length === 0) { setStage('empty'); return; }
 
       // Dev escape hatch — skip page-script probing and variable resolution.
       // Templates list still populates because visibleTemplates returns ALL
       // order/account templates when ignoreCtx is on.
-      if (ignoreCtx) { renderMain({ pageType: '__all__' }, tpls); return; }
+      if (ignoreCtx) { renderMain({ pageType: '__all__' }, usableTpls); return; }
 
       // Opened over a non-web tab (chrome://extensions where it's tested, a
       // blank tab, the Web Store…): content scripts can't run there, so don't
       // probe/inject/message it. Render without page context instead of hanging
       // on the loading stage — this also silences the "Cannot access chrome://
       // and edge:// URLs" scripting errors.
-      if (!isInjectableTab(currentTab)) { renderMain({ pageType: 'other' }, tpls); return; }
+      if (!isInjectableTab(currentTab)) { renderMain({ pageType: 'other' }, usableTpls); return; }
 
       // Probe whether all content scripts are fully live in this tab.
       // Checks both the ready flag (set by main.js) AND the existence of the
@@ -288,13 +294,13 @@ function PopupApp() {
       const askForPageInfo = async () => {
         const info = await sendMessage(currentTab.id, {
           action: 'getPageInfo',
-          templates: tpls.map((t) => ({
+          templates: usableTpls.map((t) => ({
             id: t.id, rules: t.rules, type: t.type,
             accountConditions: t.accountConditions || [],
           })),
         });
         if (cancelled) return;
-        renderMain(info || {}, tpls);
+        renderMain(info || {}, usableTpls);
         // Matching is fully synchronous now — no phase-2 variable resolution.
         // Variables (which can fetch orders / hit the catalog) resolve ONLY
         // when a template is clicked, via the streaming resolver above.
@@ -485,7 +491,7 @@ function PopupApp() {
       if (changes.templates) {
         const next = (changes.templates.newValue || [])
           .filter((t) => t.enabled !== false && t.type !== 'case');
-        setAllTemplates(next);
+        setStoredTemplates(next);
       }
     };
     chrome.storage.onChanged.addListener(listener);

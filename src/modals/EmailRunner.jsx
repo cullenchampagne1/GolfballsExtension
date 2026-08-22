@@ -6,6 +6,10 @@ import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail } from '../lib/emailSender.js';
 import { sendEmailTemplateWithFollowUps } from '../lib/emailTemplateDelivery.js';
 import { useDevSetting } from '../lib/devSettings.js';
+import {
+  filterLocalEmailTemplates,
+  readEmailTemplateCapabilities,
+} from '../lib/emailTemplateCapabilities.js';
 import { renderTemplate } from '../lib/variableResolution.js';
 import { directContactVariables } from '../lib/contactImport.js';
 import { loadCredentials } from '../lib/credentials.js';
@@ -260,6 +264,9 @@ export function EmailRunner({
   /* Per-rep mailbox name (devSettings 'email.localPart'). It is required for
      Power Automate delivery and is never defaulted to a specific employee. */
   const emailLocalPart = useDevSetting('email.localPart');
+  const allowBulkSending = useDevSetting('emailTemplates.allowBulkSending') !== false;
+  const allowLocalTemplateUsage = useDevSetting('emailTemplates.allowLocalTemplateUsage') !== false;
+  const effectiveOpen = open && allowBulkSending;
   const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedVariationId, setSelectedVariationId] = useState(null);
@@ -300,6 +307,8 @@ export function EmailRunner({
      a fresh run) stops the orchestrator cleanly without leaving stale
      row spinners behind. */
   const runTokenRef = useRef(0);
+  const capabilityRef = useRef({ allowBulkSending, allowLocalTemplateUsage });
+  capabilityRef.current = { allowBulkSending, allowLocalTemplateUsage };
 
   /* Load templates + PA URL on open. Filter matches the popup's
      visibleTemplates: drop disabled + case templates, keep email /
@@ -308,16 +317,16 @@ export function EmailRunner({
      read entirely and uses the canned MOCK_TEMPLATES + a placeholder
      PA URL so canRun passes through. */
   useEffect(() => {
-    if (!open) return;
+    if (!effectiveOpen) return;
     if (useMock) {
-      setTemplates(MOCK_TEMPLATES);
+      setTemplates(allowLocalTemplateUsage ? MOCK_TEMPLATES : []);
       setPaUrl('mock://power-automate');
       setPaEnabled(true);
       return;
     }
     try {
-      chrome.storage.local.get(['templates', 'featureFlags'], (out) => {
-        const all = Array.isArray(out?.templates) ? out.templates : [];
+      chrome.storage.local.get(['templates', 'featureFlags', 'devSettings'], (out) => {
+        const all = filterLocalEmailTemplates(out?.templates, out?.devSettings);
         const eligible = all.filter((t) =>
           t.enabled !== false
           && t.type !== 'case'
@@ -327,14 +336,29 @@ export function EmailRunner({
         loadCredentials().then((credentials) => setPaUrl(credentials.powerAutomateUrl));
       });
     } catch {}
-  }, [open, useMock]);
+  }, [effectiveOpen, useMock, allowLocalTemplateUsage]);
+
+  /* Managed policy may change while the panel is open or a paced run is
+     waiting. Cancel immediately, clear the now-ineligible source, and let the
+     parent surface slide its action away. The stored templates remain intact. */
+  useEffect(() => {
+    if (allowBulkSending && allowLocalTemplateUsage) return;
+    runTokenRef.current += 1;
+    setTemplates([]);
+    setSelectedId('');
+    setSelectedVariationId(null);
+    setStatus('idle');
+    setCurrent(null);
+    setDelayState(null);
+    onRunStateChange?.(false);
+  }, [allowBulkSending, allowLocalTemplateUsage, onRunStateChange]);
 
   /* Cancel in-flight run when the panel closes — bumps the token so
      the orchestrator's between-iteration guard short-circuits, and
      drops the running-state signal so the parent list's scan beam
      fades out instead of staying stuck on the last sending row. */
   useEffect(() => {
-    if (!open) {
+    if (!effectiveOpen) {
       /* Modal closing — cancel any in-flight run (token bump aborts
          the orchestrator's between-iteration guard) and wipe the
          run-only state so the next open lands on a fresh form. The
@@ -352,7 +376,7 @@ export function EmailRunner({
       setMeta({ startedAt: 0, finishedAt: 0 });
       onRunStateChange?.(false);
     }
-  }, [open, onRunStateChange]);
+  }, [effectiveOpen, onRunStateChange]);
 
   /* Unmount cancel. When the PARENT modal closes (TaskList /
      CRMSearch shuts), EmailRunner unmounts without ever flipping
@@ -439,9 +463,25 @@ export function EmailRunner({
     });
   }, [weightableItems]);
 
-  const canRun = !!selectedTpl && contacts.length > 0 && status !== 'running';
+  const canRun = allowBulkSending
+    && allowLocalTemplateUsage
+    && !!selectedTpl
+    && contacts.length > 0
+    && status !== 'running';
 
   const onRun = async () => {
+    const liveCapabilities = useMock
+      ? capabilityRef.current
+      : await readEmailTemplateCapabilities();
+    capabilityRef.current = liveCapabilities;
+    if (!liveCapabilities.allowBulkSending) {
+      toast?.error?.('Bulk email sending is disabled for this installation', { duration: 5000 });
+      return;
+    }
+    if (!liveCapabilities.allowLocalTemplateUsage) {
+      toast?.error?.('Local email template usage is disabled for this installation', { duration: 5000 });
+      return;
+    }
     if (!canRun) return;
     /* PA-ready → send through Power Automate; otherwise the run still goes,
        opening one Outlook window per contact (mailto, stripped, no sig).
@@ -501,7 +541,9 @@ export function EmailRunner({
     const followUpFailures = [];
 
     for (let i = 0; i < contacts.length; i++) {
-      if (runTokenRef.current !== token) return; // cancelled
+      if (runTokenRef.current !== token
+          || !capabilityRef.current.allowBulkSending
+          || !capabilityRef.current.allowLocalTemplateUsage) return; // cancelled or revoked
       const c = contacts[i];
       setProgress({ current: i + 1, total: contacts.length });
       setDelayState(null);
@@ -636,10 +678,13 @@ export function EmailRunner({
           /* Last-chance cancel guard before the actual send — catches a
              cancel that arrived DURING the variable-resolution await
              above, which would otherwise fire one more send. */
-          if (runTokenRef.current !== token) return;
+          if (runTokenRef.current !== token
+              || !capabilityRef.current.allowBulkSending
+              || !capabilityRef.current.allowLocalTemplateUsage) return;
           const res = await sendEmailTemplateWithFollowUps({
             email: {
-              from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady },
+              from, to: toEmail, subject, htmlBody, replyMode, signature,
+              config: { paReady, allowLocalTemplateUsage: liveCapabilities.allowLocalTemplateUsage },
               templateId: selectedTpl.id || '',
               templateName: selectedTpl.name || '',
               variationId: v?.id || '__original',
@@ -775,7 +820,7 @@ export function EmailRunner({
 
   return (
     <DraggablePopup
-      open={open}
+      open={effectiveOpen}
       onClose={onClose}
       anchorHostId={anchorHostId}
       cursorAnchor={cursor}

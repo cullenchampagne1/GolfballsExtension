@@ -131,6 +131,33 @@ describe('userBinding · shared workflow/action template loader', () => {
     });
     assert.deepEqual(loaded, projected);
   });
+
+  it('removes local email dependencies from the live code library when managed usage is off', async () => {
+    const priorChrome = globalThis.chrome;
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            assert.deepEqual(keys, ['templates', 'devSettings']);
+            callback({
+              templates: [{ id: 'local', name: 'Local email' }],
+              devSettings: { 'emailTemplates.allowLocalTemplateUsage': false },
+            });
+          },
+        },
+      },
+    };
+    try {
+      const loaded = await loadCodeTemplateLibrary({
+        loadTasks: async () => [],
+        loadCalls: async () => [],
+      });
+      assert.deepEqual(loaded.emails, []);
+    } finally {
+      if (priorChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = priorChrome;
+    }
+  });
 });
 
 describe('userBinding · drops a saved email into a send (both runners)', () => {

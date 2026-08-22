@@ -2,12 +2,18 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [searchSource, pageSource, emailRunnerSource, iconSource, queryBuilderSource] = await Promise.all([
+const [
+  searchSource, pageSource, emailRunnerSource, iconSource, queryBuilderSource,
+  taskListSource, taskPageSource, capabilitySlotSource,
+] = await Promise.all([
   readFile(new URL('../../src/modals/CRMSearch.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/content/crm-search-page.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/EmailRunner.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/ui/icons.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/QueryBuilder.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../../src/modals/TaskList.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../../src/content/crm-task-list-page.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../../src/ui/components/CapabilitySlot.jsx', import.meta.url), 'utf8'),
 ]);
 
 function matches(source, pattern) {
@@ -56,5 +62,26 @@ describe('CRM Search presentation · Page Engine cache control', () => {
       assert.match(source, /hasCacheQuery/);
       assert.match(source, /<CacheQueryNotice/);
     }
+  });
+});
+
+describe('bulk email presentation · managed capability', () => {
+  it('slides Email selected out of both modal and Custom Page action rails', () => {
+    for (const source of [searchSource, pageSource, taskListSource, taskPageSource]) {
+      assert.match(source, /emailTemplates\.allowBulkSending/);
+      assert.match(source, /<CapabilitySlot[^>]+visible=\{allow(?:BulkSending|Email)\}/);
+      assert.match(source, /open=\{allowBulkSending && emailRunnerOpen\}/);
+    }
+    assert.match(capabilitySlotSource, /width: 0/);
+    assert.match(capabilitySlotSource, /width: 'auto'/);
+    assert.match(capabilitySlotSource, /AnimatePresence/);
+  });
+
+  it('fails closed inside EmailRunner and cancels a run when either source is revoked', () => {
+    assert.match(emailRunnerSource, /emailTemplates\.allowBulkSending/);
+    assert.match(emailRunnerSource, /emailTemplates\.allowLocalTemplateUsage/);
+    assert.match(emailRunnerSource, /capabilityRef\.current\.allowBulkSending/);
+    assert.match(emailRunnerSource, /filterLocalEmailTemplates/);
+    assert.match(emailRunnerSource, /open=\{effectiveOpen\}/);
   });
 });

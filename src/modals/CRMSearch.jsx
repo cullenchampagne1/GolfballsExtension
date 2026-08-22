@@ -4,6 +4,7 @@ import {
   FloatingPanel, ModalHeader, Btn, IconBtn, Input, Dropdown, Tag, I, CacheQueryNotice,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { CapabilitySlot } from '../ui/components/CapabilitySlot.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { API, CRM_PAGES } from '../lib/constants.js';
@@ -156,6 +157,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
      force the demo loop without a dev setting flipped first. Otherwise:
      the global switch, or no extension context at all (standalone preview). */
   const forceMock = useDevSetting('forceMockData') ?? false;
+  const allowBulkSending = useDevSetting('emailTemplates.allowBulkSending') !== false;
   const useMock   = useMockProp ?? (forceMock || !hasExtensionContext());
   const engineIndexingEnabled = useDevSetting('pageEngine.indexingEnabled') === true;
   const engineTerritory = useDevSetting('pageEngine.territory');
@@ -616,6 +618,12 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerContacts, setEmailRunnerContacts] = useState([]);
+  useEffect(() => {
+    if (!allowBulkSending) {
+      setEmailRunnerOpen(false);
+      setEmailRunnerContacts([]);
+    }
+  }, [allowBulkSending]);
   /* Cursor coords captured at the moment the user clicks Email
      selected. EmailRunner forwards these through DraggablePopup so
      the panel pops up right where the button is — no parent-rect
@@ -686,6 +694,10 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
     else toast?.info?.('Workflow manager unavailable here', { duration: 2400, placement: 'top-center' });
   }, [workflowContacts, prepareActionContacts, toast]);
   const openEmailForSelection = useCallback(async (event) => {
+    if (!allowBulkSending) {
+      toast?.error?.('Bulk email sending is disabled for this installation');
+      return;
+    }
     if (!emailContacts.length) {
       toast?.info?.('Select contacts first', { placement: 'top-center' });
       return;
@@ -693,7 +705,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
     setEmailRunnerCursor({ x: event.clientX, y: event.clientY });
     setEmailRunnerContacts(await prepareActionContacts(emailContacts));
     setEmailRunnerOpen(true);
-  }, [emailContacts, prepareActionContacts, toast]);
+  }, [allowBulkSending, emailContacts, prepareActionContacts, toast]);
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
     if (cacheRuleTreeStatus(filter?.cacheRules || filter?.state?.cacheRules).active) {
@@ -1416,13 +1428,15 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
                 disabled={cacheActionBusy}
                 onClick={openWorkflowForSelection}
               >Run workflow</Btn>
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<I.mail size={11} />}
-                disabled={cacheActionBusy}
-                onClick={openEmailForSelection}
-              >Email selected</Btn>
+              <CapabilitySlot visible={allowBulkSending} slotKey="crm-search-email-selected">
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  icon={<I.mail size={11} />}
+                  disabled={cacheActionBusy}
+                  onClick={openEmailForSelection}
+                >Email selected</Btn>
+              </CapabilitySlot>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
@@ -1492,7 +1506,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         air between, so it reads as a child workspace rather than a
         replacement. Visible alongside the parent (no hide pattern). */}
     <EmailRunner
-      open={emailRunnerOpen}
+      open={allowBulkSending && emailRunnerOpen}
       anchorHostId="__gb-csm"
       cursor={emailRunnerCursor}
       useMock={useMock}

@@ -1560,18 +1560,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Invalid email template' });
       return true;
     }
-    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares`, {
-      method: 'POST', body,
-    }).then((share) => sendResponse({ ok: true, share }))
-      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to share email template' }));
+    chrome.storage.local.get('devSettings', (stored) => {
+      if (stored?.devSettings?.['emailTemplates.allowLocalTemplateUsage'] === false) {
+        sendResponse({ ok: false, error: 'Local email template usage is disabled for this installation' });
+        return;
+      }
+      GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares`, {
+        method: 'POST', body,
+      }).then((share) => sendResponse({ ok: true, share }))
+        .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to share email template' }));
+    });
     return true;
   }
   if (msg.action === 'emailTemplateShareGet') {
     const shareId = gbEmailTemplateShareId(msg.url || msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Enter a valid email template link' }); return true; }
-    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}`)
-      .then((share) => sendResponse({ ok: true, share }))
-      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load email template' }));
+    chrome.storage.local.get('devSettings', (stored) => {
+      if (stored?.devSettings?.['emailTemplates.allowLinkImport'] === false) {
+        sendResponse({ ok: false, error: 'Email template link import is disabled for this installation' });
+        return;
+      }
+      GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}`)
+        .then((share) => sendResponse({ ok: true, share }))
+        .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load email template' }));
+    });
     return true;
   }
   if (msg.action === 'settingsShareCreate') {

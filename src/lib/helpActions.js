@@ -2,6 +2,7 @@ import { FEATURE_DEFAULTS, FEATURE_FLAGS, loadFlags } from './flags.js';
 import {
   DEV_SETTINGS, isValueSetting, loadDevSettings, saveDevSettings,
 } from './devSettings.js';
+import { filterLocalEmailTemplates } from './emailTemplateCapabilities.js';
 import {
   THEME_VARIANTS, loadTheme, applyTheme,
 } from './theme.js';
@@ -113,13 +114,13 @@ const themeVariants = Object.fromEntries(THEME_VARIANTS.flatMap((item) => {
 const shareScopes = PRESET_SCOPES.map((item) => item.id);
 
 async function environment() {
-  const stored = await storageGet(['gbRemoteSettingsPolicy', 'templates']);
+  const stored = await storageGet(['gbRemoteSettingsPolicy', 'templates', 'devSettings']);
   return {
     featureRules,
     settingRules,
     themeVariants,
     shareScopes,
-    templates: Array.isArray(stored.templates) ? stored.templates : [],
+    templates: filterLocalEmailTemplates(stored.templates, stored.devSettings),
     modalTargets: Object.keys(MODAL_TARGETS),
     openParamRules: OPEN_PARAM_RULES,
     policy: stored.gbRemoteSettingsPolicy || {},

@@ -78,6 +78,19 @@ describe('template/settings share import', () => {
     assert.deepEqual(last.map(({ method }) => method), ['GET', 'GET']);
   });
 
+  it('blocks link retrieval at the background boundary when managed import is off', async () => {
+    const marker = requests.length;
+    stored.devSettings = { 'emailTemplates.allowLinkImport': false };
+    const response = await sendMessage({ action: 'emailTemplateShareGet', url: TEMPLATE_URL });
+    delete stored.devSettings;
+
+    assert.deepEqual(response, {
+      ok: false,
+      error: 'Email template link import is disabled for this installation',
+    });
+    assert.equal(requests.length, marker, 'disabled imports never reach the server');
+  });
+
   it('completes the import: recorded scope ids land on the share, payload ready for storage', async () => {
     const opened = await sendMessage({ action: 'settingsShareGet', url: SETTINGS_URL });
     const scopeIds = Object.keys(opened.share.scopes);
@@ -136,6 +149,22 @@ describe('template/settings share import', () => {
     const marker = requests.length;
     const invalid = await sendMessage({ action: 'emailTemplateShareCreate', template: ['not', 'an', 'object'] });
     assert.deepEqual(invalid, { ok: false, error: 'Invalid email template' });
+    assert.equal(requests.length, marker);
+  });
+
+  it('blocks sharing a local template when managed local usage is off', async () => {
+    const marker = requests.length;
+    stored.devSettings = { 'emailTemplates.allowLocalTemplateUsage': false };
+    const response = await sendMessage({
+      action: 'emailTemplateShareCreate',
+      template: templateShare.template,
+    });
+    delete stored.devSettings;
+
+    assert.deepEqual(response, {
+      ok: false,
+      error: 'Local email template usage is disabled for this installation',
+    });
     assert.equal(requests.length, marker);
   });
 });

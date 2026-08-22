@@ -12,10 +12,16 @@ import {
   buildEmailTemplateFile, importTemplates, normalizeTemplate, parseEmailTemplateFile,
 } from '../lib/templateImport.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
+import { useDevSettings } from '../lib/devSettings.js';
+import {
+  filterLocalEmailTemplates,
+  resolveEmailTemplateCapabilities,
+} from '../lib/emailTemplateCapabilities.js';
 import {
   buildEmailTemplateTrackerCatalog,
   emailTemplateTrackingIssue,
 } from '../lib/emailSubjectTracking.js';
+import { CapabilitySlot } from '../ui/components/CapabilitySlot.jsx';
 
 /* ────────────────────────────────────────────────────────────────
    editor-sidebar.jsx
@@ -721,6 +727,9 @@ function TemplateSidebar() {
   // window.__gbNotify (mounted globally by editor-notifications.jsx),
   // so confirm/prompt overlays the whole window, not the sidebar.
   const notify = useSettingNotification();
+  const [devSettings] = useDevSettings();
+  const capabilities = resolveEmailTemplateCapabilities(devSettings);
+  const allowLocalTemplates = capabilities.allowLocalTemplateUsage;
   const [importOpen,  setImportOpen]  = useState(false);
   const [shareTemplate, setShareTemplate] = useState(null);
   const [tab,         setTab]         = useState('templates');
@@ -756,14 +765,22 @@ function TemplateSidebar() {
   }, []);
 
   useEffect(() => {
-    const listener = (event) => setShareTemplate(event.detail || null);
+    const listener = (event) => {
+      if (allowLocalTemplates) setShareTemplate(event.detail || null);
+    };
     window.addEventListener('gb:share-email-template', listener);
     return () => window.removeEventListener('gb:share-email-template', listener);
-  }, []);
+  }, [allowLocalTemplates]);
+
+  useEffect(() => {
+    if (!capabilities.allowLinkImport || !allowLocalTemplates) setImportOpen(false);
+    if (!allowLocalTemplates) setShareTemplate(null);
+  }, [capabilities.allowLinkImport, allowLocalTemplates]);
 
   const isNote = tab === 'notes';
-  const allItems  = isNote ? notes : templates;
-  const folders   = isNote ? noteFolders : tplFolders;
+  const usableTemplates = filterLocalEmailTemplates(templates, devSettings);
+  const allItems  = isNote ? notes : usableTemplates;
+  const folders   = isNote ? noteFolders : (allowLocalTemplates ? tplFolders : []);
   const tplsKey   = isNote ? 'noteTemplates' : 'templates';
   const folderKey = isNote ? 'noteFolders' : 'templateFolders';
 
@@ -774,9 +791,9 @@ function TemplateSidebar() {
   }, [allItems, search]);
 
   const trackerById = useMemo(() => new Map(
-    buildEmailTemplateTrackerCatalog(templates).trackers
+    buildEmailTemplateTrackerCatalog(usableTemplates).trackers
       .map((tracker) => [tracker.templateId, tracker]),
-  ), [templates]);
+  ), [usableTemplates]);
   const summaryById = useMemo(() => {
     const result = new Map();
     for (const send of emailSends) {
@@ -806,11 +823,19 @@ function TemplateSidebar() {
 
   /* ── Actions — wire to existing editor.js globals ─────────────── */
   function openTpl(t) {
+    if (!isNote && !allowLocalTemplates) {
+      window.__gbToast?.error('Local email template usage is disabled for this installation');
+      return;
+    }
     setCurrentId(t.id);
     const open = isNote ? window.openNoteTemplate : window.openTemplate;
     if (typeof open === 'function') open(t.id);
   }
   function newTpl() {
+    if (!isNote && (!capabilities.allowCreation || !allowLocalTemplates)) {
+      window.__gbToast?.error('Email template creation is disabled for this installation');
+      return;
+    }
     const fn = isNote ? window.newNoteTemplate : window.newTemplate;
     if (typeof fn === 'function') fn();
   }
@@ -949,7 +974,7 @@ function TemplateSidebar() {
         </div>
       </div>
 
-      {importOpen && (
+      {importOpen && capabilities.allowLinkImport && allowLocalTemplates && (
         <ImportTemplatesModal
           onClose={() => setImportOpen(false)}
           onDone={(n, err) => {
@@ -970,7 +995,7 @@ function TemplateSidebar() {
           onChange={setTab}
           full
           options={[
-            { id: 'templates', label: `Templates · ${templates.length}` },
+            { id: 'templates', label: `Templates · ${usableTemplates.length}` },
             { id: 'notes',     label: `Notes · ${notes.length}` },
           ]}
         />
@@ -979,16 +1004,24 @@ function TemplateSidebar() {
             keeps the dashed brand-tinted Btn styling so the two read
             as a matched pair — just without the redundant label. */}
         <div style={{ display: 'flex', gap: 6 }}>
-          <Btn variant="dashed" size="sm" icon={<I.plus />} onClick={newTpl}
-               style={{ flex: 1, minWidth: 0 }}>
-            {isNote ? 'Note' : 'Template'}
-          </Btn>
-          <Btn
-            variant="dashed" size="sm"
-            icon={<FolderIcon />}
-            onClick={newFolder}
-            style={{ flexShrink: 0, padding: '0 9px' }}
-          />
+          <CapabilitySlot
+            visible={isNote || (capabilities.allowCreation && allowLocalTemplates)}
+            grow
+            slotKey={isNote ? 'new-note' : 'new-email-template'}
+          >
+            <Btn variant="dashed" size="sm" icon={<I.plus />} onClick={newTpl}
+                 style={{ flex: 1, minWidth: 0 }}>
+              {isNote ? 'Note' : 'Template'}
+            </Btn>
+          </CapabilitySlot>
+          <CapabilitySlot visible={isNote || allowLocalTemplates} slotKey="new-template-folder">
+            <Btn
+              variant="dashed" size="sm"
+              icon={<FolderIcon />}
+              onClick={newFolder}
+              style={{ flexShrink: 0, padding: '0 9px' }}
+            />
+          </CapabilitySlot>
         </div>
       </div>
 
@@ -1103,8 +1136,13 @@ function TemplateSidebar() {
         <Btn variant="ghost" size="sm" icon={<PenIcon />} onClick={openSignature} style={{ flex: 1, minWidth: 0 }}>
           Email signature
         </Btn>
-        <Btn variant="ghost" size="sm" icon={<ImportIcon />} onClick={() => setImportOpen(true)}
-          title="Import a temporary template link" style={{ flexShrink: 0, padding: '0 9px' }} />
+        <CapabilitySlot
+          visible={capabilities.allowLinkImport && allowLocalTemplates}
+          slotKey="email-template-link-import"
+        >
+          <Btn variant="ghost" size="sm" icon={<ImportIcon />} onClick={() => setImportOpen(true)}
+            title="Import a temporary template link" style={{ flexShrink: 0, padding: '0 9px' }} />
+        </CapabilitySlot>
       </div>
     </div>
   );

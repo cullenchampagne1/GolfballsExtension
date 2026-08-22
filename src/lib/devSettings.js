@@ -220,14 +220,12 @@ export const DEV_SETTINGS = [
   },
 
   /* ── Email-template capability policy ─────────────────────────
-     These settings establish the managed control plane before the
-     corresponding runtime gates are wired into template authoring,
-     importing, and bulk delivery. They intentionally remain shared
-     policy (not installation-local), so RevStack is authoritative. */
+     RevStack-managed controls enforced live by template authoring,
+     importing, selection, and bulk-delivery surfaces. */
   {
     key:     'emailTemplates.allowCreation',
     label:   'Email Template Creation',
-    desc:    'Managed policy gate for creating email templates. Runtime enforcement is implemented by the email-template feature.',
+    desc:    'Show email-template creation controls and permit new local email templates. Note-template creation is unaffected.',
     type:    'bool',
     default: true,
   },
@@ -241,14 +239,14 @@ export const DEV_SETTINGS = [
   {
     key:     'emailTemplates.allowLinkImport',
     label:   'Email Template Link Import',
-    desc:    'Managed policy gate for importing email templates from shared links. Runtime enforcement is implemented by the email-template feature.',
+    desc:    'Show the template import control and permit loading temporary shared-template links.',
     type:    'bool',
     default: true,
   },
   {
     key:     'emailTemplates.allowLocalTemplateUsage',
     label:   'Allow Local Template Usage',
-    desc:    'Managed policy gate for using email templates stored locally in the extension. Runtime enforcement is implemented by the email-template feature.',
+    desc:    'Expose locally stored email templates to pickers, composers, workflows, and delivery. Turning this off preserves but hides the local library.',
     type:    'bool',
     default: true,
   },
@@ -265,7 +263,7 @@ export const DEV_SETTINGS = [
   {
     key:     'emailTemplates.allowBulkSending',
     label:   'Allow Bulk Sending',
-    desc:    'Managed policy gate for bulk email sending. Runtime enforcement is implemented by the bulk-send feature.',
+    desc:    'Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces.',
     type:    'bool',
     default: true,
   },

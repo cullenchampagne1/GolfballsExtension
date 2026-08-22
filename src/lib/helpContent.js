@@ -5441,7 +5441,7 @@ export const HELP_CONTENT = {
                 "bool",
                 "On",
                 "",
-                "Managed policy gate for creating email templates. Runtime enforcement is implemented by the email-template feature."
+                "Show email-template creation controls and permit new local email templates. Note-template creation is unaffected."
               ],
               [
                 "Email Template Parent Account",
@@ -5455,14 +5455,14 @@ export const HELP_CONTENT = {
                 "bool",
                 "On",
                 "",
-                "Managed policy gate for importing email templates from shared links. Runtime enforcement is implemented by the email-template feature."
+                "Show the template import control and permit loading temporary shared-template links."
               ],
               [
                 "Allow Local Template Usage",
                 "bool",
                 "On",
                 "",
-                "Managed policy gate for using email templates stored locally in the extension. Runtime enforcement is implemented by the email-template feature."
+                "Expose locally stored email templates to pickers, composers, workflows, and delivery. Turning this off preserves but hides the local library."
               ],
               [
                 "Max Daily Bulk Send",
@@ -5476,7 +5476,7 @@ export const HELP_CONTENT = {
                 "bool",
                 "On",
                 "",
-                "Managed policy gate for bulk email sending. Runtime enforcement is implemented by the bulk-send feature."
+                "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces."
               ]
             ],
             "meta": {
@@ -9989,7 +9989,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowCreation"
       ],
-      "description": "Managed policy gate for creating email templates. Runtime enforcement is implemented by the email-template feature.",
+      "description": "Show email-template creation controls and permit new local email templates. Note-template creation is unaffected.",
       "article": "developer-settings"
     },
     {
@@ -10009,7 +10009,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowLinkImport"
       ],
-      "description": "Managed policy gate for importing email templates from shared links. Runtime enforcement is implemented by the email-template feature.",
+      "description": "Show the template import control and permit loading temporary shared-template links.",
       "article": "developer-settings"
     },
     {
@@ -10019,7 +10019,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowLocalTemplateUsage"
       ],
-      "description": "Managed policy gate for using email templates stored locally in the extension. Runtime enforcement is implemented by the email-template feature.",
+      "description": "Expose locally stored email templates to pickers, composers, workflows, and delivery. Turning this off preserves but hides the local library.",
       "article": "developer-settings"
     },
     {
@@ -10039,7 +10039,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowBulkSending"
       ],
-      "description": "Managed policy gate for bulk email sending. Runtime enforcement is implemented by the bulk-send feature.",
+      "description": "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces.",
       "article": "developer-settings"
     },
     {

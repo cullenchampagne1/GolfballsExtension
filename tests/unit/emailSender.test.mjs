@@ -185,6 +185,18 @@ describe('readEmailConfig', () => {
     assert.deepEqual(cfg.templates, [{ id: 't1' }]);
   });
 
+  it('hides but does not delete stored templates when local usage is disabled', async () => {
+    const storedTemplates = [{ id: 't1' }];
+    setStore({
+      devSettings: { 'emailTemplates.allowLocalTemplateUsage': false },
+      templates: storedTemplates,
+    });
+    const cfg = await readEmailConfig();
+    assert.deepEqual(cfg.templates, []);
+    assert.equal(cfg.allowLocalTemplateUsage, false);
+    assert.equal(store.templates, storedTemplates);
+  });
+
   it('migrates a legacy featureFlags.powerAutomateUrl into credentials and honors it for paReady', async () => {
     setStore({ featureFlags: { powerAutomateEnabled: true, powerAutomateUrl: 'https://legacy.example/flow' } });
     const cfg = await readEmailConfig();
@@ -200,6 +212,22 @@ describe('sendEmail', () => {
     let dispatched = 0;
     const r = await sendEmail({ from: 'a@b', to: '', subject: 's', htmlBody: 'x' }, { dispatch: () => { dispatched++; } });
     assert.deepEqual(r, { state: 'failed', transport: 'none', error: 'No recipient email' });
+    assert.equal(dispatched, 0);
+  });
+
+  it('rejects a local-template send before either transport when usage is disabled', async () => {
+    let dispatched = 0;
+    const result = await sendEmail({
+      from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Hi', htmlBody: 'x',
+      templateId: 'local-template',
+      config: { paReady: true, allowLocalTemplateUsage: false },
+    }, { dispatch: async () => { dispatched += 1; return { ok: true }; } });
+
+    assert.deepEqual(result, {
+      state: 'failed',
+      transport: 'none',
+      error: 'Local email template usage is disabled for this installation',
+    });
     assert.equal(dispatched, 0);
   });
 

@@ -106,14 +106,23 @@ export function CustomActionEditor({ action }) {
   // the editor also needs their names + ids for completion and linting.
   useEffect(() => {
     let alive = true;
-    loadCodeTemplateLibrary()
+    const reload = () => loadCodeTemplateLibrary()
       .then((library) => {
         if (!alive) return;
         setUserData(library);
         setTemplatesLoaded(true);
       })
       .catch(() => {});
-    return () => { alive = false; };
+    reload();
+    const onStorageChanged = (changes, area) => {
+      if (area !== 'local' || (!changes.templates && !changes.devSettings)) return;
+      reload();
+    };
+    chrome?.storage?.onChanged?.addListener?.(onStorageChanged);
+    return () => {
+      alive = false;
+      chrome?.storage?.onChanged?.removeListener?.(onStorageChanged);
+    };
   }, []);
   const bindings = useMemo(
     () => codeTemplateBindings(userData, templatesLoaded),

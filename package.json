@@ -53,6 +53,10 @@
       "file": "tests/unit/emailTemplateFollowUps.test.mjs"
     },
     {
+      "name": "email \u00b7 managed template capability gates",
+      "file": "tests/unit/emailTemplateCapabilities.test.mjs"
+    },
+    {
       "name": "flow \u00b7 contact-scoped template follow-up actions",
       "file": "tests/unit/templateFollowUpAction.test.mjs"
     },

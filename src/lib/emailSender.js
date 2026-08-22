@@ -1,6 +1,10 @@
 import { pickFromAddress, DEFAULT_LOCAL_PART } from './sender.js';
 import { loadCredentials } from './credentials.js';
 import { sanitizeHtml } from './sanitizeHtml.js';
+import {
+  filterLocalEmailTemplates,
+  resolveEmailTemplateCapabilities,
+} from './emailTemplateCapabilities.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -40,6 +44,7 @@ export function readEmailConfig() {
 
 function freezeConfig(cfg, credentials) {
   const flags = cfg.featureFlags || {};
+  const capabilities = resolveEmailTemplateCapabilities(cfg.devSettings);
   const paOn  = flags.powerAutomateEnabled === true;
   const paUrl = (typeof credentials.powerAutomateUrl === 'string' && credentials.powerAutomateUrl.trim().length > 0)
     ? credentials.powerAutomateUrl
@@ -47,7 +52,8 @@ function freezeConfig(cfg, credentials) {
   return Object.freeze({
     signature: cfg.emailSignature || '',
     localPart: String((cfg.devSettings && cfg.devSettings['email.localPart']) || DEFAULT_LOCAL_PART).trim(),
-    templates: Array.isArray(cfg.templates) ? cfg.templates : [],
+    templates: filterLocalEmailTemplates(cfg.templates, cfg.devSettings),
+    ...capabilities,
     powerAutomateEnabled: paOn,
     paReady: paOn && !!paUrl,
   });
@@ -167,8 +173,8 @@ function classifyPaResult(r) {
  * @param {string} [msg.signature] appended on the PA path, dropped on mailto
  * @param {object} [msg.config]    a readEmailConfig() result; pass it to skip
  *                                 a storage read and/or to force the transport
- *                                 (EmailRunner passes { paReady }
- *                                 so mock mode stays on the PA path).
+ *                                 (EmailRunner also carries the live local-
+ *                                 template capability into its mock config).
  * @param {object} [opts]
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
  * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
@@ -177,6 +183,13 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
   const cfg = config || await readEmailConfig();
+  if (templateId && cfg.allowLocalTemplateUsage === false) {
+    return {
+      state: 'failed',
+      transport: 'none',
+      error: 'Local email template usage is disabled for this installation',
+    };
+  }
 
   if (cfg.paReady) {
     if (!from) {

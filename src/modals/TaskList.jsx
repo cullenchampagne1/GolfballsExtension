@@ -5,6 +5,7 @@ import {
   ensureMarchingAntsStyle,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { CapabilitySlot } from '../ui/components/CapabilitySlot.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
@@ -312,6 +313,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
      tab). Drives both the fetch (passed to callSource) and the offline/mock
      UI affordances below. */
   const forceMock  = useDevSetting('forceMockData') ?? false;
+  const allowBulkSending = useDevSetting('emailTemplates.allowBulkSending') !== false;
   const useMock    = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [tasks, setTasks]         = useState([]);
@@ -322,6 +324,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   const [selected, setSelected]   = useState(() => new Set());
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
+  useEffect(() => {
+    if (!allowBulkSending) setEmailRunnerOpen(false);
+  }, [allowBulkSending]);
   /* Per-row email-send status keyed by task.id. EmailRunner pumps
      this via the onRowStart / onRowDone / onResetRowStates callbacks
      wired below; TaskRow reads from the map to replace the Quick Task
@@ -1034,15 +1039,21 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
                 icon={<MegaphoneIcon />}
                 onClick={onRunWorkflow}
               >Run workflow</Btn>
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<I.mail size={11} />}
-                onClick={(e) => {
-                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
-                  setEmailRunnerOpen(true);
-                }}
-              >Email selected</Btn>
+              <CapabilitySlot visible={allowBulkSending} slotKey="task-list-email-selected">
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  icon={<I.mail size={11} />}
+                  onClick={(e) => {
+                    if (!allowBulkSending) {
+                      toast?.error?.('Bulk email sending is disabled for this installation');
+                      return;
+                    }
+                    setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
+                    setEmailRunnerOpen(true);
+                  }}
+                >Email selected</Btn>
+              </CapabilitySlot>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
@@ -1137,7 +1148,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     {/* Email Runner side panel — sits to the right with air between,
         no hide pattern (both modals stay visible at the same time). */}
     <EmailRunner
-      open={emailRunnerOpen}
+      open={allowBulkSending && emailRunnerOpen}
       anchorHostId="__gb-tl"
       cursor={emailRunnerCursor}
       useMock={useMock}

@@ -21,6 +21,7 @@ import { uid, saveWorkflow } from './store.js';
 import { isGroupedTree, emptyTree } from '../matchEngine.js';
 import { loadCallTemplates } from '../callLog.js';
 import { loadTaskTemplates } from '../quickTask.js';
+import { filterLocalEmailTemplates } from '../emailTemplateCapabilities.js';
 import { translateProgram } from '../codeEngine/translate.js';
 
 const VALID_KINDS = ['email', 'call', 'task', 'custom'];
@@ -167,7 +168,12 @@ function resolveTemplateNames(steps, stores) {
 
 function loadEmailTemplates() {
   return new Promise((res) => {
-    try { chrome.storage.local.get('templates', (o) => res((o?.templates || []).filter((t) => t && t.enabled !== false))); }
+    try {
+      chrome.storage.local.get(['templates', 'devSettings'], (o) => res(
+        filterLocalEmailTemplates(o?.templates, o?.devSettings)
+          .filter((t) => t && t.enabled !== false),
+      ));
+    }
     catch { res([]); }
   });
 }
