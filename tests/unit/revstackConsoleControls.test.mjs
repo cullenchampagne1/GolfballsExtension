@@ -36,6 +36,39 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
   });
 
+  it('exposes managed-template inventory and former-parent cleanup blocks', () => {
+    assert.match(
+      blocks,
+      /_v2_list\("managed-email-templates", "Managed email templates"[\s\S]*?"managed-email-templates", 4, 4,[\s\S]*?shell_title=True\)/,
+    );
+    assert.match(
+      blocks,
+      /_v2_list\("managed-email-template-sources", "Template bucket sources"[\s\S]*?"managed-email-template-sources", 4, 3,[\s\S]*?shell_title=True\)/,
+    );
+    assert.match(routes, /@router\.get\("\/managed-email-templates"\)/);
+    assert.match(routes, /"editor": _owner_cell\(editor\)/);
+    assert.match(routes, /"updated": updated/);
+    assert.match(routes, /"conflict": \{/);
+    assert.match(routes, /@router\.get\("\/managed-email-template-sources"\)/);
+    assert.match(routes, /"text": "Parent" if is_parent else "Former parent"/);
+  });
+
+  it('soft-deletes managed rows and invalidates extension caches through the typed event', () => {
+    const clearRoute = routes.match(
+      /@router\.post\("\/managed-email-templates\/clear"\)[\s\S]*?return \{"cleared": True, \*\*result\}/,
+    )?.[0] || '';
+    const clientApi = readFileSync(resolve(root, '.revstack/logic/client_api.py'), 'utf8');
+    const clearLogic = clientApi.match(
+      /def clear_managed_email_templates\([\s\S]*?\n    def update_managed_email_bucket/,
+    )?.[0] || '';
+
+    assert.match(clearLogic, /row\.deleted_at = now/);
+    assert.match(clearLogic, /Model\.created_by_credential_id == created_by_credential_id/);
+    assert.match(clearRoute, /"reason": "dashboard_clear"/);
+    assert.match(clearRoute, /event_type="managed_email_templates\.changed"/);
+    assert.match(clearRoute, /"removed_count": result\["removed_count"\]/);
+  });
+
   it('declares notification composers as action-modal inputs with validated fields', () => {
     assert.match(routes, /action-modal notification composer/);
     assert.match(routes, /"kind": "form", "icon": "send"/);

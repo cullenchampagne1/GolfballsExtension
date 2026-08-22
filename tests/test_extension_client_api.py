@@ -482,6 +482,41 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertEqual(merged["templates"][0]["template"]["subject"], "Hello from parent two")
         self.assertEqual(merged["templates"][0]["template"]["body"], "<p>Owner changed the body</p>")
 
+    def test_dashboard_cleanup_can_clear_one_template_or_a_former_parent_source(self):
+        first = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write({
+                "name": "Owner welcome", "type": "order",
+                "subject": "Welcome", "body": "<p>Hello</p>",
+            }, client_template_id="owner-welcome")]), self._request(self.owner),
+        ))["templates"][0]
+        second = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write({
+                "name": "Parent two follow-up", "type": "account",
+                "subject": "Checking in", "body": "<p>Following up</p>",
+            }, client_template_id="parent-two-follow-up")]), self._request(self.parent_two),
+        ))["templates"]
+        second = next(row for row in second if row["created_by"] == "Parent Two")
+
+        one = self.api.clear_managed_email_templates(bucket_id=first["id"])
+        self.assertEqual(one["removed_count"], 1)
+        self.assertEqual(one["bucket_ids"], [first["id"]])
+        remaining = self._payload(self.api.get_managed_email_bucket(
+            self._request(self.recipient),
+        ))["templates"]
+        self.assertEqual([row["id"] for row in remaining], [second["id"]])
+
+        source = self.api.clear_managed_email_templates(
+            created_by_credential_id=self.parent_two.credential_id,
+        )
+        self.assertEqual(source["removed_count"], 1)
+        self.assertEqual(source["creator_ids"], [self.parent_two.credential_id])
+        self.assertEqual(self._payload(self.api.get_managed_email_bucket(
+            self._request(self.recipient),
+        ))["templates"], [])
+
+        with self.assertRaises(ValueError):
+            self.api.clear_managed_email_templates()
+
     def test_expired_legacy_row_is_permanent_and_payload_has_no_ttl(self):
         share_id = self._seed_share(expired=True)
         payload = self._payload(self.api.get_email_share(
