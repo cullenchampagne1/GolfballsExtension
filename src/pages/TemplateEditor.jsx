@@ -34,12 +34,22 @@ import { importedEmailShare, isImportedEmailTemplate } from '../lib/templateImpo
 const PickerIcon = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 
 function LockedRegion({ locked, children, style }) {
+  const stopLockedEvent = locked
+    ? (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    : undefined;
   return (
     <div
       inert={locked || undefined}
       aria-readonly={locked || undefined}
+      onPointerDownCapture={stopLockedEvent}
+      onClickCapture={stopLockedEvent}
+      onKeyDownCapture={stopLockedEvent}
       style={{
         ...style,
+        pointerEvents: locked ? 'none' : undefined,
         opacity: locked ? 0.62 : 1,
         filter: locked ? 'saturate(.42)' : 'none',
         transition: 'opacity 160ms ease, filter 160ms ease',

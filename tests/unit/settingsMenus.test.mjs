@@ -71,6 +71,10 @@ describe('settings menus', () => {
     assert.match(templateEditorSource, /<EditableTemplateEditor[\s\S]*?readOnly=\{imported\}/);
     assert.doesNotMatch(templateEditorSource, /function ImportedTemplateViewer/);
     assert.match(templateEditorSource, /function LockedRegion[\s\S]*?inert=\{locked \|\| undefined\}/);
+    assert.match(templateEditorSource, /onPointerDownCapture=\{stopLockedEvent\}/);
+    assert.match(templateEditorSource, /onClickCapture=\{stopLockedEvent\}/);
+    assert.match(templateEditorSource, /onKeyDownCapture=\{stopLockedEvent\}/);
+    assert.match(templateEditorSource, /pointerEvents: locked \? 'none' : undefined/);
     assert.match(templateEditorSource, /literalOverridesOnly=\{readOnly\}/);
     assert.match(templateEditorSource, /recipient-local[\s\S]*?__gbSaveTemplate/);
     assert.match(templateEditorSource, /deleteLabel=\{readOnly \? 'Remove' : 'Delete'\}/);
