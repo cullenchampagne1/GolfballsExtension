@@ -51,7 +51,7 @@ chrome.runtime.onStartup?.addListener(() => {
     if (allowed) {
       GB_HELP_ASSISTANT.resume().catch(() => {});
       GBNotificationPoll.reconcile().catch(() => {});
-      GBManagedEmailTemplates.sync().catch(() => {});
+      GBManagedEmailTemplates.sync({ force: true }).catch(() => {});
     }
   }).catch(GB_RUNTIME.report);
 });
@@ -1069,6 +1069,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((error) => sendResponse({
         ok: false,
         error: String(error?.message || error || 'Unable to refresh settings policy'),
+      }));
+    return true;
+  }
+
+  // Opening the template manager always reconciles its cached bucket against
+  // the server. Notifications keep it live between opens, but the durable
+  // server bucket remains the source of truth if an event was ever missed.
+  if (msg.action === 'gbSyncManagedEmailTemplates') {
+    const managed = globalThis.GBManagedEmailTemplates;
+    if (!managed?.sync) {
+      sendResponse({ ok: false, error: 'Managed template synchronization is unavailable' });
+      return true;
+    }
+    managed.sync({ force: true })
+      .then((result) => sendResponse({
+        ok: true,
+        revision: String(result?.revision || ''),
+        templateCount: Array.isArray(result?.templates) ? result.templates.length : 0,
+      }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: String(error?.message || error || 'Unable to refresh managed templates'),
       }));
     return true;
   }

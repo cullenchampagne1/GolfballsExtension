@@ -170,7 +170,12 @@ describe('managed email-template bucket cache', () => {
       'emailTemplates.allowParentAccount': true,
     });
     parent.subject = 'My pending subject';
-    const [merged] = bucket.reconcile([parent], {
+    const [sameRevision] = bucket.reconcile([parent], {
+      templates: [item()],
+    }, { 'emailTemplates.allowParentAccount': true });
+    assert.equal(sameRevision.subject, 'My pending subject');
+
+    const [merged] = bucket.reconcile([sameRevision], {
       templates: [item({ version: 2, last_editor: 'Parent Two', template: { ...item().template, body: '<p>Remote</p>' } })],
     }, { 'emailTemplates.allowParentAccount': true });
 
@@ -225,6 +230,31 @@ describe('managed email-template bucket cache', () => {
 
     assert.equal(h.stored.gbManagedEmailTemplateBucket.schemaVersion, 2);
     assert.equal(h.stored.gbManagedEmailTemplateBucket.revision, 'repaired');
+  });
+
+  it('treats the server as authoritative on open even with a current cache revision', async () => {
+    const staleManaged = bucket.reconcile([], { templates: [item()] }, {})[0];
+    const h = syncHarness({
+      templates: [{ id: 'private', type: 'order', name: 'Private' }, staleManaged],
+      gbManagedEmailTemplateBucket: {
+        schemaVersion: 2,
+        revision: 'apparently-current',
+        isParent: false,
+        templates: [item()],
+      },
+    });
+
+    const opening = h.bucket.sync({ force: true });
+    for (let turn = 0; turn < 5 && h.requests.length < 1; turn += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(h.requests.length, 1, 'opening must not trust a cached revision');
+    h.requests[0]({ revision: 'empty-bucket', is_parent: false, templates: [] });
+    await opening;
+
+    assert.deepEqual(h.stored.templates.map((row) => row.id), ['private']);
+    assert.equal(h.stored.gbManagedEmailTemplateBucket.revision, 'empty-bucket');
+    assert.deepEqual(h.stored.gbManagedEmailTemplateBucket.templates, []);
   });
 
   it('treats creation restrictions as managed-bucket eligibility changes', () => {

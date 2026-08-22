@@ -863,14 +863,20 @@ function TemplateSidebar() {
 
   useEffect(() => {
     let alive = true;
-    loadAll().then((d) => {
+    const loadAuthoritativeCatalog = async () => {
+      // Do not let a valid-looking local revision suppress the open-time
+      // server check. If the request is unavailable, retain the cached catalog
+      // as an offline fallback and let the notification/alarm path retry.
+      try { await sendBackgroundMessage('gbSyncManagedEmailTemplates'); }
+      catch { /* cached templates remain available while offline */ }
+      const d = await loadAll();
       if (!alive) return;
       setTemplates(d.templates || []);
       setNotes(d.noteTemplates || []);
       setTplFolders(d.templateFolders || []);
       setNoteFolders(d.noteFolders || []);
       setEmailSends(d.gbEmailTemplateSends || []);
-    });
+    };
     const onChange = (changes) => {
       if (changes.templates)       setTemplates(changes.templates.newValue || []);
       if (changes.noteTemplates)   setNotes(changes.noteTemplates.newValue || []);
@@ -879,6 +885,7 @@ function TemplateSidebar() {
       if (changes.gbEmailTemplateSends) setEmailSends(changes.gbEmailTemplateSends.newValue || []);
     };
     chrome.storage.onChanged.addListener(onChange);
+    loadAuthoritativeCatalog();
     return () => { alive = false; chrome.storage.onChanged.removeListener(onChange); };
   }, []);
 

@@ -14,6 +14,10 @@ const sidebarSource = await readFile(
   new URL('../../src/content/editor-sidebar.jsx', import.meta.url),
   'utf8',
 );
+const backgroundSource = await readFile(
+  new URL('../../background.js', import.meta.url),
+  'utf8',
+);
 const editorBridgeSource = await readFile(
   new URL('../../src/content/editor-bridge.jsx', import.meta.url),
   'utf8',
@@ -129,6 +133,16 @@ describe('settings menus', () => {
     assert.match(templateRowSource, /aria-label=\{managedEditable[\s\S]*?'Account-managed template'[\s\S]*?'Locked management template'/);
     assert.match(templateRowSource, /managed\.conflictWith\?\.length[\s\S]*?: 'var\(--gb-brand-label\)'/);
     assert.doesNotMatch(templateRowSource, />Managed<|`Management ·/);
+  });
+
+  it('refreshes the server bucket before loading the template manager catalog', () => {
+    const syncAt = sidebarSource.indexOf("sendBackgroundMessage('gbSyncManagedEmailTemplates')");
+    const loadAt = sidebarSource.indexOf('const d = await loadAll()', syncAt);
+
+    assert.ok(syncAt > 0, 'the template manager must request an authoritative bucket sync');
+    assert.ok(loadAt > syncAt, 'the local catalog must load after the server sync attempt');
+    assert.match(backgroundSource, /msg\.action === 'gbSyncManagedEmailTemplates'[\s\S]*?managed\.sync\(\{ force: true \}\)/);
+    assert.match(backgroundSource, /chrome\.runtime\.onStartup[\s\S]*?GBManagedEmailTemplates\.sync\(\{ force: true \}\)/);
   });
 
   it('offers parent accounts explicit per-template bucket enrollment below reply mode', () => {
