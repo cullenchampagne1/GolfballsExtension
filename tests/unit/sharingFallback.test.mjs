@@ -11,6 +11,8 @@ import {
 } from '../../src/lib/presetScopes.js';
 import {
   buildEmailTemplateFile,
+  markImportedEmailTemplate,
+  normalizeTemplate,
   parseEmailTemplateFile,
 } from '../../src/lib/templateImport.js';
 
@@ -171,6 +173,56 @@ describe('sharing fallback · preset scopes', () => {
       storageState.noteFolders.map((item) => item.id),
       ['local-note-folder', 'activity-folder'],
     );
+  });
+
+  it('never re-shares or overwrites a creator-owned imported email template', async () => {
+    const imported = markImportedEmailTemplate(
+      normalizeTemplate({ type: 'order', name: 'Owner copy', body: '<p>Original</p>' }),
+      {
+        id: 'S1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p_',
+        owner_name: 'Template Owner',
+      },
+    );
+    const storageState = {
+      templates: [
+        { id: 'local-order', type: 'order', name: 'Local', body: '<p>Local</p>' },
+        imported,
+      ],
+      templateFolders: [],
+    };
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            const list = Array.isArray(keys) ? keys : [keys];
+            callback(Object.fromEntries(
+              list.filter((key) => key in storageState).map((key) => [key, storageState[key]]),
+            ));
+          },
+          set(value, callback) { Object.assign(storageState, value); callback?.(); },
+        },
+      },
+    };
+
+    const gathered = await gatherScopes(['tpl-order']);
+    assert.deepEqual(gathered['tpl-order'].templates.map((item) => item.id), ['local-order']);
+
+    await applyScopes({
+      'tpl-order': {
+        templates: [
+          { id: imported.id, type: 'order', name: 'Attempted overwrite', body: '<p>Changed</p>' },
+          markImportedEmailTemplate(
+            normalizeTemplate({ type: 'order', name: 'Spoofed share', body: '<p>No</p>' }),
+            { id: 'Z1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p_' },
+          ),
+          { id: 'new-local', type: 'order', name: 'Allowed local', body: '<p>Yes</p>' },
+        ],
+      },
+    });
+
+    assert.equal(storageState.templates.find((item) => item.id === imported.id).body, '<p>Original</p>');
+    assert.equal(storageState.templates.some((item) => item.name === 'Spoofed share'), false);
+    assert.equal(storageState.templates.some((item) => item.id === 'new-local'), true);
   });
 
   it('round-trips popup, shelf, page, and custom-link feature placement', async () => {

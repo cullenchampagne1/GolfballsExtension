@@ -194,6 +194,40 @@ export function parseTemplateBlob(text) {
 export const EMAIL_TEMPLATE_FILE_KIND = 'golfballs-email-template';
 export const EMAIL_TEMPLATE_FILE_VERSION = 1;
 export const EMAIL_TEMPLATE_FILE_MAX_BYTES = 256 * 1024;
+export const EMAIL_TEMPLATE_SHARE_IMPORT_KIND = 'revstack-email-template-share';
+
+const SHARE_ID = /^[A-Za-z0-9_-]{32}$/;
+
+/** Return validated server ownership metadata for a retained shared template. */
+export function importedEmailShare(template) {
+  const source = template?.shareImport;
+  if (
+    !source || source.kind !== EMAIL_TEMPLATE_SHARE_IMPORT_KIND
+    || !SHARE_ID.test(String(source.shareId || ''))
+  ) return null;
+  return source;
+}
+
+export function isImportedEmailTemplate(template) {
+  return importedEmailShare(template) !== null;
+}
+
+/** Attach immutable provenance after normalization. Server shares never get
+ * to choose local ids, folder ids, or the provenance object itself. */
+export function markImportedEmailTemplate(template, share) {
+  const shareId = String(share?.id || '').trim();
+  if (!SHARE_ID.test(shareId)) throw new Error('Email template share is invalid');
+  return {
+    ...template,
+    shareImport: {
+      kind: EMAIL_TEMPLATE_SHARE_IMPORT_KIND,
+      shareId,
+      url: String(share?.url || ''),
+      ownerName: String(share?.owner_name || '').trim() || 'Unregistered installation',
+      importedAt: new Date().toISOString(),
+    },
+  };
+}
 
 /** Create a portable email-template file. The server link is a convenience;
  * this versioned JSON envelope is the durable, server-independent format. */
@@ -240,4 +274,95 @@ export function importTemplates(templates) {
       });
     } catch (e) { reject(e); }
   });
+}
+
+/** Persist one server share once. Re-opening the same link is idempotent and
+ * never overwrites the retained snapshot behind the user's back. */
+export function importSharedEmailTemplate(template, share) {
+  return new Promise((resolve, reject) => {
+    try {
+      const incoming = markImportedEmailTemplate(template, share);
+      chrome.storage.local.get('templates', (d) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        const existing = Array.isArray(d.templates) ? d.templates : [];
+        const retained = existing.find(
+          (item) => importedEmailShare(item)?.shareId === incoming.shareImport.shareId,
+        );
+        if (retained) {
+          resolve({ added: 0, alreadyImported: true, template: retained });
+          return;
+        }
+        chrome.storage.local.set({ templates: [...existing, incoming] }, () => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve({ added: 1, alreadyImported: false, template: incoming });
+        });
+      });
+    } catch (error) { reject(error); }
+  });
+}
+
+/** Remove every local copy carrying one share membership. This is deliberately
+ * separate from the server call so callers can first release the authenticated
+ * membership and leave local state untouched if that request fails. */
+export function removeImportedEmailTemplate(shareId) {
+  return new Promise((resolve, reject) => {
+    const id = String(shareId || '').trim();
+    if (!SHARE_ID.test(id)) {
+      reject(new Error('Email template share is invalid'));
+      return;
+    }
+    try {
+      chrome.storage.local.get('templates', (d) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        const existing = Array.isArray(d.templates) ? d.templates : [];
+        const next = existing.filter((item) => importedEmailShare(item)?.shareId !== id);
+        if (next.length === existing.length) {
+          resolve(0);
+          return;
+        }
+        chrome.storage.local.set({ templates: next }, () => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(existing.length - next.length);
+        });
+      });
+    } catch (error) { reject(error); }
+  });
+}
+
+/** Release the authenticated import row and its local snapshot as one logical
+ * operation. If local storage rejects the delete, restore the server row so
+ * Settings never silently disagrees with the templates actually on disk. */
+export async function removeRetainedEmailTemplate(templateOrShareId, { release, retain }) {
+  const directId = typeof templateOrShareId === 'string'
+    && SHARE_ID.test(templateOrShareId)
+    ? templateOrShareId
+    : '';
+  const source = directId
+    ? { shareId: directId }
+    : importedEmailShare(templateOrShareId);
+  if (!source) throw new Error('Email template is not an imported share');
+  if (typeof release !== 'function' || typeof retain !== 'function') {
+    throw new Error('Email template import lifecycle is unavailable');
+  }
+
+  const released = await release(source.shareId);
+  try {
+    const removed = await removeImportedEmailTemplate(source.shareId);
+    return { removed, membershipRemoved: released?.removed === true };
+  } catch (error) {
+    if (released?.removed === true) {
+      try {
+        await retain(source.shareId);
+      } catch {
+        throw new Error(`${error?.message || 'Local template removal failed'}; the server import could not be restored`);
+      }
+    }
+    throw error;
+  }
 }

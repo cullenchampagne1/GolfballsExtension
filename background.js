@@ -1556,7 +1556,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     let body = '';
     try { body = JSON.stringify({ template: msg.template }); } catch { /* invalid */ }
     if (!msg.template || typeof msg.template !== 'object' || Array.isArray(msg.template)
-        || body.length > 25 * 1024 * 1024) {
+        || !body) {
       sendResponse({ ok: false, error: 'Invalid email template' });
       return true;
     }
@@ -1641,6 +1641,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list email links' }));
     return true;
   }
+  if (msg.action === 'emailTemplateShareImport') {
+    const shareId = gbEmailTemplateShareId(msg.shareId);
+    if (!shareId) { sendResponse({ ok: false, error: 'Invalid email template share' }); return true; }
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}/imports`, { method: 'POST' })
+      .then((share) => sendResponse({ ok: true, share }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to retain email template' }));
+    return true;
+  }
+  if (msg.action === 'emailTemplateShareImportRemove') {
+    const shareId = gbEmailTemplateShareId(msg.shareId);
+    if (!shareId) { sendResponse({ ok: false, error: 'Invalid email template share' }); return true; }
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}/imports/remove`, { method: 'POST' })
+      .then((result) => sendResponse({ ok: true, removed: result?.removed === true, shareId }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to remove imported email template' }));
+    return true;
+  }
   if (msg.action === 'emailShareRevoke') {
     const shareId = /^[A-Za-z0-9_-]{32}$/.test(String(msg.shareId || '')) ? String(msg.shareId) : '';
     if (!shareId) { sendResponse({ ok: false, error: 'Invalid email link' }); return true; }
@@ -1654,7 +1670,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const items = Array.isArray(msg.items) ? msg.items : null;
     let body = '';
     try { body = JSON.stringify({ name, items }); } catch { /* invalid */ }
-    if (!name || name.length > 120 || !items || items.length < 1 || body.length > 1024 * 1024 * 1024) {
+    if (!name || name.length > 120 || !items || items.length < 1 || !body) {
       sendResponse({ ok: false, error: 'Invalid store' });
       return true;
     }

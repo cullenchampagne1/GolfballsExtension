@@ -335,6 +335,7 @@ export function RichTextEditor({
   initialHtml, onChange, onChipClick, variables = [], singleLine = false,
   size = 'md', minHeight, placeholder = '', onAttachmentResize,
   onSlashQueryChange, onSlashExecute, onSlashNavigate, onSlashCancel,
+  readOnly = false,
   // `bare` = no outer border/radius/background — the editor blends into a
   // parent that already frames it (e.g. the compose modal), instead of
   // drawing a redundant nested box.
@@ -671,7 +672,7 @@ export function RichTextEditor({
       background: bare ? 'transparent' : 'var(--gb-surface-canvas)',
     }}>
       {/* ── Toolbar (full mode only) ── */}
-      {!singleLine && (
+      {!singleLine && !readOnly && (
         <div style={{
           position: 'relative',
           padding: sz.toolbarPad,
@@ -750,18 +751,19 @@ export function RichTextEditor({
         <div
           ref={ref}
           className="gb-rte-content"
-          contentEditable
+          contentEditable={!readOnly}
+          aria-readonly={readOnly || undefined}
           suppressContentEditableWarning
-          onInput={onInput}
-          onPaste={onPaste}
-          onCopy={(e) => onCopyCut(e, false)}
-          onCut={(e) => onCopyCut(e, true)}
-          onKeyDown={onKeyDown}
-          onClick={onClickContent}
-          onMouseDown={onContentMouseDown}
-          onKeyUp={() => { saveSelection(); refreshMarks(); refreshSlashContext(); }}
-          onMouseUp={() => { saveSelection(); refreshMarks(); }}
-          onBlur={saveSelection}
+          onInput={readOnly ? undefined : onInput}
+          onPaste={readOnly ? undefined : onPaste}
+          onCopy={readOnly ? undefined : (e) => onCopyCut(e, false)}
+          onCut={readOnly ? undefined : (e) => onCopyCut(e, true)}
+          onKeyDown={readOnly ? undefined : onKeyDown}
+          onClick={readOnly ? undefined : onClickContent}
+          onMouseDown={readOnly ? undefined : onContentMouseDown}
+          onKeyUp={readOnly ? undefined : () => { saveSelection(); refreshMarks(); refreshSlashContext(); }}
+          onMouseUp={readOnly ? undefined : () => { saveSelection(); refreshMarks(); }}
+          onBlur={readOnly ? undefined : saveSelection}
           style={{
             padding: singleLine ? sz.slPad : sz.pad,
             minHeight: singleLine ? 'auto' : bodyMinH,
@@ -777,7 +779,7 @@ export function RichTextEditor({
       </div>
 
       {/* ── Inline variable inserter for single-line mode ── */}
-      {singleLine && variables.length > 0 && (
+      {singleLine && !readOnly && variables.length > 0 && (
         <SingleLineVarBar variables={variables} onPick={insertVariable} onOpen={saveSelection} />
       )}
     </div>

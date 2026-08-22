@@ -25,7 +25,10 @@ globalThis.chrome = {
 
 const {
   normalizeTemplate, parseTemplateBlob, buildEmailTemplateFile, parseEmailTemplateFile,
-  importTemplates, EMAIL_TEMPLATE_FILE_KIND, EMAIL_TEMPLATE_FILE_VERSION,
+  importTemplates, importSharedEmailTemplate, importedEmailShare,
+  isImportedEmailTemplate, markImportedEmailTemplate, removeImportedEmailTemplate,
+  removeRetainedEmailTemplate,
+  EMAIL_TEMPLATE_FILE_KIND, EMAIL_TEMPLATE_FILE_VERSION,
 } = await import('../../src/lib/templateImport.js');
 
 const minimal = { name: 'Welcome', body: 'Hi {{firstName}}' };
@@ -240,5 +243,83 @@ describe('importTemplates', () => {
     assert.equal(store.templates.length, 3);
     assert.equal(store.templates[0].id, 'tpl_existing');
     assert.equal(store.templates[2].name, 'Second');
+  });
+});
+
+describe('retained shared email templates', () => {
+  const share = {
+    id: 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-',
+    url: 'https://api.example/email-template-shares/T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-',
+    owner_name: 'Template Owner',
+  };
+
+  it('marks a normalized template with validated immutable share provenance', () => {
+    const marked = markImportedEmailTemplate(normalizeTemplate(minimal), share);
+    assert.equal(isImportedEmailTemplate(marked), true);
+    assert.deepEqual(importedEmailShare(marked), marked.shareImport);
+    assert.equal(marked.shareImport.shareId, share.id);
+    assert.equal(marked.shareImport.ownerName, 'Template Owner');
+    assert.throws(
+      () => markImportedEmailTemplate(normalizeTemplate(minimal), { id: 'short' }),
+      /share is invalid/,
+    );
+  });
+
+  it('imports one server share idempotently instead of creating detached copies', async () => {
+    store.templates = [];
+    const first = await importSharedEmailTemplate(normalizeTemplate(minimal), share);
+    const second = await importSharedEmailTemplate(normalizeTemplate({ ...minimal, body: 'changed' }), share);
+
+    assert.deepEqual({ added: first.added, alreadyImported: first.alreadyImported }, { added: 1, alreadyImported: false });
+    assert.deepEqual({ added: second.added, alreadyImported: second.alreadyImported }, { added: 0, alreadyImported: true });
+    assert.equal(store.templates.length, 1);
+    assert.equal(store.templates[0].body, minimal.body, 're-import does not overwrite the retained snapshot');
+  });
+
+  it('deletes every local copy for a released import membership', async () => {
+    const retained = markImportedEmailTemplate(normalizeTemplate(minimal), share);
+    store.templates = [
+      { id: 'local', name: 'Editable local template' },
+      retained,
+      { ...retained, id: 'legacy-duplicate' },
+    ];
+
+    const removed = await removeImportedEmailTemplate(share.id);
+    assert.equal(removed, 2);
+    assert.deepEqual(store.templates.map((item) => item.id), ['local']);
+  });
+
+  it('restores the server membership when local deletion fails', async () => {
+    const retained = markImportedEmailTemplate(normalizeTemplate(minimal), share);
+    store.templates = [retained];
+    const originalSet = chrome.storage.local.set;
+    const calls = [];
+    chrome.storage.local.set = (_obj, callback) => {
+      chrome.runtime.lastError = { message: 'Local storage is full' };
+      callback();
+      chrome.runtime.lastError = null;
+    };
+
+    try {
+      await assert.rejects(
+        removeRetainedEmailTemplate(retained, {
+          release: async (shareId) => {
+            calls.push(['release', shareId]);
+            return { removed: true };
+          },
+          retain: async (shareId) => { calls.push(['retain', shareId]); },
+        }),
+        /Local storage is full/,
+      );
+    } finally {
+      chrome.storage.local.set = originalSet;
+      chrome.runtime.lastError = null;
+    }
+
+    assert.deepEqual(calls, [
+      ['release', share.id],
+      ['retain', share.id],
+    ]);
+    assert.equal(store.templates.length, 1, 'the local snapshot remains when storage rejects the delete');
   });
 });

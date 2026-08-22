@@ -37,6 +37,7 @@ import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { listProductStores, revokeProductStore } from '../lib/customItems.js';
 import { trackerSummaries, setTrackerEnabled } from '../lib/trackers.js';
 import { trackerTableRows } from '../lib/trackerSettings.js';
+import { removeRetainedEmailTemplate } from '../lib/templateImport.js';
 import {
   retainManagedRowsOnFailure,
   settingsJsonFallbackMessage,
@@ -1052,8 +1053,8 @@ function DevSettingRow({ def, value, onChange, settings, managed = false }) {
   );
 }
 
-/* ── Email links: list this installation's temp email-template links and
-      revoke them. Mirrors the settings-share revoke, on the email-share API. */
+/* ── Shared email templates: owners can revoke; recipients can remove their
+      read-only import without affecting the creator's share. */
 function EmailLinksSection() {
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1067,23 +1068,30 @@ function EmailLinksSection() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const revoke = async (id) => {
-    setBusyId(id);
+  const remove = async (link) => {
+    setBusyId(link.id);
     try {
-      await sendBackgroundMessage('emailShareRevoke', { shareId: id });
-      setLinks((prev) => prev.filter((l) => l.id !== id));
-      window.__gbToast?.success?.('Email link revoked');
-    } catch {
-      window.__gbToast?.error?.('Unable to revoke email link');
+      if (link.relationship === 'imported') {
+        await removeRetainedEmailTemplate(
+          link.id,
+          {
+            release: (shareId) => sendBackgroundMessage(
+              'emailTemplateShareImportRemove', { shareId },
+            ),
+            retain: (shareId) => sendBackgroundMessage(
+              'emailTemplateShareImport', { shareId },
+            ),
+          },
+        );
+        window.__gbToast?.success?.('Imported email template removed');
+      } else {
+        await sendBackgroundMessage('emailShareRevoke', { shareId: link.id });
+        window.__gbToast?.success?.('Email template share revoked');
+      }
+      setLinks((prev) => prev.filter((item) => item.id !== link.id));
+    } catch (error) {
+      window.__gbToast?.error?.(error?.message || 'Unable to remove email template');
     } finally { setBusyId(null); }
-  };
-
-  const expiryLabel = (iso) => {
-    const ms = new Date(iso).getTime() - Date.now();
-    if (!Number.isFinite(ms)) return '';
-    if (ms <= 0) return 'expired';
-    const h = Math.floor(ms / 3600000);
-    return h >= 1 ? `expires in ${h}h` : `expires in ${Math.max(1, Math.round(ms / 60000))}m`;
   };
 
   return (
@@ -1097,17 +1105,23 @@ function EmailLinksSection() {
           transition={T.base}
           style={{ overflow: 'hidden' }}
         >
-          <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Email Links</SectionLabel>
+          <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Shared Email Templates</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {links.map((link) => (
               <Card key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.name || 'Email link'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.name || 'Shared email template'}</div>
                   <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-                    {expiryLabel(link.expires_at)} · opened {link.access_count || 0}×
+                    {link.relationship === 'imported'
+                      ? `Imported from ${link.owner_name || 'another user'} · read-only`
+                      : `Owned by you · active until revoked · opened ${link.access_count || 0}×`}
                   </div>
                 </div>
-                <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(link.id)} disabled={busyId === link.id} title="Revoke this email link" />
+                <IconBtn
+                  size="md" icon={<I.trash />} danger
+                  onClick={() => remove(link)} disabled={busyId === link.id}
+                  title={link.relationship === 'imported' ? 'Remove imported template' : 'Revoke this email template share'}
+                />
               </Card>
             ))}
           </div>
@@ -1497,7 +1511,7 @@ function InstallationIdentityNotice() {
             <Callout tone="warning" icon={<I.user />} title="Tell RevStack who uses this extension">
               <div style={{ marginBottom: 9 }}>
                 Your existing API key stays in place. This name labels API access,
-                settings links, and email links created from this browser.
+                settings shares, and email-template shares created from this browser.
               </div>
               <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
                 <Input

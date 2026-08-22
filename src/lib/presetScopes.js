@@ -2,6 +2,12 @@ import {
   REMOTE_POLICY_KEY,
   enforceManagedStorageWrites,
 } from './managedSettingsPolicy.js';
+import { isImportedEmailTemplate } from './templateImport.js';
+
+const localTemplateOfType = (type) => (template) => (
+  !isImportedEmailTemplate(template)
+  && (template?.type || 'order') === type
+);
 
 /* ───────────────────────────────────────────────────────────────
    presetScopes.js — what a shared settings template can carry.
@@ -61,22 +67,22 @@ export const PRESET_SCOPES = [
   {
     id: 'tpl-order', category: 'Email Templates', label: 'Order Templates', desc: 'Email templates for order pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
-    filter: { templates: (t) => (t.type || 'order') === 'order' },
+    filter: { templates: localTemplateOfType('order') },
   },
   {
     id: 'tpl-case', category: 'Email Templates', label: 'Case Templates', desc: 'Email templates for case pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
-    filter: { templates: (t) => t.type === 'case' },
+    filter: { templates: localTemplateOfType('case') },
   },
   {
     id: 'tpl-account', category: 'Email Templates', label: 'Account Templates', desc: 'Email templates for account pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
-    filter: { templates: (t) => t.type === 'account' },
+    filter: { templates: localTemplateOfType('account') },
   },
   {
     id: 'tpl-contact', category: 'Email Templates', label: 'Contact Templates', desc: 'Email templates for contact pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
-    filter: { templates: (t) => t.type === 'contact' },
+    filter: { templates: localTemplateOfType('contact') },
   },
   // Note templates, split by `subType`.
   {
@@ -238,15 +244,21 @@ export async function applyScopes(scopes) {
     // queued write for that key so a later scope cannot discard it.
     const current = await readKeys(def.keys);
     for (const k of def.keys) {
-      const inc = incoming[k];
+      const inc = k === 'templates' && Array.isArray(incoming[k])
+        ? incoming[k].filter((item) => !isImportedEmailTemplate(item))
+        : incoming[k];
       if (!Array.isArray(inc)) continue;
       const have = Array.isArray(writes[k])
         ? writes[k]
         : (Array.isArray(current[k]) ? current[k] : []);
       const byId = new Map(have.map((it) => [it?.id, it]));
+      const protectedIds = k === 'templates'
+        ? new Set(have.filter(isImportedEmailTemplate).map((item) => item?.id))
+        : new Set();
       let added = 0; let replaced = 0;
       for (const it of inc) {
         if (!it || !it.id) { byId.set(`__noid_${added}`, it); added++; continue; }
+        if (protectedIds.has(it.id)) continue;
         if (byId.has(it.id)) replaced++; else added++;
         byId.set(it.id, it);
       }

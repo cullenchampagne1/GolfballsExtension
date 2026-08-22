@@ -25,6 +25,12 @@ import {
   readEmailTemplateCapabilities,
   resolveEmailTemplateCapabilities,
 } from '../lib/emailTemplateCapabilities.js';
+import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
+import {
+  importedEmailShare,
+  isImportedEmailTemplate,
+  removeRetainedEmailTemplate,
+} from '../lib/templateImport.js';
 
 // ── State ──────────────────────────────────────────────────────
 let templates     = [];
@@ -98,13 +104,42 @@ function loadStorage() {
   ], res));
 }
 async function saveTemplates() {
-  return new Promise((res) => chrome.storage.local.set({ templates }, res));
+  return new Promise((resolve, reject) => chrome.storage.local.set({ templates }, () => {
+    if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+    else resolve();
+  }));
 }
 async function saveNoteTemplates() {
   return new Promise((res) => chrome.storage.local.set({ noteTemplates }, res));
 }
 async function saveCustomActions() {
   return new Promise((res) => chrome.storage.local.set({ gbCustomActions: customActions }, res));
+}
+
+async function removeTemplateRecord(tpl) {
+  const source = importedEmailShare(tpl);
+  if (source) {
+    await removeRetainedEmailTemplate(tpl, {
+      release: (shareId) => sendBackgroundMessage(
+        'emailTemplateShareImportRemove', { shareId },
+      ),
+      retain: (shareId) => sendBackgroundMessage(
+        'emailTemplateShareImport', { shareId },
+      ),
+    });
+    templates = templates.filter(
+      (item) => importedEmailShare(item)?.shareId !== source.shareId,
+    );
+    return;
+  }
+  const previous = templates;
+  templates = templates.filter((item) => item.id !== tpl.id);
+  try {
+    await saveTemplates();
+  } catch (error) {
+    templates = previous;
+    throw error;
+  }
 }
 
 // ── Templates: open / new / delete ─────────────────────────────
@@ -162,9 +197,19 @@ async function openTemplate(id) {
 
 async function deleteTemplate() {
   if (!currentId) return;
-  if (!(await gbConfirm('Delete this email template?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
-  templates = templates.filter((t) => t.id !== currentId);
-  await saveTemplates();
+  const tpl = templates.find((item) => item.id === currentId);
+  if (!tpl) return;
+  const imported = isImportedEmailTemplate(tpl);
+  if (!(await gbConfirm(
+    imported ? 'Remove this imported email template?' : 'Delete this email template?',
+    { tone: 'danger', confirmLabel: imported ? 'Remove' : 'Delete' },
+  ))) return;
+  try {
+    await removeTemplateRecord(tpl);
+  } catch (error) {
+    toast(error?.message || 'Unable to remove email template.', true);
+    return;
+  }
   setCurrentId(null);
   hide('ed-form');
   show('ed-empty');
@@ -178,9 +223,17 @@ async function deleteTemplate() {
 async function deleteTemplateById(id) {
   const tpl = templates.find((t) => t.id === id);
   if (!tpl) return;
-  if (!(await gbConfirm(`Delete "${tpl.name || 'Untitled template'}"?`, { tone: 'danger', confirmLabel: 'Delete' }))) return;
-  templates = templates.filter((t) => t.id !== id);
-  await saveTemplates();
+  const imported = isImportedEmailTemplate(tpl);
+  if (!(await gbConfirm(
+    `${imported ? 'Remove imported' : 'Delete'} "${tpl.name || 'Untitled template'}"?`,
+    { tone: 'danger', confirmLabel: imported ? 'Remove' : 'Delete' },
+  ))) return;
+  try {
+    await removeTemplateRecord(tpl);
+  } catch (error) {
+    toast(error?.message || 'Unable to remove email template.', true);
+    return;
+  }
   if (currentId === id) {
     setCurrentId(null);
     hide('ed-form');
@@ -268,6 +321,10 @@ async function applyTemplatePatch(tpl) {
   }
   setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
+  if (isImportedEmailTemplate(tpl) || (idx >= 0 && isImportedEmailTemplate(templates[idx]))) {
+    toast('Imported email templates are read-only.', true);
+    return;
+  }
   if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);
   await saveTemplates();
   const titleEl = $('ed-title');
@@ -438,7 +495,20 @@ window.__gbCurrentAction   = () => currentActionDraft
 
 // Storage onChanged — keep local arrays in sync if another tab/popup edits.
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.templates)     templates     = changes.templates.newValue     || [];
+  if (changes.templates) {
+    templates = changes.templates.newValue || [];
+    if (currentId && !templates.some((template) => template.id === currentId)) {
+      setCurrentId(null);
+      hide('ed-form');
+      _settingsPreviousView = _settingsPreviousView === 'ed-form'
+        ? 'ed-empty'
+        : _settingsPreviousView;
+      if ($('ed-settings')?.classList.contains('hidden')) {
+        show('ed-empty');
+        animateView('ed-empty');
+      }
+    }
+  }
   if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
   if (changes.gbCustomActions) customActions = changes.gbCustomActions.newValue || [];
   if (changes.orderTabId)    orderTabId    = changes.orderTabId.newValue    || null;

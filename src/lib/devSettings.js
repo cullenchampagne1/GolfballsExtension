@@ -239,7 +239,7 @@ export const DEV_SETTINGS = [
   {
     key:     'emailTemplates.allowLinkImport',
     label:   'Email Template Link Import',
-    desc:    'Show the template import control and permit loading temporary shared-template links.',
+    desc:    'Show the template import control and permit loading persistent, read-only shared-template links.',
     type:    'bool',
     default: true,
   },

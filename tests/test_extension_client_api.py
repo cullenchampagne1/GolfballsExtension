@@ -5,11 +5,14 @@ import io
 import json
 import unittest
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from fastapi import HTTPException
+from sqlalchemy import Boolean, Column, DateTime, Integer, JSON, String, create_engine
+from sqlalchemy.orm import Session, declarative_base
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -230,6 +233,169 @@ class ExtensionClientAccessTests(unittest.TestCase):
         from_values = actions["Initialize_DefaultFrom"]["inputs"]["variables"]
         self.assertEqual(inbox_values[0]["value"], "cullen@loyaltylogo.com")
         self.assertEqual(from_values[0]["value"], "cullen@loyaltylogo.com")
+
+
+class EmailTemplateShareLifecycleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        Base = declarative_base()
+
+        class AccessRow(Base):
+            __tablename__ = "extension_installation_access"
+            subject_id = Column(String(36), primary_key=True)
+            extension_enabled = Column(Boolean, nullable=True)
+            assistant_enabled = Column(Boolean, nullable=True)
+
+        class IdentityRow(Base):
+            __tablename__ = "extension_installation_identities"
+            credential_id = Column(String(36), primary_key=True)
+            display_name = Column(String(120), nullable=False)
+            local_part = Column(String(64), nullable=True)
+            source = Column(String(32), nullable=False)
+
+        class ShareRow(Base):
+            __tablename__ = "extension_email_template_shares"
+            id = Column(String(64), primary_key=True)
+            owner_credential_id = Column(String(36), nullable=False, index=True)
+            name = Column(String(120), nullable=False)
+            template = Column(JSON, nullable=False)
+            created_at = Column(DateTime, nullable=False)
+            expires_at = Column(DateTime, nullable=False)
+            access_count = Column(Integer, nullable=False, default=0)
+            revoked_at = Column(DateTime, nullable=True)
+
+        class ImportRow(Base):
+            __tablename__ = "extension_email_template_share_imports"
+            share_id = Column(String(64), primary_key=True)
+            credential_id = Column(String(36), primary_key=True, index=True)
+            imported_at = Column(DateTime, nullable=False)
+
+        cls.Base = Base
+        cls.models = SimpleNamespace(
+            ExtensionInstallationAccess=AccessRow,
+            ExtensionInstallationIdentity=IdentityRow,
+            ExtensionEmailTemplateShare=ShareRow,
+            ExtensionEmailTemplateShareImport=ImportRow,
+        )
+
+    def setUp(self):
+        self.engine = create_engine("sqlite+pysqlite:///:memory:")
+        self.Base.metadata.create_all(self.engine)
+        self.auth = SimpleNamespace(engine=self.engine)
+        self.api = client_api_module.ExtensionClientApi(
+            auth_manager=self.auth,
+            models=self.models,
+            settings_policy_store=FakeSettingsPolicy(),
+            settings_policy_error=RuntimeError,
+            client_scope="client:extension",
+            project_dir=ROOT,
+            public_origin="https://api.cullenchampagne.com",
+        )
+        self.owner = self._principal("owner-install")
+        self.recipient = self._principal("recipient-install")
+        with Session(self.engine) as session:
+            session.add(self.models.ExtensionInstallationIdentity(
+                credential_id=self.owner.credential_id,
+                display_name="Template Owner", source="settings_edit",
+            ))
+            session.commit()
+
+    @staticmethod
+    def _principal(credential_id):
+        return SimpleNamespace(
+            auth_type="api_key", credential_id=credential_id,
+            scopes=["client:extension"],
+        )
+
+    @staticmethod
+    def _request(principal):
+        return SimpleNamespace(state=SimpleNamespace(principal=principal), query_params={})
+
+    def _seed_share(self, *, expired=True):
+        share_id = "T" * 32
+        now = datetime.utcnow()
+        with Session(self.engine) as session:
+            session.add(self.models.ExtensionEmailTemplateShare(
+                id=share_id,
+                owner_credential_id=self.owner.credential_id,
+                name="Permanent follow-up",
+                template={
+                    "name": "Permanent follow-up", "type": "order",
+                    "subject": "Checking in", "body": "<p>Hello</p>",
+                    "variations": [{"label": "Short", "body": "Hi"}],
+                },
+                created_at=now,
+                expires_at=now - timedelta(days=30) if expired else datetime.max,
+                access_count=0,
+            ))
+            session.commit()
+        return share_id
+
+    @staticmethod
+    def _payload(response):
+        return json.loads(response.body)
+
+    def test_expired_legacy_row_is_permanent_and_payload_has_no_ttl(self):
+        share_id = self._seed_share(expired=True)
+        payload = self._payload(self.api.get_email_share(
+            share_id, self._request(self.recipient),
+        ))
+
+        self.assertEqual(payload["name"], "Permanent follow-up")
+        self.assertEqual(payload["relationship"], "shared")
+        self.assertNotIn("expires_at", payload)
+        self.assertNotIn("ttl_hours", payload)
+
+    def test_recipient_import_is_listed_read_only_and_removable_without_revocation(self):
+        share_id = self._seed_share()
+        retained = self._payload(self.api.retain_email_import(
+            share_id, self._request(self.recipient),
+        ))
+        self.assertEqual(retained["relationship"], "imported")
+
+        listed = self._payload(self.api.list_email_shares(
+            self._request(self.recipient),
+        ))["shares"]
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(listed[0]["relationship"], "imported")
+        self.assertEqual(listed[0]["owner_name"], "Template Owner")
+
+        with self.assertRaises(HTTPException) as raised:
+            self.api.revoke_email_share(share_id, self._request(self.recipient))
+        self.assertEqual(raised.exception.status_code, 404)
+
+        removed = self._payload(self.api.remove_email_import(
+            share_id, self._request(self.recipient),
+        ))
+        self.assertTrue(removed["removed"])
+        self.assertEqual(
+            self._payload(self.api.list_email_shares(self._request(self.recipient)))["shares"],
+            [],
+        )
+        still_available = self._payload(self.api.get_email_share(
+            share_id, self._request(self.recipient),
+        ))
+        self.assertEqual(still_available["relationship"], "shared")
+
+    def test_creator_keeps_ownership_and_alone_can_revoke(self):
+        share_id = self._seed_share()
+        owned = self._payload(self.api.get_email_share(
+            share_id, self._request(self.owner),
+        ))
+        self.assertEqual(owned["relationship"], "owned")
+        revoked = self._payload(self.api.revoke_email_share(
+            share_id, self._request(self.owner),
+        ))
+        self.assertTrue(revoked["revoked"])
+
+    def test_share_layer_has_no_payload_count_or_storage_quotas(self):
+        source = (ROOT / ".revstack" / "logic" / "client_api.py").read_text()
+        for obsolete in (
+            "MAX_SHARE_BYTES", "MAX_INSTALLATION_BYTES", "MAX_ACTIVE_SHARES",
+            "MAX_ACTIVE_EMAIL_SHARES", "MAX_ACTIVE_PRODUCT_STORES",
+            "MAX_PRODUCT_STORE_ITEMS", "per-share limit", "storage quota",
+        ):
+            self.assertNotIn(obsolete, source)
 
 
 if __name__ == "__main__":

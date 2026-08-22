@@ -28,6 +28,9 @@ const settingsShare = {
 };
 const templateShare = {
   id: TEMPLATE_ID,
+  url: TEMPLATE_URL,
+  relationship: 'shared',
+  owner_name: 'Template Owner',
   template: { name: 'Re-order nudge', subject: 'Time to restock?', body: '<p>Hi {{first}}</p>' },
 };
 
@@ -41,6 +44,12 @@ before(async () => {
     if (url === SETTINGS_URL && method === 'GET') return jsonResponse(settingsShare);
     if (url === `${SETTINGS_URL}/imports` && method === 'POST') return jsonResponse({ ...settingsShare, imports: 3 });
     if (url === TEMPLATE_URL && method === 'GET') return jsonResponse(templateShare);
+    if (url === `${TEMPLATE_URL}/imports` && method === 'POST') {
+      return jsonResponse({ ...templateShare, relationship: 'imported' });
+    }
+    if (url === `${TEMPLATE_URL}/imports/remove` && method === 'POST') {
+      return jsonResponse({ removed: true, id: TEMPLATE_ID });
+    }
     if (url === `${CLIENT_BASE}/email-template-shares` && method === 'POST') {
       return jsonResponse({ id: TEMPLATE_ID, url: TEMPLATE_URL }, 201);
     }
@@ -150,6 +159,26 @@ describe('template/settings share import', () => {
     const invalid = await sendMessage({ action: 'emailTemplateShareCreate', template: ['not', 'an', 'object'] });
     assert.deepEqual(invalid, { ok: false, error: 'Invalid email template' });
     assert.equal(requests.length, marker);
+  });
+
+  it('retains and removes the authenticated user import without revoking the owner share', async () => {
+    const retained = await sendMessage({
+      action: 'emailTemplateShareImport',
+      shareId: TEMPLATE_ID,
+    });
+    assert.equal(retained.ok, true);
+    assert.equal(retained.share.relationship, 'imported');
+    assert.equal(requests.at(-1).url, `${TEMPLATE_URL}/imports`);
+    assert.equal(requests.at(-1).method, 'POST');
+
+    const removed = await sendMessage({
+      action: 'emailTemplateShareImportRemove',
+      shareId: TEMPLATE_ID,
+    });
+    assert.deepEqual(removed, { ok: true, removed: true, shareId: TEMPLATE_ID });
+    assert.equal(requests.at(-1).url, `${TEMPLATE_URL}/imports/remove`);
+    assert.equal(requests.at(-1).method, 'POST');
+    assert.ok(!requests.at(-1).url.endsWith('/revoke'));
   });
 
   it('blocks sharing a local template when managed local usage is off', async () => {

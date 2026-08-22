@@ -9,7 +9,13 @@ import {
   useSettingNotification,
 } from '../ui/index.js';
 import {
-  buildEmailTemplateFile, importTemplates, normalizeTemplate, parseEmailTemplateFile,
+  buildEmailTemplateFile,
+  importSharedEmailTemplate,
+  importTemplates,
+  isImportedEmailTemplate,
+  normalizeTemplate,
+  parseEmailTemplateFile,
+  removeImportedEmailTemplate,
 } from '../lib/templateImport.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { useDevSettings } from '../lib/devSettings.js';
@@ -228,6 +234,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
   const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type] || (isNote ? TYPE_META_NOTE.note : TYPE_META_TPL.order);
   const TypeIcon = meta.icon;
   const disabled = tpl.enabled === false;
+  const imported = !isNote && isImportedEmailTemplate(tpl);
   const trackingIssue = !isNote && !disabled
     ? emailTemplateTrackingIssue(tracker)
     : null;
@@ -321,6 +328,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
           );
         })()}
       </div>
+      {imported && <Tag tone="brand" size="xs">IMPORTED</Tag>}
       {disabled && <Tag tone="neutral" size="xs">OFF</Tag>}
       {trackingIssue && <Tag tone={trackingIssue.tone} size="xs">{trackingIssue.badge}</Tag>}
       <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -340,7 +348,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                 </MenuItem>
               ))}
               <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '4px 6px 2px' }} />
-              {!isNote && (
+              {!isNote && !imported && (
                 <MenuItem onClick={() => {
                   setMenuOpen(false);
                   window.dispatchEvent(new CustomEvent('gb:share-email-template', { detail: tpl }));
@@ -559,8 +567,8 @@ function FolderGroup({ folder, tpls, isNote, trackerById, summaryById, currentId
 }
 
 /* ── Root ───────────────────────────────────────────────────────── */
-/* Import one temporary email-template link, preview it, then normalize it
-   through the existing importer so it receives a fresh local id. */
+/* Import one persistent email-template link, preview it, then retain its
+   server identity so the local copy remains read-only and removable. */
 function ImportTemplatesModal({ onClose, onDone }) {
   const fileInputRef = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -601,8 +609,28 @@ function ImportTemplatesModal({ onClose, onDone }) {
   const doImport = async () => {
     if (!share?.template || busy) return;
     setBusy(true);
-    try { await importTemplates([share.template]); finishClose(() => onDone(1)); }
-    catch (e) { finishClose(() => onDone(0, e.message)); }
+    try {
+      if (share.transport === 'json') {
+        await importTemplates([share.template]);
+        finishClose(() => onDone(1));
+        return;
+      }
+      if (share.relationship === 'owned') {
+        throw new Error('This is your share; open the original template to edit it');
+      }
+      const imported = await importSharedEmailTemplate(share.template, share);
+      try {
+        const retained = await sendBackgroundMessage('emailTemplateShareImport', { shareId: share.id });
+        if (retained.share?.relationship === 'owned') {
+          if (imported.added) await removeImportedEmailTemplate(share.id);
+          throw new Error('This is your share; open the original template to edit it');
+        }
+      } catch (error) {
+        if (imported.added) await removeImportedEmailTemplate(share.id);
+        throw error;
+      }
+      finishClose(() => onDone(imported.added, null, imported.alreadyImported));
+    } catch (e) { finishClose(() => onDone(0, e.message)); }
   };
   return createPortal(
     <motion.div
@@ -619,7 +647,7 @@ function ImportTemplatesModal({ onClose, onDone }) {
           <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImportIcon size={14} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import shared email template</div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Load a 24-hour link or JSON file to review it before importing.</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Load a persistent share link or JSON file to review it before importing.</div>
           </div>
           <IconBtn size="sm" icon={<I.close />} onClick={() => finishClose()} />
         </div>
@@ -630,7 +658,7 @@ function ImportTemplatesModal({ onClose, onDone }) {
             value={url}
             onChange={setUrl}
             onKeyDown={(e) => e.key === 'Enter' && load()}
-            placeholder="Paste temporary template link…"
+            placeholder="Paste shared template link…"
             leading={<I.link />}
             mono
             style={{ flex: 1 }}
@@ -692,7 +720,7 @@ function ShareEmailTemplateModal({ template, onClose }) {
   }, [template]);
   const copy = async () => {
     await navigator.clipboard.writeText(share.url);
-    window.__gbToast?.success('Temporary template link copied');
+    window.__gbToast?.success('Template share link copied');
   };
   const download = () => {
     const blob = new Blob([JSON.stringify(buildEmailTemplateFile(template), null, 2)], { type: 'application/json' });
@@ -707,11 +735,11 @@ function ShareEmailTemplateModal({ template, onClose }) {
       <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: visible ? 1 : 0, scale: visible ? 1 : 0.96, y: visible ? 0 : 8 }} transition={SOFT} style={{ width: 520, maxWidth: '92vw', padding: 16, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', fontFamily: 'var(--gb-font-sans)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
           <span style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.link size={15} /></span>
-          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 750, color: 'var(--gb-text-primary)' }}>Share “{template.name}”</div><div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>Anyone with the Golfballs extension can preview and import this template for 24 hours. The link expires automatically.</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 750, color: 'var(--gb-text-primary)' }}>Share “{template.name}”</div><div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>Anyone with the Golfballs extension can retain a read-only copy. You control the share, and the link remains active until you revoke it.</div></div>
           <IconBtn size="sm" icon={<I.close />} onClick={finishClose} title="Close" />
         </div>
         <div style={{ marginTop: 14 }}>
-          {share ? <><div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: .7 }}>Temporary link · expires {new Date(share.expires_at).toLocaleString()}</div><Input value={share.url} readOnly mono leading={<I.link />} /></> : error ? <Callout tone="warning">The sharing server is unavailable or this installation was revoked. Download the JSON file to share this template without the server.</Callout> : <div style={{ padding: 16, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 11 }}>Generating secure link…</div>}
+          {share ? <><div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: .7 }}>Active until you revoke it</div><Input value={share.url} readOnly mono leading={<I.link />} /></> : error ? <Callout tone="warning">The sharing server is unavailable or this installation was revoked. Download the JSON file to share this template without the server.</Callout> : <div style={{ padding: 16, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 11 }}>Generating secure link…</div>}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 7, marginTop: 14 }}>
           <Btn variant={error ? 'primary' : 'ghost'} size="sm" icon={<I.download />} onClick={download}>Download JSON</Btn>
@@ -980,9 +1008,10 @@ function TemplateSidebar() {
       {importOpen && capabilities.allowLinkImport && allowLocalTemplates && (
         <ImportTemplatesModal
           onClose={() => setImportOpen(false)}
-          onDone={(n, err) => {
+          onDone={(n, err, alreadyImported = false) => {
             setImportOpen(false);
             if (err) notify.notify('Import failed — ' + err, { tone: 'warning' });
+            else if (alreadyImported) notify.notify('This shared template is already imported.');
             else notify.notify(`Imported ${n} template${n === 1 ? '' : 's'}.`);
           }}
         />
@@ -1143,7 +1172,7 @@ function TemplateSidebar() {
         </LayoutGroup>
       </div>
 
-      {/* Pinned footer — signature + temporary-link import */}
+      {/* Pinned footer — signature + persistent-share import */}
       <div style={{
         padding: 10, borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0,
         background: 'var(--gb-surface-canvas)', display: 'flex', gap: 6,
@@ -1156,7 +1185,7 @@ function TemplateSidebar() {
           slotKey="email-template-link-import"
         >
           <Btn variant="ghost" size="sm" icon={<ImportIcon />} onClick={() => setImportOpen(true)}
-            title="Import a temporary template link" style={{ flexShrink: 0, padding: '0 9px' }} />
+            title="Import a shared template link" style={{ flexShrink: 0, padding: '0 9px' }} />
         </CapabilitySlot>
       </div>
     </div>

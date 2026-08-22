@@ -5455,7 +5455,7 @@ export const HELP_CONTENT = {
                 "bool",
                 "On",
                 "",
-                "Show the template import control and permit loading temporary shared-template links."
+                "Show the template import control and permit loading persistent, read-only shared-template links."
               ],
               [
                 "Allow Local Template Usage",
@@ -10009,7 +10009,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowLinkImport"
       ],
-      "description": "Show the template import control and permit loading temporary shared-template links.",
+      "description": "Show the template import control and permit loading persistent, read-only shared-template links.",
       "article": "developer-settings"
     },
     {

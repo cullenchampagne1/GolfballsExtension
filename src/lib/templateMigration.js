@@ -1,3 +1,5 @@
+import { isImportedEmailTemplate } from './templateImport.js';
+
 /* ───────────────────────────────────────────────────────────────
    templateMigration.js — one-version backwards-compat pass that lifts
    legacy template variables onto the page engine.
@@ -224,6 +226,9 @@ export function migrateTemplates(templates, opts = {}) {
   let changed = false;
 
   for (const t of list) {
+    // A recipient never rewrites a creator-owned snapshot. Shared templates
+    // are normalized before retention and remain byte-for-byte stable locally.
+    if (isImportedEmailTemplate(t)) { migrated.push(t); plans.push(null); continue; }
     // Already migrated AND no deprecated vars lingering → pass through.
     if (t && t.varsMigratedVersion === MIGRATION_VERSION) { migrated.push(t); plans.push(null); continue; }
     const plan = planTemplateMigration(t);
