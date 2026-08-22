@@ -219,6 +219,57 @@ export const DEV_SETTINGS = [
     default: false,
   },
 
+  /* ── Email-template capability policy ─────────────────────────
+     These settings establish the managed control plane before the
+     corresponding runtime gates are wired into template authoring,
+     importing, and bulk delivery. They intentionally remain shared
+     policy (not installation-local), so RevStack is authoritative. */
+  {
+    key:     'emailTemplates.allowCreation',
+    label:   'Email Template Creation',
+    desc:    'Managed policy gate for creating email templates. Runtime enforcement is implemented by the email-template feature.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'emailTemplates.allowParentAccount',
+    label:   'Email Template Parent Account',
+    desc:    'Managed policy gate for parent-account support in email templates. Runtime enforcement is implemented by the email-template feature.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'emailTemplates.allowLinkImport',
+    label:   'Email Template Link Import',
+    desc:    'Managed policy gate for importing email templates from shared links. Runtime enforcement is implemented by the email-template feature.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'emailTemplates.allowLocalTemplateUsage',
+    label:   'Allow Local Template Usage',
+    desc:    'Managed policy gate for using email templates stored locally in the extension. Runtime enforcement is implemented by the email-template feature.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'emailTemplates.maxDailyBulkSend',
+    label:   'Max Daily Bulk Send',
+    desc:    'Maximum number of bulk-send deliveries allowed per day. 0 means unlimited. Runtime enforcement is implemented by the bulk-send feature.',
+    type:    'number',
+    default: 0,
+    min:     0,
+    step:    1,
+    unit:    'emails/day',
+  },
+  {
+    key:     'emailTemplates.allowBulkSending',
+    label:   'Allow Bulk Sending',
+    desc:    'Managed policy gate for bulk email sending. Runtime enforcement is implemented by the bulk-send feature.',
+    type:    'bool',
+    default: true,
+  },
+
   /* ── Outbound email account host ──────────────────────────────
      The local part (before @) used when constructing the `from`
      address for the PA flow. The configured sender accounts in

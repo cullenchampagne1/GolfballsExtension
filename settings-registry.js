@@ -218,6 +218,43 @@
       "label": "Image Viewer: ball & chip only",
       "managedDefault": true
     },
+    "emailTemplates.allowCreation": {
+      "type": "bool",
+      "default": true,
+      "label": "Email Template Creation",
+      "managedDefault": true
+    },
+    "emailTemplates.allowParentAccount": {
+      "type": "bool",
+      "default": false,
+      "label": "Email Template Parent Account",
+      "managedDefault": true
+    },
+    "emailTemplates.allowLinkImport": {
+      "type": "bool",
+      "default": true,
+      "label": "Email Template Link Import",
+      "managedDefault": true
+    },
+    "emailTemplates.allowLocalTemplateUsage": {
+      "type": "bool",
+      "default": true,
+      "label": "Allow Local Template Usage",
+      "managedDefault": true
+    },
+    "emailTemplates.maxDailyBulkSend": {
+      "type": "number",
+      "default": 0,
+      "label": "Max Daily Bulk Send",
+      "managedDefault": true,
+      "min": 0
+    },
+    "emailTemplates.allowBulkSending": {
+      "type": "bool",
+      "default": true,
+      "label": "Allow Bulk Sending",
+      "managedDefault": true
+    },
     "email.localPart": {
       "type": "string",
       "default": "",

@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.4.7",
-  "generatedAt": "2026-08-20",
+  "generatedAt": "2026-08-22",
   "tree": [
     {
       "title": "Getting Started",
@@ -5424,6 +5424,74 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
+            "text": "emailTemplates"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Email Template Creation",
+                "bool",
+                "On",
+                "",
+                "Managed policy gate for creating email templates. Runtime enforcement is implemented by the email-template feature."
+              ],
+              [
+                "Email Template Parent Account",
+                "bool",
+                "Off",
+                "",
+                "Managed policy gate for parent-account support in email templates. Runtime enforcement is implemented by the email-template feature."
+              ],
+              [
+                "Email Template Link Import",
+                "bool",
+                "On",
+                "",
+                "Managed policy gate for importing email templates from shared links. Runtime enforcement is implemented by the email-template feature."
+              ],
+              [
+                "Allow Local Template Usage",
+                "bool",
+                "On",
+                "",
+                "Managed policy gate for using email templates stored locally in the extension. Runtime enforcement is implemented by the email-template feature."
+              ],
+              [
+                "Max Daily Bulk Send",
+                "number",
+                "0emails/day",
+                "",
+                "Maximum number of bulk-send deliveries allowed per day. 0 means unlimited. Runtime enforcement is implemented by the bulk-send feature."
+              ],
+              [
+                "Allow Bulk Sending",
+                "bool",
+                "On",
+                "",
+                "Managed policy gate for bulk email sending. Runtime enforcement is implemented by the bulk-send feature."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "emailTemplates.allowCreation",
+                "emailTemplates.allowParentAccount",
+                "emailTemplates.allowLinkImport",
+                "emailTemplates.allowLocalTemplateUsage",
+                "emailTemplates.maxDailyBulkSend",
+                "emailTemplates.allowBulkSending"
+              ]
+            }
+          },
+          {
+            "type": "heading",
             "text": "Email"
           },
           {
@@ -9912,6 +9980,66 @@ export const HELP_CONTENT = {
         "imageViewer.ballChipOnly"
       ],
       "description": "Hide the full model dropdown in the Image Viewer 3D strip and replace it with a small ball/chip toggle next to the color swatch. For reps who only need a ball or a poker-chip render. Export photos (copy/download) still work for both models.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.allowCreation",
+      "category": "Settings",
+      "title": "Email Template Creation",
+      "keywords": [
+        "emailTemplates.allowCreation"
+      ],
+      "description": "Managed policy gate for creating email templates. Runtime enforcement is implemented by the email-template feature.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.allowParentAccount",
+      "category": "Settings",
+      "title": "Email Template Parent Account",
+      "keywords": [
+        "emailTemplates.allowParentAccount"
+      ],
+      "description": "Managed policy gate for parent-account support in email templates. Runtime enforcement is implemented by the email-template feature.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.allowLinkImport",
+      "category": "Settings",
+      "title": "Email Template Link Import",
+      "keywords": [
+        "emailTemplates.allowLinkImport"
+      ],
+      "description": "Managed policy gate for importing email templates from shared links. Runtime enforcement is implemented by the email-template feature.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.allowLocalTemplateUsage",
+      "category": "Settings",
+      "title": "Allow Local Template Usage",
+      "keywords": [
+        "emailTemplates.allowLocalTemplateUsage"
+      ],
+      "description": "Managed policy gate for using email templates stored locally in the extension. Runtime enforcement is implemented by the email-template feature.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.maxDailyBulkSend",
+      "category": "Settings",
+      "title": "Max Daily Bulk Send",
+      "keywords": [
+        "emailTemplates.maxDailyBulkSend"
+      ],
+      "description": "Maximum number of bulk-send deliveries allowed per day. 0 means unlimited. Runtime enforcement is implemented by the bulk-send feature.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.allowBulkSending",
+      "category": "Settings",
+      "title": "Allow Bulk Sending",
+      "keywords": [
+        "emailTemplates.allowBulkSending"
+      ],
+      "description": "Managed policy gate for bulk email sending. Runtime enforcement is implemented by the bulk-send feature.",
       "article": "developer-settings"
     },
     {

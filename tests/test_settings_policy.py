@@ -193,6 +193,40 @@ class SettingsPolicyTests(unittest.TestCase):
         })
         self.assertEqual(self.legacy.read_count, 1)
 
+    def test_email_capability_controls_reconcile_as_managed_backend_settings(self):
+        source = (ROOT / "settings-registry.js").read_text(encoding="utf-8")
+        registry = json.loads(settings_policy._REGISTRY.search(source).group(1))
+        expected = {
+            "emailTemplates.allowCreation": (True, "Email Template Creation"),
+            "emailTemplates.allowParentAccount": (
+                False, "Email Template Parent Account"
+            ),
+            "emailTemplates.allowLinkImport": (
+                True, "Email Template Link Import"
+            ),
+            "emailTemplates.allowLocalTemplateUsage": (
+                True, "Allow Local Template Usage"
+            ),
+            "emailTemplates.maxDailyBulkSend": (0, "Max Daily Bulk Send"),
+            "emailTemplates.allowBulkSending": (True, "Allow Bulk Sending"),
+        }
+
+        self.store.global_document()
+        for key in expected:
+            self.store.registry["developerSettings"][key] = registry[
+                "developerSettings"
+            ][key]
+        reconciled = self.store.global_document()["developer_settings"]
+
+        for key, (value, label) in expected.items():
+            self.assertEqual(reconciled[key], {
+                "value": value,
+                "hidden": False,
+                "managed": True,
+                "label": label,
+            })
+        self.assertEqual(self.legacy.read_count, 1)
+
     def test_published_342_clients_receive_an_exact_compatible_projection(self):
         source = (ROOT / "settings-registry.js").read_text(encoding="utf-8")
         registry = json.loads(settings_policy._REGISTRY.search(source).group(1))

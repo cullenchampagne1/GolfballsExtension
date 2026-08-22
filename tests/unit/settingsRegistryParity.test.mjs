@@ -71,6 +71,34 @@ describe('settings registry · extension/backend parity', () => {
     assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.inspectTerritory'), false);
   });
 
+  it('registers every email capability control as managed by default', () => {
+    const expected = {
+      'emailTemplates.allowCreation': {
+        type: 'bool', default: true, label: 'Email Template Creation', managedDefault: true,
+      },
+      'emailTemplates.allowParentAccount': {
+        type: 'bool', default: false, label: 'Email Template Parent Account', managedDefault: true,
+      },
+      'emailTemplates.allowLinkImport': {
+        type: 'bool', default: true, label: 'Email Template Link Import', managedDefault: true,
+      },
+      'emailTemplates.allowLocalTemplateUsage': {
+        type: 'bool', default: true, label: 'Allow Local Template Usage', managedDefault: true,
+      },
+      'emailTemplates.maxDailyBulkSend': {
+        type: 'number', default: 0, label: 'Max Daily Bulk Send', managedDefault: true, min: 0,
+      },
+      'emailTemplates.allowBulkSending': {
+        type: 'bool', default: true, label: 'Allow Bulk Sending', managedDefault: true,
+      },
+    };
+
+    for (const [key, policy] of Object.entries(expected)) {
+      assert.deepEqual(registry.developerSettings[key], policy, key);
+      assert.equal(defaults[key], policy.default, `${key} extension default`);
+    }
+  });
+
   it('exposes one generic Custom Pages scope with every registered page', () => {
     assert.deepEqual(Object.keys(registry.customPageScopes), ['all']);
     const section = CUSTOM_PAGE_SECTIONS[0];
