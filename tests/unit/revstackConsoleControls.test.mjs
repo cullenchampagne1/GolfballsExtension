@@ -15,6 +15,16 @@ const keyOverridesEnd = routes.indexOf('@router.post("/keys/{key_id}/configurati
 const keyOverridesRoute = keyOverridesStart >= 0 && keyOverridesEnd > keyOverridesStart
   ? routes.slice(keyOverridesStart, keyOverridesEnd)
   : '';
+const emailLinksStart = routes.indexOf('@router.get("/shares/email")');
+const emailLinksEnd = routes.indexOf('@router.get("/shares/products")', emailLinksStart);
+const emailLinksRoute = emailLinksStart >= 0 && emailLinksEnd > emailLinksStart
+  ? routes.slice(emailLinksStart, emailLinksEnd)
+  : '';
+const sourceStart = routes.indexOf('@router.get("/managed-email-template-sources")');
+const sourceEnd = routes.indexOf('@router.post("/managed-email-templates/clear")', sourceStart);
+const sourceRoute = sourceStart >= 0 && sourceEnd > sourceStart
+  ? routes.slice(sourceStart, sourceEnd)
+  : '';
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
@@ -36,6 +46,20 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
   });
 
+  it('keeps email links and bucket sources inside compact fixed column budgets', () => {
+    const emailColumns = emailLinksRoute.match(/columns = \[([\s\S]*?)\]\n    return/)?.[1] || '';
+    const sourceColumns = sourceRoute.match(/"columns": \[([\s\S]*?)\],\n        "rows"/)?.[1] || '';
+    const keys = (source) => [...source.matchAll(/"key": "([^"]+)"/g)].map((match) => match[1]);
+
+    assert.deepEqual(keys(emailColumns), ['name', 'owner', 'type', 'updated', 'act']);
+    assert.match(emailColumns, /"key": "act", "label": "Revoke"/);
+    assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
+    assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
+    assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
+    assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
+    assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
+  });
+
   it('exposes managed-template inventory and former-parent cleanup blocks', () => {
     assert.match(
       blocks,
@@ -50,7 +74,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"updated": updated/);
     assert.match(routes, /"conflict": \{/);
     assert.match(routes, /@router\.get\("\/managed-email-template-sources"\)/);
-    assert.match(routes, /"text": "Parent" if is_parent else "Former parent"/);
+    assert.match(routes, /"sub": "Parent" if is_parent else "Former parent"/);
   });
 
   it('soft-deletes managed rows and invalidates extension caches through the typed event', () => {

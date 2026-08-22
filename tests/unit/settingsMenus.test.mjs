@@ -47,6 +47,10 @@ const actionMenuSource = sidebarSource.slice(
   sidebarSource.indexOf('function ActionMenu'),
   sidebarSource.indexOf('function MenuItem'),
 );
+const templateRowSource = sidebarSource.slice(
+  sidebarSource.indexOf('function TemplateRow'),
+  sidebarSource.indexOf('function TypeSection'),
+);
 const statCellSource = settingsPanelSource.slice(
   settingsPanelSource.indexOf('function StatCell'),
   settingsPanelSource.indexOf('function DevSettingRow'),
@@ -117,6 +121,13 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);
+  });
+
+  it('uses quiet icon-only provenance for managed template rows', () => {
+    assert.match(templateRowSource, /managed && !managedEditable \? 'var\(--gb-fill-subtle\)' : 'transparent'/);
+    assert.match(templateRowSource, /managedEditable \? <I\.users size=\{9\} \/> : <I\.lock size=\{9\} \/>/);
+    assert.match(templateRowSource, /aria-label=\{managedEditable[\s\S]*?'Account-managed template'[\s\S]*?'Locked management template'/);
+    assert.doesNotMatch(templateRowSource, />Managed<|`Management ·/);
   });
 
   it('keeps subject insertion inline and opens smart options for OR expressions', () => {

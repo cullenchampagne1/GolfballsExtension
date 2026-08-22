@@ -284,7 +284,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
           ? (ownerShared ? 'var(--gb-warning-tint-medium)' : 'var(--gb-brand-tint-soft)')
           : (disabled ? 'var(--gb-surface-deep)' : (ownerShared
             ? 'var(--gb-warning-tint-soft)'
-            : (managed ? 'var(--gb-success-tint-soft)' : 'transparent'))),
+            : (managed && !managedEditable ? 'var(--gb-fill-subtle)' : 'transparent'))),
       }}
     >
       {/* Type stripe — inset rounded bar, never a full border. Stays put
@@ -375,16 +375,22 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
               {managed && (
                 <span
                   title={managedEditable
-                    ? 'Changes are pushed to managed extension users'
-                    : `Managed by ${managed.lastEditor || managed.createdBy || 'Management'}`}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: managed.conflictWith?.length ? 'var(--gb-warning-fg)' : 'var(--gb-success-fg)', fontWeight: 700, minWidth: 0 }}
+                    ? 'Account-managed template · changes update managed extension users'
+                    : `Locked management template · approved by ${managed.lastEditor || managed.createdBy || 'Management'}`}
+                  aria-label={managedEditable
+                    ? 'Account-managed template'
+                    : 'Locked management template'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    color: managed.conflictWith?.length
+                      ? 'var(--gb-warning-fg)'
+                      : (managedEditable ? 'var(--gb-text-muted)' : 'var(--gb-text-tertiary)'),
+                    fontWeight: 700, minWidth: 0, flexShrink: 0,
+                  }}
                 >
-                  {managed.conflictWith?.length ? <I.alert size={8} /> : <I.users size={8} />}
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {managed.conflictWith?.length
-                      ? `Conflict with ${managed.conflictWith.join(', ')}`
-                      : (managedEditable ? 'Managed' : `Management · ${managed.lastEditor || managed.createdBy || 'approved'}`)}
-                  </span>
+                  {managed.conflictWith?.length
+                    ? <><I.alert size={8} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Conflict with {managed.conflictWith.join(', ')}</span></>
+                    : (managedEditable ? <I.users size={9} /> : <I.lock size={9} />)}
                 </span>
               )}
             </div>
