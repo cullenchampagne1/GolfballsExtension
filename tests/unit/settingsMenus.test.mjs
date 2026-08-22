@@ -128,11 +128,21 @@ describe('settings menus', () => {
   });
 
   it('uses quiet icon-only provenance for managed template rows', () => {
-    assert.match(templateRowSource, /managed && !managedEditable \? 'var\(--gb-fill-subtle\)' : 'transparent'/);
+    assert.doesNotMatch(templateRowSource, /managed && !managedEditable \? 'var\(--gb-fill-subtle\)/);
+    assert.match(templateRowSource, /ownerShared[\s\S]*?var\(--gb-warning-tint-soft\)[\s\S]*?: 'transparent'/);
     assert.match(templateRowSource, /managedEditable \? <I\.users size=\{9\} \/> : <I\.lock size=\{9\} \/>/);
     assert.match(templateRowSource, /aria-label=\{managedEditable[\s\S]*?'Account-managed template'[\s\S]*?'Locked management template'/);
     assert.match(templateRowSource, /managed\.conflictWith\?\.length[\s\S]*?: 'var\(--gb-brand-label\)'/);
     assert.doesNotMatch(templateRowSource, />Managed<|`Management ·/);
+  });
+
+  it('collapses secondary row labels to icons only when the metadata would overflow', () => {
+    assert.match(sidebarSource, /gb-template-row-meta\[data-icon-only="true"\] \.gb-template-row-secondary-label/);
+    assert.match(templateRowSource, /el\.scrollWidth > el\.clientWidth \+ 1 \? 'true' : 'false'/);
+    assert.match(templateRowSource, /new ResizeObserver\(measure\)/);
+    assert.match(templateRowSource, /className="gb-template-row-secondary-label">Shared by you<\/span>/);
+    assert.match(templateRowSource, /className="gb-template-row-secondary-label">[\s\S]*?importedSource\?\.ownerName/);
+    assert.match(templateRowSource, /overflow: 'hidden', whiteSpace: 'nowrap'/);
   });
 
   it('refreshes the server bucket before loading the template manager catalog', () => {

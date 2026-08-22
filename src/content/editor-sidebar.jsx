@@ -118,6 +118,10 @@ function ensureRowStyle() {
     .gb-sidebar-hoverable:not(.is-active):not(.is-disabled):hover {
       background-color: var(--gb-fill-soft) !important;
     }
+    .gb-template-row-secondary-label { display: inline; white-space: nowrap; }
+    .gb-template-row-meta[data-icon-only="true"] .gb-template-row-secondary-label {
+      display: none;
+    }
   `;
   (document.head || document.documentElement).appendChild(el);
 }
@@ -235,6 +239,7 @@ function MenuItem({ children, onClick, danger }) {
 function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onMove, folders, onDragStart, onDragEnd }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const btnRef = useRef(null);
+  const metaRef = useRef(null);
   const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type] || (isNote ? TYPE_META_NOTE.note : TYPE_META_TPL.order);
   const TypeIcon = meta.icon;
   const disabled = tpl.enabled === false;
@@ -248,6 +253,32 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
     ? emailTemplateTrackingIssue(tracker)
     : null;
   useEffect(() => { ensureRowStyle(); }, []);
+  useEffect(() => {
+    const el = metaRef.current;
+    if (!el) return undefined;
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // Measure the complete labels first. If they exceed the actual row,
+        // collapse every secondary attachment together so provenance never
+        // wraps or leaves one half-visible label behind.
+        el.dataset.iconOnly = 'false';
+        el.dataset.iconOnly = el.scrollWidth > el.clientWidth + 1 ? 'true' : 'false';
+      });
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(measure)
+      : null;
+    observer?.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [tpl, tracker, summary, importedSource?.ownerName, ownerShared, managed]);
 
   return (
     <motion.div
@@ -284,7 +315,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
           ? (ownerShared ? 'var(--gb-warning-tint-medium)' : 'var(--gb-brand-tint-soft)')
           : (disabled ? 'var(--gb-surface-deep)' : (ownerShared
             ? 'var(--gb-warning-tint-soft)'
-            : (managed && !managedEditable ? 'var(--gb-fill-subtle)' : 'transparent'))),
+            : 'transparent')),
       }}
     >
       {/* Type stripe — inset rounded bar, never a full border. Stays put
@@ -331,11 +362,16 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
             : Object.keys(tpl.vars || {}).length;
           const varsN = (tpl.variations || []).length;
           return (
-            <div style={{
+            <div
+              ref={metaRef}
+              className="gb-template-row-meta"
+              data-icon-only="false"
+              style={{
               display: 'flex', alignItems: 'center', gap: 5, minWidth: 0,
+              overflow: 'hidden', whiteSpace: 'nowrap',
               fontSize: 9.5, color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', marginTop: 1,
             }}>
-              <span style={{ flexShrink: 0 }}>
+              <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {ruleN} rule{ruleN !== 1 ? 's' : ''}
                 {' · '}
                 {varN} var{varN !== 1 ? 's' : ''}
@@ -353,13 +389,13 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                   title={`Shared by ${importedSource?.ownerName || 'Unregistered installation'}`}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 3,
-                    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    flexShrink: 0, whiteSpace: 'nowrap',
                     color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-brand-label)',
                     fontWeight: 650,
                   }}
                 >
                   <I.user size={8} style={{ flexShrink: 0 }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span className="gb-template-row-secondary-label">
                     {importedSource?.ownerName || 'Unregistered installation'}
                   </span>
                 </span>
@@ -367,9 +403,10 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
               {ownerShared && (
                 <span
                   title="Changes to this template update everyone who imported it"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--gb-warning-fg)', fontWeight: 700 }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--gb-warning-fg)', fontWeight: 700 }}
                 >
-                  <I.link size={8} /> Shared by you
+                  <I.link size={8} style={{ flexShrink: 0 }} />
+                  <span className="gb-template-row-secondary-label">Shared by you</span>
                 </span>
               )}
               {managed && (
@@ -389,7 +426,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                   }}
                 >
                   {managed.conflictWith?.length
-                    ? <><I.alert size={8} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Conflict with {managed.conflictWith.join(', ')}</span></>
+                    ? <><I.alert size={8} /><span className="gb-template-row-secondary-label">Conflict with {managed.conflictWith.join(', ')}</span></>
                     : (managedEditable ? <I.users size={9} /> : <I.lock size={9} />)}
                 </span>
               )}
