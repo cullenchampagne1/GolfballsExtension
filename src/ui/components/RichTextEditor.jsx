@@ -354,7 +354,7 @@ export function RichTextEditor({
   initialHtml, onChange, onChipClick, variables = [], singleLine = false,
   size = 'md', minHeight, placeholder = '', onAttachmentResize,
   onSlashQueryChange, onSlashExecute, onSlashNavigate, onSlashCancel,
-  readOnly = false,
+  readOnly = false, externalRevision = null,
   // `bare` = no outer border/radius/background — the editor blends into a
   // parent that already frames it (e.g. the compose modal), instead of
   // drawing a redundant nested box.
@@ -375,6 +375,7 @@ export function RichTextEditor({
   const [bgColor,   setBgColor]   = useState('#fff170');
   const slashRef = useRef(null);
   const slashSuppressedRef = useRef(false);
+  const appliedExternalRevision = useRef(externalRevision);
 
   /* name → {kind, attach} for attachment variables — drives the chip
      renderer (inline block vs paperclip pill). Kept in a ref so the
@@ -395,6 +396,22 @@ export function RichTextEditor({
     );
     setEmpty(!el.textContent.trim());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Imported templates receive owner changes while open. Refresh the DOM only
+     for an explicit external revision; ordinary controlled re-renders must not
+     rewrite contenteditable or move the user's caret. */
+  useEffect(() => {
+    if (externalRevision == null || appliedExternalRevision.current === externalRevision) return;
+    appliedExternalRevision.current = externalRevision;
+    const el = ref.current;
+    if (!el) return;
+    el.innerHTML = decorateEditorImages(
+      highlightVars(sanitizeHtml(normalizeInitial(initialHtml)), varMetaRef.current),
+    );
+    savedRange.current = null;
+    setVarMenu(false);
+    setEmpty(!el.textContent.trim());
+  }, [externalRevision, initialHtml]);
 
   /* Emit stored-format content to the parent. */
   const emit = useCallback(() => {

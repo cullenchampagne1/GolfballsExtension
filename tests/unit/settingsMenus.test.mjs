@@ -100,7 +100,12 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /emailTemplateShareUpdate/);
     assert.match(editorBridgeSource, /window\.addEventListener\('pagehide', leaveCurrentTemplate\)/);
     assert.match(editorBridgeSource, /currentTemplate && window\.__gbOpenTemplate/);
-    assert.match(editorTemplatesSource, /tpl\.shareImport\?\.version \|\| 0/);
+    assert.match(editorTemplatesSource, /key=\{tpl\.id\}/);
+    assert.doesNotMatch(editorTemplatesSource, /key=\{`\$\{tpl\.id\}:\$\{tpl\.shareImport/);
+    assert.match(templateEditorSource, /seenImportRevision\.current === importRevision/);
+    assert.match(templateEditorSource, /setContentRevision\(importRevision\)/);
+    assert.match(templateEditorSource, /externalRevision=\{contentRevision\}/);
+    assert.match(richTextEditorSource, /appliedExternalRevision\.current === externalRevision/);
     assert.match(sidebarSource, /__gbTrackTemplateShare\(template\.id, response\.share, template\)/);
     assert.match(sidebarSource, /ownedTemplateShares\(tpl\)/);
     assert.match(sidebarSource, /> Revoke share/);

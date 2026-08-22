@@ -37,7 +37,7 @@ function TemplateEditorRoot() {
     <>
       {tpl ? (
         <TemplateEditor
-          key={`${tpl.id}:${tpl.shareImport?.version || 0}`}
+          key={tpl.id}
           tpl={tpl}
           onDelete={() => { if (typeof window.deleteTemplate === 'function') window.deleteTemplate(); }}
         />

@@ -273,6 +273,7 @@ export function TemplateEditor({ tpl, onDelete }) {
 ──────────────────────────────────────────────────────────── */
 function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '' }) {
   const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
+  const importRevision = readOnly ? Math.max(1, Number(tpl.shareImport?.version) || 1) : 0;
   const [typeId, setTypeId] = useState(initialType);
   const meta = TYPE_META[typeId] || TYPE_META.order;
 
@@ -325,7 +326,51 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   // the original shows as a labeled block alongside the alternates (display
   // only — the base still sends tpl.subject/body).
   const [baseLabel, setBaseLabel] = useState(tpl.baseLabel || '');
+  const [contentRevision, setContentRevision] = useState(importRevision);
+  const seenImportRevision = useRef(importRevision);
+  const skipSave     = useRef(true);
+  const skipTypeSave = useRef(true);
+  const saveTimer    = useRef(0);
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
+
+  /* A retained share can update while this exact editor is open. Reconcile
+     the new source snapshot into the existing component instead of changing
+     its React key: remounting briefly collapsed #editor while paReady loaded,
+     which clamped its scrollTop to zero. Recipient-owned overrides are already
+     folded into `tpl` by live-updates, so these controls keep their values. */
+  useEffect(() => {
+    if (!readOnly || seenImportRevision.current === importRevision) return;
+    seenImportRevision.current = importRevision;
+    skipSave.current = true;
+    clearTimeout(saveTimer.current);
+    const nextType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
+    setTypeId(nextType);
+    setVars(convertVars(tpl));
+    setEnabled(tpl.enabled !== false);
+    setName(tpl.name || '');
+    setSubject(tpl.subject || '');
+    setBody(tpl.body || '');
+    setRuleData(null);
+    setCaseTagsData(null);
+    setSmartTarget(null);
+    setRecipientIdx(recipientIndexFor(nextType, tpl.toField));
+    setToFieldValue((tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '');
+    setPickingRecipient(false);
+    setRecipientResolved(null);
+    setPresetTaskId(tpl.presetTaskId || '');
+    setFollowUpActionId(tpl.followUpActionId || '');
+    setReplyMode(tpl.replyMode !== 'standalone');
+    setSenderAccount(tpl.senderAccount || 'golfballs');
+    setSenderRandomize(!!tpl.senderRandomize);
+    setVariations((tpl.variations || []).map((variation, index) => ({
+      id: variation.id || `var_${Date.now()}_${index}`,
+      label: variation.label || `Variation ${index + 1}`,
+      subject: variation.subject || '',
+      body: variation.body || '',
+    })));
+    setBaseLabel(tpl.baseLabel || '');
+    setContentRevision(importRevision);
+  }, [importRevision, readOnly, tpl]);
 
   function addVariation() {
     // The initial email is block "Variation 1", so added blocks number from 2.
@@ -586,9 +631,6 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   }, [tpl, typeId, enabled, name, subject, vars, variations, baseLabel, replyMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const trackingIssue = emailTemplateTrackingIssue(subjectTracker);
 
-  const skipSave     = useRef(true);
-  const skipTypeSave = useRef(true);
-  const saveTimer    = useRef(0);
   useEffect(() => {
     // Imported shares use this exact editor tree and save through the same
     // debounce. The bridge applies a strict allowlist, so only recipient-local
@@ -822,6 +864,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       {typeId === 'case' && (
         <LockedRegion locked={readOnly} style={S.mb14}>
           <CaseTagsEditor
+            key={`case-tags:${contentRevision}`}
             initial={tpl.caseTags}
             onChange={setCaseTagsData}
           />
@@ -831,6 +874,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       {/* ── Rules — imports the template's saved rules/conditions ── */}
       <LockedRegion locked={readOnly} style={S.mb14}>
         <RulesComp
+          key={`rules:${typeId}:${contentRevision}`}
           initial={
             typeId === 'account' ? tpl.accountConditions
               : typeId === 'case' ? tpl.caseRules
@@ -855,6 +899,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
                 singleLine
                 size="sm"
                 initialHtml={subject}
+                externalRevision={contentRevision}
                 onChange={setSubject}
                 onChipClick={openSmartByName}
                 variables={vars}
@@ -867,6 +912,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
               <RichTextEditor
                 size="sm"
                 initialHtml={body}
+                externalRevision={contentRevision}
                 onChange={setBody}
                 onChipClick={openSmartByName}
                 variables={vars}
@@ -895,6 +941,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
                 <RichTextEditor
                   singleLine size="sm"
                   initialHtml={subject}
+                  externalRevision={contentRevision}
                   onChange={setSubject}
                   onChipClick={openSmartByName}
                   variables={vars}
@@ -907,6 +954,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
                 <RichTextEditor
                   size="sm"
                   initialHtml={body}
+                  externalRevision={contentRevision}
                   onChange={setBody}
                   onChipClick={openSmartByName}
                   variables={vars}
@@ -950,6 +998,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
                   <RichTextEditor
                     singleLine size="sm"
                     initialHtml={v.subject}
+                    externalRevision={contentRevision}
                     onChange={(s) => updateVariation(v.id, { subject: s })}
                     onChipClick={openSmartByName}
                     variables={vars}
@@ -962,6 +1011,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
                   <RichTextEditor
                     size="sm"
                     initialHtml={v.body}
+                    externalRevision={contentRevision}
                     onChange={(b) => updateVariation(v.id, { body: b })}
                     onChipClick={openSmartByName}
                     variables={vars}
