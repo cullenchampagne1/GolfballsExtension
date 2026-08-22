@@ -25,6 +25,17 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(ticketBlock, /TicketList|tickets\.cards|ticket-reply/);
   });
 
+  it('uses the editable block-shell title as the only email-share heading', () => {
+    const listHelper = blocks.match(/def _v2_list[\s\S]*?# --- secondary surfaces/)?.[0] || '';
+    const emailLinks = listHelper.match(/_v2_list\("email-links"[\s\S]*?shell_title=True\)/)?.[0] || '';
+
+    assert.match(listHelper, /if not shell_title:[\s\S]*props\["title"\] = title/);
+    assert.match(listHelper, /hide_title=not shell_title/);
+    assert.match(emailLinks, /"Shared email templates"/);
+    assert.match(emailLinks, /shell_title=True/);
+    assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
+  });
+
   it('declares notification composers as action-modal inputs with validated fields', () => {
     assert.match(routes, /action-modal notification composer/);
     assert.match(routes, /"kind": "form", "icon": "send"/);
