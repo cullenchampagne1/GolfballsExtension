@@ -86,6 +86,10 @@ class FakeNotifications:
         return ({"id": len(self.enqueued)}, True)
 
     def fanout(self, **payload):
+        if payload.get("visible") is False and (
+            payload.get("title") or payload.get("body")
+        ):
+            raise ValueError("Silent events cannot include notification text")
         self.fanouts.append(payload)
         return {
             "created": list(range(len(payload.get("credential_ids") or []))),
@@ -440,10 +444,16 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertFalse(child["templates"][0]["created_by_current"])
         self.assertEqual(child["templates"][0]["created_by"], "Template Owner")
         self.assertEqual(child["templates"][0]["template"]["subject"], "Welcome")
-        self.assertEqual(self.notifications.fanouts[-1]["event"]["type"], "managed_email_templates.changed")
-        self.assertFalse(self.notifications.fanouts[-1]["visible"])
+        invalidation = self.notifications.fanouts[-1]
+        self.assertEqual(invalidation["event"]["type"], "managed_email_templates.changed")
+        self.assertFalse(invalidation["visible"])
+        self.assertNotIn(
+            "title", invalidation,
+            "silent state invalidations are rejected when they include notification text",
+        )
+        self.assertNotIn("body", invalidation)
         self.assertEqual(
-            self.notifications.fanouts[-1]["credential_ids"],
+            invalidation["credential_ids"],
             [
                 "owner-install", "parent-two", "recipient-install",
                 "creation-disabled-install",
