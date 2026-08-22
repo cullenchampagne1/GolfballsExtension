@@ -58,6 +58,24 @@ class FakeSettingsPolicy:
         }, "database-revision", registry)
 
 
+class FakeNotifications:
+    def __init__(self):
+        self.enqueued = []
+        self.fanouts = []
+
+    def enqueue(self, **payload):
+        self.enqueued.append(payload)
+        return ({"id": len(self.enqueued)}, True)
+
+    def fanout(self, **payload):
+        self.fanouts.append(payload)
+        return {
+            "created": list(range(len(payload.get("credential_ids") or []))),
+            "existing": [], "failed": [],
+            "recipient_count": len(payload.get("credential_ids") or []),
+        }
+
+
 class ExtensionClientAccessTests(unittest.TestCase):
     def setUp(self):
         FakeSession.rows = {}
@@ -282,6 +300,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.engine = create_engine("sqlite+pysqlite:///:memory:")
         self.Base.metadata.create_all(self.engine)
         self.auth = SimpleNamespace(engine=self.engine)
+        self.notifications = FakeNotifications()
         self.api = client_api_module.ExtensionClientApi(
             auth_manager=self.auth,
             models=self.models,
@@ -290,6 +309,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             client_scope="client:extension",
             project_dir=ROOT,
             public_origin="https://api.cullenchampagne.com",
+            notification_service=self.notifications,
         )
         self.owner = self._principal("owner-install")
         self.recipient = self._principal("recipient-install")
@@ -379,6 +399,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
 
     def test_creator_keeps_ownership_and_alone_can_revoke(self):
         share_id = self._seed_share()
+        self.api.retain_email_import(share_id, self._request(self.recipient))
         owned = self._payload(self.api.get_email_share(
             share_id, self._request(self.owner),
         ))
@@ -387,6 +408,21 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             share_id, self._request(self.owner),
         ))
         self.assertTrue(revoked["revoked"])
+        self.assertEqual(len(self.notifications.enqueued), 1)
+        owner_event = self.notifications.enqueued[0]
+        self.assertEqual(owner_event["owner_credential_id"], "owner-install")
+        self.assertFalse(owner_event["visible"])
+        self.assertEqual(owner_event["event"]["type"], "email_templates.changed")
+        self.assertEqual(owner_event["event"]["data"]["share_id"], share_id)
+
+        self.assertEqual(len(self.notifications.fanouts), 1)
+        recipient_event = self.notifications.fanouts[0]
+        self.assertEqual(recipient_event["credential_ids"], ["recipient-install"])
+        self.assertTrue(recipient_event["visible"])
+        self.assertEqual(
+            recipient_event["title"],
+            'Template Owner revoked “Permanent follow-up”',
+        )
 
     def test_share_layer_has_no_payload_count_or_storage_quotas(self):
         source = (ROOT / ".revstack" / "logic" / "client_api.py").read_text()

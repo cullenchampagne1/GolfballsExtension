@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -985,6 +985,14 @@ function gbMarkEmailSharesChanged() {
   } catch { /* settings will still refresh on its next open/manual refresh */ }
 }
 
+function gbMarkSupportTicketsChanged() {
+  try {
+    chrome.storage.local.set({ gbSupportTicketRevision: Date.now() }, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch { /* an open Settings window still refreshes on its next load */ }
+}
+
 function gbEmailShareMutationError(error, fallback) {
   const message = String(error?.message || '').trim();
   // FastAPI's generic 404 means the project router has not loaded this new
@@ -1486,7 +1494,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/tickets`, {
       method: 'POST',
       body: JSON.stringify({ request_id: requestId, kind, title, description, context }),
-    }).then((payload) => sendResponse({ ok: true, ticket: payload?.ticket, created: payload?.created === true }))
+    }).then((payload) => {
+      gbMarkSupportTicketsChanged();
+      sendResponse({ ok: true, ticket: payload?.ticket, created: payload?.created === true });
+    })
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to submit support ticket' }));
     return true;
   }

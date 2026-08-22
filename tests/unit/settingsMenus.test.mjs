@@ -51,6 +51,10 @@ const emailLinksSectionSource = settingsPanelSource.slice(
   settingsPanelSource.indexOf('function EmailLinksSection'),
   settingsPanelSource.indexOf('function ProductStoresSection'),
 );
+const supportTicketsSectionSource = settingsPanelSource.slice(
+  settingsPanelSource.indexOf('function SupportTicketsSection'),
+  settingsPanelSource.indexOf('function TrackersSection'),
+);
 
 describe('settings menus', () => {
   it('animates managed template creation/import controls while leaving notes available', () => {
@@ -89,6 +93,23 @@ describe('settings menus', () => {
     assert.match(emailLinksSectionSource, /if \(area === 'local'[\s\S]*load\(\)/);
     assert.match(emailLinksSectionSource, /chrome\.storage\.onChanged\.addListener\(onShareChange\)/);
     assert.match(emailLinksSectionSource, /chrome\.storage\.onChanged\.removeListener\(onShareChange\)/);
+  });
+
+  it('refreshes support tickets from live invalidations without a second poller', () => {
+    assert.match(supportTicketsSectionSource, /changes\.gbSupportTicketRevision/);
+    assert.match(supportTicketsSectionSource, /load\(\{ quiet: true \}\)/);
+    assert.match(supportTicketsSectionSource, /chrome\.storage\.onChanged\.addListener\(onTicketChange\)/);
+    assert.doesNotMatch(supportTicketsSectionSource, /setInterval/);
+  });
+
+  it('publishes settings, ticket, and email-revoke changes through typed events', {
+    skip: !hasProjectRoutes,
+  }, () => {
+    assert.match(projectRoutesSource, /event_type="settings\.changed"/);
+    assert.match(projectRoutesSource, /event_type="tickets\.changed"/);
+    assert.match(projectRoutesSource, /["']event_type["']:\s*"email_templates\.changed"/);
+    assert.match(projectRoutesSource, /visible=True/);
+    assert.match(projectRoutesSource, /notification_service=extension_notifications/);
   });
 
   it('caps the template action menu height and scrolls it internally', () => {

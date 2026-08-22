@@ -133,6 +133,10 @@
       "file": "tests/unit/notificationsStore.test.mjs"
     },
     {
+      "name": "ui \u00b7 typed extension live-update invalidation",
+      "file": "tests/unit/liveUpdates.test.mjs"
+    },
+    {
       "name": "ui \u00b7 notification center stable filtering",
       "file": "tests/unit/notificationsPresentation.test.mjs"
     },
@@ -535,6 +539,10 @@
         "../.venv/bin/python",
         "tests/test_extension_notifications.py"
       ]
+    },
+    {
+      "name": "flow \u00b7 notification cursor live updates",
+      "file": "tests/integration/notification-live-updates.test.mjs"
     },
     {
       "name": "guard \u00b7 mockup catalog authoring",

@@ -1204,9 +1204,8 @@ function ProductStoresSection() {
 }
 
 /* ── Support tickets: only materializes when this installation owns at least
-      one ticket. Administrator replies and status changes arrive through the
-      installation-authenticated ticket API; a quiet poll keeps an open
-      settings page current without flashing the section away. */
+      one ticket. The notification cursor publishes typed invalidations;
+      Settings fetches the authoritative ticket list only on open or change. */
 function SupportTicketsSection() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1225,8 +1224,15 @@ function SupportTicketsSection() {
 
   useEffect(() => {
     load();
-    const timer = setInterval(() => load({ quiet: true }), 30_000);
-    return () => clearInterval(timer);
+    const onTicketChange = (changes, area) => {
+      if (area === 'local' && changes.gbSupportTicketRevision) {
+        load({ quiet: true });
+      }
+    };
+    try { chrome.storage.onChanged.addListener(onTicketChange); } catch { /* */ }
+    return () => {
+      try { chrome.storage.onChanged.removeListener(onTicketChange); } catch { /* */ }
+    };
   }, [load]);
 
   const tone = (status) => ({
