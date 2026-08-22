@@ -103,7 +103,7 @@ describe('buildPaPayload', () => {
     assert.equal(p.emails[0].to, 'buyer@example.com');
     assert.equal(p.emails[0].subject, 'Hi');
     assert.equal(p.emails[0].replyMode, 'reply');
-    assert.equal(p.emails[0].htmlBody, '<p>Body</p>');
+    assert.equal(p.emails[0].htmlBody, '<p style="line-height:1.6;margin:0px">Body</p>');
   });
 
   it('appends the signature to the html body when one is provided', () => {
@@ -111,7 +111,7 @@ describe('buildPaPayload', () => {
       from: 'a@b', to: 'c@d', subject: 's',
       htmlBody: '<p>Body</p>', signature: '<b>Alex</b>', replyMode: 'standalone',
     });
-    assert.equal(p.emails[0].htmlBody, '<p>Body</p><br><div><b>Alex</b></div>');
+    assert.equal(p.emails[0].htmlBody, '<p style="line-height:1.6;margin:0px 0px 8px">Body</p><br><p style="line-height:1.6;margin:0px"><b>Alex</b></p>');
   });
 
   it('sanitizes the html body (event handlers and scripts stripped)', () => {
@@ -119,7 +119,17 @@ describe('buildPaPayload', () => {
       from: 'a@b', to: 'c@d', subject: 's',
       htmlBody: '<p onclick="steal()">Hi</p><script>evil()</script>', replyMode: 'standalone',
     });
-    assert.equal(p.emails[0].htmlBody, '<p>Hi</p>');
+    assert.equal(p.emails[0].htmlBody, '<p style="line-height:1.6;margin:0px">Hi</p>');
+  });
+
+  it('carries editor paragraph, list, and pasted-image geometry into Outlook', () => {
+    const p = buildPaPayload({
+      from: 'a@b', to: 'c@d', subject: 's', replyMode: 'standalone',
+      htmlBody: '<div>First line</div><p>Second line</p><ul><li>One</li></ul><img src="https://example.test/a.png" width="245">',
+    });
+    assert.match(p.emails[0].htmlBody, /<p style="line-height:1\.6;margin:0px 0px 8px">First line<\/p>/);
+    assert.match(p.emails[0].htmlBody, /<ul style="margin:0px 0px 8px;padding-left:22px"><li style="line-height:1\.6;margin:0px">One<\/li><\/ul>/);
+    assert.match(p.emails[0].htmlBody, /<img[^>]*width="245"[^>]*style="width:245px;max-width:100%;height:auto"/);
   });
 
   it('carries template, variation, and recipient context for worker-side verification', () => {
@@ -241,7 +251,7 @@ describe('sendEmail', () => {
     }, { dispatch });
     assert.deepEqual(r, { state: 'sent', transport: 'pa', error: null });
     assert.equal(seen[0].action, 'paAutomate');
-    assert.equal(seen[0].payload.emails[0].htmlBody, '<p>Body</p><br><div><i>Sig</i></div>');
+    assert.equal(seen[0].payload.emails[0].htmlBody, '<p style="line-height:1.6;margin:0px 0px 8px">Body</p><br><p style="line-height:1.6;margin:0px"><i>Sig</i></p>');
     assert.equal(seen[0].payload.emails[0].replyMode, 'reply');
   });
 

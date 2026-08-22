@@ -20,7 +20,7 @@ import { DEV_SETTINGS } from '../lib/settings-live.jsx';
 ═══════════════════════════════════════════════════════════════════ */
 
 /* A {{variable}} chip in its unresolved (red) state — mirrors the
-   editor/popup styling that warns you a variable would leak braces. */
+   editor/popup styling that warns the sent value would be blank. */
 function UnresolvedChip({ name }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'stretch', borderRadius: 5, border: '1px solid var(--gb-error-tint-border)', background: 'var(--gb-error-tint-soft)', overflow: 'hidden', verticalAlign: 'middle', margin: '0 1px' }}>
@@ -97,7 +97,7 @@ function UnresolvedSnippet() {
         {mode === 'drop' && <span style={{ color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>(the whole sentence is dropped — no awkward blank)</span>}
       </div>
       <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 8, textAlign: 'center' }}>
-        {mode === 'leak' && 'Contact has no phone — the braces would leak. The popup flags it red before you send.'}
+        {mode === 'leak' && 'Contact has no phone — the sent value would be blank. The popup flags it red before you send.'}
         {mode === 'or' && 'Fix #1 — {{phone|email}} falls through to the next non-empty candidate.'}
         {mode === 'drop' && 'Fix #2 — mark it conditional and the empty sentence disappears.'}
       </div>
@@ -181,7 +181,7 @@ export function TroubleshootingPage() {
       </TourBox>
 
       <TourBox n={2} eyebrow="Templates" title="“A variable shows as {{unresolved}}”" live={<UnresolvedSnippet />}>
-        <p>An unresolved variable would leak its braces into the email. The popup highlights it <strong>red before you send</strong> — treat any highlight as a stop sign. Four causes:</p>
+        <p>An unresolved variable sends as blank when it has no fallback. The popup highlights it <strong>red before you send</strong> — treat any highlight as a stop sign. Four causes:</p>
         <ul>
           <li><strong>Wrong page type</strong> — order variables resolve only on order pages, contact variables on contact pages.</li>
           <li><strong>Data genuinely missing</strong> — no phone on file means <code>{'{{phone}}'}</code> stays empty.</li>

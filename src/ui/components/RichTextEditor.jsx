@@ -3,7 +3,13 @@ import { createPortal } from 'react-dom';
 import { Icon } from '../icons.jsx';
 import { ColorButton } from './ColorButton.jsx';
 import { sanitizeHtml } from '../../lib/sanitizeHtml.js';
-import { fragToPlain, plainToHtml } from '../../lib/rteClipboard.js';
+import {
+  decorateEditorImages,
+  fragToPlain,
+  normalizePastedFragment,
+  plainToHtml,
+  stripEditorDecorations,
+} from '../../lib/rteClipboard.js';
 
 /* ──────────────────────────────────────────────────────────────
    RichTextEditor — contenteditable rich-text surface with a
@@ -206,6 +212,19 @@ function ensureStyle() {
       cursor: nwse-resize;
     }
     .gb-rte-att:hover .gb-rte-att-resize { opacity: .9; }
+    .gb-rte-image {
+      display: inline-block; position: relative; max-width: 100%; vertical-align: bottom;
+      margin: 2px; outline: 1px solid transparent; border-radius: 3px !important;
+    }
+    .gb-rte-image:hover { outline-color: var(--gb-brand-tint-border); }
+    .gb-rte-image img { display: block; max-width: 100%; height: auto; }
+    .gb-rte-image-resize {
+      position: absolute; right: -2px; bottom: -2px; width: 13px; height: 13px;
+      border-radius: 3px 0 3px 0 !important; background: var(--gb-brand-label);
+      box-shadow: 0 0 0 1px var(--gb-surface-canvas); cursor: nwse-resize;
+      opacity: .72;
+    }
+    .gb-rte-image:hover .gb-rte-image-resize { opacity: 1; }
     /* Attached-file chip — paperclip pill listed in the body (mirrors how a
        mail client lists attachments); invisible in the sent email. */
     .gb-rte-att-file {
@@ -371,7 +390,9 @@ export function RichTextEditor({
     ensureStyle();
     const el = ref.current;
     if (!el) return;
-    el.innerHTML = highlightVars(sanitizeHtml(normalizeInitial(initialHtml)), varMetaRef.current);
+    el.innerHTML = decorateEditorImages(
+      highlightVars(sanitizeHtml(normalizeInitial(initialHtml)), varMetaRef.current),
+    );
     setEmpty(!el.textContent.trim());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -379,7 +400,9 @@ export function RichTextEditor({
   const emit = useCallback(() => {
     const el = ref.current;
     if (!el || !onChange) return;
-    onChange(singleLine ? (el.textContent || '') : sanitizeHtml(stripChips(el.innerHTML)));
+    onChange(singleLine
+      ? (el.textContent || '').replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ')
+      : sanitizeHtml(stripEditorDecorations(stripChips(el.innerHTML))));
   }, [onChange, singleLine]);
 
   const refreshMarks = useCallback(() => {
@@ -421,15 +444,36 @@ export function RichTextEditor({
     emit();
   }
 
+  function insertHtmlAtCaret(html) {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    let range = savedRange.current;
+    if (!range || !el.contains(range.commonAncestorContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+    }
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const fragment = range.createContextualFragment(html);
+    const last = fragment.lastChild;
+    range.deleteContents();
+    range.insertNode(fragment);
+    if (last) {
+      range = document.createRange();
+      range.setStartAfter(last);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      savedRange.current = range.cloneRange();
+    }
+  }
+
   function insertVariable(name) {
     setVarMenu(false);
-    ref.current?.focus();
-    if (savedRange.current) {
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(savedRange.current);
-    }
-    document.execCommand('insertHTML', false, chipHTML(name, varMetaRef.current) + ' ');
+    insertHtmlAtCaret(chipHTML(name, varMetaRef.current) + ' ');
     saveSelection();
     setEmpty(false);
     emit();
@@ -474,6 +518,31 @@ export function RichTextEditor({
      Width is clamped, painted live on the block, and persisted to the
      variable (onAttachmentResize) on release so the sent <img> matches. */
   function onContentMouseDown(e) {
+    const pastedHandle = e.target?.closest?.('.gb-rte-image-resize');
+    if (pastedHandle) {
+      const block = pastedHandle.closest('.gb-rte-image');
+      const image = block?.querySelector('img');
+      if (!block || !image) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = block.offsetWidth || Number(image.getAttribute('width')) || 320;
+      let width = startW;
+      const move = (event) => {
+        width = Math.max(24, Math.min(600, Math.round(startW + event.clientX - startX)));
+        block.style.width = `${width}px`;
+        image.style.width = `${width}px`;
+        image.setAttribute('width', String(width));
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        emit();
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+      return;
+    }
     const handle = e.target?.closest?.('.gb-rte-att-resize');
     if (!handle) return;
     const block = handle.closest('.gb-rte-att');
@@ -514,11 +583,26 @@ export function RichTextEditor({
       emit();
       return;
     }
+    const imageFile = Array.from(e.clipboardData?.items || [])
+      .find((item) => item.kind === 'file' && /^image\//i.test(item.type))?.getAsFile?.();
+    if (imageFile && typeof FileReader !== 'undefined') {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const src = escapeHtml(String(reader.result || ''));
+        insertHtmlAtCaret(decorateEditorImages(`<img src="${src}" alt="Pasted image">`));
+        setEmpty(false);
+        emit();
+      };
+      reader.readAsDataURL(imageFile);
+      return;
+    }
     const html = e.clipboardData.getData('text/html');
     const clean = html
-      ? highlightVars(stripChips(sanitizeHtml(html)), varMetaRef.current)
+      ? decorateEditorImages(highlightVars(
+        normalizePastedFragment(stripChips(sanitizeHtml(html))), varMetaRef.current,
+      ))
       : highlightVars(plainToHtml(e.clipboardData.getData('text/plain')), varMetaRef.current);
-    document.execCommand('insertHTML', false, clean);
+    insertHtmlAtCaret(clean);
     saveSelection();
     setEmpty(!ref.current.textContent.trim());
     emit();
@@ -550,6 +634,9 @@ export function RichTextEditor({
 
   function onKeyDown(e) {
     if (singleLine && e.key === 'Enter') { e.preventDefault(); return; }
+    if (!singleLine && e.key === 'Enter') {
+      try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch { /* noop */ }
+    }
     if (!slashRef.current) return;
     if (e.key === 'Escape') {
       e.preventDefault(); slashSuppressedRef.current = true; slashRef.current = null;
@@ -772,7 +859,7 @@ export function RichTextEditor({
             lineHeight: 1.6,
             color: 'var(--gb-text-primary)',
             fontFamily: 'var(--gb-font-sans)',
-            whiteSpace: singleLine ? 'nowrap' : 'pre-wrap',
+            whiteSpace: singleLine ? 'nowrap' : 'normal',
             overflowX: singleLine ? 'auto' : 'visible',
           }}
         />

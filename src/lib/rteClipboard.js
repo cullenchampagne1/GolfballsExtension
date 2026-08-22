@@ -19,6 +19,79 @@ export function plainToHtml(text) {
   return escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>');
 }
 
+/** Remove indentation-only root nodes from rich clipboard HTML. Under the
+ * editor's former `white-space:pre-wrap` those source-code newlines painted as
+ * extra visual lines around a pasted list. Orphaned list items are grouped so
+ * copying only the bullets (without prose above/below) remains a real list. */
+export function normalizePastedFragment(html) {
+  if (typeof document === 'undefined') return String(html || '');
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+  for (const node of Array.from(template.content.childNodes)) {
+    if (node.nodeType === 3 && !node.textContent.trim()) node.remove();
+  }
+  let list = null;
+  for (const node of Array.from(template.content.childNodes)) {
+    if (node.nodeType === 1 && node.tagName === 'LI') {
+      if (!list) {
+        list = document.createElement('ul');
+        node.before(list);
+      }
+      list.appendChild(node);
+    } else if (!(node.nodeType === 3 && !node.textContent.trim())) {
+      list = null;
+    }
+  }
+  return template.innerHTML;
+}
+
+const imageWidth = (image) => {
+  const attr = Number.parseFloat(image.getAttribute('width') || '');
+  const css = Number.parseFloat(image.style?.width || '');
+  return Math.max(24, Math.min(600, Math.round(attr || css || 320)));
+};
+
+/** Add editor-only resize chrome around ordinary pasted images. */
+export function decorateEditorImages(html) {
+  if (typeof document === 'undefined') return String(html || '');
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+  for (const image of Array.from(template.content.querySelectorAll('img'))) {
+    if (image.closest('.gb-rte-image')) continue;
+    const width = imageWidth(image);
+    const wrapper = document.createElement('span');
+    wrapper.className = 'gb-rte-image';
+    wrapper.setAttribute('contenteditable', 'false');
+    wrapper.style.cssText = `display:inline-block;position:relative;width:${width}px;max-width:100%;vertical-align:bottom`;
+    image.setAttribute('width', String(width));
+    image.style.width = `${width}px`;
+    image.style.maxWidth = '100%';
+    image.style.height = 'auto';
+    image.style.display = 'block';
+    image.replaceWith(wrapper);
+    wrapper.appendChild(image);
+    const handle = document.createElement('span');
+    handle.className = 'gb-rte-image-resize';
+    handle.title = 'Drag to resize';
+    wrapper.appendChild(handle);
+  }
+  return template.innerHTML;
+}
+
+/** Remove editor-only image handles while retaining the selected dimensions. */
+export function stripEditorDecorations(html) {
+  if (typeof document === 'undefined') return String(html || '');
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+  for (const wrapper of Array.from(template.content.querySelectorAll('.gb-rte-image'))) {
+    const image = wrapper.querySelector('img');
+    if (image) wrapper.replaceWith(image);
+    else wrapper.remove();
+  }
+  template.content.querySelectorAll('.gb-rte-image-resize').forEach((node) => node.remove());
+  return template.innerHTML;
+}
+
 /* Serialize an editor fragment (a DOM node) to clean plain text for the
    clipboard: variable chips become their {{name}} placeholder, list items get
    a "- " marker (so bullets don't paste as run-together lines), and block

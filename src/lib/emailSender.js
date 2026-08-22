@@ -1,6 +1,7 @@
 import { pickFromAddress, DEFAULT_LOCAL_PART } from './sender.js';
 import { loadCredentials } from './credentials.js';
 import { sanitizeHtml } from './sanitizeHtml.js';
+import { normalizeEmailHtml } from './emailHtml.js';
 import {
   filterLocalEmailTemplates,
   resolveEmailTemplateCapabilities,
@@ -132,7 +133,7 @@ export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMo
       from,
       to,
       subject,
-      htmlBody: sanitizeHtml(signature != null ? withSignature(htmlBody, signature) : htmlBody),
+      htmlBody: normalizeEmailHtml(signature != null ? withSignature(htmlBody, signature) : htmlBody),
       replyMode,
       ...trackingFields({ templateId, templateName, variationId, templateVariationId, trackingContext }),
     }],

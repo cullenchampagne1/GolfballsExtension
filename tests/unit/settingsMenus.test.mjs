@@ -30,6 +30,14 @@ const templateEditorSource = await readFile(
   new URL('../../src/pages/TemplateEditor.jsx', import.meta.url),
   'utf8',
 );
+const richTextEditorSource = await readFile(
+  new URL('../../src/ui/components/RichTextEditor.jsx', import.meta.url),
+  'utf8',
+);
+const draggablePopupSource = await readFile(
+  new URL('../../src/ui/components/DraggablePopup.jsx', import.meta.url),
+  'utf8',
+);
 const projectRoutesUrl = new URL('../../.revstack/routes.py', import.meta.url);
 const hasProjectRoutes = existsSync(projectRoutesUrl);
 const projectRoutesSource = hasProjectRoutes
@@ -97,6 +105,15 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);
+  });
+
+  it('keeps subject insertion inline and opens smart options for OR expressions', () => {
+    assert.match(richTextEditorSource, /range\.createContextualFragment\(html\)/);
+    assert.doesNotMatch(richTextEditorSource, /execCommand\('insertHTML'/);
+    assert.match(richTextEditorSource, /textContent \|\| ''\)\.replace\(\/\[\\r\\n\]\+\/g, ' '\)/);
+    assert.match(templateEditorSource, /variable: \{ \.\.\.v, name \}/);
+    assert.match(templateEditorSource, /variable\.name\.split\('\|'\)/);
+    assert.match(draggablePopupSource, /closest\?\.\('\.gb-dd-popover'\)/);
   });
 
   it('uses an accessible icon-only JSON import action', () => {

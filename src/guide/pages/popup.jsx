@@ -153,7 +153,7 @@ export function PopupPage() {
         <ul>
           <li><strong>Spinner · “resolving…”</strong> — still being read from the page.</li>
           <li><strong>Spinner · “running code…”</strong> — a code variable is executing; these finish last.</li>
-          <li><strong>Red “Not found”</strong> — unresolved. Sending now would leak the literal <code>{'{{name}}'}</code> into the email. Treat it as a stop sign.</li>
+          <li><strong>Red “Not found”</strong> — unresolved. Without a fallback, sending now inserts a blank value. Treat it as a stop sign.</li>
         </ul>
         <p>Send stays disabled while anything is resolving and when no recipient was found.</p>
       </TourBox>

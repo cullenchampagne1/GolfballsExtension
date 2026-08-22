@@ -366,7 +366,7 @@ export function TemplatesPage() {
 
       <TourBox n={1} eyebrow="The idea" title="Write once, fill automatically" live={<BodySnippet />} wide>
         <p>A template has a <strong>subject</strong> and a <strong>body</strong>. Anywhere you'd type a customer-specific detail, you write a variable in <code>{'{{double braces}}'}</code> instead.</p>
-        <p>Flip the snippet between <strong>Template</strong> (what you write) and <strong>Resolved</strong> (what the customer receives). In the editor, chips are color-coded live: green resolves, yellow has a fallback, red would leak the braces.</p>
+        <p>Flip the snippet between <strong>Template</strong> (what you write) and <strong>Resolved</strong> (what the customer receives). In the editor, chips are color-coded live: green resolves, yellow has a fallback, red would send as blank.</p>
       </TourBox>
 
       <TourBox n={2} eyebrow="Where values come from" title="Four kinds of variable" live={<VarCreatorSnippet />} flip wide>

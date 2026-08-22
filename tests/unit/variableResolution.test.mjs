@@ -26,9 +26,9 @@ describe('renderTemplate — substitution', () => {
     assert.equal(renderTemplate('Order {{ orderId }} shipped', { orderId: '5119355' }), 'Order 5119355 shipped');
   });
 
-  it('leaves an unresolved placeholder intact so the rep sees the gap', () => {
-    assert.equal(renderTemplate('Hi {{first}},', {}), 'Hi {{first}},');
-    assert.equal(renderTemplate('Hi {{first}},', { first: '' }), 'Hi {{first}},');
+  it('renders unresolved placeholders blank so braces never leak into sent mail', () => {
+    assert.equal(renderTemplate('Hi {{first}},', {}), 'Hi ,');
+    assert.equal(renderTemplate('Hi {{first}},', { first: '' }), 'Hi ,');
   });
 
   it('OR-block {{a|b}} falls through to the first non-empty candidate', () => {
@@ -36,8 +36,8 @@ describe('renderTemplate — substitution', () => {
     assert.equal(renderTemplate('Hi {{nick|first}}!', { nick: 'Cap', first: 'Ann' }), 'Hi Cap!');
   });
 
-  it('OR-block with no resolvable candidate passes the original through', () => {
-    assert.equal(renderTemplate('Hi {{nick|first}}!', {}), 'Hi {{nick|first}}!');
+  it('OR-block with no resolvable candidate renders blank', () => {
+    assert.equal(renderTemplate('Hi {{nick|first}}!', {}), 'Hi !');
   });
 
   it('empty pipe segments are dropped, so {{|x}} behaves like {{x}}', () => {
@@ -53,6 +53,13 @@ describe('renderTemplate — substitution', () => {
     assert.equal(
       renderTemplate('{{first}} {{last}} ({{first}})', { first: 'Ann', last: 'Lee' }),
       'Ann Lee (Ann)',
+    );
+  });
+
+  it('keeps the source sentence formatting around a substituted variable', () => {
+    assert.equal(
+      renderTemplate('<p><small style="font-size:10px">Hi {{first}}</small></p>', { first: 'Ann' }),
+      '<p><small style="font-size:10px">Hi Ann</small></p>',
     );
   });
 });
@@ -131,6 +138,34 @@ describe('dropConditional', () => {
   });
 });
 
+describe('dropConditional — visual HTML scopes', () => {
+  const dom = new JSDOM('<!doctype html><body></body>');
+  globalThis.document = dom.window.document;
+  globalThis.Node = dom.window.Node;
+  globalThis.NodeFilter = dom.window.NodeFilter;
+
+  it('drops the actual br-delimited editor line, including images on it', () => {
+    const defs = { code: { smart: { conditional: true, conditionalScope: 'line' } } };
+    assert.equal(
+      dropConditional('<p>Keep<br><img src="https://example.test/a.png">{{code}}<br>After</p>', defs, {}),
+      '<p>Keep<br>After</p>',
+    );
+  });
+
+  it('removes a paragraph whose only visible content is the empty variable', () => {
+    const defs = { first: { smart: { conditional: true, conditionalScope: 'paragraph' } } };
+    assert.equal(dropConditional('<p>Keep</p><p><span>{{first}}</span></p><p>After</p>', defs, {}), '<p>Keep</p><p>After</p>');
+  });
+
+  it('keeps surrounding HTML valid while dropping only one sentence', () => {
+    const defs = { first: { smart: { conditional: true, conditionalScope: 'sentence' } } };
+    assert.equal(
+      dropConditional('<p>Hello. <small>Welcome {{first}} today.</small> Thanks.</p>', defs, {}),
+      '<p>Hello. Thanks.</p>',
+    );
+  });
+});
+
 describe('cached Page Engine variable resolution', () => {
   it('resolves recipient, schema fields, code vars, name, and email history from one saved snapshot', async () => {
     const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'outside-only' });
@@ -171,6 +206,13 @@ describe('cached Page Engine variable resolution', () => {
     assert.deepEqual({ ...result.resolved }, { first: 'Ada', summary: 'Ada:1250' });
     assert.equal(result.displayName, 'Ada Lovelace');
     assert.equal(result.lastEmailMs, Date.parse('2026-07-21T12:00:00Z'));
+
+    const transformed = await dom.window.__gbResolveVarsForData(snapshot, {
+      first: { type: 'literal', value: 'MARCUS', smart: { transform: 'titleCase' } },
+      greeting: { type: 'literal', value: 'HELLO WORLD', smart: { transform: 'capitalize' } },
+    }, { type: 'auto' });
+    assert.equal(transformed.resolved.first, 'Marcus');
+    assert.equal(transformed.resolved.greeting, 'Hello world');
     dom.window.close();
   });
 });

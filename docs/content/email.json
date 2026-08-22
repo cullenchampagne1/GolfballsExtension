@@ -27,7 +27,7 @@
             ["A value (green)", "Resolved from the page — this exact text goes into the email"],
             ["Spinner + 'resolving…'", "Still being pulled from the page"],
             ["Spinner + 'running code…'", "A code variable is executing (these finish last)"],
-            ["Red 'Not found' tag", "Could not resolve — fix before sending or the literal {{name}} leaks into the email"]
+            ["Red 'Not found' tag", "Could not resolve — fix before sending; without a fallback the sent value is blank"]
           ] },
           { "type": "callout", "kind": "warning", "text": "Send stays disabled while variables are resolving and when no recipient was found. A red 'Not found' on the To row means the page has no detectable customer email." }
         ],
@@ -82,7 +82,7 @@
         "advanced": [
           { "type": "heading", "text": "The body editor" },
           { "type": "p", "text": "Subject and Body are rich-text editors. Toolbar: Bold, Italic, Underline, Strikethrough, bullet/numbered lists, Link, alignment, and Clear formatting. The Insert menu drops any of the template's variables in as a chip at the caret." },
-          { "type": "p", "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the literal {{name}} would leak). Click a chip's lightning bolt to open its smart options." },
+          { "type": "p", "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the sent value will be blank). Click a chip's lightning bolt to open its smart options." },
           { "type": "heading", "text": "Variations" },
           { "type": "p", "text": "The dashed 'Add variation' button adds an alternate subject + body that uses the same variables. The moment you add the first one, the initial email itself converts into the first block (named 'Variation 1' by default) so every option is a uniform, renameable block — the original is no longer a special case." },
           { "type": "p", "text": "Each block carries an editable name field: type a label like 'Warm' or 'Value-first' and it shows everywhere the variation is offered (the popup picker, the Email Runner, and the Workflow Manager split) instead of a generic 'Variation N'. Renaming sticks — deleting a variation no longer renumbers or clobbers the others' names. Added blocks number from 2 (the initial email holds slot 1)." },
@@ -126,7 +126,7 @@
         "advanced": [
           { "type": "heading", "text": "Writing variables into the body" },
           { "type": "table", "headers": ["Syntax", "Behavior"], "rows": [
-            ["{{name}}", "Substituted with the resolved value; if unresolved, the literal {{name}} stays visible so you notice"],
+            ["{{name}}", "Substituted with the resolved value; if unresolved and no fallback is set, it sends as blank"],
             ["{{mobile|office|email}}", "OR-block: candidates tried left to right, first non-empty wins. Renders in the body as a two-tone split pill — lighter half is the preferred variable, darker half the fallbacks"],
             ["Conditional", "Set on a chip via smart options: if the variable is empty, the whole sentence, line, or paragraph containing it is dropped from the output — no more 'Dear ,' emails"]
           ] },

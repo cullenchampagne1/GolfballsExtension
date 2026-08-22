@@ -1304,7 +1304,7 @@ export const HELP_CONTENT = {
               ],
               [
                 "Red 'Not found' tag",
-                "Could not resolve — fix before sending or the literal {{name}} leaks into the email"
+                "Could not resolve — fix before sending; without a fallback the sent value is blank"
               ]
             ]
           },
@@ -1483,7 +1483,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the literal {{name}} would leak). Click a chip's lightning bolt to open its smart options."
+            "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the sent value will be blank). Click a chip's lightning bolt to open its smart options."
           },
           {
             "type": "heading",
@@ -1639,7 +1639,7 @@ export const HELP_CONTENT = {
             "rows": [
               [
                 "{{name}}",
-                "Substituted with the resolved value; if unresolved, the literal {{name}} stays visible so you notice"
+                "Substituted with the resolved value; if unresolved and no fallback is set, it sends as blank"
               ],
               [
                 "{{mobile|office|email}}",

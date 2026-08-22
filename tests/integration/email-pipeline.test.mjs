@@ -22,6 +22,7 @@ globalThis.document = dom.window.document;
 
 const { parseEml } = await import('../../src/lib/emailParse.js');
 const { sanitizeHtml } = await import('../../src/lib/sanitizeHtml.js');
+const { normalizeEmailHtml } = await import('../../src/lib/emailHtml.js');
 const { htmlToPlainText, buildMailtoUrl, withSignature, sendEmail } = await import('../../src/lib/emailSender.js');
 const { sendThreadReply } = await import('../../src/lib/emailReply.js');
 const { evaluateWorkflowTemplate } = await import('../../src/lib/workflow/templateEvaluation.js');
@@ -205,8 +206,8 @@ describe('email pipeline', () => {
     assert.equal(email.to, 'buyer@example.com');
     assert.equal(email.replyMode, 'reply');
     assert.equal(email.htmlBody.includes('<script'), false, 'the PA body is sanitized');
-    assert.ok(email.htmlBody.includes('<br><div><b>Rep Name</b> · Golfballs.com</div>'), 'signature is glued via withSignature');
-    assert.equal(email.htmlBody, sanitizeHtml(withSignature(parsed.bodyHtml, '<b>Rep Name</b> · Golfballs.com')));
+    assert.ok(email.htmlBody.includes('<br><p') && email.htmlBody.includes('<b>Rep Name</b> · Golfballs.com</p>'), 'signature is glued via withSignature');
+    assert.equal(email.htmlBody, normalizeEmailHtml(withSignature(parsed.bodyHtml, '<b>Rep Name</b> · Golfballs.com')));
   });
 
   it('routes a freeform reply through the clicked email channel', async () => {
@@ -228,7 +229,7 @@ describe('email pipeline', () => {
     assert.equal(email.to, 'buyer@example.com');
     assert.equal(email.subject, 'RE: Order update');
     assert.equal(email.replyMode, 'reply');
-    assert.equal(email.htmlBody, '<p>Thanks, Pat.</p><br><div><b>Cullen</b></div>');
+    assert.equal(email.htmlBody, '<p style="line-height:1.6;margin:0px 0px 8px">Thanks, Pat.</p><br><p style="line-height:1.6;margin:0px"><b>Cullen</b></p>');
   });
 
   it('keeps a new inline photo distinct from preserved reply signature CIDs', async () => {

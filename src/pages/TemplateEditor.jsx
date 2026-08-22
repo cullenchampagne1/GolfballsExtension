@@ -448,7 +448,10 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
 
   const handleSaveSmart = smart => {
     if (!smartTarget?.variable) return;
-    const name = smartTarget.variable.name;
+    // An OR chip ({{preferred|fallback}}) is one expression, not a stored
+    // variable. Attach its group-level conditional behavior to the first
+    // candidate; the renderer evaluates emptiness across every candidate.
+    const name = smartTarget.variable.name.split('|').map((part) => part.trim()).filter(Boolean)[0];
     setVars(vs => vs.map(v => v.name === name ? { ...v, smart } : v));
     setSmartTarget(null);
   };
@@ -501,8 +504,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
      fell back to viewport-centre placement — that's the "way off cursor"
      bug the user kept reporting. */
   const openSmartByName = (name, _anchor, cursor) => {
-    const v = vars.find(x => x.name === name);
-    if (v && cursor) setSmartTarget({ variable: v, cursor });
+    const names = String(name).split('|').map((part) => part.trim()).filter(Boolean);
+    const v = vars.find(x => x.name === names[0]);
+    if (v && cursor) setSmartTarget({ variable: { ...v, name }, cursor });
   };
   const openSmartFromTable = (v, _anchor, cursor) => {
     if (v && cursor) setSmartTarget({ variable: v, cursor });

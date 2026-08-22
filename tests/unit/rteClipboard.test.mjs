@@ -7,7 +7,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
-import { fragToPlain, plainToHtml } from '../../src/lib/rteClipboard.js';
+import {
+  decorateEditorImages,
+  fragToPlain,
+  normalizePastedFragment,
+  plainToHtml,
+  stripEditorDecorations,
+} from '../../src/lib/rteClipboard.js';
 
 const dom = new JSDOM('<!doctype html><body></body>');
 globalThis.document = dom.window.document;
@@ -61,5 +67,23 @@ describe('plainToHtml — plain paste keeps line breaks and lets {{var}} survive
 
   it('leaves {{var}} intact so a later highlight pass can chip it', () => {
     assert.equal(plainToHtml('Hi {{firstName}}'), 'Hi {{firstName}}');
+  });
+});
+
+describe('rich paste normalization', () => {
+  it('keeps a bullet-only clipboard fragment as one real list without whitespace lines', () => {
+    assert.equal(
+      normalizePastedFragment('\n  <li>First</li>\n  <li>Second</li>\n'),
+      '<ul><li>First</li><li>Second</li></ul>',
+    );
+  });
+
+  it('adds a resize handle to pasted images and strips only the editor chrome on save', () => {
+    const decorated = decorateEditorImages('<img src="https://example.test/a.png" width="240">');
+    assert.match(decorated, /class="gb-rte-image"/);
+    assert.match(decorated, /class="gb-rte-image-resize"/);
+    const stored = stripEditorDecorations(decorated);
+    assert.doesNotMatch(stored, /gb-rte-image/);
+    assert.match(stored, /<img[^>]*width="240"[^>]*style="width: 240px; max-width: 100%; height: auto; display: block;">/);
   });
 });

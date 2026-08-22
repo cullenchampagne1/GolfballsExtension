@@ -272,6 +272,9 @@ export function DraggablePopup({
   useEffect(() => {
     if (!open || !closeOnOutside) return undefined;
     const onDown = (e) => {
+      // Dropdown menus portal to <body>, so they are outside rootRef in the
+      // DOM even though they are logically children of this popup.
+      if (e.target?.closest?.('.gb-dd-popover')) return;
       if (!rootRef.current?.contains(e.target)) onClose?.();
     };
     document.addEventListener('mousedown', onDown);
