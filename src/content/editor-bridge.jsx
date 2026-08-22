@@ -27,6 +27,7 @@ import {
 } from '../lib/emailTemplateCapabilities.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import {
+  applyImportedEmailTemplateOverrides,
   importedEmailShare,
   isImportedEmailTemplate,
   removeRetainedEmailTemplate,
@@ -322,7 +323,12 @@ async function applyTemplatePatch(tpl) {
   setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
   if (isImportedEmailTemplate(tpl) || (idx >= 0 && isImportedEmailTemplate(templates[idx]))) {
-    toast('Imported email templates are read-only.', true);
+    if (idx < 0 || !isImportedEmailTemplate(templates[idx])) {
+      toast('Imported email template overrides could not be saved.', true);
+      return;
+    }
+    templates[idx] = applyImportedEmailTemplateOverrides(templates[idx], tpl);
+    await saveTemplates();
     return;
   }
   if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);

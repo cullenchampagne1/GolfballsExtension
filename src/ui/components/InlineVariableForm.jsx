@@ -57,7 +57,7 @@ const KIND_ICONS = {
 
 const SOFT = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
 
-export function InlineVariableForm({ typeId, onAdd, onCancel, onDelete, varNames = [], initialVariable = null }) {
+export function InlineVariableForm({ typeId, onAdd, onCancel, onDelete, varNames = [], initialVariable = null, valueOnly = false }) {
   const initial = initialVariable || {};
   const initialAttach = initial.attach || {};
   const [name,         setName]         = useState(initial.name || '');
@@ -203,7 +203,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, onDelete, varNames
     : kind === 'attachment' ? (config ? (attMode === 'inline' ? `(inline image · ${attWidth}px)` : '(file attachment)') : '— point at a file —')
     : '—';
 
-  const canAdd = !!name && !!config && /^\w+$/.test(name) && !varNames.includes(name);
+  const canAdd = !!name && (valueOnly || !!config) && /^\w+$/.test(name) && !varNames.includes(name);
 
   /* The form previously ran a ResizeObserver that called
      anchor.scrollIntoView({ block: 'nearest' }) on every layout
@@ -218,6 +218,58 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, onDelete, varNames
      scrolling, and the user can scroll manually if needed. */
   const formRef = useRef(null);
   const bottomRef = useRef(null);
+
+  if (valueOnly) {
+    return (
+      <motion.div
+        ref={formRef}
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: 'auto', opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        transition={SOFT}
+        style={{ overflow: 'hidden' }}
+      >
+        <div style={{
+          padding: 12,
+          background: 'var(--gb-fill-faint)',
+          borderTop: '1px solid var(--gb-border-subtle)',
+          borderBottom: '1px solid var(--gb-border-subtle)',
+          display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <I.edit size={11} style={{ color: 'var(--gb-brand-label)' }} />
+            <span style={{
+              flex: 1, fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
+              textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+            }}>
+              Literal override · {name}
+            </span>
+          </div>
+          <Field label="Fixed value" hint="This value is saved only for your imported copy.">
+            <Input
+              size="sm"
+              value={config}
+              placeholder="Leave empty to use an empty value"
+              autoFocus
+              onChange={setConfig}
+            />
+          </Field>
+          <div ref={bottomRef} style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+            <Btn variant="ghost" size="sm" onClick={onCancel}>Cancel</Btn>
+            <Btn
+              variant="primary"
+              size="sm"
+              icon={<I.check />}
+              disabled={!canAdd}
+              onClick={() => onAdd?.({ name, kind: 'literal', config })}
+            >
+              Save override
+            </Btn>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

@@ -212,6 +212,102 @@ export function isImportedEmailTemplate(template) {
   return importedEmailShare(template) !== null;
 }
 
+const IMPORT_OVERRIDE_FIELDS = Object.freeze([
+  'presetTaskId',
+  'followUpActionId',
+  'replyMode',
+  'senderAccount',
+  'senderRandomize',
+]);
+
+function importOverrideValues(template) {
+  const values = {
+    presetTaskId: String(template?.presetTaskId || ''),
+    followUpActionId: String(template?.followUpActionId || ''),
+    replyMode: template?.replyMode === 'reply' ? 'reply' : 'standalone',
+    senderAccount: String(template?.senderAccount || 'golfballs'),
+    senderRandomize: template?.senderRandomize === true,
+    literalVariables: {},
+  };
+  for (const [name, definition] of Object.entries(template?.vars || {})) {
+    if (definition?.type === 'literal') {
+      values.literalVariables[name] = String(definition.value ?? '');
+    }
+  }
+  for (const variable of template?.caseVars || []) {
+    if (variable?.kind === 'literal' && variable.name) {
+      values.literalVariables[variable.name] = String(variable.config ?? '');
+    }
+  }
+  return values;
+}
+
+function sameOverrideValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** Apply the recipient-owned part of a retained share edit. The source
+ * template remains immutable: only post-send behavior, Direct Send account
+ * choices, and existing literal values may cross this boundary. The effective
+ * values are mirrored onto the template so every existing send surface sees
+ * them without needing a second template-resolution path. */
+export function applyImportedEmailTemplateOverrides(template, draft) {
+  const source = importedEmailShare(template);
+  if (!source) throw new Error('Email template is not an imported share');
+
+  const defaults = source.overrideDefaults && typeof source.overrideDefaults === 'object'
+    ? source.overrideDefaults
+    : importOverrideValues(template);
+  const candidate = importOverrideValues(draft || template);
+  const overrides = {};
+  for (const field of IMPORT_OVERRIDE_FIELDS) {
+    if (!sameOverrideValue(candidate[field], defaults[field])) {
+      overrides[field] = candidate[field];
+    }
+  }
+  for (const [name, value] of Object.entries(candidate.literalVariables)) {
+    const isSourceLiteral = template.vars?.[name]?.type === 'literal'
+      || template.caseVars?.some((variable) => variable?.name === name && variable.kind === 'literal');
+    if (!isSourceLiteral) continue;
+    if (!sameOverrideValue(value, defaults.literalVariables?.[name])) {
+      (overrides.literalVariables ||= {})[name] = value;
+    }
+  }
+
+  const vars = { ...(template.vars || {}) };
+  for (const [name, definition] of Object.entries(vars)) {
+    if (definition?.type !== 'literal') continue;
+    vars[name] = {
+      ...definition,
+      value: candidate.literalVariables[name] ?? String(definition.value ?? ''),
+    };
+  }
+  const caseVars = Array.isArray(template.caseVars)
+    ? template.caseVars.map((variable) => (
+      variable?.kind === 'literal'
+        ? { ...variable, config: candidate.literalVariables[variable.name] ?? String(variable.config ?? '') }
+        : variable
+    ))
+    : template.caseVars;
+
+  return {
+    ...template,
+    presetTaskId: candidate.presetTaskId,
+    followUpActionId: candidate.followUpActionId,
+    replyMode: candidate.replyMode,
+    senderAccount: candidate.senderAccount,
+    senderRandomize: candidate.senderRandomize,
+    vars,
+    caseVars,
+    updatedAt: Date.now(),
+    shareImport: {
+      ...source,
+      overrideDefaults: defaults,
+      overrides,
+    },
+  };
+}
+
 /** Attach immutable provenance after normalization. Server shares never get
  * to choose local ids, folder ids, or the provenance object itself. */
 export function markImportedEmailTemplate(template, share) {
@@ -225,6 +321,8 @@ export function markImportedEmailTemplate(template, share) {
       url: String(share?.url || ''),
       ownerName: String(share?.owner_name || '').trim() || 'Unregistered installation',
       importedAt: new Date().toISOString(),
+      overrideDefaults: importOverrideValues(template),
+      overrides: {},
     },
   };
 }

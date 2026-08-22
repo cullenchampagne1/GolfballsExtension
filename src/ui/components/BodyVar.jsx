@@ -24,7 +24,7 @@ const SIZES = {
  *   size        'md' (body, default) | 'sm' (table row)
  *   onOpenSmart Called when the lightning button is clicked
  */
-export function BodyVar({ v, onOpenSmart, size = 'md' }) {
+export function BodyVar({ v, onOpenSmart, size = 'md', readOnly = false }) {
   const hasSmart = !!(v?.smart && (
     typeof v.smart.fallback === 'string' && v.smart.fallback.length > 0
       || v.smart.transform
@@ -67,6 +67,7 @@ export function BodyVar({ v, onOpenSmart, size = 'md' }) {
            the bolt element; the third arg is the cursor pos. */
         onClick={(e) => {
           e.stopPropagation();
+          if (readOnly) return;
           onOpenSmart?.(v, e.currentTarget, { x: e.clientX, y: e.clientY });
         }}
         style={{
@@ -77,12 +78,12 @@ export function BodyVar({ v, onOpenSmart, size = 'md' }) {
             : 'transparent',
           color: p.fg,
           display: 'inline-flex', alignItems: 'center',
-          cursor: 'pointer',
-          opacity: hasSmart ? 1 : 0.55,
+          cursor: readOnly ? 'default' : 'pointer',
+          opacity: readOnly ? 0.35 : (hasSmart ? 1 : 0.55),
           transition: 'opacity var(--gb-anim)',
         }}
-        onMouseEnter={e => (e.currentTarget.style.opacity = 1)}
-        onMouseLeave={e => (e.currentTarget.style.opacity = hasSmart ? 1 : 0.55)}
+        onMouseEnter={e => { if (!readOnly) e.currentTarget.style.opacity = 1; }}
+        onMouseLeave={e => { if (!readOnly) e.currentTarget.style.opacity = hasSmart ? 1 : 0.55; }}
       >
         <I.bolt size={s.boltIcon} />
       </span>

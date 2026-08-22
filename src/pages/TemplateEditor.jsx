@@ -33,6 +33,23 @@ import { importedEmailShare, isImportedEmailTemplate } from '../lib/templateImpo
    glyph for the same type. */
 const PickerIcon = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 
+function LockedRegion({ locked, children, style }) {
+  return (
+    <div
+      inert={locked || undefined}
+      aria-readonly={locked || undefined}
+      style={{
+        ...style,
+        opacity: locked ? 0.62 : 1,
+        filter: locked ? 'saturate(.42)' : 'none',
+        transition: 'opacity 160ms ease, filter 160ms ease',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────
    Convert old template format → new
    Old: tpl.vars = { name: { type, builtin?, selector?, pattern? } }
@@ -556,10 +573,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   const skipTypeSave = useRef(true);
   const saveTimer    = useRef(0);
   useEffect(() => {
-    // Imported shares use this exact editor tree for presentation, but the
-    // recipient never owns the content. Keep the UI and bridge protections
-    // independent so a future control cannot accidentally persist a share.
-    if (readOnly) return undefined;
+    // Imported shares use this exact editor tree and save through the same
+    // debounce. The bridge applies a strict allowlist, so only recipient-local
+    // overrides can persist even if a locked control changes unexpectedly.
     if (skipSave.current) { skipSave.current = false; return undefined; }
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -637,26 +653,15 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         enabled={enabled}
         onToggle={readOnly ? undefined : () => setEnabled((e) => !e)}
         toggleDisabled={readOnly}
-        desc={readOnly ? `${meta.desc} Read only · Shared by ${ownerName}` : meta.desc}
+        desc={readOnly ? `${meta.desc} Shared by ${ownerName} · Source content is read only.` : meta.desc}
         onDelete={onDelete}
         deleteLabel={readOnly ? 'Remove' : 'Delete'}
       />
 
-      {/* A retained share deliberately renders the production editor rather
-          than a reduced viewer. `inert` locks every current and future form
-          control without hiding sections or changing their layout; the
-          editor bridge separately rejects imported-template writes. */}
-      <div
-        className={readOnly ? 'gb-template-editor-readonly' : undefined}
-        inert={readOnly || undefined}
-        aria-readonly={readOnly || undefined}
-        title={readOnly ? `Read-only template shared by ${ownerName}` : undefined}
-        style={{
-          opacity: readOnly ? 0.68 : 1,
-          filter: readOnly ? 'saturate(.45)' : 'none',
-          transition: 'opacity 160ms ease, filter 160ms ease',
-        }}
-      >
+      {/* Retained shares keep the production editor layout. LockedRegion dims
+          and disables source-owned sections, while recipient-owned overrides
+          remain normal controls and are enforced again by the save bridge. */}
+      <div className={readOnly ? 'gb-template-editor-readonly' : undefined}>
 
       {/* ── Type tabs + sender picker on the same row.
           Left: order/case/account Segmented.
@@ -668,7 +673,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
           dimmed) — the value is still persisted so flipping the flag back
           on later doesn't lose the user's preference. */}
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
+        <LockedRegion locked={readOnly} style={{ display: 'flex' }}>
+          <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
+        </LockedRegion>
         <div style={{ flex: 1 }} />
         {paEnabled && (
           <Segmented
@@ -696,7 +703,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       )}
 
       {/* ── Meta row ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: recipOpt.toType === 'auto' ? 12 : 8 }}>
+      <LockedRegion locked={readOnly} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: recipOpt.toType === 'auto' ? 12 : 8 }}>
         <Field label="Template name">
           <Input value={name} placeholder="e.g. Charge Error Follow-Up" size="sm" onChange={setName} />
         </Field>
@@ -708,11 +715,11 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
             onChange={(id) => setRecipientIdx(id)}
           />
         </Field>
-      </div>
+      </LockedRegion>
 
       {/* ── Conditional recipient value ── */}
       {recipOpt.toType !== 'auto' && (
-        <div style={S.mb12}>
+        <LockedRegion locked={readOnly} style={S.mb12}>
           <Field label={recipOpt.toType === 'literal' ? 'Fixed recipient email' : 'Recipient selector (CSS)'}>
             <Input
               value={toFieldValue}
@@ -741,7 +748,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
               style={{ marginTop: 6 }}
             />
           )}
-        </div>
+        </LockedRegion>
       )}
 
       {/* ── Successful-delivery follow-ups (all non-case email templates) ── */}
@@ -796,16 +803,16 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
 
       {/* ── Recommended case tags (case templates only) ── */}
       {typeId === 'case' && (
-        <div style={S.mb14}>
+        <LockedRegion locked={readOnly} style={S.mb14}>
           <CaseTagsEditor
             initial={tpl.caseTags}
             onChange={setCaseTagsData}
           />
-        </div>
+        </LockedRegion>
       )}
 
       {/* ── Rules — imports the template's saved rules/conditions ── */}
-      <div style={S.mb14}>
+      <LockedRegion locked={readOnly} style={S.mb14}>
         <RulesComp
           initial={
             typeId === 'account' ? tpl.accountConditions
@@ -815,8 +822,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
           varNames={vars.map((v) => v.name)}
           onChange={setRuleData}
         />
-      </div>
+      </LockedRegion>
 
+      <LockedRegion locked={readOnly}>
       {/* ── Subject + Body ──
           With no variations: plain Subject/Body fields. Once a variation is
           added, the initial email BECOMES the first block (default name
@@ -955,6 +963,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
           Add variation
         </Btn>
       </div>
+      </LockedRegion>
 
       {/* ── Variables — VariableTable manages its own inline add form
            now, so we just pass the create callback directly. ── */}
@@ -968,6 +977,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
           onDelete={handleDeleteVar}
           onOpenSmart={openSmartFromTable}
           onExport={exportVarsJson}
+          literalOverridesOnly={readOnly}
         />
       </div>
 

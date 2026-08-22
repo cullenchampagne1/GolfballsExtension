@@ -46,7 +46,7 @@ const COL_GRID = 'minmax(0, 1fr) 84px 120px 120px 28px';
  *                delete and re-add. Reduces the rename UI to a native prompt.
  *   onOpenSmart  (variable) => void — opens the smart-options modal
  */
-export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart, paEnabled = false, onExport }) {
+export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart, paEnabled = false, onExport, literalOverridesOnly = false }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [exported, setExported] = useState(false);
@@ -165,12 +165,19 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               background: v.deprecated
                 ? 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))'
                 : (isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent'),
+              opacity: literalOverridesOnly && v.kind !== 'literal' ? 0.62 : 1,
+              filter: literalOverridesOnly && v.kind !== 'literal' ? 'saturate(.42)' : 'none',
             }}
           >
             {/* Name — the canonical BodyVar chip at table density.
                 Bolt is BodyVar's own clickable smart-options button. */}
             <div style={{ minWidth: 0, display: 'flex' }}>
-              <BodyVar v={v} size="sm" onOpenSmart={onOpenSmart} />
+              <BodyVar
+                v={v}
+                size="sm"
+                readOnly={literalOverridesOnly}
+                onOpenSmart={literalOverridesOnly ? undefined : onOpenSmart}
+              />
             </div>
 
             {/* Kind (+ deprecation badge from the one-version migration) */}
@@ -212,8 +219,15 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               <IconBtn
                 size="sm"
                 icon={<I.edit />}
-                tooltip="Edit variable"
-                onClick={() => { setAdding(false); setEditing(v); }}
+                disabled={literalOverridesOnly && v.kind !== 'literal'}
+                tooltip={literalOverridesOnly
+                  ? (v.kind === 'literal' ? 'Edit your literal override' : 'Shared variable is read only')
+                  : 'Edit variable'}
+                onClick={() => {
+                  if (literalOverridesOnly && v.kind !== 'literal') return;
+                  setAdding(false);
+                  setEditing(v);
+                }}
               />
             </div>
           </motion.div>
@@ -236,6 +250,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
             }}
             onDelete={() => { onDelete?.(editing.name); setEditing(null); }}
             onCancel={() => setEditing(null)}
+            valueOnly={literalOverridesOnly}
           />
         )}
         {adding && (
@@ -248,7 +263,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
           />
         )}
       </AnimatePresence>
-      {!adding && !editing && (
+      {!literalOverridesOnly && !adding && !editing && (
         <div style={{
           padding: 8,
           background: 'var(--gb-surface-modal)',

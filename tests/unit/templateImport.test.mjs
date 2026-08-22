@@ -25,7 +25,7 @@ globalThis.chrome = {
 
 const {
   normalizeTemplate, parseTemplateBlob, buildEmailTemplateFile, parseEmailTemplateFile,
-  importTemplates, importSharedEmailTemplate, importedEmailShare,
+  applyImportedEmailTemplateOverrides, importTemplates, importSharedEmailTemplate, importedEmailShare,
   isImportedEmailTemplate, markImportedEmailTemplate, removeImportedEmailTemplate,
   removeRetainedEmailTemplate,
   EMAIL_TEMPLATE_FILE_KIND, EMAIL_TEMPLATE_FILE_VERSION,
@@ -274,6 +274,77 @@ describe('retained shared email templates', () => {
     assert.deepEqual({ added: second.added, alreadyImported: second.alreadyImported }, { added: 0, alreadyImported: true });
     assert.equal(store.templates.length, 1);
     assert.equal(store.templates[0].body, minimal.body, 're-import does not overwrite the retained snapshot');
+  });
+
+  it('persists only recipient-owned overrides on an imported template', () => {
+    const retained = markImportedEmailTemplate(normalizeTemplate({
+      ...minimal,
+      presetTaskId: 'source-task',
+      followUpActionId: 'source-action',
+      replyMode: 'standalone',
+      senderAccount: 'golfballs',
+      vars: {
+        greeting: { type: 'literal', value: 'Hello' },
+        first_name: { type: 'schema', path: 'contact.firstName' },
+      },
+    }), share);
+
+    const updated = applyImportedEmailTemplateOverrides(retained, {
+      ...retained,
+      name: 'Attempted source rename',
+      body: '<p>Attempted source rewrite</p>',
+      presetTaskId: 'my-task',
+      followUpActionId: 'my-action',
+      replyMode: 'reply',
+      senderAccount: 'outlook',
+      senderRandomize: true,
+      vars: {
+        greeting: { type: 'literal', value: 'Howdy' },
+        first_name: { type: 'literal', value: 'Attempted type change' },
+      },
+    });
+
+    assert.equal(updated.name, 'Welcome');
+    assert.equal(updated.body, minimal.body);
+    assert.equal(updated.presetTaskId, 'my-task');
+    assert.equal(updated.followUpActionId, 'my-action');
+    assert.equal(updated.replyMode, 'reply');
+    assert.equal(updated.senderAccount, 'outlook');
+    assert.equal(updated.senderRandomize, true);
+    assert.deepEqual(updated.vars.greeting, { type: 'literal', value: 'Howdy' });
+    assert.deepEqual(updated.vars.first_name, { type: 'schema', path: 'contact.firstName' });
+    assert.deepEqual(updated.shareImport.overrides, {
+      presetTaskId: 'my-task',
+      followUpActionId: 'my-action',
+      replyMode: 'reply',
+      senderAccount: 'outlook',
+      senderRandomize: true,
+      literalVariables: { greeting: 'Howdy' },
+    });
+  });
+
+  it('allows literal overrides for imported case variables too', () => {
+    const retained = markImportedEmailTemplate(normalizeTemplate({
+      type: 'case',
+      name: 'Case reply',
+      body: '<p>{{signoff}}</p>',
+      caseVars: [
+        { name: 'signoff', kind: 'literal', config: 'Regards' },
+        { name: 'case_number', kind: 'regex', config: 'Case (\\d+)' },
+      ],
+    }), share);
+    const updated = applyImportedEmailTemplateOverrides(retained, {
+      ...retained,
+      caseVars: [
+        { name: 'signoff', kind: 'literal', config: 'Thanks' },
+        { name: 'case_number', kind: 'literal', config: 'Attempted replacement' },
+      ],
+    });
+
+    assert.equal(updated.caseVars[0].config, 'Thanks');
+    assert.equal(updated.caseVars[1].kind, 'regex');
+    assert.equal(updated.caseVars[1].config, 'Case (\\d+)');
+    assert.deepEqual(updated.shareImport.overrides.literalVariables, { signoff: 'Thanks' });
   });
 
   it('deletes every local copy for a released import membership', async () => {

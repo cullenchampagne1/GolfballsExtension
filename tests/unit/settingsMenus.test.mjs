@@ -66,18 +66,19 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowLocalTemplateUsage/);
   });
 
-  it('renders retained email shares in the complete editor while locking content edits', () => {
+  it('renders retained email shares in the complete editor with allowlisted local overrides', () => {
     assert.match(templateEditorSource, /const imported = isImportedEmailTemplate\(tpl\)/);
     assert.match(templateEditorSource, /<EditableTemplateEditor[\s\S]*?readOnly=\{imported\}/);
     assert.doesNotMatch(templateEditorSource, /function ImportedTemplateViewer/);
-    assert.match(templateEditorSource, /inert=\{readOnly \|\| undefined\}/);
-    assert.match(templateEditorSource, /if \(readOnly\) return undefined;[\s\S]*?__gbSaveTemplate/);
+    assert.match(templateEditorSource, /function LockedRegion[\s\S]*?inert=\{locked \|\| undefined\}/);
+    assert.match(templateEditorSource, /literalOverridesOnly=\{readOnly\}/);
+    assert.match(templateEditorSource, /recipient-local[\s\S]*?__gbSaveTemplate/);
     assert.match(templateEditorSource, /deleteLabel=\{readOnly \? 'Remove' : 'Delete'\}/);
     assert.match(templateEditorSource, /Shared by \$\{ownerName\}/);
     assert.match(sidebarSource, /importedEmailShare\(tpl\)/);
     assert.match(sidebarSource, /<I\.user size=\{8\}/);
     assert.doesNotMatch(sidebarSource, />IMPORTED</);
-    assert.match(editorBridgeSource, /Imported email templates are read-only/);
+    assert.match(editorBridgeSource, /applyImportedEmailTemplateOverrides\(templates\[idx\], tpl\)/);
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);
