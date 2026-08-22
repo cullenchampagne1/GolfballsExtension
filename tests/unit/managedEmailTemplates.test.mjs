@@ -99,6 +99,52 @@ describe('managed email-template bucket cache', () => {
     assert.equal(bucket.needsPublish(result, { templates: [item({ created_by_current: true })] }), true);
   });
 
+  it('publishes only explicitly enrolled local templates', () => {
+    const privateTemplate = {
+      id: 'private', type: 'order', name: 'Private', subject: 'Local only', body: '<p>Hi</p>',
+    };
+    const enrolledTemplate = {
+      id: 'approved', type: 'order', name: 'Approved', subject: 'Shared', body: '<p>Hi</p>',
+      managedTemplateEnrollment: { kind: 'revstack-managed-email-template' },
+    };
+    const update = bucket.writes([privateTemplate, enrolledTemplate], { templates: [] });
+
+    assert.deepEqual(update.templates.map((row) => row.client_template_id), ['approved']);
+    assert.equal(update.templates[0].template.managedTemplateEnrollment, undefined);
+    assert.equal(bucket.needsPublish([privateTemplate], { templates: [] }), false);
+    assert.equal(bucket.needsPublish([privateTemplate, enrolledTemplate], { templates: [] }), true);
+  });
+
+  it('does not adopt an identical private template from another parent', () => {
+    const privateTemplate = {
+      id: 'private-welcome',
+      ...item().template,
+    };
+    const result = bucket.reconcile([privateTemplate], {
+      templates: [item({ created_by_current: false })],
+    }, { 'emailTemplates.allowParentAccount': true });
+
+    assert.equal(result.length, 2);
+    assert.equal(result[0], privateTemplate);
+    assert.equal(result[1].managedTemplate.editable, true);
+    assert.notEqual(result[1].id, privateTemplate.id);
+  });
+
+  it('keeps a contributor local copy when its bucket row is cleared', () => {
+    const [contributed] = bucket.reconcile([], {
+      templates: [item({ created_by_current: true })],
+    }, { 'emailTemplates.allowParentAccount': true });
+    const detached = bucket.reconcile([contributed], { templates: [] }, {});
+
+    assert.equal(detached.length, 1);
+    assert.equal(detached[0].id, 'welcome');
+    assert.equal(detached[0].name, 'Welcome');
+    assert.equal(detached[0].managedTemplate, undefined);
+
+    const [mirrored] = bucket.reconcile([], { templates: [item()] }, {});
+    assert.deepEqual(bucket.reconcile([mirrored], { templates: [] }, {}), []);
+  });
+
   it('keeps child follow-up, sender, and literal overrides across server refreshes', () => {
     const [first] = bucket.reconcile([], { templates: [item()] }, {});
     first.presetTaskId = 'task-local';

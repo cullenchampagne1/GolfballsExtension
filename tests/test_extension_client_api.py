@@ -687,6 +687,9 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             template={
                 "name": "Persistent source", "type": "order",
                 "subject": "Original", "body": "<p>Hello</p>",
+                "managedTemplateEnrollment": {
+                    "kind": "revstack-managed-email-template",
+                },
             },
             source_template_id="t_local-template-1",
         )
@@ -704,6 +707,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
 
         self.assertEqual(second["id"], first["id"])
         self.assertEqual(second["template"]["subject"], "Original")
+        self.assertNotIn("managedTemplateEnrollment", second["template"])
         with Session(self.engine) as session:
             self.assertEqual(session.query(
                 self.models.ExtensionEmailTemplateShare,

@@ -33,6 +33,8 @@ describe('owned email-template share synchronization', () => {
       name: 'Follow up', type: 'order', body: '<p>Hello</p>',
       shareImport: { shareId: 'not-server-content' },
       shareSync: { owned: [] },
+      managedTemplate: { bucketId: 'not-server-content' },
+      managedTemplateEnrollment: { kind: 'not-server-content' },
     }), {
       name: 'Follow up', type: 'order', body: '<p>Hello</p>',
     });

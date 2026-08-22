@@ -18,7 +18,11 @@ import {
   trackerForTemplate,
 } from '../lib/emailSubjectTracking.js';
 import { importedEmailShare, isImportedEmailTemplate } from '../lib/templateImport.js';
-import { managedEmailTemplate } from '../lib/emailTemplateCapabilities.js';
+import {
+  emailTemplateIsBucketEnrolled,
+  managedEmailTemplate,
+  setEmailTemplateBucketEnrollment,
+} from '../lib/emailTemplateCapabilities.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -308,6 +312,10 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   // Default to reply mode for new templates — matches legacy editor's
   // "checked unless explicitly 'standalone'" load behavior.
   const [replyMode,      setReplyMode]      = useState(tpl.replyMode !== 'standalone');
+  const [bucketEnrolled, setBucketEnrolled] = useState(
+    () => emailTemplateIsBucketEnrolled(tpl),
+  );
+  const templateBucketEnrolled = emailTemplateIsBucketEnrolled(tpl);
   // Sender account — only meaningful when Direct Send via Power Automate is
   // on (the flow chooses which "from" address to use). Two accounts are
   // currently provisioned; senderRandomize=true picks per send.
@@ -365,6 +373,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     setPresetTaskId(tpl.presetTaskId || '');
     setFollowUpActionId(tpl.followUpActionId || '');
     setReplyMode(tpl.replyMode !== 'standalone');
+    setBucketEnrolled(emailTemplateIsBucketEnrolled(tpl));
     setSenderAccount(tpl.senderAccount || 'golfballs');
     setSenderRandomize(!!tpl.senderRandomize);
     setVariations((tpl.variations || []).map((variation, index) => ({
@@ -376,6 +385,10 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     setBaseLabel(tpl.baseLabel || '');
     setContentRevision(importRevision);
   }, [importRevision, readOnly, tpl]);
+
+  useEffect(() => {
+    setBucketEnrolled(templateBucketEnrolled);
+  }, [templateBucketEnrolled]);
 
   function addVariation() {
     // The initial email is block "Variation 1", so added blocks number from 2.
@@ -422,16 +435,24 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   // and those controls visibly pop in. The whole template panel takes
   // ~1 frame longer to appear but renders in its final shape.
   const [paEnabled, setPaEnabled] = useState(false);
+  const [parentAccount, setParentAccount] = useState(false);
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
-    chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
+    chrome.storage.local.get(['featureFlags', 'devSettings'], ({ featureFlags, devSettings }) => {
       setPaEnabled(!!(featureFlags && featureFlags.powerAutomateEnabled));
+      setParentAccount(devSettings?.['emailTemplates.allowParentAccount'] === true);
       setPaReady(true);
     });
     function onChanged(changes) {
-      if (!changes.featureFlags) return;
-      const v = changes.featureFlags.newValue;
-      setPaEnabled(!!(v && v.powerAutomateEnabled));
+      if (changes.featureFlags) {
+        const v = changes.featureFlags.newValue;
+        setPaEnabled(!!(v && v.powerAutomateEnabled));
+      }
+      if (changes.devSettings) {
+        setParentAccount(
+          changes.devSettings.newValue?.['emailTemplates.allowParentAccount'] === true,
+        );
+      }
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
@@ -624,7 +645,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       else if (typeId === 'case') next.caseRules = ruleData.map((r) => ({ field: r.left, op: r.op, value: r.right }));
       else                        next.rules = ruleData; // order: grouped tree from RuleGroups
     }
-    return next;
+    return parentAccount
+      ? setEmailTemplateBucketEnrollment(next, bucketEnrolled)
+      : next;
   }
 
   const subjectTracker = useMemo(() => {
@@ -646,7 +669,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, followUpActionId, replyMode, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, followUpActionId, replyMode, bucketEnrolled, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
      spring is keyed on tpl.type, so we save the new type immediately and
@@ -863,6 +886,22 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
             onChange={(on) => setReplyMode(on)}
           />
         </LockedRegion>
+      )}
+
+      {/* Parent accounts opt individual templates into the approved bucket.
+          Removing one from the bucket strips only its management provenance;
+          the same document remains in this parent's private local library. */}
+      {parentAccount && !readOnly && (
+        <div style={S.mb12}>
+          <FeatureSpotlight
+            size="xs"
+            on={bucketEnrolled}
+            icon={<I.users />}
+            name="Approved template bucket"
+            desc="Shares this template with managed users and other parent accounts. Turning it off keeps a private local copy."
+            onChange={setBucketEnrolled}
+          />
+        </div>
       )}
 
       {/* ── Recommended case tags (case templates only) ── */}

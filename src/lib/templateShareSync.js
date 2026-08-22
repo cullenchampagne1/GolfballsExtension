@@ -10,7 +10,9 @@ export const OWNED_EMAIL_SHARE_SYNC_KIND = 'revstack-owned-email-template-shares
 const SHARE_ID = /^[A-Za-z0-9_-]{32}$/;
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/;
 const LOCAL_FIELDS = new Set([
-  'id', 'folderId', 'shareImport', 'shareSync', 'createdAt', 'updatedAt',
+  'id', 'folderId', 'shareImport', 'shareSync',
+  'managedTemplate', 'managedTemplateEnrollment',
+  'createdAt', 'updatedAt',
 ]);
 
 const plainObject = (value) => (

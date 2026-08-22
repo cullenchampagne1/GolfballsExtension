@@ -130,6 +130,17 @@ describe('settings menus', () => {
     assert.doesNotMatch(templateRowSource, />Managed<|`Management ·/);
   });
 
+  it('offers parent accounts explicit per-template bucket enrollment below reply mode', () => {
+    const replyToggle = templateEditorSource.indexOf('name="Reply to most recent email"');
+    const bucketToggle = templateEditorSource.indexOf('name="Approved template bucket"');
+
+    assert.ok(replyToggle > 0);
+    assert.ok(bucketToggle > replyToggle);
+    assert.match(templateEditorSource, /parentAccount && !readOnly/);
+    assert.match(templateEditorSource, /setEmailTemplateBucketEnrollment\(next, bucketEnrolled\)/);
+    assert.match(templateEditorSource, /Turning it off keeps a private local copy/);
+  });
+
   it('keeps subject insertion inline and opens smart options for OR expressions', () => {
     assert.match(richTextEditorSource, /range\.createContextualFragment\(html\)/);
     assert.doesNotMatch(richTextEditorSource, /execCommand\('insertHTML'/);

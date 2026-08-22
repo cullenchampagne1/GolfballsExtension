@@ -15,6 +15,9 @@ export const EMAIL_TEMPLATE_CAPABILITY_KEYS = Object.freeze({
   allowParentAccount: 'emailTemplates.allowParentAccount',
 });
 
+export const MANAGED_EMAIL_TEMPLATE_KIND = 'revstack-managed-email-template';
+export const MANAGED_EMAIL_TEMPLATE_ENROLLMENT_KEY = 'managedTemplateEnrollment';
+
 export function resolveEmailTemplateCapabilities(devSettings = {}) {
   const settings = devSettings && typeof devSettings === 'object' && !Array.isArray(devSettings)
     ? devSettings
@@ -39,8 +42,29 @@ export function filterLocalEmailTemplates(templates, devSettings = {}) {
 
 export function managedEmailTemplate(template) {
   const source = template?.managedTemplate;
-  return source?.kind === 'revstack-managed-email-template'
+  return source?.kind === MANAGED_EMAIL_TEMPLATE_KIND
     && typeof source.bucketId === 'string' ? source : null;
+}
+
+export function emailTemplateIsBucketEnrolled(template) {
+  if (managedEmailTemplate(template)) return true;
+  return template?.[MANAGED_EMAIL_TEMPLATE_ENROLLMENT_KEY]?.kind
+    === MANAGED_EMAIL_TEMPLATE_KIND;
+}
+
+export function setEmailTemplateBucketEnrollment(template, enrolled) {
+  const next = { ...(template || {}) };
+  if (enrolled) {
+    if (!managedEmailTemplate(next)) {
+      next[MANAGED_EMAIL_TEMPLATE_ENROLLMENT_KEY] = {
+        kind: MANAGED_EMAIL_TEMPLATE_KIND,
+      };
+    }
+  } else {
+    delete next.managedTemplate;
+    delete next[MANAGED_EMAIL_TEMPLATE_ENROLLMENT_KEY];
+  }
+  return next;
 }
 
 export function isManagedEmailTemplate(template) {

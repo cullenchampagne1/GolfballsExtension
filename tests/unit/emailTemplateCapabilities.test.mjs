@@ -2,10 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMAIL_TEMPLATE_CAPABILITY_KEYS,
+  emailTemplateIsBucketEnrolled,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
   readEmailTemplateCapabilities,
   resolveEmailTemplateCapabilities,
+  setEmailTemplateBucketEnrollment,
 } from '../../src/lib/emailTemplateCapabilities.js';
 
 describe('managed email-template capabilities', () => {
@@ -59,6 +61,23 @@ describe('managed email-template capabilities', () => {
       .map((row) => row.id), ['local', 'managed']);
     assert.equal(emailTemplateIsEditable(managed, settings), true);
     assert.equal(emailTemplateIsEditable(managed, {}), false);
+  });
+
+  it('enrolls and detaches a local template without changing its document', () => {
+    const local = { id: 'private', type: 'order', name: 'Private template' };
+    const enrolled = setEmailTemplateBucketEnrollment(local, true);
+
+    assert.equal(emailTemplateIsBucketEnrolled(local), false);
+    assert.equal(emailTemplateIsBucketEnrolled(enrolled), true);
+    assert.equal(local.managedTemplateEnrollment, undefined);
+
+    const detached = setEmailTemplateBucketEnrollment({
+      ...enrolled,
+      managedTemplate: {
+        kind: 'revstack-managed-email-template', bucketId: 'bucket-row',
+      },
+    }, false);
+    assert.deepEqual(detached, local);
   });
 
   it('reads the live devSettings bag through the storage boundary', async () => {
