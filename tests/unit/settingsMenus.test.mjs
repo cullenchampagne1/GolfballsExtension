@@ -105,7 +105,7 @@ describe('settings menus', () => {
     assert.match(sidebarSource, /ownedTemplateShares\(tpl\)/);
     assert.match(sidebarSource, /> Revoke share/);
     assert.match(sidebarSource, /!ownerShared[\s\S]*?> Share template/);
-    assert.match(templateEditorSource, /title="Shared by you"/);
+    assert.doesNotMatch(templateEditorSource, /ownerShared|Shared by you/);
     assert.match(editorBridgeSource, /__gbRevokeTemplateShares = revokeOwnedTemplateShares/);
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
