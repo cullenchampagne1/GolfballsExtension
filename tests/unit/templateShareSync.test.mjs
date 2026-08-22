@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   acknowledgeOwnedTemplateShare,
+  ownedTemplateShares,
   pendingOwnedTemplateShareUpdates,
   reconcileOwnedTemplateShares,
   registerOwnedTemplateShare,
@@ -15,6 +16,17 @@ const SHARE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
 const SESSION_ID = 'share-edit-session-0001';
 
 describe('owned email-template share synchronization', () => {
+  it('exposes only validated owner share rows to owner-facing controls', () => {
+    const valid = { shareId: SHARE_ID, version: 2 };
+    assert.deepEqual(ownedTemplateShares({
+      shareSync: {
+        kind: 'revstack-owned-email-template-shares',
+        owned: [valid, { shareId: 'not-a-share' }],
+      },
+    }), [valid]);
+    assert.deepEqual(ownedTemplateShares({ shareSync: { owned: [valid] } }), []);
+  });
+
   it('builds a server snapshot without local ids, folders, timestamps, or sync metadata', () => {
     assert.deepEqual(templateShareSnapshot({
       id: 'local-id', folderId: 'folder-1', createdAt: 1, updatedAt: 2,

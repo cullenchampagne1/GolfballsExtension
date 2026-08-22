@@ -102,6 +102,11 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /currentTemplate && window\.__gbOpenTemplate/);
     assert.match(editorTemplatesSource, /tpl\.shareImport\?\.version \|\| 0/);
     assert.match(sidebarSource, /__gbTrackTemplateShare\(template\.id, response\.share, template\)/);
+    assert.match(sidebarSource, /ownedTemplateShares\(tpl\)/);
+    assert.match(sidebarSource, /> Revoke share/);
+    assert.match(sidebarSource, /!ownerShared[\s\S]*?> Share template/);
+    assert.match(templateEditorSource, /title="Shared by you"/);
+    assert.match(editorBridgeSource, /__gbRevokeTemplateShares = revokeOwnedTemplateShares/);
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);

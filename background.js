@@ -1587,7 +1587,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.action === 'emailTemplateShareCreate') {
     let body = '';
-    try { body = JSON.stringify({ template: msg.template }); } catch { /* invalid */ }
+    try {
+      body = JSON.stringify({
+        template: msg.template,
+        source_template_id: typeof msg.template?.id === 'string' ? msg.template.id : undefined,
+      });
+    } catch { /* invalid */ }
     if (!msg.template || typeof msg.template !== 'object' || Array.isArray(msg.template)
         || !body) {
       sendResponse({ ok: false, error: 'Invalid email template' });

@@ -19,6 +19,7 @@ import {
   removeImportedEmailTemplate,
 } from '../lib/templateImport.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
+import { ownedTemplateShares } from '../lib/templateShareSync.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   filterLocalEmailTemplates,
@@ -237,6 +238,8 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
   const disabled = tpl.enabled === false;
   const imported = !isNote && isImportedEmailTemplate(tpl);
   const importedSource = imported ? importedEmailShare(tpl) : null;
+  const ownedShares = !isNote && !imported ? ownedTemplateShares(tpl) : [];
+  const ownerShared = ownedShares.length > 0;
   const trackingIssue = !isNote && !disabled
     ? emailTemplateTrackingIssue(tracker)
     : null;
@@ -273,7 +276,9 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
         // Base background is plain CSS so :hover can fade cleanly. Active
         // and disabled states override via the className-scoped rule
         // below, and the class wins over :hover (CSS specificity).
-        background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-deep)' : 'transparent'),
+        background: active
+          ? (ownerShared ? 'var(--gb-warning-tint-medium)' : 'var(--gb-brand-tint-soft)')
+          : (disabled ? 'var(--gb-surface-deep)' : (ownerShared ? 'var(--gb-warning-tint-soft)' : 'transparent')),
       }}
     >
       {/* Type stripe — inset rounded bar, never a full border. Stays put
@@ -353,6 +358,14 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                   </span>
                 </span>
               )}
+              {ownerShared && (
+                <span
+                  title="Changes to this template update everyone who imported it"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--gb-warning-fg)', fontWeight: 700 }}
+                >
+                  <I.link size={8} /> Shared by you
+                </span>
+              )}
             </div>
           );
         })()}
@@ -376,12 +389,20 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                 </MenuItem>
               ))}
               <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '4px 6px 2px' }} />
-              {!isNote && !imported && (
+              {!isNote && !imported && !ownerShared && (
                 <MenuItem onClick={() => {
                   setMenuOpen(false);
                   window.dispatchEvent(new CustomEvent('gb:share-email-template', { detail: tpl }));
                 }}>
                   <I.link size={11} /> Share template
+                </MenuItem>
+              )}
+              {ownerShared && (
+                <MenuItem danger onClick={() => {
+                  setMenuOpen(false);
+                  window.__gbRevokeTemplateShares?.(tpl.id);
+                }}>
+                  <I.link size={11} /> Revoke share
                 </MenuItem>
               )}
               <MenuItem
@@ -834,7 +855,10 @@ function TemplateSidebar() {
 
   useEffect(() => {
     const listener = (event) => {
-      if (allowLocalTemplates) setShareTemplate(event.detail || null);
+      const template = event.detail || null;
+      if (allowLocalTemplates && template && ownedTemplateShares(template).length === 0) {
+        setShareTemplate(template);
+      }
     };
     window.addEventListener('gb:share-email-template', listener);
     return () => window.removeEventListener('gb:share-email-template', listener);

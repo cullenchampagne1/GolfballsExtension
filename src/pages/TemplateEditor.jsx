@@ -18,6 +18,7 @@ import {
   trackerForTemplate,
 } from '../lib/emailSubjectTracking.js';
 import { importedEmailShare, isImportedEmailTemplate } from '../lib/templateImport.js';
+import { ownedTemplateShares } from '../lib/templateShareSync.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -255,6 +256,7 @@ export function EmptyState() {
 export function TemplateEditor({ tpl, onDelete }) {
   const imported = isImportedEmailTemplate(tpl);
   const source = imported ? importedEmailShare(tpl) : null;
+  const ownerShared = !imported && ownedTemplateShares(tpl).length > 0;
   const displayedTemplate = imported && source?.overrideDefaults?.replyMode
     ? { ...tpl, replyMode: source.overrideDefaults.replyMode }
     : tpl;
@@ -264,6 +266,7 @@ export function TemplateEditor({ tpl, onDelete }) {
       onDelete={onDelete}
       readOnly={imported}
       ownerName={source?.ownerName || 'Unregistered installation'}
+      ownerShared={ownerShared}
     />
   );
 }
@@ -271,7 +274,7 @@ export function TemplateEditor({ tpl, onDelete }) {
 /* ────────────────────────────────────────────────────────────
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
-function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '' }) {
+function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '', ownerShared = false }) {
   const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
   const [typeId, setTypeId] = useState(initialType);
   const meta = TYPE_META[typeId] || TYPE_META.order;
@@ -660,7 +663,16 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   if (!paReady) return null;
 
   return (
-    <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
+    <div style={{
+      fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)',
+      ...(ownerShared ? {
+        padding: 12,
+        margin: -12,
+        border: '1px solid var(--gb-warning-tint-border)',
+        borderRadius: 'var(--gb-r-lg)',
+        background: 'var(--gb-warning-tint-soft)',
+      } : {}),
+    }}>
 
       {/* ── Header — shared EditorHeader, identical to NoteEditor's. ── */}
       <EditorHeader
@@ -674,6 +686,12 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         onDelete={onDelete}
         deleteLabel={readOnly ? 'Remove' : 'Delete'}
       />
+
+      {ownerShared && (
+        <Callout tone="warning" title="Shared by you" style={{ marginBottom: 12 }}>
+          Changes made here update everyone who imported this template when you leave it. Use Revoke share in the template menu to stop sharing.
+        </Callout>
+      )}
 
       {/* Retained shares keep the production editor layout. LockedRegion dims
           and disables source-owned sections, while recipient-owned overrides

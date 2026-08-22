@@ -146,16 +146,20 @@ describe('template/settings share import', () => {
 
   it('creates a template share for a valid template object only', async () => {
     delete stored.gbEmailShareRevision;
+    const localTemplate = { ...templateShare.template, id: 't_local-template-1' };
     const created = await sendMessage({
       action: 'emailTemplateShareCreate',
-      template: templateShare.template,
+      template: localTemplate,
     });
     assert.equal(created.ok, true);
     assert.equal(created.share.url, TEMPLATE_URL);
     const request = requests.at(-1);
     assert.equal(request.url, `${CLIENT_BASE}/email-template-shares`);
     assert.equal(request.method, 'POST');
-    assert.deepEqual(JSON.parse(request.options.body), { template: templateShare.template });
+    assert.deepEqual(JSON.parse(request.options.body), {
+      template: localTemplate,
+      source_template_id: localTemplate.id,
+    });
     assert.equal(
       typeof stored.gbEmailShareRevision,
       'number',

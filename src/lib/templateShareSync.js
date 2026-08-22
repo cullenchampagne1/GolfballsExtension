@@ -56,6 +56,11 @@ function ownedRows(template) {
   return sync.owned.filter((row) => SHARE_ID.test(String(row?.shareId || '')));
 }
 
+/** Public, defensive view used by owner-facing UI and revoke flows. */
+export function ownedTemplateShares(template) {
+  return ownedRows(template).map((row) => ({ ...row }));
+}
+
 /** Reconnect shares created before local sync metadata existed. Exact source
  * snapshots win; otherwise a share is attached only when its name/type pair
  * identifies one local template unambiguously. */

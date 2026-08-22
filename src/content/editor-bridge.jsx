@@ -34,9 +34,11 @@ import {
 } from '../lib/templateImport.js';
 import {
   acknowledgeOwnedTemplateShare,
+  ownedTemplateShares,
   pendingOwnedTemplateShareUpdates,
   reconcileOwnedTemplateShares,
   registerOwnedTemplateShare,
+  removeOwnedTemplateShare,
 } from '../lib/templateShareSync.js';
 
 // ── State ──────────────────────────────────────────────────────
@@ -139,6 +141,33 @@ async function trackTemplateShare(templateId, share, sharedTemplate) {
   if (idx < 0 || isImportedEmailTemplate(templates[idx])) return false;
   templates[idx] = registerOwnedTemplateShare(templates[idx], share, sharedTemplate);
   await saveTemplates();
+  return true;
+}
+
+async function revokeOwnedTemplateShares(templateId) {
+  const idx = templates.findIndex((item) => item.id === templateId);
+  if (idx < 0 || isImportedEmailTemplate(templates[idx])) return false;
+  const owned = ownedTemplateShares(templates[idx]);
+  if (!owned.length) return false;
+  const ok = await gbConfirm(
+    `Revoke the share for “${templates[idx].name || 'Untitled template'}”? Anyone who imported it will lose the shared source.`,
+    { tone: 'danger', confirmLabel: 'Revoke share' },
+  );
+  if (!ok) return false;
+  try {
+    for (const row of owned) {
+      await sendBackgroundMessage('emailShareRevoke', { shareId: row.shareId });
+      const current = templates.findIndex((item) => item.id === templateId);
+      if (current >= 0) {
+        templates[current] = removeOwnedTemplateShare(templates[current], row.shareId);
+        await saveTemplates();
+      }
+    }
+  } catch (error) {
+    toast(error?.message || 'Unable to revoke the template share.', true);
+    return false;
+  }
+  toast('Template share revoked.');
   return true;
 }
 
@@ -570,6 +599,7 @@ window.__gbSaveTemplate = applyTemplatePatch;
 window.__gbSaveNote     = applyNotePatch;
 window.__gbSaveAction   = applyActionPatch;
 window.__gbTrackTemplateShare = trackTemplateShare;
+window.__gbRevokeTemplateShares = revokeOwnedTemplateShares;
 window.__gbFlushTemplateShares = flushOwnedTemplateShares;
 window.__gbResolveVars  = resolveVarsLive;
 window.__gbCurrentTemplate = () => emailTemplateCapabilities.allowLocalTemplateUsage

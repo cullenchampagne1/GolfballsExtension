@@ -41,6 +41,9 @@ const sources = {
 const hasProject = present('.revstack/routes.py');
 const projectRoutes = hasProject ? await read('.revstack/routes.py') : '';
 const clientApi = present('.revstack/logic/client_api.py') ? await read('.revstack/logic/client_api.py') : '';
+const projectManifest = present('revstack.project.json')
+  ? JSON.parse(await read('revstack.project.json'))
+  : null;
 
 const backendRoot = new URL('../revstack-backend/', root);
 const hasBackend = existsSync(backendRoot);
@@ -145,6 +148,14 @@ describe('backend contract · project client endpoints', () => {
   it('keeps the product API logic in the extension project', { skip: !clientApi }, () => {
     assert.ok(clientApi.includes('class ExtensionClientApi'),
       'product API logic must live in the extension project');
+  });
+
+  it('authorizes installation keys to PATCH project client routes', { skip: !projectManifest }, () => {
+    assert.ok(projectManifest.client_routes?.some((route) => (
+      route.scope === 'client:extension'
+      && route.method === 'PATCH'
+      && route.path === '/projects/golfballs-extension/client/*'
+    )), 'PATCH client routes must be registered or share edits fail with 403 before routing');
   });
 
   it('keeps core /extension compatibility redirect-only', { skip: !hasBackend }, () => {

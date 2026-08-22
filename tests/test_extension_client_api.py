@@ -498,6 +498,34 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             self.assertEqual([change["version"] for change in history], [2, 3])
             self.assertIn("vars.signoff.type", history[0]["paths"])
 
+    def test_share_creation_is_idempotent_for_an_owner_source_template(self):
+        request = self._request(self.owner)
+        body = client_api_module.EmailTemplateShareCreate(
+            template={
+                "name": "Persistent source", "type": "order",
+                "subject": "Original", "body": "<p>Hello</p>",
+            },
+            source_template_id="t_local-template-1",
+        )
+        first = self._payload(self.api.create_email_share(body, request))
+        second = self._payload(self.api.create_email_share(
+            client_api_module.EmailTemplateShareCreate(
+                template={
+                    "name": "Persistent source", "type": "order",
+                    "subject": "A stale tab", "body": "<p>Different</p>",
+                },
+                source_template_id="t_local-template-1",
+            ),
+            request,
+        ))
+
+        self.assertEqual(second["id"], first["id"])
+        self.assertEqual(second["template"]["subject"], "Original")
+        with Session(self.engine) as session:
+            self.assertEqual(session.query(
+                self.models.ExtensionEmailTemplateShare,
+            ).count(), 1)
+
     def test_non_owner_cannot_patch_a_shared_template(self):
         share_id = self._seed_share()
         with self.assertRaises(HTTPException) as raised:
