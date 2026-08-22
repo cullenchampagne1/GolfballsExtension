@@ -22,6 +22,9 @@
 import { migrateTemplates } from '../lib/templateMigration.js';
 import { blankCustomAction, normalizeCustomAction } from '../lib/customActions.js';
 import {
+  emailTemplateIsEditable,
+  filterLocalEmailTemplates,
+  isManagedEmailTemplate,
   readEmailTemplateCapabilities,
   resolveEmailTemplateCapabilities,
 } from '../lib/emailTemplateCapabilities.js';
@@ -216,6 +219,9 @@ function leaveCurrentTemplate() {
 }
 
 async function removeTemplateRecord(tpl) {
+  if (isManagedEmailTemplate(tpl) && !emailTemplateCapabilities.allowParentAccount) {
+    throw new Error('Managed email templates can only be removed by a parent account');
+  }
   const source = importedEmailShare(tpl);
   if (source) {
     await removeRetainedEmailTemplate(tpl, {
@@ -246,7 +252,8 @@ async function newTemplate() {
   leaveCurrentTemplate();
   emailTemplateCapabilities = await readEmailTemplateCapabilities();
   if (!emailTemplateCapabilities.allowCreation
-      || !emailTemplateCapabilities.allowLocalTemplateUsage) {
+      || (!emailTemplateCapabilities.allowLocalTemplateUsage
+        && !emailTemplateCapabilities.allowParentAccount)) {
     toast('Email template creation is disabled for this installation.', true);
     return;
   }
@@ -274,16 +281,18 @@ async function newTemplate() {
 
 async function openTemplate(id) {
   emailTemplateCapabilities = await readEmailTemplateCapabilities();
-  if (!emailTemplateCapabilities.allowLocalTemplateUsage) {
-    toast('Local email template usage is disabled for this installation.', true);
-    return;
-  }
   if (currentId === id && !$('ed-form').classList.contains('hidden')) return;
   const tpl = templates.find((t) => t.id === id);
   if (!tpl) return;
+  if (!filterLocalEmailTemplates(templates, {
+    'emailTemplates.allowLocalTemplateUsage': emailTemplateCapabilities.allowLocalTemplateUsage,
+    'emailTemplates.allowParentAccount': emailTemplateCapabilities.allowParentAccount,
+  }).some((item) => item.id === id)) return;
   leaveCurrentTemplate();
   setCurrentId(id);
-  currentShareSessionId = isImportedEmailTemplate(tpl) ? null : newShareSessionId();
+  currentShareSessionId = (isImportedEmailTemplate(tpl)
+    || (isManagedEmailTemplate(tpl) && !tpl.managedTemplate?.editable))
+    ? null : newShareSessionId();
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
@@ -421,21 +430,25 @@ async function deleteNoteTemplateById(id) {
  */
 async function applyTemplatePatch(tpl) {
   if (!tpl || !tpl.id) return;
-  if (!emailTemplateCapabilities.allowLocalTemplateUsage) {
-    toast('Local email template usage is disabled for this installation.', true);
-    return;
-  }
   setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
-  if (isImportedEmailTemplate(tpl) || (idx >= 0 && isImportedEmailTemplate(templates[idx]))) {
-    if (idx < 0 || !isImportedEmailTemplate(templates[idx])) {
+  const storedTemplate = idx >= 0 ? templates[idx] : null;
+  const lockedImport = isImportedEmailTemplate(storedTemplate)
+    || (isManagedEmailTemplate(storedTemplate)
+      && !emailTemplateCapabilities.allowParentAccount);
+  if (lockedImport) {
+    if (!storedTemplate) {
       toast('Imported email template overrides could not be saved.', true);
       return;
     }
-    templates[idx] = applyImportedEmailTemplateOverrides(templates[idx], tpl);
+    templates[idx] = applyImportedEmailTemplateOverrides(storedTemplate, tpl);
     await saveTemplates();
     return;
   }
+  if (!emailTemplateIsEditable(storedTemplate || tpl, {
+    'emailTemplates.allowLocalTemplateUsage': emailTemplateCapabilities.allowLocalTemplateUsage,
+    'emailTemplates.allowParentAccount': emailTemplateCapabilities.allowParentAccount,
+  })) return;
   ensureShareSession();
   if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);
   await saveTemplates();
@@ -602,9 +615,7 @@ window.__gbTrackTemplateShare = trackTemplateShare;
 window.__gbRevokeTemplateShares = revokeOwnedTemplateShares;
 window.__gbFlushTemplateShares = flushOwnedTemplateShares;
 window.__gbResolveVars  = resolveVarsLive;
-window.__gbCurrentTemplate = () => emailTemplateCapabilities.allowLocalTemplateUsage
-  ? templates.find((t) => t.id === currentId) || null
-  : null;
+window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
 window.__gbCurrentNote     = () => noteTemplates.find((t) => t.id === currentNoteId) || null;
 window.__gbCurrentAction   = () => currentActionDraft
   || customActions.find((a) => a.id === currentActionId)
@@ -635,9 +646,10 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.gbCustomActions) customActions = changes.gbCustomActions.newValue || [];
   if (changes.orderTabId)    orderTabId    = changes.orderTabId.newValue    || null;
   if (changes.devSettings) {
-    const prior = emailTemplateCapabilities;
     emailTemplateCapabilities = resolveEmailTemplateCapabilities(changes.devSettings.newValue);
-    if (prior.allowLocalTemplateUsage && !emailTemplateCapabilities.allowLocalTemplateUsage) {
+    const currentVisible = filterLocalEmailTemplates(templates, changes.devSettings.newValue)
+      .some((template) => template.id === currentId);
+    if (currentId && !currentVisible) {
       setCurrentId(null);
       hide('ed-form');
       show('ed-empty');

@@ -212,6 +212,16 @@ export function isImportedEmailTemplate(template) {
   return importedEmailShare(template) !== null;
 }
 
+function importedOverrideSource(template) {
+  if (importedEmailShare(template)) return { key: 'shareImport', value: template.shareImport };
+  const managed = template?.managedTemplate;
+  if (managed?.kind === 'revstack-managed-email-template'
+      && typeof managed.bucketId === 'string' && managed.editable !== true) {
+    return { key: 'managedTemplate', value: managed };
+  }
+  return null;
+}
+
 const IMPORT_OVERRIDE_FIELDS = Object.freeze([
   'presetTaskId',
   'followUpActionId',
@@ -251,8 +261,9 @@ function sameOverrideValue(left, right) {
  * values are mirrored onto the template so every existing send surface sees
  * them without needing a second template-resolution path. */
 export function applyImportedEmailTemplateOverrides(template, draft) {
-  const source = importedEmailShare(template);
-  if (!source) throw new Error('Email template is not an imported share');
+  const importedSource = importedOverrideSource(template);
+  if (!importedSource) throw new Error('Email template is not an imported or managed template');
+  const source = importedSource.value;
 
   const defaults = source.overrideDefaults && typeof source.overrideDefaults === 'object'
     ? source.overrideDefaults
@@ -289,7 +300,7 @@ export function applyImportedEmailTemplateOverrides(template, draft) {
     ))
     : template.caseVars;
 
-  return {
+  const result = {
     ...template,
     presetTaskId: candidate.presetTaskId,
     followUpActionId: candidate.followUpActionId,
@@ -299,12 +310,13 @@ export function applyImportedEmailTemplateOverrides(template, draft) {
     vars,
     caseVars,
     updatedAt: Date.now(),
-    shareImport: {
+    [importedSource.key]: {
       ...source,
       overrideDefaults: defaults,
       overrides,
     },
   };
+  return result;
 }
 
 /** Attach immutable provenance after normalization. Server shares never get

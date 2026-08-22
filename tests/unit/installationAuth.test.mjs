@@ -191,6 +191,18 @@ describe('installation auth · authenticated requests', () => {
     );
   });
 
+  it('allows credentialed PUT only for the managed email-template bucket', async () => {
+    const response = await client.apiJson(`${client.CLIENT_BASE}/email-template-bucket`, {
+      method: 'PUT', body: JSON.stringify({ templates: [], removed_ids: [] }),
+    });
+    assert.equal(response.ok, true);
+    assert.equal(requests.at(-1).options.method, 'PUT');
+    await assert.rejects(
+      client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'PUT' }),
+      /Blocked non-extension API path/,
+    );
+  });
+
   it('fetches one relayed email by the reference its notification carried', async () => {
     const ref = 'a'.repeat(32);
     const message = await client.apiJson(
@@ -262,7 +274,7 @@ describe('installation auth · guardrails', () => {
     );
     await assert.rejects(
       client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'PUT' }),
-      /Blocked extension API method/,
+      /Blocked non-extension API path/,
     );
   });
 

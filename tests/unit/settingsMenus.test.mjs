@@ -68,11 +68,12 @@ describe('settings menus', () => {
   it('animates managed template creation/import controls while leaving notes available', () => {
     assert.match(sidebarSource, /capabilities\.allowCreation/);
     assert.match(sidebarSource, /capabilities\.allowLinkImport/);
-    assert.match(sidebarSource, /visible=\{isNote \|\| \(capabilities\.allowCreation && allowLocalTemplates\)\}/);
+    assert.match(sidebarSource, /visible=\{isNote \|\| \(capabilities\.allowCreation && canAuthorTemplates\)\}/);
     assert.match(sidebarSource, /const folderTakesRow = !isNote[\s\S]*!capabilities\.allowCreation;/);
     assert.match(sidebarSource, /grow=\{folderTakesRow\}/);
     assert.match(sidebarSource, /folderTakesRow \? 'Folder' : null/);
     assert.match(sidebarSource, /slotKey="email-template-link-import"/);
+    assert.match(sidebarSource, /visible=\{capabilities\.allowLinkImport\}/);
     assert.match(sidebarSource, /filterLocalEmailTemplates\(templates, devSettings\)/);
     assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowCreation/);
     assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowLocalTemplateUsage/);
@@ -80,7 +81,8 @@ describe('settings menus', () => {
 
   it('renders retained email shares in the complete editor with allowlisted local overrides', () => {
     assert.match(templateEditorSource, /const imported = isImportedEmailTemplate\(tpl\)/);
-    assert.match(templateEditorSource, /<EditableTemplateEditor[\s\S]*?readOnly=\{imported\}/);
+    assert.match(templateEditorSource, /const readOnly = imported \|\| \(managed && managed\.editable !== true\)/);
+    assert.match(templateEditorSource, /<EditableTemplateEditor[\s\S]*?readOnly=\{readOnly\}/);
     assert.doesNotMatch(templateEditorSource, /function ImportedTemplateViewer/);
     assert.match(templateEditorSource, /function LockedRegion[\s\S]*?inert=\{locked \|\| undefined\}/);
     assert.match(templateEditorSource, /onPointerDownCapture=\{stopLockedEvent\}/);
@@ -95,7 +97,7 @@ describe('settings menus', () => {
     assert.match(sidebarSource, /importedEmailShare\(tpl\)/);
     assert.match(sidebarSource, /<I\.user size=\{8\}/);
     assert.doesNotMatch(sidebarSource, />IMPORTED</);
-    assert.match(editorBridgeSource, /applyImportedEmailTemplateOverrides\(templates\[idx\], tpl\)/);
+    assert.match(editorBridgeSource, /applyImportedEmailTemplateOverrides\(storedTemplate, tpl\)/);
     assert.match(editorBridgeSource, /pendingOwnedTemplateShareUpdates\(template, sessionId\)/);
     assert.match(editorBridgeSource, /emailTemplateShareUpdate/);
     assert.match(editorBridgeSource, /window\.addEventListener\('pagehide', leaveCurrentTemplate\)/);

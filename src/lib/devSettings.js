@@ -232,7 +232,7 @@ export const DEV_SETTINGS = [
   {
     key:     'emailTemplates.allowParentAccount',
     label:   'Email Template Parent Account',
-    desc:    'Managed policy gate for parent-account support in email templates. Runtime enforcement is implemented by the email-template feature.',
+    desc:    'Make this installation a collaborative manager of the universal approved-template bucket. Existing local templates merge into the bucket; edits sync to other parents and managed users.',
     type:    'bool',
     default: false,
   },
@@ -246,7 +246,7 @@ export const DEV_SETTINGS = [
   {
     key:     'emailTemplates.allowLocalTemplateUsage',
     label:   'Allow Local Template Usage',
-    desc:    'Expose locally stored email templates to pickers, composers, workflows, and delivery. Turning this off preserves but hides the local library.',
+    desc:    'Allow this installation to use its private local library. Turning this off preserves those rows but shows only management-approved templates and retained user shares.',
     type:    'bool',
     default: true,
   },

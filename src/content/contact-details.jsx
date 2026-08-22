@@ -14,7 +14,6 @@ import { ensureTheme } from '../lib/theme.js';
 import { sendContactEmail } from '../lib/contactEmail.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
-import { useDevSetting } from '../lib/devSettings.js';
 import { EmailComposer } from '../modals/EmailPreview.jsx';
 import { CasesPanel, DataCtx, DetailErrorBoundary, EmailsPanel, I, LazySection, OrdersPanel, StatsStrip, SystemCard, fullName, useD } from '../lib/detail-shared.jsx';
 import { AccountInfoCard, AddNoteModal, ActivityPanel, AltLookupsCard, Breadcrumb, ContactInfoCard, DetailPageFrame, Hero, MailerCard, ModalCtx, ModalShell, OpportunitiesPanel, PatchCtx, ProofsPanel, QuickLogCard, TasksPanel, TopBar, gbToast, useDetailData, useModal, useModalHost } from '../lib/crm-detail-shared.jsx';
@@ -22,7 +21,6 @@ import { AccountInfoCard, AddNoteModal, ActivityPanel, AltLookupsCard, Breadcrum
 function ContactEmailModal() {
   const D = useD();
   const { closeModal } = useModal();
-  const allowLocalTemplateUsage = useDevSetting('emailTemplates.allowLocalTemplateUsage') !== false;
   const [config, setConfig] = useState(null);
   const [proposals, setProposals] = useState([]);
   const [sending, setSending] = useState(false);
@@ -41,11 +39,6 @@ function ContactEmailModal() {
   }, []);
 
   const applyTemplate = async (template) => {
-    if (!allowLocalTemplateUsage) {
-      const message = 'Local email template usage is disabled for this installation';
-      gbToast(message, 'error');
-      return { ok: false, error: message };
-    }
     try {
       const resolver = window.__gbResolveAllVarsAsync;
       const result = await evaluateAccountEmailTemplate(template, (vars, toField) => {
@@ -82,9 +75,7 @@ function ContactEmailModal() {
         subject=""
         onSend={send}
         sending={sending}
-        accountTemplates={accountEmailTemplates(
-          allowLocalTemplateUsage ? config?.templates : [],
-        )}
+        accountTemplates={accountEmailTemplates(config?.templates || [])}
         onApplyAccountTemplate={applyTemplate}
         savedProposals={proposals}
         onApplySavedProposal={async (proposal) => ({ ok: true, mode: 'insert', text: savedProposalPlaceholder(proposal) })}

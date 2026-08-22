@@ -5448,7 +5448,7 @@ export const HELP_CONTENT = {
                 "bool",
                 "Off",
                 "",
-                "Managed policy gate for parent-account support in email templates. Runtime enforcement is implemented by the email-template feature."
+                "Make this installation a collaborative manager of the universal approved-template bucket. Existing local templates merge into the bucket; edits sync to other parents and managed users."
               ],
               [
                 "Email Template Link Import",
@@ -5462,7 +5462,7 @@ export const HELP_CONTENT = {
                 "bool",
                 "On",
                 "",
-                "Expose locally stored email templates to pickers, composers, workflows, and delivery. Turning this off preserves but hides the local library."
+                "Allow this installation to use its private local library. Turning this off preserves those rows but shows only management-approved templates and retained user shares."
               ],
               [
                 "Max Daily Bulk Send",
@@ -9999,7 +9999,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowParentAccount"
       ],
-      "description": "Managed policy gate for parent-account support in email templates. Runtime enforcement is implemented by the email-template feature.",
+      "description": "Make this installation a collaborative manager of the universal approved-template bucket. Existing local templates merge into the bucket; edits sync to other parents and managed users.",
       "article": "developer-settings"
     },
     {
@@ -10019,7 +10019,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "emailTemplates.allowLocalTemplateUsage"
       ],
-      "description": "Expose locally stored email templates to pickers, composers, workflows, and delivery. Turning this off preserves but hides the local library.",
+      "description": "Allow this installation to use its private local library. Turning this off preserves those rows but shows only management-approved templates and retained user shares.",
       "article": "developer-settings"
     },
     {

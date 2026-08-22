@@ -22,7 +22,9 @@ import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { ownedTemplateShares } from '../lib/templateShareSync.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
+  emailTemplateIsEditable,
   filterLocalEmailTemplates,
+  managedEmailTemplate,
   resolveEmailTemplateCapabilities,
 } from '../lib/emailTemplateCapabilities.js';
 import {
@@ -240,6 +242,8 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
   const importedSource = imported ? importedEmailShare(tpl) : null;
   const ownedShares = !isNote && !imported ? ownedTemplateShares(tpl) : [];
   const ownerShared = ownedShares.length > 0;
+  const managed = !isNote ? managedEmailTemplate(tpl) : null;
+  const managedEditable = managed?.editable === true;
   const trackingIssue = !isNote && !disabled
     ? emailTemplateTrackingIssue(tracker)
     : null;
@@ -254,7 +258,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
       layoutId={`tpl-${tpl.id}`}
       layout="position"
       transition={LAYOUT_SPRING}
-      draggable
+      draggable={!managed || managedEditable}
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_MIME, tpl.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -272,13 +276,15 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '6px 8px 6px 14px',
         borderRadius: 'var(--gb-r-sm)',
-        cursor: 'grab', userSelect: 'none',
+        cursor: (!managed || managedEditable) ? 'grab' : 'pointer', userSelect: 'none',
         // Base background is plain CSS so :hover can fade cleanly. Active
         // and disabled states override via the className-scoped rule
         // below, and the class wins over :hover (CSS specificity).
         background: active
           ? (ownerShared ? 'var(--gb-warning-tint-medium)' : 'var(--gb-brand-tint-soft)')
-          : (disabled ? 'var(--gb-surface-deep)' : (ownerShared ? 'var(--gb-warning-tint-soft)' : 'transparent')),
+          : (disabled ? 'var(--gb-surface-deep)' : (ownerShared
+            ? 'var(--gb-warning-tint-soft)'
+            : (managed ? 'var(--gb-success-tint-soft)' : 'transparent'))),
       }}
     >
       {/* Type stripe — inset rounded bar, never a full border. Stays put
@@ -366,6 +372,21 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                   <I.link size={8} /> Shared by you
                 </span>
               )}
+              {managed && (
+                <span
+                  title={managedEditable
+                    ? 'Changes are pushed to managed extension users'
+                    : `Managed by ${managed.lastEditor || managed.createdBy || 'Management'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: managed.conflictWith?.length ? 'var(--gb-warning-fg)' : 'var(--gb-success-fg)', fontWeight: 700, minWidth: 0 }}
+                >
+                  {managed.conflictWith?.length ? <I.alert size={8} /> : <I.users size={8} />}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {managed.conflictWith?.length
+                      ? `Conflict with ${managed.conflictWith.join(', ')}`
+                      : (managedEditable ? 'Managed' : `Management · ${managed.lastEditor || managed.createdBy || 'approved'}`)}
+                  </span>
+                </span>
+              )}
             </div>
           );
         })()}
@@ -377,7 +398,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
         <AnimatePresence>
           {menuOpen && (
             <ActionMenu onClose={() => setMenuOpen(false)} anchorRef={btnRef}>
-              <div style={{ padding: '4px 8px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)' }}>
+              {(!managed || managedEditable) && <><div style={{ padding: '4px 8px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)' }}>
                 Move to folder
               </div>
               <MenuItem onClick={() => { onMove(null); setMenuOpen(false); }}>
@@ -389,7 +410,8 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                 </MenuItem>
               ))}
               <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '4px 6px 2px' }} />
-              {!isNote && !imported && !ownerShared && (
+              </>}
+              {!isNote && !imported && !managed && !ownerShared && (
                 <MenuItem onClick={() => {
                   setMenuOpen(false);
                   window.dispatchEvent(new CustomEvent('gb:share-email-template', { detail: tpl }));
@@ -405,7 +427,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                   <I.link size={11} /> Revoke share
                 </MenuItem>
               )}
-              <MenuItem
+              {(!managed || managedEditable) && <MenuItem
                 danger
                 onClick={() => {
                   setMenuOpen(false);
@@ -417,7 +439,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                 }}
               >
                 <I.trash size={11} /> Delete {isNote ? 'note' : 'template'}
-              </MenuItem>
+              </MenuItem>}
             </ActionMenu>
           )}
         </AnimatePresence>
@@ -819,6 +841,7 @@ function TemplateSidebar() {
   const [devSettings] = useDevSettings();
   const capabilities = resolveEmailTemplateCapabilities(devSettings);
   const allowLocalTemplates = capabilities.allowLocalTemplateUsage;
+  const canAuthorTemplates = allowLocalTemplates || capabilities.allowParentAccount;
   const [importOpen,  setImportOpen]  = useState(false);
   const [shareTemplate, setShareTemplate] = useState(null);
   const [tab,         setTab]         = useState('templates');
@@ -856,26 +879,27 @@ function TemplateSidebar() {
   useEffect(() => {
     const listener = (event) => {
       const template = event.detail || null;
-      if (allowLocalTemplates && template && ownedTemplateShares(template).length === 0) {
+      if (template && emailTemplateIsEditable(template, devSettings)
+          && !managedEmailTemplate(template) && ownedTemplateShares(template).length === 0) {
         setShareTemplate(template);
       }
     };
     window.addEventListener('gb:share-email-template', listener);
     return () => window.removeEventListener('gb:share-email-template', listener);
-  }, [allowLocalTemplates]);
+  }, [devSettings]);
 
   useEffect(() => {
-    if (!capabilities.allowLinkImport || !allowLocalTemplates) setImportOpen(false);
-    if (!allowLocalTemplates) setShareTemplate(null);
-  }, [capabilities.allowLinkImport, allowLocalTemplates]);
+    if (!capabilities.allowLinkImport) setImportOpen(false);
+    if (!canAuthorTemplates) setShareTemplate(null);
+  }, [capabilities.allowLinkImport, canAuthorTemplates]);
 
   const isNote = tab === 'notes';
   const usableTemplates = filterLocalEmailTemplates(templates, devSettings);
   const folderTakesRow = !isNote
-    && allowLocalTemplates
+    && canAuthorTemplates
     && !capabilities.allowCreation;
   const allItems  = isNote ? notes : usableTemplates;
-  const folders   = isNote ? noteFolders : (allowLocalTemplates ? tplFolders : []);
+  const folders   = isNote ? noteFolders : (canAuthorTemplates ? tplFolders : []);
   const tplsKey   = isNote ? 'noteTemplates' : 'templates';
   const folderKey = isNote ? 'noteFolders' : 'templateFolders';
 
@@ -918,16 +942,12 @@ function TemplateSidebar() {
 
   /* ── Actions — wire to existing editor.js globals ─────────────── */
   function openTpl(t) {
-    if (!isNote && !allowLocalTemplates) {
-      window.__gbToast?.error('Local email template usage is disabled for this installation');
-      return;
-    }
     setCurrentId(t.id);
     const open = isNote ? window.openNoteTemplate : window.openTemplate;
     if (typeof open === 'function') open(t.id);
   }
   function newTpl() {
-    if (!isNote && (!capabilities.allowCreation || !allowLocalTemplates)) {
+    if (!isNote && (!capabilities.allowCreation || !canAuthorTemplates)) {
       window.__gbToast?.error('Email template creation is disabled for this installation');
       return;
     }
@@ -1069,7 +1089,7 @@ function TemplateSidebar() {
         </div>
       </div>
 
-      {importOpen && capabilities.allowLinkImport && allowLocalTemplates && (
+      {importOpen && capabilities.allowLinkImport && (
         <ImportTemplatesModal
           onClose={() => setImportOpen(false)}
           onDone={(n, err, alreadyImported = false) => {
@@ -1101,7 +1121,7 @@ function TemplateSidebar() {
             label so the row still reads as one intentional primary action. */}
         <div style={{ display: 'flex', gap: 6 }}>
           <CapabilitySlot
-            visible={isNote || (capabilities.allowCreation && allowLocalTemplates)}
+            visible={isNote || (capabilities.allowCreation && canAuthorTemplates)}
             grow
             slotKey={isNote ? 'new-note' : 'new-email-template'}
           >
@@ -1111,7 +1131,7 @@ function TemplateSidebar() {
             </Btn>
           </CapabilitySlot>
           <CapabilitySlot
-            visible={isNote || allowLocalTemplates}
+            visible={isNote || canAuthorTemplates}
             grow={folderTakesRow}
             slotKey={folderTakesRow ? 'new-template-folder-wide' : 'new-template-folder-icon'}
           >
@@ -1245,7 +1265,7 @@ function TemplateSidebar() {
           Email signature
         </Btn>
         <CapabilitySlot
-          visible={capabilities.allowLinkImport && allowLocalTemplates}
+          visible={capabilities.allowLinkImport}
           slotKey="email-template-link-import"
         >
           <Btn variant="ghost" size="sm" icon={<ImportIcon />} onClick={() => setImportOpen(true)}

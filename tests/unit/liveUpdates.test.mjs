@@ -12,6 +12,7 @@ function harness(initial = {}, remoteShare = null) {
   const stored = structuredClone(initial);
   let policySyncs = 0;
   let shareFetches = 0;
+  let managedSyncs = 0;
   const chrome = {
     runtime: { lastError: null },
     storage: {
@@ -33,6 +34,12 @@ function harness(initial = {}, remoteShare = null) {
   context.GBRemoteSettingsPolicy = {
     async sync() { policySyncs += 1; },
   };
+  context.GBManagedEmailTemplates = {
+    async sync(options) {
+      assert.equal(options?.force, true);
+      managedSyncs += 1;
+    },
+  };
   context.GBInstallationAuth = {
     CLIENT_BASE: '/projects/golfballs-extension/client',
     async apiJson() {
@@ -46,6 +53,7 @@ function harness(initial = {}, remoteShare = null) {
     stored,
     policySyncs: () => policySyncs,
     shareFetches: () => shareFetches,
+    managedSyncs: () => managedSyncs,
   };
 }
 
@@ -141,11 +149,16 @@ describe('typed extension live updates', () => {
   });
 
   it('invalidates ticket state and refreshes managed settings through one channel', async () => {
-    const { updates, stored, policySyncs } = harness();
+    const { updates, stored, policySyncs, managedSyncs } = harness();
     await updates.apply(notification(
       'tickets.changed',
       { ticket_id: 'GBT-ABCDEFGH', reason: 'reply', status: 'resolved' },
       42,
+    ));
+    await updates.apply(notification(
+      'managed_email_templates.changed',
+      { revision: 'a'.repeat(64), editor_name: 'Parent One' },
+      44,
     ));
     await updates.apply(notification(
       'settings.changed',
@@ -157,6 +170,7 @@ describe('typed extension live updates', () => {
     assert.equal(stored.gbSettingsPolicyRevision.notificationId, 43);
     assert.equal(stored.gbLiveUpdate.type, 'settings.changed');
     assert.equal(policySyncs(), 1);
+    assert.equal(managedSyncs(), 1);
   });
 
   it('keeps future valid events generic and rejects malformed envelopes', async () => {

@@ -319,7 +319,7 @@ export function EmailRunner({
   useEffect(() => {
     if (!effectiveOpen) return;
     if (useMock) {
-      setTemplates(allowLocalTemplateUsage ? MOCK_TEMPLATES : []);
+      setTemplates(MOCK_TEMPLATES);
       setPaUrl('mock://power-automate');
       setPaEnabled(true);
       return;
@@ -342,7 +342,7 @@ export function EmailRunner({
      waiting. Cancel immediately, clear the now-ineligible source, and let the
      parent surface slide its action away. The stored templates remain intact. */
   useEffect(() => {
-    if (allowBulkSending && allowLocalTemplateUsage) return;
+    if (allowBulkSending) return;
     runTokenRef.current += 1;
     setTemplates([]);
     setSelectedId('');
@@ -351,7 +351,7 @@ export function EmailRunner({
     setCurrent(null);
     setDelayState(null);
     onRunStateChange?.(false);
-  }, [allowBulkSending, allowLocalTemplateUsage, onRunStateChange]);
+  }, [allowBulkSending, onRunStateChange]);
 
   /* Cancel in-flight run when the panel closes — bumps the token so
      the orchestrator's between-iteration guard short-circuits, and
@@ -464,7 +464,6 @@ export function EmailRunner({
   }, [weightableItems]);
 
   const canRun = allowBulkSending
-    && allowLocalTemplateUsage
     && !!selectedTpl
     && contacts.length > 0
     && status !== 'running';
@@ -476,10 +475,6 @@ export function EmailRunner({
     capabilityRef.current = liveCapabilities;
     if (!liveCapabilities.allowBulkSending) {
       toast?.error?.('Bulk email sending is disabled for this installation', { duration: 5000 });
-      return;
-    }
-    if (!liveCapabilities.allowLocalTemplateUsage) {
-      toast?.error?.('Local email template usage is disabled for this installation', { duration: 5000 });
       return;
     }
     if (!canRun) return;
@@ -542,8 +537,7 @@ export function EmailRunner({
 
     for (let i = 0; i < contacts.length; i++) {
       if (runTokenRef.current !== token
-          || !capabilityRef.current.allowBulkSending
-          || !capabilityRef.current.allowLocalTemplateUsage) return; // cancelled or revoked
+          || !capabilityRef.current.allowBulkSending) return; // cancelled or revoked
       const c = contacts[i];
       setProgress({ current: i + 1, total: contacts.length });
       setDelayState(null);
@@ -679,12 +673,11 @@ export function EmailRunner({
              cancel that arrived DURING the variable-resolution await
              above, which would otherwise fire one more send. */
           if (runTokenRef.current !== token
-              || !capabilityRef.current.allowBulkSending
-              || !capabilityRef.current.allowLocalTemplateUsage) return;
+              || !capabilityRef.current.allowBulkSending) return;
           const res = await sendEmailTemplateWithFollowUps({
             email: {
               from, to: toEmail, subject, htmlBody, replyMode, signature,
-              config: { paReady, allowLocalTemplateUsage: liveCapabilities.allowLocalTemplateUsage },
+              config: { paReady, templates: [selectedTpl] },
               templateId: selectedTpl.id || '',
               templateName: selectedTpl.name || '',
               variationId: v?.id || '__original',

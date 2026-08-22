@@ -27,6 +27,7 @@ const actionLanguage = await read('lib/action-language.js');
 const actionRuntime = await read('lib/action-runtime.js');
 const notificationPoll = await read('lib/notifications-poll.js');
 const notificationCenter = await read('src/modals/Notifications.jsx');
+const managedEmailTemplates = await read('lib/managed-email-templates.js');
 const helpActions = await read('src/lib/helpActions.js');
 const openParamRules = await read('src/lib/openParamRules.js');
 const helpAssistant = await read('help/help-assistant.js');
@@ -36,6 +37,7 @@ const sources = {
   'background.js': background,
   'notifications-poll.js': notificationPoll,
   'help-assistant.js': helpAssistant,
+  'managed-email-templates.js': managedEmailTemplates,
 };
 
 const hasProject = present('.revstack/routes.py');
@@ -63,6 +65,8 @@ const RUNTIME = [
   { name: 'identity:read',          in: 'installation-auth.js', literal: '/identity',                            method: 'get',  route: '/client/identity' },
   { name: 'identity:update',        in: 'installation-auth.js', literal: '/identity',                            method: 'post', route: '/client/identity' },
   { name: 'configuration',          in: 'installation-auth.js', literal: '/configuration',                       method: 'get',  route: '/client/configuration' },
+  { name: 'managed-email:read',     in: 'managed-email-templates.js', literal: '/email-template-bucket',          method: 'get',  route: '/client/email-template-bucket' },
+  { name: 'managed-email:merge',    in: 'managed-email-templates.js', literal: "method: 'PUT'",                  method: 'put',  route: '/client/email-template-bucket' },
   { name: 'tickets:list',           in: 'background.js',        literal: '/tickets',                             method: 'get',  route: '/client/tickets' },
   { name: 'tickets:create',         in: 'background.js',        literal: '/tickets',                             method: 'post', route: '/client/tickets' },
   { name: 'settings-shares:list',   in: 'background.js',        literal: '/settings-shares',                     method: 'get',  route: '/client/settings-shares' },
@@ -156,6 +160,14 @@ describe('backend contract · project client endpoints', () => {
       && route.method === 'PATCH'
       && route.path === '/projects/golfballs-extension/client/*'
     )), 'PATCH client routes must be registered or share edits fail with 403 before routing');
+  });
+
+  it('authorizes installation keys to PUT the managed bucket route', { skip: !projectManifest }, () => {
+    assert.ok(projectManifest.client_routes?.some((route) => (
+      route.scope === 'client:extension'
+      && route.method === 'PUT'
+      && route.path === '/projects/golfballs-extension/client/*'
+    )), 'PUT client routes must be registered or parent merges fail with 403 before routing');
   });
 
   it('keeps core /extension compatibility redirect-only', { skip: !hasBackend }, () => {

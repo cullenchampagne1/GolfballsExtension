@@ -323,6 +323,41 @@ describe('retained shared email templates', () => {
     });
   });
 
+  it('uses the same override boundary for a locked management template', () => {
+    const managed = {
+      ...normalizeTemplate({
+        ...minimal,
+        replyMode: 'standalone',
+        presetTaskId: 'source-task',
+        vars: { greeting: { type: 'literal', value: 'Hello' } },
+      }),
+      managedTemplate: {
+        kind: 'revstack-managed-email-template', bucketId: 'B'.repeat(32),
+        editable: false,
+        overrideDefaults: {
+          presetTaskId: 'source-task', followUpActionId: '', replyMode: 'standalone',
+          senderAccount: 'golfballs', senderRandomize: false,
+          literalVariables: { greeting: 'Hello' },
+        },
+        overrides: {},
+      },
+    };
+    const updated = applyImportedEmailTemplateOverrides(managed, {
+      ...managed, name: 'Cannot rename', replyMode: 'reply',
+      presetTaskId: 'managed-user-task',
+      vars: { greeting: { type: 'literal', value: 'Howdy' } },
+    });
+
+    assert.equal(updated.name, 'Welcome');
+    assert.equal(updated.replyMode, 'standalone');
+    assert.equal(updated.presetTaskId, 'managed-user-task');
+    assert.equal(updated.vars.greeting.value, 'Howdy');
+    assert.deepEqual(updated.managedTemplate.overrides, {
+      presetTaskId: 'managed-user-task',
+      literalVariables: { greeting: 'Howdy' },
+    });
+  });
+
   it('allows literal overrides for imported case variables too', () => {
     const retained = markImportedEmailTemplate(normalizeTemplate({
       type: 'case',

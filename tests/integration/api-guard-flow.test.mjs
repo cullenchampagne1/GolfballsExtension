@@ -227,7 +227,7 @@ describe('extension API guard', () => {
 
   it('rejects disallowed methods and GET requests that carry a body', async () => {
     const { client, requests } = makeSandbox();
-    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'PUT' }), /Blocked extension API method/);
+    await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'PUT' }), /Blocked non-extension API path/);
     await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'DELETE' }), /Blocked non-extension API path/);
     await assert.rejects(
       client.apiFetch(`${CLIENT_BASE}/product-generation/batches/not-a-batch`, { method: 'DELETE' }),

@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -26,6 +26,7 @@ if (!GB_EMAIL_TEMPLATE_TRACKING) throw new Error('Email template tracking failed
 // Subject clusters are local derived state, so keep them current even before
 // an installation is authorized to use network-backed runtime features.
 GB_EMAIL_TEMPLATE_TRACKING.install().catch(() => {});
+GBManagedEmailTemplates.install();
 // installation-auth samples every backend round-trip through this hook, so
 // the Latency block measures the real wait without auth importing telemetry.
 globalThis.GBUsageSink = GB_USAGE.sample;
@@ -35,6 +36,7 @@ GB_RUNTIME.start().then((allowed) => {
   GBInstallationAuth.syncIdentityFromStorage().catch(() => {});
   GB_HELP_ASSISTANT.resume().catch(() => {});
   GBNotificationPoll.reconcile().catch(() => {});
+  GBManagedEmailTemplates.sync().catch(() => {});
   // Trackers arm their own sweep alarm and no-op while the flag is off. Same
   // authorization gate as everything else: an unauthorized installation must
   // not be reading the rep's CRM on a schedule.
@@ -49,6 +51,7 @@ chrome.runtime.onStartup?.addListener(() => {
     if (allowed) {
       GB_HELP_ASSISTANT.resume().catch(() => {});
       GBNotificationPoll.reconcile().catch(() => {});
+      GBManagedEmailTemplates.sync().catch(() => {});
     }
   }).catch(GB_RUNTIME.report);
 });
@@ -1599,7 +1602,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     chrome.storage.local.get('devSettings', (stored) => {
-      if (stored?.devSettings?.['emailTemplates.allowLocalTemplateUsage'] === false) {
+      if (stored?.devSettings?.['emailTemplates.allowLocalTemplateUsage'] === false
+          && stored?.devSettings?.['emailTemplates.allowParentAccount'] !== true) {
         sendResponse({ ok: false, error: 'Local email template usage is disabled for this installation' });
         return;
       }

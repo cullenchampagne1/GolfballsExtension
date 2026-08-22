@@ -184,11 +184,12 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
   const cfg = config || await readEmailConfig();
-  if (templateId && cfg.allowLocalTemplateUsage === false) {
+  if (templateId && Array.isArray(cfg.templates)
+      && !cfg.templates.some((template) => String(template?.id || '') === String(templateId))) {
     return {
       state: 'failed',
       transport: 'none',
-      error: 'Local email template usage is disabled for this installation',
+      error: 'This email template is not available to this installation',
     };
   }
 

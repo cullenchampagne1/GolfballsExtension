@@ -18,6 +18,7 @@ import {
   trackerForTemplate,
 } from '../lib/emailSubjectTracking.js';
 import { importedEmailShare, isImportedEmailTemplate } from '../lib/templateImport.js';
+import { managedEmailTemplate } from '../lib/emailTemplateCapabilities.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -254,16 +255,19 @@ export function EmptyState() {
 
 export function TemplateEditor({ tpl, onDelete }) {
   const imported = isImportedEmailTemplate(tpl);
-  const source = imported ? importedEmailShare(tpl) : null;
-  const displayedTemplate = imported && source?.overrideDefaults?.replyMode
+  const managed = managedEmailTemplate(tpl);
+  const readOnly = imported || (managed && managed.editable !== true);
+  const source = imported ? importedEmailShare(tpl) : managed;
+  const displayedTemplate = readOnly && source?.overrideDefaults?.replyMode
     ? { ...tpl, replyMode: source.overrideDefaults.replyMode }
     : tpl;
   return (
     <EditableTemplateEditor
       tpl={displayedTemplate}
-      onDelete={onDelete}
-      readOnly={imported}
-      ownerName={source?.ownerName || 'Unregistered installation'}
+      readOnly={readOnly}
+      ownerName={source?.ownerName || source?.lastEditor || source?.createdBy || 'Management'}
+      managed={!!managed}
+      onDelete={managed && managed.editable !== true ? undefined : onDelete}
     />
   );
 }
@@ -271,9 +275,10 @@ export function TemplateEditor({ tpl, onDelete }) {
 /* ────────────────────────────────────────────────────────────
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
-function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '' }) {
+function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '', managed = false }) {
   const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
-  const importRevision = readOnly ? Math.max(1, Number(tpl.shareImport?.version) || 1) : 0;
+  const importRevision = readOnly
+    ? Math.max(1, Number(tpl.shareImport?.version || tpl.managedTemplate?.version) || 1) : 0;
   const [typeId, setTypeId] = useState(initialType);
   const meta = TYPE_META[typeId] || TYPE_META.order;
 
@@ -712,7 +717,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         enabled={enabled}
         onToggle={readOnly ? undefined : () => setEnabled((e) => !e)}
         toggleDisabled={readOnly}
-        desc={readOnly ? `${meta.desc} Shared by ${ownerName} · Source content is read only.` : meta.desc}
+        desc={readOnly && !managed ? `${meta.desc} Shared by ${ownerName} · Source content is read only.` : meta.desc}
         onDelete={onDelete}
         deleteLabel={readOnly ? 'Remove' : 'Delete'}
       />

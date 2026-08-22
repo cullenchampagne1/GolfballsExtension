@@ -12,6 +12,7 @@ export const EMAIL_TEMPLATE_CAPABILITY_KEYS = Object.freeze({
   allowLinkImport: 'emailTemplates.allowLinkImport',
   allowBulkSending: 'emailTemplates.allowBulkSending',
   allowLocalTemplateUsage: 'emailTemplates.allowLocalTemplateUsage',
+  allowParentAccount: 'emailTemplates.allowParentAccount',
 });
 
 export function resolveEmailTemplateCapabilities(devSettings = {}) {
@@ -20,12 +21,38 @@ export function resolveEmailTemplateCapabilities(devSettings = {}) {
     : {};
   return Object.freeze(Object.fromEntries(
     Object.entries(EMAIL_TEMPLATE_CAPABILITY_KEYS)
-      .map(([name, key]) => [name, settings[key] !== false]),
+      .map(([name, key]) => [
+        name,
+        name === 'allowParentAccount' ? settings[key] === true : settings[key] !== false,
+      ]),
   ));
 }
 export function filterLocalEmailTemplates(templates, devSettings = {}) {
-  if (!resolveEmailTemplateCapabilities(devSettings).allowLocalTemplateUsage) return [];
-  return Array.isArray(templates) ? templates : [];
+  const all = Array.isArray(templates) ? templates : [];
+  const capabilities = resolveEmailTemplateCapabilities(devSettings);
+  if (capabilities.allowParentAccount) return all;
+  if (capabilities.allowLocalTemplateUsage) {
+    return all.filter((template) => !isManagedEmailTemplate(template));
+  }
+  return all.filter((template) => isManagedEmailTemplate(template) || !!template?.shareImport);
+}
+
+export function managedEmailTemplate(template) {
+  const source = template?.managedTemplate;
+  return source?.kind === 'revstack-managed-email-template'
+    && typeof source.bucketId === 'string' ? source : null;
+}
+
+export function isManagedEmailTemplate(template) {
+  return !!managedEmailTemplate(template);
+}
+
+export function emailTemplateIsEditable(template, devSettings = {}) {
+  if (template?.shareImport) return false;
+  const managed = managedEmailTemplate(template);
+  if (managed) return resolveEmailTemplateCapabilities(devSettings).allowParentAccount
+    && managed.editable === true;
+  return resolveEmailTemplateCapabilities(devSettings).allowLocalTemplateUsage;
 }
 
 export function readEmailTemplateCapabilities(storage = globalThis.chrome?.storage?.local) {

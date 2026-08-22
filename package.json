@@ -57,6 +57,10 @@
       "file": "tests/unit/emailTemplateCapabilities.test.mjs"
     },
     {
+      "name": "email \u00b7 managed bucket cache and parent merge",
+      "file": "tests/unit/managedEmailTemplates.test.mjs"
+    },
+    {
       "name": "flow \u00b7 contact-scoped template follow-up actions",
       "file": "tests/unit/templateFollowUpAction.test.mjs"
     },

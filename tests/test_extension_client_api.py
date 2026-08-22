@@ -46,8 +46,19 @@ class FakeSession:
 
 
 class FakeSettingsPolicy:
-    def __init__(self):
+    def __init__(self, parent_ids=()):
         self.calls = []
+        self.parent_ids = set(parent_ids)
+
+    def resolve(self, credential_id):
+        return ({
+            "developer_settings": {
+                "emailTemplates.allowParentAccount": {
+                    "value": credential_id in self.parent_ids,
+                },
+                "emailTemplates.allowLocalTemplateUsage": {"value": True},
+            },
+        }, "database-revision")
 
     def resolve_client(self, credential_id, extension_version):
         self.calls.append((credential_id, extension_version))
@@ -74,6 +85,9 @@ class FakeNotifications:
             "existing": [], "failed": [],
             "recipient_count": len(payload.get("credential_ids") or []),
         }
+
+    def active_installation_ids(self):
+        return ["owner-install", "parent-two", "recipient-install"]
 
 
 class ExtensionClientAccessTests(unittest.TestCase):
@@ -288,12 +302,25 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             credential_id = Column(String(36), primary_key=True, index=True)
             imported_at = Column(DateTime, nullable=False)
 
+        class ManagedRow(Base):
+            __tablename__ = "extension_managed_email_templates"
+            id = Column(String(64), primary_key=True)
+            client_template_id = Column(String(160), nullable=False)
+            created_by_credential_id = Column(String(36), nullable=False, index=True)
+            last_editor_credential_id = Column(String(36), nullable=False, index=True)
+            template = Column(JSON, nullable=False)
+            version = Column(Integer, nullable=False, default=1)
+            created_at = Column(DateTime, nullable=False)
+            updated_at = Column(DateTime, nullable=False, index=True)
+            deleted_at = Column(DateTime, nullable=True, index=True)
+
         cls.Base = Base
         cls.models = SimpleNamespace(
             ExtensionInstallationAccess=AccessRow,
             ExtensionInstallationIdentity=IdentityRow,
             ExtensionEmailTemplateShare=ShareRow,
             ExtensionEmailTemplateShareImport=ImportRow,
+            ExtensionManagedEmailTemplate=ManagedRow,
         )
 
     def setUp(self):
@@ -301,10 +328,11 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.Base.metadata.create_all(self.engine)
         self.auth = SimpleNamespace(engine=self.engine)
         self.notifications = FakeNotifications()
+        self.settings_policy = FakeSettingsPolicy({"owner-install", "parent-two"})
         self.api = client_api_module.ExtensionClientApi(
             auth_manager=self.auth,
             models=self.models,
-            settings_policy_store=FakeSettingsPolicy(),
+            settings_policy_store=self.settings_policy,
             settings_policy_error=RuntimeError,
             client_scope="client:extension",
             project_dir=ROOT,
@@ -313,10 +341,15 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         )
         self.owner = self._principal("owner-install")
         self.recipient = self._principal("recipient-install")
+        self.parent_two = self._principal("parent-two")
         with Session(self.engine) as session:
             session.add(self.models.ExtensionInstallationIdentity(
                 credential_id=self.owner.credential_id,
                 display_name="Template Owner", source="settings_edit",
+            ))
+            session.add(self.models.ExtensionInstallationIdentity(
+                credential_id=self.parent_two.credential_id,
+                display_name="Parent Two", source="settings_edit",
             ))
             session.commit()
 
@@ -354,6 +387,100 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
     @staticmethod
     def _payload(response):
         return json.loads(response.body)
+
+    @staticmethod
+    def _managed_write(template, **values):
+        return client_api_module.ManagedEmailTemplateWrite(
+            client_template_id=values.pop("client_template_id", "welcome-template"),
+            template=template,
+            **values,
+        )
+
+    @staticmethod
+    def _managed_body(templates, removed_ids=None):
+        return SimpleNamespace(templates=templates, removed_ids=removed_ids or [])
+
+    def test_managed_bucket_requires_parent_and_is_readable_by_managed_users(self):
+        template = {
+            "name": "Approved welcome", "type": "order",
+            "subject": "Welcome", "body": "<p>Hello</p>",
+        }
+        with self.assertRaises(HTTPException) as raised:
+            self.api.update_managed_email_bucket(
+                self._managed_body([self._managed_write(template)]),
+                self._request(self.recipient),
+            )
+        self.assertEqual(raised.exception.status_code, 403)
+
+        created = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(template)]),
+            self._request(self.owner),
+        ))
+        self.assertTrue(created["is_parent"])
+        self.assertEqual(created["templates"][0]["client_template_id"], "welcome-template")
+        self.assertTrue(created["templates"][0]["created_by_current"])
+
+        child = self._payload(self.api.get_managed_email_bucket(
+            self._request(self.recipient),
+        ))
+        self.assertFalse(child["is_parent"])
+        self.assertFalse(child["templates"][0]["created_by_current"])
+        self.assertEqual(child["templates"][0]["created_by"], "Template Owner")
+        self.assertEqual(child["templates"][0]["template"]["subject"], "Welcome")
+        self.assertEqual(self.notifications.fanouts[-1]["event"]["type"], "managed_email_templates.changed")
+        self.assertFalse(self.notifications.fanouts[-1]["visible"])
+
+        bucket_id = created["templates"][0]["id"]
+        removed = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([], [bucket_id]), self._request(self.parent_two),
+        ))
+        self.assertEqual(removed["templates"], [], "any parent controls the shared bucket")
+        restored = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(template)]), self._request(self.owner),
+        ))
+        self.assertEqual(restored["templates"][0]["template"]["name"], "Approved welcome")
+
+    def test_parent_disjoint_edits_merge_and_overlap_names_the_conflicting_parent(self):
+        original = {
+            "name": "Approved welcome", "type": "order",
+            "subject": "Welcome", "body": "<p>Hello</p>",
+        }
+        created = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(original)]), self._request(self.owner),
+        ))
+        row = created["templates"][0]
+
+        parent_two = {**original, "subject": "Hello from parent two"}
+        second = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(
+                parent_two,
+                bucket_id=row["id"], base_version=row["version"],
+                base_template=original, client_template_id="parent-two-copy",
+            )]), self._request(self.parent_two),
+        ))
+        self.assertEqual(second["templates"][0]["version"], 2)
+
+        stale_overlap = {**original, "subject": "Owner competing subject"}
+        conflict = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(
+                stale_overlap,
+                bucket_id=row["id"], base_version=1, base_template=original,
+            )]), self._request(self.owner),
+        ))
+        self.assertEqual(conflict["sync_conflicts"][0]["with"], "Parent Two")
+        self.assertIn("subject", conflict["sync_conflicts"][0]["paths"])
+        self.assertTrue(self.notifications.enqueued[-1]["visible"])
+
+        owner_body_edit = {**original, "body": "<p>Owner changed the body</p>"}
+        merged = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(
+                owner_body_edit,
+                bucket_id=row["id"], base_version=1, base_template=original,
+            )]), self._request(self.owner),
+        ))
+        self.assertEqual(merged["sync_conflicts"], [])
+        self.assertEqual(merged["templates"][0]["template"]["subject"], "Hello from parent two")
+        self.assertEqual(merged["templates"][0]["template"]["body"], "<p>Owner changed the body</p>")
 
     def test_expired_legacy_row_is_permanent_and_payload_has_no_ttl(self):
         share_id = self._seed_share(expired=True)

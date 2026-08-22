@@ -225,18 +225,18 @@ describe('sendEmail', () => {
     assert.equal(dispatched, 0);
   });
 
-  it('rejects a local-template send before either transport when usage is disabled', async () => {
+  it('rejects a template send when the effective managed catalog does not contain it', async () => {
     let dispatched = 0;
     const result = await sendEmail({
       from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Hi', htmlBody: 'x',
       templateId: 'local-template',
-      config: { paReady: true, allowLocalTemplateUsage: false },
+      config: { paReady: true, templates: [] },
     }, { dispatch: async () => { dispatched += 1; return { ok: true }; } });
 
     assert.deepEqual(result, {
       state: 'failed',
       transport: 'none',
-      error: 'Local email template usage is disabled for this installation',
+      error: 'This email template is not available to this installation',
     });
     assert.equal(dispatched, 0);
   });

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMAIL_TEMPLATE_CAPABILITY_KEYS,
+  emailTemplateIsEditable,
   filterLocalEmailTemplates,
   readEmailTemplateCapabilities,
   resolveEmailTemplateCapabilities,
@@ -14,6 +15,7 @@ describe('managed email-template capabilities', () => {
       allowLinkImport: true,
       allowBulkSending: true,
       allowLocalTemplateUsage: true,
+      allowParentAccount: false,
     });
   });
 
@@ -26,18 +28,37 @@ describe('managed email-template capabilities', () => {
       allowLinkImport: false,
       allowBulkSending: false,
       allowLocalTemplateUsage: false,
+      allowParentAccount: false,
     });
   });
 
   it('projects local templates out without mutating or deleting the stored library', () => {
-    const stored = [{ id: 'welcome' }, { id: 'follow-up' }];
+    const stored = [
+      { id: 'welcome' },
+      { id: 'direct', shareImport: { shareId: 'share' } },
+      { id: 'managed', managedTemplate: { kind: 'revstack-managed-email-template', bucketId: 'bucket' } },
+    ];
     const hidden = filterLocalEmailTemplates(stored, {
       'emailTemplates.allowLocalTemplateUsage': false,
     });
 
-    assert.deepEqual(hidden, []);
-    assert.deepEqual(stored, [{ id: 'welcome' }, { id: 'follow-up' }]);
-    assert.equal(filterLocalEmailTemplates(stored, {}), stored);
+    assert.deepEqual(hidden.map((row) => row.id), ['direct', 'managed']);
+    assert.deepEqual(stored.map((row) => row.id), ['welcome', 'direct', 'managed']);
+    assert.deepEqual(filterLocalEmailTemplates(stored, {}).map((row) => row.id), ['welcome', 'direct']);
+  });
+
+  it('gives parent accounts one editable merged catalog', () => {
+    const managed = {
+      id: 'managed',
+      managedTemplate: {
+        kind: 'revstack-managed-email-template', bucketId: 'bucket', editable: true,
+      },
+    };
+    const settings = { 'emailTemplates.allowParentAccount': true };
+    assert.deepEqual(filterLocalEmailTemplates([{ id: 'local' }, managed], settings)
+      .map((row) => row.id), ['local', 'managed']);
+    assert.equal(emailTemplateIsEditable(managed, settings), true);
+    assert.equal(emailTemplateIsEditable(managed, {}), false);
   });
 
   it('reads the live devSettings bag through the storage boundary', async () => {

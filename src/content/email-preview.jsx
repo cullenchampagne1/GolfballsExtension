@@ -10,7 +10,6 @@ import { sendEmail, readEmailConfig } from '../lib/emailSender.js';
 import { bareEmail, replyRecipient, replySenderAccount, replySubject, sendThreadReply } from '../lib/emailReply.js';
 import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
 import { filterLocalEmailTemplates } from '../lib/emailTemplateCapabilities.js';
-import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    email-preview.jsx — content-script entry for the React Email
@@ -110,7 +109,6 @@ if (!window.__gbEmailPreviewLoaded) {
      apply/junk lifecycle, feeding the presentational EmailPreview. */
   function EmailPreviewHost({ target, mountOnClosed, mountBindClose }) {
     const toast = useToast();
-    const allowLocalTemplateUsage = useDevSetting('emailTemplates.allowLocalTemplateUsage') !== false;
     const [email, setEmail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [recommended, setRecommended] = useState([]);
@@ -241,10 +239,6 @@ if (!window.__gbEmailPreviewLoaded) {
        the freeform composer. Both controls are hidden unless PA is ready. */
     const onSendTemplate = async (tpl) => {
       if (sendingTemplate) return;
-      if (!allowLocalTemplateUsage) {
-        toast?.error?.('Local email template usage is disabled for this installation', { duration: 5000 });
-        return;
-      }
       const cfg = emailConfig || await readEmailConfig();
       if (!cfg.paReady) return;
       const to = replyRecipient(email, target.meta);
@@ -342,15 +336,13 @@ if (!window.__gbEmailPreviewLoaded) {
         defaultCase={isCasePage()}
         caseId={currentCaseId()}
         recommended={recommended}
-        caseTemplates={allowLocalTemplateUsage ? caseTemplates : []}
+        caseTemplates={caseTemplates}
         onSendTemplate={onSendTemplate}
         sendingTemplate={sendingTemplate}
         replyEnabled={emailConfig?.paReady === true}
         onSendReply={onSendReply}
         sendingReply={sendingReply}
-        accountTemplates={accountEmailTemplates(
-          allowLocalTemplateUsage ? emailConfig?.templates : [],
-        )}
+        accountTemplates={accountEmailTemplates(emailConfig?.templates || [])}
         onApplyAccountTemplate={onApplyAccountTemplate}
         savedProposals={savedProposals}
         onApplySavedProposal={onApplySavedProposal}
