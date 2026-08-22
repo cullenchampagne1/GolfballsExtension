@@ -1,5 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const source = readFileSync(
+  new URL('../../lib/managed-email-templates.js', import.meta.url), 'utf8',
+);
 
 globalThis.chrome = {
   storage: { local: {}, onChanged: { addListener() {} } },
@@ -22,6 +28,41 @@ const item = (patch = {}) => ({
   conflict_with: [],
   ...patch,
 });
+
+function syncHarness() {
+  const stored = {
+    templates: [],
+    devSettings: { 'emailTemplates.allowLocalTemplateUsage': false },
+  };
+  const requests = [];
+  const chrome = {
+    runtime: { lastError: null },
+    storage: {
+      local: {
+        get(_keys, callback) { callback(structuredClone(stored)); },
+        set(values, callback) {
+          Object.assign(stored, structuredClone(values));
+          callback?.();
+        },
+      },
+      onChanged: { addListener() {} },
+    },
+  };
+  const context = vm.createContext({
+    chrome, console, globalThis: null,
+    Date, JSON, Promise, Object, Array, String, Number, Boolean,
+    RegExp, Error, TypeError, Set, Map, structuredClone,
+    setTimeout, clearTimeout,
+  });
+  context.globalThis = context;
+  context.GBInstallationAuth = {
+    apiJson() {
+      return new Promise((resolve) => requests.push(resolve));
+    },
+  };
+  new vm.Script(source, { filename: 'managed-email-templates.js' }).runInContext(context);
+  return { bucket: context.GBManagedEmailTemplates, requests, stored };
+}
 
 describe('managed email-template bucket cache', () => {
   it('mirrors managed rows without deleting preserved local templates', () => {
@@ -98,5 +139,26 @@ describe('managed email-template bucket cache', () => {
     }, { 'emailTemplates.allowParentAccount': true }, { acceptRemote: true });
     assert.equal(acknowledged.body, '<p>Remote</p>');
     assert.equal(acknowledged.managedTemplate.remoteVersion, undefined);
+  });
+
+  it('runs a forced refresh after an overlapping startup sync', async () => {
+    const h = syncHarness();
+    const startup = h.bucket.sync();
+    for (let turn = 0; turn < 5 && h.requests.length < 1; turn += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(h.requests.length, 1);
+
+    const invalidation = h.bucket.sync({ force: true });
+    h.requests[0]({ revision: 'first', is_parent: false, templates: [] });
+    await startup;
+    for (let turn = 0; turn < 5 && h.requests.length < 2; turn += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(h.requests.length, 2, 'the invalidation must not reuse a stale in-flight fetch');
+
+    h.requests[1]({ revision: 'second', is_parent: false, templates: [] });
+    await invalidation;
+    assert.equal(h.stored.gbManagedEmailTemplateBucket.revision, 'second');
   });
 });

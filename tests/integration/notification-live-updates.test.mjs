@@ -7,7 +7,7 @@ const source = readFileSync(
   new URL('../../lib/notifications-poll.js', import.meta.url), 'utf8',
 );
 
-function harness({ notificationsEnabled = true } = {}) {
+function harness({ notificationsEnabled = true, applyError = null } = {}) {
   const stored = { featureFlags: { notificationsEnabled } };
   const applied = [];
   const merged = [];
@@ -48,7 +48,10 @@ function harness({ notificationsEnabled = true } = {}) {
   });
   context.globalThis = context;
   context.GBLiveUpdates = {
-    async applyAll(rows) { applied.push(...rows.map((row) => row.id)); },
+    async applyAll(rows) {
+      applied.push(...rows.map((row) => row.id));
+      if (applyError) throw applyError;
+    },
   };
   context.GBNotifications = {
     async mergeRemote(rows) {
@@ -111,5 +114,16 @@ describe('notification cursor as live-update transport', () => {
     assert.equal(h.messages.length, 0);
     assert.deepEqual(h.receipts[0].notification_ids, [91, 92]);
     assert.equal(h.stored.gbNotificationCursor, 92);
+  });
+
+  it('does not acknowledge or advance past an authoritative refresh failure', async () => {
+    const h = harness({ applyError: new Error('managed bucket unavailable') });
+    const result = await h.poll.processResult({ notifications: [silent], cursor: 91 });
+
+    assert.equal(result, false);
+    assert.deepEqual(h.applied, [91]);
+    assert.deepEqual(h.merged, []);
+    assert.deepEqual(h.receipts, []);
+    assert.equal(h.stored.gbNotificationCursor, undefined);
   });
 });

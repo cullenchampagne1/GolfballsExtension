@@ -8,7 +8,7 @@ const source = readFileSync(
 );
 const SHARE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
 
-function harness(initial = {}, remoteShare = null) {
+function harness(initial = {}, remoteShare = null, { managedError = null } = {}) {
   const stored = structuredClone(initial);
   let policySyncs = 0;
   let shareFetches = 0;
@@ -38,6 +38,7 @@ function harness(initial = {}, remoteShare = null) {
     async sync(options) {
       assert.equal(options?.force, true);
       managedSyncs += 1;
+      if (managedError) throw managedError;
     },
   };
   context.GBInstallationAuth = {
@@ -171,6 +172,22 @@ describe('typed extension live updates', () => {
     assert.equal(stored.gbLiveUpdate.type, 'settings.changed');
     assert.equal(policySyncs(), 1);
     assert.equal(managedSyncs(), 1);
+  });
+
+  it('propagates managed bucket refresh failures so delivery can retry', async () => {
+    const { updates, stored } = harness({}, null, {
+      managedError: new Error('managed bucket unavailable'),
+    });
+
+    await assert.rejects(
+      updates.apply(notification(
+        'managed_email_templates.changed',
+        { revision: 'b'.repeat(64), editor_name: 'Parent Two' },
+        47,
+      )),
+      /managed bucket unavailable/,
+    );
+    assert.equal(stored.gbLiveUpdate, undefined);
   });
 
   it('keeps future valid events generic and rejects malformed envelopes', async () => {

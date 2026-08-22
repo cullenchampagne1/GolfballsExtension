@@ -46,9 +46,11 @@ class FakeSession:
 
 
 class FakeSettingsPolicy:
-    def __init__(self, parent_ids=()):
+    def __init__(self, parent_ids=(), managed_ids=(), creation_disabled_ids=()):
         self.calls = []
         self.parent_ids = set(parent_ids)
+        self.managed_ids = set(managed_ids)
+        self.creation_disabled_ids = set(creation_disabled_ids)
 
     def resolve(self, credential_id):
         return ({
@@ -56,7 +58,12 @@ class FakeSettingsPolicy:
                 "emailTemplates.allowParentAccount": {
                     "value": credential_id in self.parent_ids,
                 },
-                "emailTemplates.allowLocalTemplateUsage": {"value": True},
+                "emailTemplates.allowLocalTemplateUsage": {
+                    "value": credential_id not in self.managed_ids,
+                },
+                "emailTemplates.allowCreation": {
+                    "value": credential_id not in self.creation_disabled_ids,
+                },
             },
         }, "database-revision")
 
@@ -87,7 +94,10 @@ class FakeNotifications:
         }
 
     def active_installation_ids(self):
-        return ["owner-install", "parent-two", "recipient-install"]
+        return [
+            "owner-install", "parent-two", "recipient-install",
+            "creation-disabled-install", "unmanaged-install",
+        ]
 
 
 class ExtensionClientAccessTests(unittest.TestCase):
@@ -328,7 +338,10 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.Base.metadata.create_all(self.engine)
         self.auth = SimpleNamespace(engine=self.engine)
         self.notifications = FakeNotifications()
-        self.settings_policy = FakeSettingsPolicy({"owner-install", "parent-two"})
+        self.settings_policy = FakeSettingsPolicy(
+            {"owner-install", "parent-two"}, {"recipient-install"},
+            {"creation-disabled-install"},
+        )
         self.api = client_api_module.ExtensionClientApi(
             auth_manager=self.auth,
             models=self.models,
@@ -429,6 +442,14 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertEqual(child["templates"][0]["template"]["subject"], "Welcome")
         self.assertEqual(self.notifications.fanouts[-1]["event"]["type"], "managed_email_templates.changed")
         self.assertFalse(self.notifications.fanouts[-1]["visible"])
+        self.assertEqual(
+            self.notifications.fanouts[-1]["credential_ids"],
+            [
+                "owner-install", "parent-two", "recipient-install",
+                "creation-disabled-install",
+            ],
+            "only parents and restricted users need bucket invalidations",
+        )
 
         bucket_id = created["templates"][0]["id"]
         removed = self._payload(self.api.update_managed_email_bucket(
