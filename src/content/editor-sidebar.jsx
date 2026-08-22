@@ -779,6 +779,9 @@ function TemplateSidebar() {
 
   const isNote = tab === 'notes';
   const usableTemplates = filterLocalEmailTemplates(templates, devSettings);
+  const folderTakesRow = !isNote
+    && allowLocalTemplates
+    && !capabilities.allowCreation;
   const allItems  = isNote ? notes : usableTemplates;
   const folders   = isNote ? noteFolders : (allowLocalTemplates ? tplFolders : []);
   const tplsKey   = isNote ? 'noteTemplates' : 'templates';
@@ -1000,9 +1003,9 @@ function TemplateSidebar() {
           ]}
         />
         <Input size="sm" value={search} onChange={setSearch} placeholder="Search…" leading={<I.search />} />
-        {/* Template button takes the row; Folder is icon-only but
-            keeps the dashed brand-tinted Btn styling so the two read
-            as a matched pair — just without the redundant label. */}
+        {/* Folder stays compact beside a creation action. When managed email
+            creation is off, it glides into the released width and gains a
+            label so the row still reads as one intentional primary action. */}
         <div style={{ display: 'flex', gap: 6 }}>
           <CapabilitySlot
             visible={isNote || (capabilities.allowCreation && allowLocalTemplates)}
@@ -1014,13 +1017,25 @@ function TemplateSidebar() {
               {isNote ? 'Note' : 'Template'}
             </Btn>
           </CapabilitySlot>
-          <CapabilitySlot visible={isNote || allowLocalTemplates} slotKey="new-template-folder">
+          <CapabilitySlot
+            visible={isNote || allowLocalTemplates}
+            grow={folderTakesRow}
+            slotKey={folderTakesRow ? 'new-template-folder-wide' : 'new-template-folder-icon'}
+          >
             <Btn
               variant="dashed" size="sm"
               icon={<FolderIcon />}
               onClick={newFolder}
-              style={{ flexShrink: 0, padding: '0 9px' }}
-            />
+              title="New folder"
+              style={{
+                flex: folderTakesRow ? 1 : undefined,
+                minWidth: 0,
+                flexShrink: 0,
+                padding: folderTakesRow ? undefined : '0 9px',
+              }}
+            >
+              {folderTakesRow ? 'Folder' : null}
+            </Btn>
           </CapabilitySlot>
         </div>
       </div>

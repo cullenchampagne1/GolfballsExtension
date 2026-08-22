@@ -41,6 +41,9 @@ describe('settings menus', () => {
     assert.match(sidebarSource, /capabilities\.allowCreation/);
     assert.match(sidebarSource, /capabilities\.allowLinkImport/);
     assert.match(sidebarSource, /visible=\{isNote \|\| \(capabilities\.allowCreation && allowLocalTemplates\)\}/);
+    assert.match(sidebarSource, /const folderTakesRow = !isNote[\s\S]*!capabilities\.allowCreation;/);
+    assert.match(sidebarSource, /grow=\{folderTakesRow\}/);
+    assert.match(sidebarSource, /folderTakesRow \? 'Folder' : null/);
     assert.match(sidebarSource, /slotKey="email-template-link-import"/);
     assert.match(sidebarSource, /filterLocalEmailTemplates\(templates, devSettings\)/);
     assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowCreation/);
