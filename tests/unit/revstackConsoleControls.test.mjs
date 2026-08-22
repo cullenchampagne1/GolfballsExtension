@@ -53,11 +53,25 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
 
     assert.deepEqual(keys(emailColumns), ['name', 'owner', 'type', 'updated', 'act']);
     assert.match(emailColumns, /"key": "act", "label": "Revoke"/);
+    assert.match(emailColumns, /"key": "name", "label": "Name", "width": "112px"/);
+    assert.doesNotMatch(emailColumns, /"key": "name"[^\n]*"grow": True/);
     assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
     assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
     assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
+    assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "112px"/);
+    assert.doesNotMatch(sourceColumns, /"key": "source"[^\n]*"grow": True/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
+  });
+
+  it('long-polls the outbox so live updates stay below the installation quota', () => {
+    const notificationRoute = routes.match(
+      /@router\.get\("\/client\/notifications"\)[\s\S]*?@router\.post\("\/client\/notifications\/receipts"\)/,
+    )?.[0] || '';
+
+    assert.match(notificationRoute, /wait_seconds: int = 25/);
+    assert.match(notificationRoute, /await asyncio\.sleep\(0\.5\)/);
+    assert.match(notificationRoute, /payload\["notifications"\]/);
   });
 
   it('exposes managed-template inventory and former-parent cleanup blocks', () => {

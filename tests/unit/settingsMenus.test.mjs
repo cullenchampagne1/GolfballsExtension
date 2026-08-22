@@ -127,6 +127,7 @@ describe('settings menus', () => {
     assert.match(templateRowSource, /managed && !managedEditable \? 'var\(--gb-fill-subtle\)' : 'transparent'/);
     assert.match(templateRowSource, /managedEditable \? <I\.users size=\{9\} \/> : <I\.lock size=\{9\} \/>/);
     assert.match(templateRowSource, /aria-label=\{managedEditable[\s\S]*?'Account-managed template'[\s\S]*?'Locked management template'/);
+    assert.match(templateRowSource, /managed\.conflictWith\?\.length[\s\S]*?: 'var\(--gb-brand-label\)'/);
     assert.doesNotMatch(templateRowSource, />Managed<|`Management ·/);
   });
 

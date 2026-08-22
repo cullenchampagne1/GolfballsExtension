@@ -13,6 +13,7 @@ function harness({ notificationsEnabled = true, applyError = null } = {}) {
   const merged = [];
   const receipts = [];
   const messages = [];
+  const notificationUrls = [];
   const listeners = { installed: [], startup: [], alarm: [], storage: [] };
   const chrome = {
     runtime: {
@@ -66,13 +67,14 @@ function harness({ notificationsEnabled = true, applyError = null } = {}) {
         receipts.push(JSON.parse(options.body));
         return { updated: true };
       }
+      notificationUrls.push(url);
       return { notifications: [], cursor: 0 };
     },
   };
   new vm.Script(source, { filename: 'notifications-poll.js' }).runInContext(context);
   return {
     poll: context.GBNotificationPoll,
-    stored, applied, merged, receipts, messages,
+    stored, applied, merged, receipts, messages, notificationUrls,
   };
 }
 
@@ -125,5 +127,16 @@ describe('notification cursor as live-update transport', () => {
     assert.deepEqual(h.merged, []);
     assert.deepEqual(h.receipts, []);
     assert.equal(h.stored.gbNotificationCursor, undefined);
+  });
+
+  it('holds one request open for immediate updates without exhausting the shared quota', async () => {
+    const h = harness();
+    assert.equal(await h.poll.poll(), true);
+
+    assert.equal(h.notificationUrls.length, 1);
+    const url = new URL(h.notificationUrls[0], 'https://api.example.test');
+    assert.equal(url.searchParams.get('after'), '0');
+    assert.equal(url.searchParams.get('limit'), '50');
+    assert.equal(url.searchParams.get('wait_seconds'), '25');
   });
 });

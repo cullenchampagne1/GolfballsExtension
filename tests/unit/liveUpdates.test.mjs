@@ -8,7 +8,9 @@ const source = readFileSync(
 );
 const SHARE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
 
-function harness(initial = {}, remoteShare = null, { managedError = null } = {}) {
+function harness(initial = {}, remoteShare = null, {
+  managedError = null, policyError = null,
+} = {}) {
   const stored = structuredClone(initial);
   let policySyncs = 0;
   let shareFetches = 0;
@@ -32,7 +34,11 @@ function harness(initial = {}, remoteShare = null, { managedError = null } = {})
   });
   context.globalThis = context;
   context.GBRemoteSettingsPolicy = {
-    async sync() { policySyncs += 1; },
+    async sync(options) {
+      assert.equal(options?.force, true);
+      policySyncs += 1;
+      if (policyError) throw policyError;
+    },
   };
   context.GBManagedEmailTemplates = {
     async sync(options) {
@@ -187,6 +193,23 @@ describe('typed extension live updates', () => {
       )),
       /managed bucket unavailable/,
     );
+    assert.equal(stored.gbLiveUpdate, undefined);
+  });
+
+  it('propagates settings refresh failures so the user never has to reopen Settings', async () => {
+    const { updates, stored } = harness({}, null, {
+      policyError: new Error('configuration unavailable'),
+    });
+
+    await assert.rejects(
+      updates.apply(notification(
+        'settings.changed',
+        { revision: 'c'.repeat(64), path: ['developer_settings', 'emailTemplates.allowCreation'] },
+        48,
+      )),
+      /configuration unavailable/,
+    );
+    assert.equal(stored.gbSettingsPolicyRevision, undefined);
     assert.equal(stored.gbLiveUpdate, undefined);
   });
 

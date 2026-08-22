@@ -29,10 +29,11 @@ const item = (patch = {}) => ({
   ...patch,
 });
 
-function syncHarness() {
+function syncHarness(initial = {}) {
   const stored = {
     templates: [],
     devSettings: { 'emailTemplates.allowLocalTemplateUsage': false },
+    ...structuredClone(initial),
   };
   const requests = [];
   const chrome = {
@@ -206,5 +207,30 @@ describe('managed email-template bucket cache', () => {
     h.requests[1]({ revision: 'second', is_parent: false, templates: [] });
     await invalidation;
     assert.equal(h.stored.gbManagedEmailTemplateBucket.revision, 'second');
+  });
+
+  it('repairs a revision skipped by clients using the old cache contract', async () => {
+    const h = syncHarness({
+      gbManagedEmailTemplateBucket: {
+        schemaVersion: 1, revision: 'stale', isParent: false, templates: [],
+      },
+    });
+    const repair = h.bucket.sync();
+    for (let turn = 0; turn < 5 && h.requests.length < 1; turn += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(h.requests.length, 1);
+    h.requests[0]({ revision: 'repaired', is_parent: false, templates: [] });
+    await repair;
+
+    assert.equal(h.stored.gbManagedEmailTemplateBucket.schemaVersion, 2);
+    assert.equal(h.stored.gbManagedEmailTemplateBucket.revision, 'repaired');
+  });
+
+  it('treats creation restrictions as managed-bucket eligibility changes', () => {
+    assert.equal(bucket.capabilities({}).allowCreation, true);
+    assert.equal(bucket.capabilities({
+      'emailTemplates.allowCreation': false,
+    }).allowCreation, false);
   });
 });

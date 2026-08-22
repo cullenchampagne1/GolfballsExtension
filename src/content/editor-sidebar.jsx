@@ -384,7 +384,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                     display: 'inline-flex', alignItems: 'center', gap: 3,
                     color: managed.conflictWith?.length
                       ? 'var(--gb-warning-fg)'
-                      : (managedEditable ? 'var(--gb-text-muted)' : 'var(--gb-text-tertiary)'),
+                      : 'var(--gb-brand-label)',
                     fontWeight: 700, minWidth: 0, flexShrink: 0,
                   }}
                 >
