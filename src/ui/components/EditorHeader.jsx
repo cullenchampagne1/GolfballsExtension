@@ -18,9 +18,14 @@ import { I } from '../icons.jsx';
  *   enabled    Boolean — drives the SwitchTag.
  *   onToggle   () => void — fires when the SwitchTag is clicked.
  *   desc       Optional one-line description shown under the title.
- *   onDelete   Optional. When set, renders a "Delete" danger button.
+ *   onDelete   Optional. When set, renders a danger button.
+ *   toggleDisabled  Locks the enable switch without changing its shape.
+ *   deleteLabel     Optional danger-button label (default "Delete").
  */
-export function EditorHeader({ icon, title, typeLabel, enabled, onToggle, desc, onDelete }) {
+export function EditorHeader({
+  icon, title, typeLabel, enabled, onToggle, desc, onDelete,
+  toggleDisabled = false, deleteLabel = 'Delete',
+}) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
       <div style={{
@@ -51,6 +56,7 @@ export function EditorHeader({ icon, title, typeLabel, enabled, onToggle, desc, 
             on={enabled}
             label={enabled ? 'Enabled' : 'Disabled'}
             onClick={onToggle}
+            disabled={toggleDisabled}
             size="sm"
             style={{ flexShrink: 0 }}
           />
@@ -65,7 +71,7 @@ export function EditorHeader({ icon, title, typeLabel, enabled, onToggle, desc, 
         )}
       </div>
       {onDelete && (
-        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
+        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>{deleteLabel}</Btn>
       )}
     </div>
   );

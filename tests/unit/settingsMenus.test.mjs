@@ -26,10 +26,6 @@ const templateEditorSource = await readFile(
   new URL('../../src/pages/TemplateEditor.jsx', import.meta.url),
   'utf8',
 );
-const richTextEditorSource = await readFile(
-  new URL('../../src/ui/components/RichTextEditor.jsx', import.meta.url),
-  'utf8',
-);
 const projectRoutesUrl = new URL('../../.revstack/routes.py', import.meta.url);
 const hasProjectRoutes = existsSync(projectRoutesUrl);
 const projectRoutesSource = hasProjectRoutes
@@ -70,12 +66,17 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /!emailTemplateCapabilities\.allowLocalTemplateUsage/);
   });
 
-  it('renders retained email shares read-only while preserving recipient deletion', () => {
-    assert.match(templateEditorSource, /isImportedEmailTemplate\(tpl\)/);
-    assert.match(templateEditorSource, /Read-only shared template/);
-    assert.match(templateEditorSource, /<RichTextEditor[\s\S]*?readOnly/);
-    assert.match(templateEditorSource, /Variables · \{vars\.length\}/);
-    assert.match(richTextEditorSource, /contentEditable=\{!readOnly\}/);
+  it('renders retained email shares in the complete editor while locking content edits', () => {
+    assert.match(templateEditorSource, /const imported = isImportedEmailTemplate\(tpl\)/);
+    assert.match(templateEditorSource, /<EditableTemplateEditor[\s\S]*?readOnly=\{imported\}/);
+    assert.doesNotMatch(templateEditorSource, /function ImportedTemplateViewer/);
+    assert.match(templateEditorSource, /inert=\{readOnly \|\| undefined\}/);
+    assert.match(templateEditorSource, /if \(readOnly\) return undefined;[\s\S]*?__gbSaveTemplate/);
+    assert.match(templateEditorSource, /deleteLabel=\{readOnly \? 'Remove' : 'Delete'\}/);
+    assert.match(templateEditorSource, /Shared by \$\{ownerName\}/);
+    assert.match(sidebarSource, /importedEmailShare\(tpl\)/);
+    assert.match(sidebarSource, /<I\.user size=\{8\}/);
+    assert.doesNotMatch(sidebarSource, />IMPORTED</);
     assert.match(editorBridgeSource, /Imported email templates are read-only/);
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);

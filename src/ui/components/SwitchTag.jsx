@@ -15,24 +15,27 @@ const SIZES = {
  *
  * Props: on, label, icon, size 'xs'|'sm'|'md'|'lg',
  *   tone 'neutral'|'brand'|'warning'|'error' (auto: off→neutral, on→brand),
- *   onClick.
+ *   onClick, disabled.
  */
-export function SwitchTag({ on, label, tone, icon, size = 'md', onClick, style }) {
+export function SwitchTag({ on, label, tone, icon, size = 'md', onClick, disabled = false, style }) {
   const t = TINT[tone || (on ? 'brand' : 'neutral')] || TINT.neutral;
   const s = SIZES[size] || SIZES.md;
   const knobX = s.switchW - s.knob - 4;
 
   return (
     <motion.span
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled || undefined}
       animate={{ backgroundColor: t.bg, color: t.fg, borderColor: t.bd }}
       transition={T.base}
-      whileTap={{ scale: 0.97 }}
+      whileTap={disabled ? undefined : { scale: 0.97 }}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: s.gap,
         padding: s.padding, borderRadius: 'var(--gb-r-sm)',
         fontSize: s.fontSize, fontWeight: 600, border: '1px solid',
-        cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.62 : 1,
+        userSelect: 'none', whiteSpace: 'nowrap',
         fontFamily: 'var(--gb-font-sans)', boxSizing: 'border-box',
         ...style,
       }}

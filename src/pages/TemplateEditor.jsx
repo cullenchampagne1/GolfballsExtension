@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   Btn,
   Input, Dropdown, Field, IconBtn,
-  Segmented, FeatureSpotlight, EditorHeader, ResolveHint, Callout, Tag,
+  Segmented, FeatureSpotlight, EditorHeader, ResolveHint, Callout,
   TYPE_ICONS,
   I, Icon,
   SmartPopover,
@@ -225,133 +225,23 @@ export function EmptyState() {
   );
 }
 
-function ImportedTemplateViewer({ tpl, onDelete }) {
-  const typeId = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
-  const meta = TYPE_META[typeId] || TYPE_META.order;
-  const source = importedEmailShare(tpl);
-  const vars = convertVars(tpl);
-  const variations = [
-    {
-      id: 'base',
-      label: tpl.variations?.length ? (tpl.baseLabel || 'Variation 1') : 'Email',
-      subject: tpl.subject || '',
-      body: tpl.body || '',
-    },
-    ...(tpl.variations || []).map((variation, index) => ({
-      id: variation.id || `variation-${index}`,
-      label: variation.label || `Variation ${index + 2}`,
-      subject: variation.subject || tpl.subject || '',
-      body: variation.body || tpl.body || '',
-    })),
-  ];
-  const recipient = tpl.toField?.type === 'literal'
-    ? tpl.toField.value
-    : tpl.toField?.type === 'selector'
-      ? tpl.toField.selector
-      : 'Automatic from the current record';
-
-  return (
-    <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
-          background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)',
-          color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {React.cloneElement(meta.icon, { size: 14 })}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {tpl.name || 'Imported template'}
-            </span>
-            <Tag tone="brand" size="xs">IMPORTED</Tag>
-            <Tag tone={tpl.enabled === false ? 'neutral' : 'success'} size="xs">
-              {tpl.enabled === false ? 'OFF' : typeId.toUpperCase()}
-            </Tag>
-          </div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>
-            Shared by {source?.ownerName || 'Unregistered installation'}
-          </div>
-        </div>
-        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Remove</Btn>
-      </div>
-
-      <Callout tone="brand" title="Read-only shared template" style={{ marginBottom: 12 }}>
-        You can review and send every variation, but only the creator can change this template's subject, body, variables, or delivery rules.
-      </Callout>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-        <Field label="Template type"><Input value={typeId} readOnly size="sm" /></Field>
-        <Field label="Recipient"><Input value={recipient || 'Not set'} readOnly size="sm" /></Field>
-      </div>
-
-      {variations.map((variation) => (
-        <div key={variation.id} style={{
-          padding: 12, marginBottom: 12, borderRadius: 'var(--gb-r-md)',
-          background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-brand-tint-border)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-            <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} />
-            <strong style={{ fontSize: 11.5, color: 'var(--gb-text-primary)' }}>{variation.label}</strong>
-          </div>
-          <div style={{ marginBottom: 8 }}>
-            <Field label="Subject">
-              <RichTextEditor
-                readOnly singleLine size="sm" initialHtml={variation.subject}
-                variables={vars} placeholder="No subject"
-              />
-            </Field>
-          </div>
-          <Field label="Body">
-            <RichTextEditor
-              readOnly size="sm" initialHtml={variation.body}
-              variables={vars} minHeight={130} placeholder="Empty body"
-            />
-          </Field>
-        </div>
-      ))}
-
-      <div style={{
-        border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-        overflow: 'hidden', marginBottom: 12,
-      }}>
-        <div style={{
-          padding: '8px 10px', background: 'var(--gb-surface-modal)',
-          borderBottom: '1px solid var(--gb-border-subtle)',
-          fontSize: 10.5, fontWeight: 750, color: 'var(--gb-text-primary)',
-        }}>
-          Variables · {vars.length}
-        </div>
-        {vars.length ? vars.map((variable) => (
-          <div key={variable.name} style={{
-            display: 'grid', gridTemplateColumns: 'minmax(120px,.7fr) minmax(90px,.5fr) minmax(0,1.8fr)',
-            gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--gb-border-subtle)',
-            fontSize: 10.5, alignItems: 'center',
-          }}>
-            <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: 'var(--gb-brand-label)' }}>{variable.name}</span>
-            <span style={{ color: 'var(--gb-text-muted)' }}>{variable.kind}</span>
-            <span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{variable.config || '—'}</span>
-          </div>
-        )) : (
-          <div style={{ padding: 12, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>No variables in this template.</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function TemplateEditor({ tpl, onDelete }) {
-  if (isImportedEmailTemplate(tpl)) {
-    return <ImportedTemplateViewer tpl={tpl} onDelete={onDelete} />;
-  }
-  return <EditableTemplateEditor tpl={tpl} onDelete={onDelete} />;
+  const imported = isImportedEmailTemplate(tpl);
+  const source = imported ? importedEmailShare(tpl) : null;
+  return (
+    <EditableTemplateEditor
+      tpl={tpl}
+      onDelete={onDelete}
+      readOnly={imported}
+      ownerName={source?.ownerName || 'Unregistered installation'}
+    />
+  );
 }
 
 /* ────────────────────────────────────────────────────────────
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
-function EditableTemplateEditor({ tpl, onDelete }) {
+function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '' }) {
   const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
   const [typeId, setTypeId] = useState(initialType);
   const meta = TYPE_META[typeId] || TYPE_META.order;
@@ -666,6 +556,10 @@ function EditableTemplateEditor({ tpl, onDelete }) {
   const skipTypeSave = useRef(true);
   const saveTimer    = useRef(0);
   useEffect(() => {
+    // Imported shares use this exact editor tree for presentation, but the
+    // recipient never owns the content. Keep the UI and bridge protections
+    // independent so a future control cannot accidentally persist a share.
+    if (readOnly) return undefined;
     if (skipSave.current) { skipSave.current = false; return undefined; }
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -679,6 +573,7 @@ function EditableTemplateEditor({ tpl, onDelete }) {
      let the storage `onChanged` listener kick the layout animation in
      within a frame. */
   useEffect(() => {
+    if (readOnly) return;
     if (skipTypeSave.current) { skipTypeSave.current = false; return; }
     if (typeof window.__gbSaveTemplate === 'function') {
       window.__gbSaveTemplate(buildTemplate());
@@ -740,10 +635,28 @@ function EditableTemplateEditor({ tpl, onDelete }) {
         title={name || 'New Template'}
         typeLabel={typeId.toUpperCase()}
         enabled={enabled}
-        onToggle={() => setEnabled((e) => !e)}
-        desc={meta.desc}
+        onToggle={readOnly ? undefined : () => setEnabled((e) => !e)}
+        toggleDisabled={readOnly}
+        desc={readOnly ? `${meta.desc} Read only · Shared by ${ownerName}` : meta.desc}
         onDelete={onDelete}
+        deleteLabel={readOnly ? 'Remove' : 'Delete'}
       />
+
+      {/* A retained share deliberately renders the production editor rather
+          than a reduced viewer. `inert` locks every current and future form
+          control without hiding sections or changing their layout; the
+          editor bridge separately rejects imported-template writes. */}
+      <div
+        className={readOnly ? 'gb-template-editor-readonly' : undefined}
+        inert={readOnly || undefined}
+        aria-readonly={readOnly || undefined}
+        title={readOnly ? `Read-only template shared by ${ownerName}` : undefined}
+        style={{
+          opacity: readOnly ? 0.68 : 1,
+          filter: readOnly ? 'saturate(.45)' : 'none',
+          transition: 'opacity 160ms ease, filter 160ms ease',
+        }}
+      >
 
       {/* ── Type tabs + sender picker on the same row.
           Left: order/case/account Segmented.
@@ -1069,6 +982,7 @@ function EditableTemplateEditor({ tpl, onDelete }) {
           />
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

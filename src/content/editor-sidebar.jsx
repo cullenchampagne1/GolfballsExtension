@@ -12,6 +12,7 @@ import {
   buildEmailTemplateFile,
   importSharedEmailTemplate,
   importTemplates,
+  importedEmailShare,
   isImportedEmailTemplate,
   normalizeTemplate,
   parseEmailTemplateFile,
@@ -235,6 +236,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
   const TypeIcon = meta.icon;
   const disabled = tpl.enabled === false;
   const imported = !isNote && isImportedEmailTemplate(tpl);
+  const importedSource = imported ? importedEmailShare(tpl) : null;
   const trackingIssue = !isNote && !disabled
     ? emailTemplateTrackingIssue(tracker)
     : null;
@@ -301,7 +303,11 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
           // ({groups:[{conditions:[]}]}), so the old `tpl.rules.length` was
           // `undefined`. Count total conditions across all groups (still
           // handling the legacy flat array).
-          const tree = tpl.type === 'account' ? tpl.accountConditions : tpl.rules;
+          const tree = type === 'account'
+            ? tpl.accountConditions
+            : type === 'case'
+              ? tpl.caseRules
+              : tpl.rules;
           const ruleN = !tree
             ? 0
             : Array.isArray(tree)
@@ -309,26 +315,48 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
               : Array.isArray(tree.groups)
                 ? tree.groups.reduce((n, g) => n + ((g && g.conditions ? g.conditions.length : 0)), 0)
                 : 0;
-          const varN  = Object.keys(tpl.vars || {}).length;
+          const varN  = type === 'case'
+            ? (Array.isArray(tpl.caseVars) ? tpl.caseVars.length : 0)
+            : Object.keys(tpl.vars || {}).length;
           const varsN = (tpl.variations || []).length;
           return (
-            <div style={{ fontSize: 9.5, color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', marginTop: 1 }}>
-              {ruleN} rule{ruleN !== 1 ? 's' : ''}
-              {' · '}
-              {varN} var{varN !== 1 ? 's' : ''}
-              {/* Show variations stat once there's any variation — keeps
-                  the row chrome quiet for single-version templates. */}
-              {varsN > 0 && (
-                <>{' · '}{varsN} variation{varsN !== 1 ? 's' : ''}</>
-              )}
-              {summary?.sent > 0 && (
-                <>{' · '}{summary.responded}/{summary.sent} replies{' · '}{summary.ordered} orders</>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5, minWidth: 0,
+              fontSize: 9.5, color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', marginTop: 1,
+            }}>
+              <span style={{ flexShrink: 0 }}>
+                {ruleN} rule{ruleN !== 1 ? 's' : ''}
+                {' · '}
+                {varN} var{varN !== 1 ? 's' : ''}
+                {/* Show variations stat once there's any variation — keeps
+                    the row chrome quiet for single-version templates. */}
+                {varsN > 0 && (
+                  <>{' · '}{varsN} variation{varsN !== 1 ? 's' : ''}</>
+                )}
+                {summary?.sent > 0 && (
+                  <>{' · '}{summary.responded}/{summary.sent} replies{' · '}{summary.ordered} orders</>
+                )}
+              </span>
+              {imported && (
+                <span
+                  title={`Shared by ${importedSource?.ownerName || 'Unregistered installation'}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-brand-label)',
+                    fontWeight: 650,
+                  }}
+                >
+                  <I.user size={8} style={{ flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {importedSource?.ownerName || 'Unregistered installation'}
+                  </span>
+                </span>
               )}
             </div>
           );
         })()}
       </div>
-      {imported && <Tag tone="brand" size="xs">IMPORTED</Tag>}
       {disabled && <Tag tone="neutral" size="xs">OFF</Tag>}
       {trackingIssue && <Tag tone={trackingIssue.tone} size="xs">{trackingIssue.badge}</Tag>}
       <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
