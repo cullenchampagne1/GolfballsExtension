@@ -255,9 +255,12 @@ export function EmptyState() {
 export function TemplateEditor({ tpl, onDelete }) {
   const imported = isImportedEmailTemplate(tpl);
   const source = imported ? importedEmailShare(tpl) : null;
+  const displayedTemplate = imported && source?.overrideDefaults?.replyMode
+    ? { ...tpl, replyMode: source.overrideDefaults.replyMode }
+    : tpl;
   return (
     <EditableTemplateEditor
-      tpl={tpl}
+      tpl={displayedTemplate}
       onDelete={onDelete}
       readOnly={imported}
       ownerName={source?.ownerName || 'Unregistered installation'}
@@ -799,7 +802,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
           mailto regardless of this flag). Persisted value is preserved
           when PA toggles off so the preference isn't lost. */}
       {typeId !== 'case' && paEnabled && (
-        <div style={S.mb12}>
+        <LockedRegion locked={readOnly} style={S.mb12}>
           <FeatureSpotlight
             size="xs"
             on={replyMode}
@@ -808,7 +811,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
             desc="Threads this template as a reply instead of sending as a new message."
             onChange={(on) => setReplyMode(on)}
           />
-        </div>
+        </LockedRegion>
       )}
 
       {/* ── Recommended case tags (case templates only) ── */}

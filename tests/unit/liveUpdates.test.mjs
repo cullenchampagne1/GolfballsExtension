@@ -8,9 +8,10 @@ const source = readFileSync(
 );
 const SHARE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
 
-function harness(initial = {}) {
+function harness(initial = {}, remoteShare = null) {
   const stored = structuredClone(initial);
   let policySyncs = 0;
+  let shareFetches = 0;
   const chrome = {
     runtime: { lastError: null },
     storage: {
@@ -32,11 +33,19 @@ function harness(initial = {}) {
   context.GBRemoteSettingsPolicy = {
     async sync() { policySyncs += 1; },
   };
+  context.GBInstallationAuth = {
+    CLIENT_BASE: '/projects/golfballs-extension/client',
+    async apiJson() {
+      shareFetches += 1;
+      return structuredClone(remoteShare);
+    },
+  };
   new vm.Script(source, { filename: 'live-updates.js' }).runInContext(context);
   return {
     updates: context.GBLiveUpdates,
     stored,
     policySyncs: () => policySyncs,
+    shareFetches: () => shareFetches,
   };
 }
 
@@ -48,7 +57,13 @@ describe('typed extension live updates', () => {
   it('removes a revoked imported email snapshot and invalidates open share UIs', async () => {
     const { updates, stored } = harness({
       templates: [
-        { id: 'local', name: 'Local template' },
+        {
+          id: 'local', name: 'Local template',
+          shareSync: {
+            kind: 'revstack-owned-email-template-shares',
+            owned: [{ shareId: SHARE_ID }, { shareId: 'Z'.repeat(32) }],
+          },
+        },
         {
           id: 'imported', name: 'Shared template',
           shareImport: {
@@ -66,6 +81,63 @@ describe('typed extension live updates', () => {
     assert.equal(stored.gbLiveUpdate.notificationId, 41);
     assert.equal(stored.gbEmailShareRevision.data.share_id, SHARE_ID);
     assert.deepEqual(stored.templates.map((item) => item.id), ['local']);
+    assert.deepEqual(stored.templates[0].shareSync.owned.map((row) => row.shareId), ['Z'.repeat(32)]);
+  });
+
+  it('refreshes an imported snapshot while preserving only recipient-owned overrides', async () => {
+    const remoteShare = {
+      id: SHARE_ID,
+      owner_name: 'Template Owner',
+      version: 2,
+      updated_at: '2026-08-22T12:00:00',
+      template: {
+        name: 'Updated shared template', type: 'order',
+        subject: 'Owner changed this', body: '<p>New source</p>',
+        replyMode: 'standalone', presetTaskId: 'owner-task',
+        senderAccount: 'golfballs', senderRandomize: false,
+        vars: {
+          greeting: { type: 'literal', value: 'Owner default' },
+          first_name: { type: 'schema', path: 'contact.firstName' },
+        },
+      },
+    };
+    const { updates, stored, shareFetches } = harness({
+      templates: [{
+        id: 'imported', name: 'Old shared template', type: 'order',
+        subject: 'Old', body: '<p>Old source</p>', replyMode: 'reply',
+        presetTaskId: 'my-task', senderAccount: 'outlook',
+        vars: { greeting: { type: 'literal', value: 'Howdy' } },
+        shareImport: {
+          kind: 'revstack-email-template-share', shareId: SHARE_ID, version: 1,
+          overrideDefaults: { replyMode: 'standalone' },
+          overrides: {
+            replyMode: 'reply', presetTaskId: 'my-task', senderAccount: 'outlook',
+            literalVariables: { greeting: 'Howdy', removed_literal: 'No longer valid' },
+          },
+        },
+      }],
+    }, remoteShare);
+
+    const event = notification('email_templates.changed', {
+      reason: 'updated', share_id: SHARE_ID, version: 2,
+    }, 45);
+    await updates.apply(event);
+    const imported = stored.templates[0];
+    assert.equal(imported.name, 'Updated shared template');
+    assert.equal(imported.subject, 'Owner changed this');
+    assert.equal(imported.replyMode, 'standalone', 'reply mode follows the owner');
+    assert.equal(imported.presetTaskId, 'my-task');
+    assert.equal(imported.senderAccount, 'outlook');
+    assert.equal(imported.vars.greeting.value, 'Howdy');
+    assert.equal(imported.shareImport.version, 2);
+    assert.equal(imported.shareImport.overrides.replyMode, undefined);
+    assert.deepEqual(imported.shareImport.overrides.literalVariables, { greeting: 'Howdy' });
+    assert.equal(shareFetches(), 1);
+
+    await updates.apply(notification('email_templates.changed', {
+      reason: 'updated', share_id: SHARE_ID, version: 2,
+    }, 46));
+    assert.equal(shareFetches(), 1, 'visible and silent rows for one version refresh once');
   });
 
   it('invalidates ticket state and refreshes managed settings through one channel', async () => {

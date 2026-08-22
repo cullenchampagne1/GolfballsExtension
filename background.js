@@ -1608,6 +1608,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+  if (msg.action === 'emailTemplateShareUpdate') {
+    const shareId = gbEmailTemplateShareId(msg.shareId);
+    const sessionId = String(msg.sessionId || '');
+    let body = '';
+    try { body = JSON.stringify({ patch: msg.patch, session_id: sessionId }); } catch { /* invalid */ }
+    if (!shareId || !msg.patch || typeof msg.patch !== 'object' || Array.isArray(msg.patch)
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/.test(sessionId) || !body) {
+      sendResponse({ ok: false, error: 'Invalid email template update' });
+      return true;
+    }
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/email-template-shares/${shareId}`, {
+      method: 'PATCH', body,
+    }).then((share) => {
+      gbMarkEmailSharesChanged();
+      sendResponse({ ok: true, share });
+    }).catch((error) => sendResponse({
+      ok: false,
+      error: error?.message || 'Unable to update shared email template',
+      status: Number(error?.status || 0),
+    }));
+    return true;
+  }
   if (msg.action === 'emailTemplateShareGet') {
     const shareId = gbEmailTemplateShareId(msg.url || msg.shareId);
     if (!shareId) { sendResponse({ ok: false, error: 'Enter a valid email template link' }); return true; }

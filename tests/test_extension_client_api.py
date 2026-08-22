@@ -424,6 +424,93 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             'Template Owner revoked “Permanent follow-up”',
         )
 
+    def test_owner_list_includes_source_snapshot_for_legacy_local_reconciliation(self):
+        share_id = self._seed_share()
+        owned = self._payload(self.api.list_email_shares(
+            self._request(self.owner),
+        ))["shares"]
+        self.assertEqual(len(owned), 1)
+        self.assertEqual(owned[0]["id"], share_id)
+        self.assertEqual(owned[0]["relationship"], "owned")
+        self.assertEqual(owned[0]["template"]["body"], "<p>Hello</p>")
+
+        self.api.retain_email_import(share_id, self._request(self.recipient))
+        imported = self._payload(self.api.list_email_shares(
+            self._request(self.recipient),
+        ))["shares"]
+        self.assertNotIn("template", imported[0])
+
+    def test_owner_diff_versions_share_and_coalesces_visible_notice_per_session(self):
+        share_id = self._seed_share()
+        self.api.retain_email_import(share_id, self._request(self.recipient))
+        session_id = "share-edit-session-0001"
+
+        first = self._payload(self.api.update_email_share(
+            share_id,
+            client_api_module.EmailTemplateShareUpdate(
+                patch={
+                    "subject": "Updated subject",
+                    "variations": None,
+                    "vars": {"signoff": {"type": "literal", "value": "Thanks"}},
+                },
+                session_id=session_id,
+            ),
+            self._request(self.owner),
+        ))
+        self.assertEqual(first["version"], 2)
+        self.assertEqual(first["change_count"], 1)
+        self.assertEqual(first["template"]["subject"], "Updated subject")
+        self.assertNotIn("variations", first["template"])
+        self.assertNotIn(client_api_module.EMAIL_SHARE_META, first["template"])
+
+        second = self._payload(self.api.update_email_share(
+            share_id,
+            client_api_module.EmailTemplateShareUpdate(
+                patch={"body": "<p>One more change</p>"},
+                session_id=session_id,
+            ),
+            self._request(self.owner),
+        ))
+        self.assertEqual(second["version"], 3)
+        self.assertEqual(second["change_count"], 2)
+
+        silent = [row for row in self.notifications.fanouts if not row["visible"]]
+        visible = [row for row in self.notifications.fanouts if row["visible"]]
+        self.assertEqual(len(silent), 2, "every version must invalidate importers")
+        self.assertEqual(len(visible), 1, "one editing session produces one notice")
+        self.assertEqual(visible[0]["credential_ids"], ["recipient-install"])
+        self.assertEqual(
+            visible[0]["title"],
+            'Template Owner updated “Permanent follow-up”',
+        )
+        self.assertEqual(silent[-1]["event"]["data"]["version"], 3)
+
+        imported = self._payload(self.api.get_email_share(
+            share_id, self._request(self.recipient),
+        ))
+        self.assertEqual(imported["relationship"], "imported")
+        self.assertEqual(imported["version"], 3)
+        self.assertEqual(imported["template"]["body"], "<p>One more change</p>")
+
+        with Session(self.engine) as session:
+            stored = session.get(self.models.ExtensionEmailTemplateShare, share_id)
+            history = stored.template[client_api_module.EMAIL_SHARE_META]["changes"]
+            self.assertEqual([change["version"] for change in history], [2, 3])
+            self.assertIn("vars.signoff.type", history[0]["paths"])
+
+    def test_non_owner_cannot_patch_a_shared_template(self):
+        share_id = self._seed_share()
+        with self.assertRaises(HTTPException) as raised:
+            self.api.update_email_share(
+                share_id,
+                client_api_module.EmailTemplateShareUpdate(
+                    patch={"subject": "Hijacked"},
+                    session_id="share-edit-session-0002",
+                ),
+                self._request(self.recipient),
+            )
+        self.assertEqual(raised.exception.status_code, 404)
+
     def test_share_layer_has_no_payload_count_or_storage_quotas(self):
         source = (ROOT / ".revstack" / "logic" / "client_api.py").read_text()
         for obsolete in (

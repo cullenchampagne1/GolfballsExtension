@@ -18,6 +18,10 @@ const editorBridgeSource = await readFile(
   new URL('../../src/content/editor-bridge.jsx', import.meta.url),
   'utf8',
 );
+const editorTemplatesSource = await readFile(
+  new URL('../../src/content/editor-templates.jsx', import.meta.url),
+  'utf8',
+);
 const settingsPanelSource = await readFile(
   new URL('../../src/pages/SettingsPanel.jsx', import.meta.url),
   'utf8',
@@ -76,6 +80,7 @@ describe('settings menus', () => {
     assert.match(templateEditorSource, /onKeyDownCapture=\{stopLockedEvent\}/);
     assert.match(templateEditorSource, /pointerEvents: locked \? 'none' : undefined/);
     assert.match(templateEditorSource, /literalOverridesOnly=\{readOnly\}/);
+    assert.match(templateEditorSource, /Reply mode[\s\S]*?<LockedRegion locked=\{readOnly\}/);
     assert.match(templateEditorSource, /recipient-local[\s\S]*?__gbSaveTemplate/);
     assert.match(templateEditorSource, /deleteLabel=\{readOnly \? 'Remove' : 'Delete'\}/);
     assert.match(templateEditorSource, /Shared by \$\{ownerName\}/);
@@ -83,6 +88,12 @@ describe('settings menus', () => {
     assert.match(sidebarSource, /<I\.user size=\{8\}/);
     assert.doesNotMatch(sidebarSource, />IMPORTED</);
     assert.match(editorBridgeSource, /applyImportedEmailTemplateOverrides\(templates\[idx\], tpl\)/);
+    assert.match(editorBridgeSource, /pendingOwnedTemplateShareUpdates\(template, sessionId\)/);
+    assert.match(editorBridgeSource, /emailTemplateShareUpdate/);
+    assert.match(editorBridgeSource, /window\.addEventListener\('pagehide', leaveCurrentTemplate\)/);
+    assert.match(editorBridgeSource, /currentTemplate && window\.__gbOpenTemplate/);
+    assert.match(editorTemplatesSource, /tpl\.shareImport\?\.version \|\| 0/);
+    assert.match(sidebarSource, /__gbTrackTemplateShare\(template\.id, response\.share, template\)/);
     assert.match(editorBridgeSource, /emailTemplateShareImportRemove/);
     assert.match(settingsPanelSource, /link\.relationship === 'imported'/);
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);

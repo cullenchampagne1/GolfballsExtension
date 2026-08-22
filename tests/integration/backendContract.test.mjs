@@ -70,6 +70,7 @@ const RUNTIME = [
   { name: 'email-shares:list',      in: 'background.js',        literal: '/email-template-shares',              method: 'get',  route: '/client/email-template-shares' },
   { name: 'email-share:create',     in: 'background.js',        literal: '/email-template-shares',               method: 'post', route: '/client/email-template-shares' },
   { name: 'email-share:get',        in: 'background.js',        literal: '/email-template-shares/${',            method: 'get',  route: '/client/email-template-shares/{share_id}' },
+  { name: 'email-share:update',     in: 'background.js',        literal: 'emailTemplateShareUpdate',             method: 'patch', route: '/client/email-template-shares/{share_id}' },
   { name: 'email-share:import',     in: 'background.js',        literal: '/imports',                             method: 'post', route: '/client/email-template-shares/{share_id}/imports' },
   { name: 'email-share:remove',     in: 'background.js',        literal: '/imports/remove',                      method: 'post', route: '/client/email-template-shares/{share_id}/imports/remove' },
   { name: 'email-share:revoke',     in: 'background.js',        literal: '/revoke',                              method: 'post', route: '/client/email-template-shares/{share_id}/revoke' },

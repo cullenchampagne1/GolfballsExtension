@@ -749,7 +749,12 @@ function ShareEmailTemplateModal({ template, onClose }) {
   useEffect(() => {
     let alive = true;
     sendBackgroundMessage('emailTemplateShareCreate', { template })
-      .then((response) => { if (alive) setShare(response.share); })
+      .then(async (response) => {
+        if (typeof window.__gbTrackTemplateShare === 'function') {
+          await window.__gbTrackTemplateShare(template.id, response.share, template);
+        }
+        if (alive) setShare(response.share);
+      })
       .catch((e) => { if (alive) setError(e.message); });
     return () => { alive = false; };
   }, [template]);

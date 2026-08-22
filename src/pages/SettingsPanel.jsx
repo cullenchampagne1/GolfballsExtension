@@ -1125,6 +1125,11 @@ function EmailLinksSection() {
                       ? `Imported from ${link.owner_name || 'another user'} · read-only`
                       : `Owned by you · active until revoked · opened ${link.access_count || 0}×`}
                   </div>
+                  <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 2 }}>
+                    Version {Math.max(1, Number(link.version) || 1)}
+                    {' · '}{Number(link.change_count) || 0} update{Number(link.change_count) === 1 ? '' : 's'}
+                    {link.updated_at ? ` · last changed ${new Date(link.updated_at).toLocaleString()}` : ''}
+                  </div>
                 </div>
                 <IconBtn
                   size="md" icon={<I.trash />} danger

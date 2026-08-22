@@ -177,6 +177,20 @@ describe('installation auth · authenticated requests', () => {
     );
   });
 
+  it('allows credentialed patches only for a concrete email-template share', async () => {
+    const shareId = 'b'.repeat(32);
+    const response = await client.apiJson(
+      `${client.CLIENT_BASE}/email-template-shares/${shareId}`,
+      { method: 'PATCH', body: JSON.stringify({ patch: { subject: 'New' }, session_id: 'session-0001' }) },
+    );
+    assert.equal(response.ok, true);
+    assert.equal(requests.at(-1).options.method, 'PATCH');
+    await assert.rejects(
+      client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'PATCH' }),
+      /Blocked non-extension API path/,
+    );
+  });
+
   it('fetches one relayed email by the reference its notification carried', async () => {
     const ref = 'a'.repeat(32);
     const message = await client.apiJson(
@@ -247,7 +261,7 @@ describe('installation auth · guardrails', () => {
       /Blocked non-extension API path/,
     );
     await assert.rejects(
-      client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'PATCH' }),
+      client.apiFetch(`${client.CLIENT_BASE}/ping`, { method: 'PUT' }),
       /Blocked extension API method/,
     );
   });

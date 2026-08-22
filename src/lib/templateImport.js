@@ -215,7 +215,6 @@ export function isImportedEmailTemplate(template) {
 const IMPORT_OVERRIDE_FIELDS = Object.freeze([
   'presetTaskId',
   'followUpActionId',
-  'replyMode',
   'senderAccount',
   'senderRandomize',
 ]);
@@ -294,7 +293,7 @@ export function applyImportedEmailTemplateOverrides(template, draft) {
     ...template,
     presetTaskId: candidate.presetTaskId,
     followUpActionId: candidate.followUpActionId,
-    replyMode: candidate.replyMode,
+    replyMode: defaults.replyMode === 'reply' ? 'reply' : 'standalone',
     senderAccount: candidate.senderAccount,
     senderRandomize: candidate.senderRandomize,
     vars,
@@ -321,6 +320,8 @@ export function markImportedEmailTemplate(template, share) {
       url: String(share?.url || ''),
       ownerName: String(share?.owner_name || '').trim() || 'Unregistered installation',
       importedAt: new Date().toISOString(),
+      version: Math.max(1, Number(share?.version) || 1),
+      updatedAt: String(share?.updated_at || share?.created_at || ''),
       overrideDefaults: importOverrideValues(template),
       overrides: {},
     },

@@ -32,6 +32,12 @@ import {
   isImportedEmailTemplate,
   removeRetainedEmailTemplate,
 } from '../lib/templateImport.js';
+import {
+  acknowledgeOwnedTemplateShare,
+  pendingOwnedTemplateShareUpdates,
+  reconcileOwnedTemplateShares,
+  registerOwnedTemplateShare,
+} from '../lib/templateShareSync.js';
 
 // ── State ──────────────────────────────────────────────────────
 let templates     = [];
@@ -43,6 +49,8 @@ let currentActionId = null;
 let currentActionDraft = null;
 let orderTabId    = null;
 let emailTemplateCapabilities = resolveEmailTemplateCapabilities();
+let currentShareSessionId = null;
+const shareFlushes = new Map();
 
 /* Mirror the active-template ids to window so the React sidebar's
    polling effect (editor-sidebar.jsx) can read them. The sidebar
@@ -117,6 +125,67 @@ async function saveCustomActions() {
   return new Promise((res) => chrome.storage.local.set({ gbCustomActions: customActions }, res));
 }
 
+function newShareSessionId() {
+  return `share-edit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function ensureShareSession() {
+  if (!currentShareSessionId) currentShareSessionId = newShareSessionId();
+  return currentShareSessionId;
+}
+
+async function trackTemplateShare(templateId, share, sharedTemplate) {
+  const idx = templates.findIndex((item) => item.id === templateId);
+  if (idx < 0 || isImportedEmailTemplate(templates[idx])) return false;
+  templates[idx] = registerOwnedTemplateShare(templates[idx], share, sharedTemplate);
+  await saveTemplates();
+  return true;
+}
+
+function flushShareUpdate(templateId, initialUpdate) {
+  const key = `${templateId}:${initialUpdate.shareId}`;
+  if (shareFlushes.has(key)) return shareFlushes.get(key);
+  const pending = (async () => {
+    let update = initialUpdate;
+    while (update) {
+      const response = await sendBackgroundMessage('emailTemplateShareUpdate', {
+        shareId: update.shareId,
+        sessionId: update.sessionId,
+        patch: update.patch,
+      });
+      const idx = templates.findIndex((item) => item.id === templateId);
+      if (idx < 0) return;
+      templates[idx] = acknowledgeOwnedTemplateShare(
+        templates[idx], update.shareId, update.snapshot, response.share,
+      );
+      await saveTemplates();
+      update = pendingOwnedTemplateShareUpdates(
+        templates[idx], update.sessionId,
+      ).find((item) => item.shareId === update.shareId) || null;
+    }
+  })().catch((error) => {
+    toast(error?.message || 'Unable to update shared email template.', true);
+  }).finally(() => {
+    shareFlushes.delete(key);
+  });
+  shareFlushes.set(key, pending);
+  return pending;
+}
+
+function flushOwnedTemplateShares(templateId = currentId, sessionId = currentShareSessionId) {
+  const template = templates.find((item) => item.id === templateId);
+  if (!template || isImportedEmailTemplate(template) || !sessionId) return [];
+  return pendingOwnedTemplateShareUpdates(template, sessionId)
+    .map((update) => flushShareUpdate(templateId, update));
+}
+
+function leaveCurrentTemplate() {
+  const templateId = currentId;
+  const sessionId = currentShareSessionId;
+  currentShareSessionId = null;
+  if (templateId && sessionId) flushOwnedTemplateShares(templateId, sessionId);
+}
+
 async function removeTemplateRecord(tpl) {
   const source = importedEmailShare(tpl);
   if (source) {
@@ -145,6 +214,7 @@ async function removeTemplateRecord(tpl) {
 
 // ── Templates: open / new / delete ─────────────────────────────
 async function newTemplate() {
+  leaveCurrentTemplate();
   emailTemplateCapabilities = await readEmailTemplateCapabilities();
   if (!emailTemplateCapabilities.allowCreation
       || !emailTemplateCapabilities.allowLocalTemplateUsage) {
@@ -182,7 +252,9 @@ async function openTemplate(id) {
   if (currentId === id && !$('ed-form').classList.contains('hidden')) return;
   const tpl = templates.find((t) => t.id === id);
   if (!tpl) return;
+  leaveCurrentTemplate();
   setCurrentId(id);
+  currentShareSessionId = isImportedEmailTemplate(tpl) ? null : newShareSessionId();
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
@@ -205,6 +277,7 @@ async function deleteTemplate() {
     imported ? 'Remove this imported email template?' : 'Delete this email template?',
     { tone: 'danger', confirmLabel: imported ? 'Remove' : 'Delete' },
   ))) return;
+  leaveCurrentTemplate();
   try {
     await removeTemplateRecord(tpl);
   } catch (error) {
@@ -229,6 +302,7 @@ async function deleteTemplateById(id) {
     `${imported ? 'Remove imported' : 'Delete'} "${tpl.name || 'Untitled template'}"?`,
     { tone: 'danger', confirmLabel: imported ? 'Remove' : 'Delete' },
   ))) return;
+  if (currentId === id) leaveCurrentTemplate();
   try {
     await removeTemplateRecord(tpl);
   } catch (error) {
@@ -245,6 +319,7 @@ async function deleteTemplateById(id) {
 
 // ── Note templates: open / new / delete ────────────────────────
 async function newNoteTemplate() {
+  leaveCurrentTemplate();
   if (!window.__gbOpenNote) {
     toast('Note-template editor failed to load — reload the editor.', true);
     return;
@@ -271,6 +346,7 @@ function openNoteTemplate(id) {
   if (currentNoteId === id && !$('ed-note-form').classList.contains('hidden')) return;
   const tpl = noteTemplates.find((t) => t.id === id);
   if (!tpl) return;
+  leaveCurrentTemplate();
   setCurrentNoteId(id);
   hide('ed-empty');
   hide('ed-form');
@@ -331,6 +407,7 @@ async function applyTemplatePatch(tpl) {
     await saveTemplates();
     return;
   }
+  ensureShareSession();
   if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);
   await saveTemplates();
   const titleEl = $('ed-title');
@@ -350,6 +427,7 @@ async function applyNotePatch(tpl) {
 // Actions are managed only from the Settings table, so the editor always
 // returns there. A new action remains an in-memory draft until Save Action.
 function showActionForm() {
+  leaveCurrentTemplate();
   const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-settings'];
   views.forEach((v) => hide(v));
   show('ed-action-form');
@@ -444,6 +522,7 @@ function resolveVarsLive(varsObj) {
 
 // ── Settings open/close (React owns the panel body) ────────────
 function openSettings() {
+  leaveCurrentTemplate();
   const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-action-form'];
   _settingsPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
   views.forEach((v) => $(v)?.classList.add('hidden'));
@@ -490,6 +569,8 @@ window.closeActionEditor = closeActionEditor;
 window.__gbSaveTemplate = applyTemplatePatch;
 window.__gbSaveNote     = applyNotePatch;
 window.__gbSaveAction   = applyActionPatch;
+window.__gbTrackTemplateShare = trackTemplateShare;
+window.__gbFlushTemplateShares = flushOwnedTemplateShares;
 window.__gbResolveVars  = resolveVarsLive;
 window.__gbCurrentTemplate = () => emailTemplateCapabilities.allowLocalTemplateUsage
   ? templates.find((t) => t.id === currentId) || null
@@ -503,7 +584,10 @@ window.__gbCurrentAction   = () => currentActionDraft
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.templates) {
     templates = changes.templates.newValue || [];
-    if (currentId && !templates.some((template) => template.id === currentId)) {
+    const currentTemplate = currentId
+      ? templates.find((template) => template.id === currentId)
+      : null;
+    if (currentId && !currentTemplate) {
       setCurrentId(null);
       hide('ed-form');
       _settingsPreviousView = _settingsPreviousView === 'ed-form'
@@ -513,6 +597,8 @@ chrome.storage.onChanged.addListener((changes) => {
         show('ed-empty');
         animateView('ed-empty');
       }
+    } else if (currentTemplate && window.__gbOpenTemplate) {
+      window.__gbOpenTemplate(currentTemplate);
     }
   }
   if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
@@ -530,6 +616,8 @@ chrome.storage.onChanged.addListener((changes) => {
   }
   if (changes.gbEditorLaunchIntent?.newValue) consumeLaunchIntent(changes.gbEditorLaunchIntent.newValue);
 });
+
+window.addEventListener('pagehide', leaveCurrentTemplate);
 
 // Settings gear in the legacy editor.html chrome (React's sidebar also
 // calls window.openSettings directly via its own gear button).
@@ -552,6 +640,17 @@ async function init() {
     const mig = migrateTemplates(templates, { dryRun: false });
     if (mig.changed) { templates = mig.migrated; await saveTemplates(); }
   } catch (e) { toast('A stored template could not be upgraded automatically.', true); }
+  // Older share links predate local source→share bookkeeping. The owner-only
+  // list includes their server snapshots so we can recover an unambiguous
+  // association before the user edits, without guessing between duplicates.
+  try {
+    const response = await sendBackgroundMessage('emailShareList');
+    const reconciled = reconcileOwnedTemplateShares(templates, response.shares);
+    if (reconciled.changed) {
+      templates = reconciled.templates;
+      await saveTemplates();
+    }
+  } catch { /* offline startup: Settings refresh / the next editor load retries */ }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       wireGearButton();

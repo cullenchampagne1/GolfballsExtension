@@ -77,6 +77,10 @@
       "file": "tests/unit/templateImport.test.mjs"
     },
     {
+      "name": "email \u00b7 shared template diff synchronization",
+      "file": "tests/unit/templateShareSync.test.mjs"
+    },
+    {
       "name": "email \u00b7 legacy template migration",
       "file": "tests/unit/templateMigration.test.mjs"
     },

@@ -259,6 +259,7 @@ describe('retained shared email templates', () => {
     assert.deepEqual(importedEmailShare(marked), marked.shareImport);
     assert.equal(marked.shareImport.shareId, share.id);
     assert.equal(marked.shareImport.ownerName, 'Template Owner');
+    assert.equal(marked.shareImport.version, 1);
     assert.throws(
       () => markImportedEmailTemplate(normalizeTemplate(minimal), { id: 'short' }),
       /share is invalid/,
@@ -308,7 +309,7 @@ describe('retained shared email templates', () => {
     assert.equal(updated.body, minimal.body);
     assert.equal(updated.presetTaskId, 'my-task');
     assert.equal(updated.followUpActionId, 'my-action');
-    assert.equal(updated.replyMode, 'reply');
+    assert.equal(updated.replyMode, 'standalone', 'reply mode remains source-owned');
     assert.equal(updated.senderAccount, 'outlook');
     assert.equal(updated.senderRandomize, true);
     assert.deepEqual(updated.vars.greeting, { type: 'literal', value: 'Howdy' });
@@ -316,7 +317,6 @@ describe('retained shared email templates', () => {
     assert.deepEqual(updated.shareImport.overrides, {
       presetTaskId: 'my-task',
       followUpActionId: 'my-action',
-      replyMode: 'reply',
       senderAccount: 'outlook',
       senderRandomize: true,
       literalVariables: { greeting: 'Howdy' },
