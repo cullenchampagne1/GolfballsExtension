@@ -328,6 +328,22 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             updated_at = Column(DateTime, nullable=False, index=True)
             deleted_at = Column(DateTime, nullable=True, index=True)
 
+        class SubmissionRow(Base):
+            __tablename__ = "extension_email_template_submissions"
+            id = Column(String(64), primary_key=True)
+            client_submission_id = Column(String(160), nullable=False)
+            submitter_credential_id = Column(String(36), nullable=False, index=True)
+            last_editor_credential_id = Column(String(36), nullable=False, index=True)
+            template = Column(JSON, nullable=False)
+            version = Column(Integer, nullable=False, default=1)
+            status = Column(String(16), nullable=False, default="pending", index=True)
+            approved_bucket_id = Column(String(64), nullable=True, index=True)
+            approved_version = Column(Integer, nullable=True)
+            created_at = Column(DateTime, nullable=False)
+            updated_at = Column(DateTime, nullable=False, index=True)
+            submitted_at = Column(DateTime, nullable=False)
+            approved_at = Column(DateTime, nullable=True)
+
         cls.Base = Base
         cls.models = SimpleNamespace(
             ExtensionInstallationAccess=AccessRow,
@@ -335,6 +351,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             ExtensionEmailTemplateShare=ShareRow,
             ExtensionEmailTemplateShareImport=ImportRow,
             ExtensionManagedEmailTemplate=ManagedRow,
+            ExtensionEmailTemplateSubmission=SubmissionRow,
         )
 
     def setUp(self):
@@ -359,6 +376,8 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.owner = self._principal("owner-install")
         self.recipient = self._principal("recipient-install")
         self.parent_two = self._principal("parent-two")
+        self.creation_disabled = self._principal("creation-disabled-install")
+        self.unmanaged = self._principal("unmanaged-install")
         with Session(self.engine) as session:
             session.add(self.models.ExtensionInstallationIdentity(
                 credential_id=self.owner.credential_id,
@@ -367,6 +386,10 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             session.add(self.models.ExtensionInstallationIdentity(
                 credential_id=self.parent_two.credential_id,
                 display_name="Parent Two", source="settings_edit",
+            ))
+            session.add(self.models.ExtensionInstallationIdentity(
+                credential_id=self.creation_disabled.credential_id,
+                display_name="Restricted Author", source="settings_edit",
             ))
             session.commit()
 
@@ -512,6 +535,101 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertEqual(merged["sync_conflicts"], [])
         self.assertEqual(merged["templates"][0]["template"]["subject"], "Hello from parent two")
         self.assertEqual(merged["templates"][0]["template"]["body"], "<p>Owner changed the body</p>")
+
+    def test_restricted_submission_requires_parent_approval_before_bucket_use(self):
+        draft = {
+            "name": "Customer follow-up", "type": "order",
+            "subject": "Following up", "body": "<p>Hello {{firstName}}</p>",
+        }
+        create = client_api_module.EmailTemplateSubmissionCreate(
+            client_submission_id="submission-local-1", template=draft,
+        )
+        with self.assertRaises(HTTPException) as raised:
+            self.api.create_email_template_submission(
+                create, self._request(self.unmanaged),
+            )
+        self.assertEqual(raised.exception.status_code, 403)
+
+        submitted = self._payload(self.api.create_email_template_submission(
+            create, self._request(self.creation_disabled),
+        ))
+        self.assertTrue(submitted["can_submit"])
+        self.assertEqual(submitted["pending_count"], 1)
+        row = submitted["submissions"][0]
+        self.assertEqual(row["status"], "pending")
+        self.assertTrue(row["submitted_by_current"])
+        self.assertEqual(
+            self._payload(self.api.get_managed_email_bucket(
+                self._request(self.creation_disabled),
+            ))["templates"], [],
+            "an unapproved submission must never enter the sendable bucket",
+        )
+        self.assertEqual(
+            self.notifications.fanouts[-1]["credential_ids"],
+            ["owner-install", "parent-two", "creation-disabled-install"],
+        )
+
+        parent_view = self._payload(self.api.get_email_template_submissions(
+            self._request(self.owner),
+        ))
+        self.assertTrue(parent_view["is_parent"])
+        self.assertEqual(parent_view["submissions"][0]["submitter_name"], "Restricted Author")
+
+        reviewed = {**draft, "subject": "Approved follow-up"}
+        approved = self._payload(self.api.approve_email_template_submission(
+            row["id"], client_api_module.EmailTemplateSubmissionApproval(
+                base_version=row["version"], template=reviewed,
+            ), self._request(self.owner),
+        ))
+        approved_row = approved["submissions"][0]
+        self.assertEqual(approved_row["status"], "approved")
+        self.assertEqual(approved_row["approved_version"], 2)
+        child_bucket = self._payload(self.api.get_managed_email_bucket(
+            self._request(self.creation_disabled),
+        ))
+        self.assertEqual(child_bucket["templates"][0]["template"]["subject"], "Approved follow-up")
+
+        revision = {**reviewed, "body": "<p>Updated draft</p>"}
+        pending = self._payload(self.api.update_email_template_submission(
+            row["id"], client_api_module.EmailTemplateSubmissionUpdate(
+                base_version=approved_row["version"], template=revision,
+            ), self._request(self.creation_disabled),
+        ))
+        self.assertEqual(pending["submissions"][0]["status"], "pending")
+        unchanged_bucket = self._payload(self.api.get_managed_email_bucket(
+            self._request(self.creation_disabled),
+        ))
+        self.assertEqual(
+            unchanged_bucket["templates"][0]["template"]["body"],
+            reviewed["body"],
+            "a pending revision keeps the last approved managed copy usable",
+        )
+
+    def test_submission_updates_reject_stale_editor_versions(self):
+        draft = {
+            "name": "Versioned draft", "type": "contact",
+            "subject": "One", "body": "<p>One</p>",
+        }
+        submitted = self._payload(self.api.create_email_template_submission(
+            client_api_module.EmailTemplateSubmissionCreate(
+                client_submission_id="versioned-submission", template=draft,
+            ), self._request(self.creation_disabled),
+        ))["submissions"][0]
+        self.api.update_email_template_submission(
+            submitted["id"], client_api_module.EmailTemplateSubmissionUpdate(
+                base_version=1, template={**draft, "subject": "Two"},
+            ), self._request(self.owner),
+        )
+        with self.assertRaises(HTTPException) as raised:
+            self.api.update_email_template_submission(
+                submitted["id"], client_api_module.EmailTemplateSubmissionUpdate(
+                    base_version=1, template={**draft, "subject": "Stale"},
+                ), self._request(self.creation_disabled),
+            )
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(
+            raised.exception.detail["code"], "email_template_submission_conflict",
+        )
 
     def test_dashboard_cleanup_can_clear_one_template_or_a_former_parent_source(self):
         first = self._payload(self.api.update_managed_email_bucket(

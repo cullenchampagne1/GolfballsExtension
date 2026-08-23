@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/email-template-submissions.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -37,6 +37,7 @@ GB_RUNTIME.start().then((allowed) => {
   GB_HELP_ASSISTANT.resume().catch(() => {});
   GBNotificationPoll.reconcile().catch(() => {});
   GBManagedEmailTemplates.sync().catch(() => {});
+  GBEmailTemplateSubmissions.sync().catch(() => {});
   // Trackers arm their own sweep alarm and no-op while the flag is off. Same
   // authorization gate as everything else: an unauthorized installation must
   // not be reading the rep's CRM on a schedule.
@@ -52,6 +53,7 @@ chrome.runtime.onStartup?.addListener(() => {
       GB_HELP_ASSISTANT.resume().catch(() => {});
       GBNotificationPoll.reconcile().catch(() => {});
       GBManagedEmailTemplates.sync({ force: true }).catch(() => {});
+      GBEmailTemplateSubmissions.sync({ force: true }).catch(() => {});
     }
   }).catch(GB_RUNTIME.report);
 });
@@ -1091,6 +1093,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((error) => sendResponse({
         ok: false,
         error: String(error?.message || error || 'Unable to refresh managed templates'),
+      }));
+    return true;
+  }
+
+  if (msg.action === 'gbSyncEmailTemplateSubmissions') {
+    const submissions = globalThis.GBEmailTemplateSubmissions;
+    if (!submissions?.sync) {
+      sendResponse({ ok: false, error: 'Template submission synchronization is unavailable' });
+      return true;
+    }
+    submissions.sync({ force: true })
+      .then((cache) => sendResponse({ ok: true, cache }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: String(error?.message || error || 'Unable to refresh template submissions'),
+      }));
+    return true;
+  }
+
+  if (msg.action === 'emailTemplateSubmissionCreate') {
+    const submissions = globalThis.GBEmailTemplateSubmissions;
+    submissions?.create?.(msg.clientSubmissionId, msg.template)
+      .then((submission) => sendResponse({ ok: true, submission }))
+      .catch((error) => sendResponse({
+        ok: false, error: String(error?.message || error || 'Unable to submit template'),
+      }));
+    return true;
+  }
+
+  if (msg.action === 'emailTemplateSubmissionUpdate') {
+    const submissions = globalThis.GBEmailTemplateSubmissions;
+    submissions?.update?.(msg.submissionId, msg.template)
+      .then((submission) => sendResponse({ ok: true, submission }))
+      .catch((error) => sendResponse({
+        ok: false, error: String(error?.message || error || 'Unable to update template submission'),
+      }));
+    return true;
+  }
+
+  if (msg.action === 'emailTemplateSubmissionApprove') {
+    const submissions = globalThis.GBEmailTemplateSubmissions;
+    submissions?.approve?.(msg.submissionId, msg.template)
+      .then((submission) => sendResponse({ ok: true, submission }))
+      .catch((error) => sendResponse({
+        ok: false, error: String(error?.message || error || 'Unable to approve template submission'),
       }));
     return true;
   }

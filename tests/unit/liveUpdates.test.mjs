@@ -9,12 +9,13 @@ const source = readFileSync(
 const SHARE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
 
 function harness(initial = {}, remoteShare = null, {
-  managedError = null, policyError = null,
+  managedError = null, policyError = null, submissionError = null,
 } = {}) {
   const stored = structuredClone(initial);
   let policySyncs = 0;
   let shareFetches = 0;
   let managedSyncs = 0;
+  let submissionSyncs = 0;
   const chrome = {
     runtime: { lastError: null },
     storage: {
@@ -47,6 +48,13 @@ function harness(initial = {}, remoteShare = null, {
       if (managedError) throw managedError;
     },
   };
+  context.GBEmailTemplateSubmissions = {
+    async sync(options) {
+      assert.equal(options?.force, true);
+      submissionSyncs += 1;
+      if (submissionError) throw submissionError;
+    },
+  };
   context.GBInstallationAuth = {
     CLIENT_BASE: '/projects/golfballs-extension/client',
     async apiJson() {
@@ -61,6 +69,7 @@ function harness(initial = {}, remoteShare = null, {
     policySyncs: () => policySyncs,
     shareFetches: () => shareFetches,
     managedSyncs: () => managedSyncs,
+    submissionSyncs: () => submissionSyncs,
   };
 }
 
@@ -156,7 +165,7 @@ describe('typed extension live updates', () => {
   });
 
   it('invalidates ticket state and refreshes managed settings through one channel', async () => {
-    const { updates, stored, policySyncs, managedSyncs } = harness();
+    const { updates, stored, policySyncs, managedSyncs, submissionSyncs } = harness();
     await updates.apply(notification(
       'tickets.changed',
       { ticket_id: 'GBT-ABCDEFGH', reason: 'reply', status: 'resolved' },
@@ -172,12 +181,19 @@ describe('typed extension live updates', () => {
       { revision: 'f'.repeat(64), path: ['features', 'crmSearchEnabled'] },
       43,
     ));
+    await updates.apply(notification(
+      'email_template_submissions.changed',
+      { submission_id: 'S'.repeat(32), version: 2, status: 'pending' },
+      49,
+    ));
 
     assert.equal(stored.gbSupportTicketRevision.notificationId, 42);
     assert.equal(stored.gbSettingsPolicyRevision.notificationId, 43);
-    assert.equal(stored.gbLiveUpdate.type, 'settings.changed');
+    assert.equal(stored.gbLiveUpdate.type, 'email_template_submissions.changed');
     assert.equal(policySyncs(), 1);
     assert.equal(managedSyncs(), 1);
+    assert.equal(submissionSyncs(), 1);
+    assert.equal(stored.gbEmailTemplateSubmissionRevision.notificationId, 49);
   });
 
   it('propagates managed bucket refresh failures so delivery can retry', async () => {
@@ -210,6 +226,23 @@ describe('typed extension live updates', () => {
       /configuration unavailable/,
     );
     assert.equal(stored.gbSettingsPolicyRevision, undefined);
+    assert.equal(stored.gbLiveUpdate, undefined);
+  });
+
+  it('retains a submission invalidation when the authoritative refresh fails', async () => {
+    const { updates, stored } = harness({}, null, {
+      submissionError: new Error('submission catalog unavailable'),
+    });
+
+    await assert.rejects(
+      updates.apply(notification(
+        'email_template_submissions.changed',
+        { submission_id: 'S'.repeat(32), version: 3, status: 'pending' },
+        50,
+      )),
+      /submission catalog unavailable/,
+    );
+    assert.equal(stored.gbEmailTemplateSubmissionRevision, undefined);
     assert.equal(stored.gbLiveUpdate, undefined);
   });
 

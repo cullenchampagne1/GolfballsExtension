@@ -23,6 +23,10 @@ import {
   managedEmailTemplate,
   setEmailTemplateBucketEnrollment,
 } from '../lib/emailTemplateCapabilities.js';
+import {
+  emailTemplateSubmission,
+  submissionTemplateDocument,
+} from '../lib/emailTemplateSubmission.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -260,6 +264,7 @@ export function EmptyState() {
 export function TemplateEditor({ tpl, onDelete }) {
   const imported = isImportedEmailTemplate(tpl);
   const managed = managedEmailTemplate(tpl);
+  const submission = emailTemplateSubmission(tpl);
   const readOnly = imported || (managed && managed.editable !== true);
   const source = imported ? importedEmailShare(tpl) : managed;
   const displayedTemplate = readOnly && source?.overrideDefaults?.replyMode
@@ -271,7 +276,8 @@ export function TemplateEditor({ tpl, onDelete }) {
       readOnly={readOnly}
       ownerName={source?.ownerName || source?.lastEditor || source?.createdBy || 'Management'}
       managed={!!managed}
-      onDelete={managed && managed.editable !== true ? undefined : onDelete}
+      submission={submission}
+      onDelete={(submission || (managed && managed.editable !== true)) ? undefined : onDelete}
     />
   );
 }
@@ -279,10 +285,12 @@ export function TemplateEditor({ tpl, onDelete }) {
 /* ────────────────────────────────────────────────────────────
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
-function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '', managed = false }) {
+function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '', managed = false, submission = null }) {
   const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
-  const importRevision = readOnly
-    ? Math.max(1, Number(tpl.shareImport?.version || tpl.managedTemplate?.version) || 1) : 0;
+  const importRevision = (readOnly || submission)
+    ? Math.max(1, Number(
+      submission?.version || tpl.shareImport?.version || tpl.managedTemplate?.version,
+    ) || 1) : 0;
   const [typeId, setTypeId] = useState(initialType);
   const meta = TYPE_META[typeId] || TYPE_META.order;
 
@@ -341,6 +349,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   const [baseLabel, setBaseLabel] = useState(tpl.baseLabel || '');
   const [contentRevision, setContentRevision] = useState(importRevision);
   const seenImportRevision = useRef(importRevision);
+  const localSubmissionSnapshot = useRef(
+    submission ? JSON.stringify(submissionTemplateDocument(tpl)) : '',
+  );
   const skipSave     = useRef(true);
   const skipTypeSave = useRef(true);
   const saveTimer    = useRef(0);
@@ -352,8 +363,12 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
      which clamped its scrollTop to zero. Recipient-owned overrides are already
      folded into `tpl` by live-updates, so these controls keep their values. */
   useEffect(() => {
-    if (!readOnly || seenImportRevision.current === importRevision) return;
+    if ((!readOnly && !submission) || seenImportRevision.current === importRevision) return;
     seenImportRevision.current = importRevision;
+    const incomingSnapshot = submission
+      ? JSON.stringify(submissionTemplateDocument(tpl)) : '';
+    if (submission && incomingSnapshot === localSubmissionSnapshot.current) return;
+    if (submission) localSubmissionSnapshot.current = incomingSnapshot;
     skipSave.current = true;
     clearTimeout(saveTimer.current);
     const nextType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
@@ -384,7 +399,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     })));
     setBaseLabel(tpl.baseLabel || '');
     setContentRevision(importRevision);
-  }, [importRevision, readOnly, tpl]);
+  }, [importRevision, readOnly, submission, tpl]);
 
   useEffect(() => {
     setBucketEnrolled(templateBucketEnrolled);
@@ -645,7 +660,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       else if (typeId === 'case') next.caseRules = ruleData.map((r) => ({ field: r.left, op: r.op, value: r.right }));
       else                        next.rules = ruleData; // order: grouped tree from RuleGroups
     }
-    return parentAccount
+    return parentAccount && !submission
       ? setEmailTemplateBucketEnrollment(next, bucketEnrolled)
       : next;
   }
@@ -666,7 +681,11 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     if (skipSave.current) { skipSave.current = false; return undefined; }
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
+      const next = buildTemplate();
+      if (submission) {
+        localSubmissionSnapshot.current = JSON.stringify(submissionTemplateDocument(next));
+      }
+      if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(next);
     }, 500);
     return () => clearTimeout(saveTimer.current);
   }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, followUpActionId, replyMode, bucketEnrolled, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -679,7 +698,11 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     if (readOnly) return;
     if (skipTypeSave.current) { skipTypeSave.current = false; return; }
     if (typeof window.__gbSaveTemplate === 'function') {
-      window.__gbSaveTemplate(buildTemplate());
+      const next = buildTemplate();
+      if (submission) {
+        localSubmissionSnapshot.current = JSON.stringify(submissionTemplateDocument(next));
+      }
+      window.__gbSaveTemplate(next);
     }
   }, [typeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -744,6 +767,33 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         onDelete={onDelete}
         deleteLabel={readOnly ? 'Remove' : 'Delete'}
       />
+
+      {submission && (
+        <Callout tone={submission.status === 'approved' ? 'success' : 'warning'} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 750, color: 'var(--gb-text-primary)' }}>
+                {submission.status === 'approved' ? 'Approved template' : 'Pending approval'}
+              </div>
+              <div style={{ marginTop: 2 }}>
+                {submission.isParent
+                  ? `Submitted by ${submission.submitterName}. Review and adjust it here before publishing.`
+                  : (submission.status === 'approved'
+                    ? 'The approved copy is available in Templates. Editing this draft sends the new revision back for approval.'
+                    : 'This draft is not available for sending until a parent account approves it.')}
+              </div>
+            </div>
+            {submission.isParent && (
+              <Btn
+                variant="primary" size="sm" icon={<I.check />}
+                onClick={() => window.__gbApproveTemplateSubmission?.(buildTemplate())}
+              >
+                {submission.status === 'approved' ? 'Approve again' : 'Approve'}
+              </Btn>
+            )}
+          </div>
+        </Callout>
+      )}
 
       {/* Retained shares keep the production editor layout. LockedRegion dims
           and disables source-owned sections, while recipient-owned overrides
@@ -891,7 +941,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       {/* Parent accounts opt individual templates into the approved bucket.
           Removing one from the bucket strips only its management provenance;
           the same document remains in this parent's private local library. */}
-      {parentAccount && !readOnly && (
+      {parentAccount && !readOnly && !submission && (
         <div style={S.mb12}>
           <FeatureSpotlight
             size="xs"

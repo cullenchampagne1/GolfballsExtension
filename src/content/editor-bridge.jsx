@@ -30,6 +30,11 @@ import {
 } from '../lib/emailTemplateCapabilities.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import {
+  emailTemplateSubmission,
+  submissionEditorTemplate,
+  submissionTemplateDocument,
+} from '../lib/emailTemplateSubmission.js';
+import {
   applyImportedEmailTemplateOverrides,
   importedEmailShare,
   isImportedEmailTemplate,
@@ -52,6 +57,9 @@ let currentId     = null;
 let currentNoteId = null;
 let currentActionId = null;
 let currentActionDraft = null;
+let emailTemplateSubmissions = null;
+let currentSubmissionId = null;
+let currentSubmissionDraft = null;
 let orderTabId    = null;
 let emailTemplateCapabilities = resolveEmailTemplateCapabilities();
 let currentShareSessionId = null;
@@ -67,6 +75,10 @@ const shareFlushes = new Map();
 function setCurrentId(id)     { currentId     = id; if (typeof window !== 'undefined') window.currentId     = id; }
 function setCurrentNoteId(id) { currentNoteId = id; if (typeof window !== 'undefined') window.currentNoteId = id; }
 function setCurrentActionId(id) { currentActionId = id; if (typeof window !== 'undefined') window.currentActionId = id; }
+function setCurrentSubmissionId(id) {
+  currentSubmissionId = id;
+  if (typeof window !== 'undefined') window.currentSubmissionId = id;
+}
 // Tracks the view that was visible before openSettings() so
 // closeSettings() can restore it.
 let _settingsPreviousView = 'ed-empty';
@@ -115,6 +127,7 @@ function loadStorage() {
   return new Promise((res) => chrome.storage.local.get([
     'templates', 'noteTemplates', 'gbCustomActions', 'orderTabId',
     'gbEditorLaunchIntent', 'devSettings',
+    'gbEmailTemplateSubmissions',
   ], res));
 }
 async function saveTemplates() {
@@ -279,6 +292,52 @@ async function newTemplate() {
   await openTemplate(id);
 }
 
+async function newEmailTemplateSubmission() {
+  emailTemplateCapabilities = await readEmailTemplateCapabilities();
+  if (emailTemplateCapabilities.allowParentAccount
+      || emailTemplateCapabilities.allowCreation) {
+    toast('Template submissions are available when template creation is disabled.', true);
+    return;
+  }
+  const clientSubmissionId = `submission_${uid()}`;
+  const blank = {
+    type: 'order', name: 'New Template Submission', enabled: true,
+    subject: '', body: '', rules: [], vars: {}, varOrder: [],
+  };
+  try {
+    const response = await sendBackgroundMessage('emailTemplateSubmissionCreate', {
+      clientSubmissionId, template: blank,
+    });
+    if (!response.submission) throw new Error('Submission was not returned');
+    await openEmailTemplateSubmission(response.submission.id, response.submission);
+    toast('Template submitted for approval.');
+  } catch (error) {
+    toast(error?.message || 'Unable to submit this template.', true);
+  }
+}
+
+async function openEmailTemplateSubmission(id, supplied = null) {
+  const row = supplied || (emailTemplateSubmissions?.submissions || [])
+    .find((item) => String(item?.id) === String(id));
+  if (!row) return;
+  const editorTemplate = submissionEditorTemplate(
+    row, emailTemplateSubmissions?.isParent === true,
+  );
+  if (!editorTemplate) return;
+  leaveCurrentTemplate();
+  setCurrentId(null);
+  setCurrentSubmissionId(String(row.id));
+  currentSubmissionDraft = editorTemplate;
+  hide('ed-empty');
+  hide('ed-note-form');
+  hide('ed-settings');
+  hide('ed-action-form');
+  show('ed-form');
+  animateView('ed-form');
+  if (window.__gbOpenTemplate) window.__gbOpenTemplate(editorTemplate);
+  else toast('Template editor failed to load — reload the editor.', true);
+}
+
 async function openTemplate(id) {
   emailTemplateCapabilities = await readEmailTemplateCapabilities();
   if (currentId === id && !$('ed-form').classList.contains('hidden')) return;
@@ -289,6 +348,8 @@ async function openTemplate(id) {
     'emailTemplates.allowParentAccount': emailTemplateCapabilities.allowParentAccount,
   }).some((item) => item.id === id)) return;
   leaveCurrentTemplate();
+  setCurrentSubmissionId(null);
+  currentSubmissionDraft = null;
   setCurrentId(id);
   currentShareSessionId = (isImportedEmailTemplate(tpl)
     || (isManagedEmailTemplate(tpl) && !tpl.managedTemplate?.editable))
@@ -430,6 +491,20 @@ async function deleteNoteTemplateById(id) {
  */
 async function applyTemplatePatch(tpl) {
   if (!tpl || !tpl.id) return;
+  const submission = emailTemplateSubmission(tpl);
+  if (submission) {
+    currentSubmissionDraft = tpl;
+    setCurrentSubmissionId(submission.submissionId);
+    try {
+      await sendBackgroundMessage('emailTemplateSubmissionUpdate', {
+        submissionId: submission.submissionId,
+        template: submissionTemplateDocument(tpl),
+      });
+    } catch (error) {
+      toast(error?.message || 'Unable to update this template submission.', true);
+    }
+    return;
+  }
   setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
   const storedTemplate = idx >= 0 ? templates[idx] : null;
@@ -454,6 +529,26 @@ async function applyTemplatePatch(tpl) {
   await saveTemplates();
   const titleEl = $('ed-title');
   if (titleEl) titleEl.textContent = tpl.name || 'Untitled';
+}
+
+async function approveEmailTemplateSubmission(tpl = currentSubmissionDraft) {
+  const submission = emailTemplateSubmission(tpl);
+  if (!submission?.submissionId || !emailTemplateSubmissions?.isParent) return false;
+  try {
+    const response = await sendBackgroundMessage('emailTemplateSubmissionApprove', {
+      submissionId: submission.submissionId,
+      template: submissionTemplateDocument(tpl),
+    });
+    if (response.submission) {
+      currentSubmissionDraft = submissionEditorTemplate(response.submission, true);
+      window.__gbOpenTemplate?.(currentSubmissionDraft);
+    }
+    toast('Template approved and published to the managed bucket.');
+    return true;
+  } catch (error) {
+    toast(error?.message || 'Unable to approve this template submission.', true);
+    return false;
+  }
 }
 async function applyNotePatch(tpl) {
   if (!tpl || !tpl.id) return;
@@ -597,6 +692,8 @@ function consumeLaunchIntent(intent) {
 window.openTemplate     = openTemplate;
 window.openNoteTemplate = openNoteTemplate;
 window.newTemplate      = newTemplate;
+window.newEmailTemplateSubmission = newEmailTemplateSubmission;
+window.openEmailTemplateSubmission = openEmailTemplateSubmission;
 window.newNoteTemplate  = newNoteTemplate;
 window.deleteTemplate   = deleteTemplate;
 window.deleteNoteTemplate = deleteNoteTemplate;
@@ -609,13 +706,15 @@ window.newAction        = newAction;
 window.deleteActionById = deleteActionById;
 window.closeActionEditor = closeActionEditor;
 window.__gbSaveTemplate = applyTemplatePatch;
+window.__gbApproveTemplateSubmission = approveEmailTemplateSubmission;
 window.__gbSaveNote     = applyNotePatch;
 window.__gbSaveAction   = applyActionPatch;
 window.__gbTrackTemplateShare = trackTemplateShare;
 window.__gbRevokeTemplateShares = revokeOwnedTemplateShares;
 window.__gbFlushTemplateShares = flushOwnedTemplateShares;
 window.__gbResolveVars  = resolveVarsLive;
-window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
+window.__gbCurrentTemplate = () => currentSubmissionDraft
+  || templates.find((t) => t.id === currentId) || null;
 window.__gbCurrentNote     = () => noteTemplates.find((t) => t.id === currentNoteId) || null;
 window.__gbCurrentAction   = () => currentActionDraft
   || customActions.find((a) => a.id === currentActionId)
@@ -640,6 +739,25 @@ chrome.storage.onChanged.addListener((changes) => {
       }
     } else if (currentTemplate && window.__gbOpenTemplate) {
       window.__gbOpenTemplate(currentTemplate);
+    }
+  }
+  if (changes.gbEmailTemplateSubmissions) {
+    emailTemplateSubmissions = changes.gbEmailTemplateSubmissions.newValue || null;
+    if (currentSubmissionId) {
+      const row = (emailTemplateSubmissions?.submissions || [])
+        .find((item) => String(item?.id) === currentSubmissionId);
+      if (!row) {
+        setCurrentSubmissionId(null);
+        currentSubmissionDraft = null;
+        hide('ed-form');
+        show('ed-empty');
+        animateView('ed-empty');
+      } else {
+        currentSubmissionDraft = submissionEditorTemplate(
+          row, emailTemplateSubmissions?.isParent === true,
+        );
+        window.__gbOpenTemplate?.(currentSubmissionDraft);
+      }
     }
   }
   if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
@@ -674,6 +792,7 @@ async function init() {
   customActions = data.gbCustomActions || [];
   orderTabId    = data.orderTabId    || null;
   emailTemplateCapabilities = resolveEmailTemplateCapabilities(data.devSettings);
+  emailTemplateSubmissions = data.gbEmailTemplateSubmissions || null;
   /* One-version backwards-compat pass: lift legacy contact/account/order
      variables onto the page engine, and scratch legacy order auto-match
      rules so they're re-authored against the order schema. Persists +

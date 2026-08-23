@@ -166,6 +166,21 @@ describe('settings menus', () => {
     assert.match(templateEditorSource, /Turning it off keeps a private local copy/);
   });
 
+  it('keeps restricted submissions separate and gives parents the full review editor', () => {
+    assert.match(sidebarSource, /const canSubmitTemplates = !capabilities\.allowParentAccount && !capabilities\.allowCreation/);
+    assert.match(sidebarSource, /capabilities\.allowParentAccount \? 'Submissions' : 'My submissions'/);
+    assert.match(sidebarSource, /badge=\{submissionCache\?\.pendingCount \|\| 0\}/);
+    assert.match(sidebarSource, />\s*Submit template\s*</);
+    assert.match(editorBridgeSource, /emailTemplateSubmissionCreate/);
+    assert.match(editorBridgeSource, /emailTemplateSubmissionUpdate/);
+    assert.match(editorBridgeSource, /emailTemplateSubmissionApprove/);
+    assert.match(templateEditorSource, /submission=\{submission\}/);
+    assert.match(templateEditorSource, /Pending approval/);
+    assert.match(templateEditorSource, /__gbApproveTemplateSubmission\?\.\(buildTemplate\(\)\)/);
+    assert.match(templateEditorSource, /window\.__gbResolveVars/);
+    assert.match(templateEditorSource, /parentAccount && !readOnly && !submission/);
+  });
+
   it('keeps subject insertion inline and opens smart options for OR expressions', () => {
     assert.match(richTextEditorSource, /range\.createContextualFragment\(html\)/);
     assert.doesNotMatch(richTextEditorSource, /execCommand\('insertHTML'/);

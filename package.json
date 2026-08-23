@@ -61,6 +61,14 @@
       "file": "tests/unit/managedEmailTemplates.test.mjs"
     },
     {
+      "name": "email \u00b7 restricted template submission approval cache",
+      "file": "tests/unit/emailTemplateSubmissions.test.mjs"
+    },
+    {
+      "name": "email \u00b7 submission editor document boundary",
+      "file": "tests/unit/emailTemplateSubmissionModel.test.mjs"
+    },
+    {
       "name": "flow \u00b7 contact-scoped template follow-up actions",
       "file": "tests/unit/templateFollowUpAction.test.mjs"
     },

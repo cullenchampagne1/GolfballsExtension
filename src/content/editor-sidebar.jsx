@@ -85,7 +85,7 @@ const CogIcon    = (p) => <Icon {...p}><path d="M10.3 4.3c.4-1.7 2.9-1.7 3.3 0a1
 const HelpIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 2.5-3 4.5"/><path d="M12 17.5h.01"/></Icon>;
 
 /* ── Storage helpers ────────────────────────────────────────────── */
-const STORAGE_KEYS = ['templates', 'noteTemplates', 'templateFolders', 'noteFolders', 'gbEmailTemplateSends'];
+const STORAGE_KEYS = ['templates', 'noteTemplates', 'templateFolders', 'noteFolders', 'gbEmailTemplateSends', 'gbEmailTemplateSubmissions'];
 function loadAll() { return new Promise((res) => chrome.storage.local.get(STORAGE_KEYS, res)); }
 function saveKey(key, value) { chrome.storage.local.set({ [key]: value }); }
 
@@ -876,6 +876,57 @@ function ShareEmailTemplateModal({ template, onClose }) {
   );
 }
 
+function SubmissionRow({ submission, active, parent, onOpen }) {
+  const template = submission.template || {};
+  const meta = TYPE_META_TPL[template.type] || TYPE_META_TPL.order;
+  const TypeIcon = meta.icon;
+  const pending = submission.status !== 'approved';
+  return (
+    <motion.button
+      type="button"
+      layout="position"
+      onClick={onOpen}
+      whileTap={{ scale: 0.985 }}
+      className={`gb-sidebar-hoverable${active ? ' is-active' : ''}`}
+      style={{
+        width: '100%', position: 'relative', display: 'flex', alignItems: 'center',
+        gap: 8, padding: '7px 8px 7px 14px', border: 'none',
+        borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', textAlign: 'left',
+        fontFamily: 'inherit',
+        background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        boxShadow: active
+          ? 'inset 0 0 0 1px var(--gb-brand-tint-border)'
+          : 'inset 0 0 0 1px transparent',
+      }}
+    >
+      <span style={{
+        position: 'absolute', left: 6, top: 6, bottom: 6, width: 2,
+        borderRadius: 2, background: meta.color,
+      }} />
+      <TypeIcon size={11} style={{ color: active ? 'var(--gb-brand-label)' : meta.color }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 11.5, fontWeight: 650,
+          color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {template.name || 'Untitled submission'}
+        </div>
+        <div style={{
+          marginTop: 1, fontSize: 9.5, color: 'var(--gb-text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {parent ? `From ${submission.submitter_name || 'Unregistered installation'} · ` : ''}
+          Updated {String(submission.updated_at || '').slice(0, 16).replace('T', ' ') || 'just now'}
+        </div>
+      </div>
+      <Tag tone={pending ? 'warning' : 'success'} size="xs">
+        {pending ? 'PENDING' : 'APPROVED'}
+      </Tag>
+    </motion.button>
+  );
+}
+
 function TemplateSidebar() {
   // No local SettingNotificationHost — the hook below picks up
   // window.__gbNotify (mounted globally by editor-notifications.jsx),
@@ -885,6 +936,8 @@ function TemplateSidebar() {
   const capabilities = resolveEmailTemplateCapabilities(devSettings);
   const allowLocalTemplates = capabilities.allowLocalTemplateUsage;
   const canAuthorTemplates = allowLocalTemplates || capabilities.allowParentAccount;
+  const canSubmitTemplates = !capabilities.allowParentAccount && !capabilities.allowCreation;
+  const showSubmissions = capabilities.allowParentAccount || canSubmitTemplates;
   const [importOpen,  setImportOpen]  = useState(false);
   const [shareTemplate, setShareTemplate] = useState(null);
   const [tab,         setTab]         = useState('templates');
@@ -893,6 +946,7 @@ function TemplateSidebar() {
   const [tplFolders,  setTplFolders]  = useState([]);
   const [noteFolders, setNoteFolders] = useState([]);
   const [emailSends,  setEmailSends]  = useState([]);
+  const [submissionCache, setSubmissionCache] = useState(null);
   const [search,      setSearch]      = useState('');
   const [currentId,   setCurrentId]   = useState(null);
   const draggingId = useRef(null);
@@ -904,8 +958,10 @@ function TemplateSidebar() {
       // Do not let a valid-looking local revision suppress the open-time
       // server check. If the request is unavailable, retain the cached catalog
       // as an offline fallback and let the notification/alarm path retry.
-      try { await sendBackgroundMessage('gbSyncManagedEmailTemplates'); }
-      catch { /* cached templates remain available while offline */ }
+      await Promise.allSettled([
+        sendBackgroundMessage('gbSyncManagedEmailTemplates'),
+        sendBackgroundMessage('gbSyncEmailTemplateSubmissions'),
+      ]);
       const d = await loadAll();
       if (!alive) return;
       setTemplates(d.templates || []);
@@ -913,6 +969,7 @@ function TemplateSidebar() {
       setTplFolders(d.templateFolders || []);
       setNoteFolders(d.noteFolders || []);
       setEmailSends(d.gbEmailTemplateSends || []);
+      setSubmissionCache(d.gbEmailTemplateSubmissions || null);
     };
     const onChange = (changes) => {
       if (changes.templates)       setTemplates(changes.templates.newValue || []);
@@ -920,6 +977,7 @@ function TemplateSidebar() {
       if (changes.templateFolders) setTplFolders(changes.templateFolders.newValue || []);
       if (changes.noteFolders)     setNoteFolders(changes.noteFolders.newValue || []);
       if (changes.gbEmailTemplateSends) setEmailSends(changes.gbEmailTemplateSends.newValue || []);
+      if (changes.gbEmailTemplateSubmissions) setSubmissionCache(changes.gbEmailTemplateSubmissions.newValue || null);
     };
     chrome.storage.onChanged.addListener(onChange);
     loadAuthoritativeCatalog();
@@ -943,15 +1001,38 @@ function TemplateSidebar() {
     if (!canAuthorTemplates) setShareTemplate(null);
   }, [capabilities.allowLinkImport, canAuthorTemplates]);
 
+  useEffect(() => {
+    if (!showSubmissions) {
+      if (tab === 'submissions') setTab('templates');
+      return;
+    }
+    sendBackgroundMessage('gbSyncEmailTemplateSubmissions').catch(() => {});
+  }, [showSubmissions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isSubmissions = tab === 'submissions';
   const isNote = tab === 'notes';
   const usableTemplates = filterLocalEmailTemplates(templates, devSettings);
   const folderTakesRow = !isNote
     && canAuthorTemplates
     && !capabilities.allowCreation;
-  const allItems  = isNote ? notes : usableTemplates;
+  const allItems  = isSubmissions ? [] : (isNote ? notes : usableTemplates);
   const folders   = isNote ? noteFolders : (canAuthorTemplates ? tplFolders : []);
   const tplsKey   = isNote ? 'noteTemplates' : 'templates';
   const folderKey = isNote ? 'noteFolders' : 'templateFolders';
+  const submissions = useMemo(() => (
+    Array.isArray(submissionCache?.submissions)
+      ? [...submissionCache.submissions].sort((left, right) => (
+        Number(left?.status === 'approved') - Number(right?.status === 'approved')
+      ))
+      : []
+  ), [submissionCache?.submissions]);
+  const filteredSubmissions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return submissions;
+    return submissions.filter((row) => [
+      row?.template?.name, row?.submitter_name, row?.status,
+    ].some((value) => String(value || '').toLowerCase().includes(q)));
+  }, [submissions, search]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1003,6 +1084,13 @@ function TemplateSidebar() {
     }
     const fn = isNote ? window.newNoteTemplate : window.newTemplate;
     if (typeof fn === 'function') fn();
+  }
+  function newSubmission() {
+    window.newEmailTemplateSubmission?.();
+  }
+  function openSubmission(row) {
+    setCurrentId(row.id);
+    window.openEmailTemplateSubmission?.(row.id);
   }
   async function newFolder() {
     const name = await notify.prompt('Name the new folder', {
@@ -1096,12 +1184,14 @@ function TemplateSidebar() {
   // active forever once anything was selected.
   useEffect(() => {
     const i = setInterval(() => {
-      const id = isNote ? window.currentNoteId : window.currentId;
+      const id = isSubmissions
+        ? window.currentSubmissionId
+        : (isNote ? window.currentNoteId : window.currentId);
       const next = id || null;
       if (next !== currentId) setCurrentId(next);
     }, 300);
     return () => clearInterval(i);
-  }, [currentId, isNote]);
+  }, [currentId, isNote, isSubmissions]);
 
   const uncatGroups = groupByType(groups.uncat, isNote);
   const hasFolders  = folders.length > 0;
@@ -1157,7 +1247,7 @@ function TemplateSidebar() {
       {/* Controls: tabs + search + new template + new folder */}
       <div style={{ padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
         <Segmented
-          value={tab}
+          value={isSubmissions ? '' : tab}
           onChange={setTab}
           full
           options={[
@@ -1165,11 +1255,26 @@ function TemplateSidebar() {
             { id: 'notes',     label: `Notes · ${notes.length}` },
           ]}
         />
-        <Input size="sm" value={search} onChange={setSearch} placeholder="Search…" leading={<I.search />} />
+        {showSubmissions && (
+          <Btn
+            variant={isSubmissions ? 'tinted' : 'secondary'}
+            size="sm" full icon={<I.clock />}
+            badge={submissionCache?.pendingCount || 0}
+            badgeTone="warning"
+            onClick={() => setTab('submissions')}
+          >
+            {capabilities.allowParentAccount ? 'Submissions' : 'My submissions'}
+          </Btn>
+        )}
+        <Input
+          size="sm" value={search} onChange={setSearch}
+          placeholder={isSubmissions ? 'Search submissions…' : 'Search…'}
+          leading={<I.search />}
+        />
         {/* Folder stays compact beside a creation action. When managed email
             creation is off, it glides into the released width and gains a
             label so the row still reads as one intentional primary action. */}
-        <div style={{ display: 'flex', gap: 6 }}>
+        {!isSubmissions && <div style={{ display: 'flex', gap: 6 }}>
           <CapabilitySlot
             visible={isNote || (capabilities.allowCreation && canAuthorTemplates)}
             grow
@@ -1200,7 +1305,12 @@ function TemplateSidebar() {
               {folderTakesRow ? 'Folder' : null}
             </Btn>
           </CapabilitySlot>
-        </div>
+        </div>}
+        {isSubmissions && canSubmitTemplates && (
+          <Btn variant="dashed" size="sm" full icon={<I.send />} onClick={newSubmission}>
+            Submit template
+          </Btn>
+        )}
       </div>
 
       {/* Folder + uncategorized list — wrapped in a LayoutGroup so every
@@ -1224,8 +1334,29 @@ function TemplateSidebar() {
             exit={{ opacity: 0, x: tab === 'templates' ? -18 : 18 }}
             transition={SOFT}
           >
+            {isSubmissions && filteredSubmissions.map((row) => (
+              <SubmissionRow
+                key={row.id}
+                submission={row}
+                active={currentId === row.id}
+                parent={capabilities.allowParentAccount}
+                onOpen={() => openSubmission(row)}
+              />
+            ))}
+            {isSubmissions && submissions.length === 0 && (
+              <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
+                {capabilities.allowParentAccount
+                  ? 'No template submissions yet.'
+                  : 'Submit an email template for parent approval.'}
+              </div>
+            )}
+            {isSubmissions && submissions.length > 0 && filteredSubmissions.length === 0 && (
+              <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
+                No matching submissions.
+              </div>
+            )}
             {/* Folders first */}
-            {groups.folders.map(({ folder, tpls }) => (
+            {!isSubmissions && groups.folders.map(({ folder, tpls }) => (
               <FolderGroup
                 key={folder.id}
                 folder={folder} tpls={tpls} isNote={isNote} currentId={currentId}
@@ -1242,7 +1373,7 @@ function TemplateSidebar() {
 
             {/* Uncategorized flows flat at the bottom — no folder wrapper.
                 The whole block is itself a drop target. */}
-            {(hasUncat || !hasFolders) && (
+            {!isSubmissions && (hasUncat || !hasFolders) && (
               <motion.div
                 onDragOver={uncatDragOver}
                 onDragLeave={uncatDragLeave}
@@ -1291,12 +1422,12 @@ function TemplateSidebar() {
               </motion.div>
             )}
 
-            {allItems.length === 0 && (
+            {!isSubmissions && allItems.length === 0 && (
               <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
                 No {isNote ? 'notes' : 'templates'} yet.
               </div>
             )}
-            {allItems.length > 0 && filtered.length === 0 && (
+            {!isSubmissions && allItems.length > 0 && filtered.length === 0 && (
               <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
                 No matches for "{search}"
               </div>
