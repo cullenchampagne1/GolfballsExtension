@@ -51,6 +51,23 @@ const imageWidth = (image) => {
   return Math.max(24, Math.min(600, Math.round(attr || css || 320)));
 };
 
+/** A resized editor image is a standalone email block. Pin its horizontal
+ * margins instead of inheriting paragraph alignment from the insertion caret;
+ * that inheritance made the same saved image center or drift right in Outlook.
+ * Keep any deliberate vertical spacing from the pasted source. */
+function anchorResizedImageLeft(image) {
+  const marginTop = image.style?.marginTop || '';
+  const marginBottom = image.style?.marginBottom || '';
+  image.removeAttribute('align');
+  image.setAttribute('data-gb-resized-image', 'true');
+  image.style.removeProperty('margin');
+  if (marginTop) image.style.marginTop = marginTop;
+  if (marginBottom) image.style.marginBottom = marginBottom;
+  image.style.marginLeft = '0';
+  image.style.marginRight = 'auto';
+  image.style.display = 'block';
+}
+
 /** Add editor-only resize chrome around ordinary pasted images. */
 export function decorateEditorImages(html) {
   if (typeof document === 'undefined') return String(html || '');
@@ -62,12 +79,12 @@ export function decorateEditorImages(html) {
     const wrapper = document.createElement('span');
     wrapper.className = 'gb-rte-image';
     wrapper.setAttribute('contenteditable', 'false');
-    wrapper.style.cssText = `display:inline-block;position:relative;width:${width}px;max-width:100%;vertical-align:bottom`;
+    wrapper.style.cssText = `display:block;position:relative;width:${width}px;max-width:100%;margin-left:0;margin-right:auto`;
     image.setAttribute('width', String(width));
     image.style.width = `${width}px`;
     image.style.maxWidth = '100%';
     image.style.height = 'auto';
-    image.style.display = 'block';
+    anchorResizedImageLeft(image);
     image.replaceWith(wrapper);
     wrapper.appendChild(image);
     const handle = document.createElement('span');
@@ -85,7 +102,10 @@ export function stripEditorDecorations(html) {
   template.innerHTML = String(html || '');
   for (const wrapper of Array.from(template.content.querySelectorAll('.gb-rte-image'))) {
     const image = wrapper.querySelector('img');
-    if (image) wrapper.replaceWith(image);
+    if (image) {
+      anchorResizedImageLeft(image);
+      wrapper.replaceWith(image);
+    }
     else wrapper.remove();
   }
   template.content.querySelectorAll('.gb-rte-image-resize').forEach((node) => node.remove());

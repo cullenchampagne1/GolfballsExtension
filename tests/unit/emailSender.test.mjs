@@ -125,11 +125,31 @@ describe('buildPaPayload', () => {
   it('carries editor paragraph, list, and pasted-image geometry into Outlook', () => {
     const p = buildPaPayload({
       from: 'a@b', to: 'c@d', subject: 's', replyMode: 'standalone',
-      htmlBody: '<div>First line</div><p>Second line</p><ul><li>One</li></ul><img src="https://example.test/a.png" width="245">',
+      htmlBody: '<div>First line</div><p>Second line</p><ul><li>One</li></ul><p style="text-align:center"><img src="https://example.test/a.png" width="245" align="right" data-gb-resized-image="true" style="width:245px;max-width:100%;height:auto;display:block;margin:auto"></p>',
     });
     assert.match(p.emails[0].htmlBody, /<p style="line-height:1\.6;margin:0px 0px 8px">First line<\/p>/);
     assert.match(p.emails[0].htmlBody, /<ul style="margin:0px 0px 8px;padding-left:22px"><li style="line-height:1\.6;margin:0px">One<\/li><\/ul>/);
-    assert.match(p.emails[0].htmlBody, /<img[^>]*width="245"[^>]*style="width:245px;max-width:100%;height:auto"/);
+    const body = document.createElement('div');
+    body.innerHTML = p.emails[0].htmlBody;
+    const image = body.querySelector('img');
+    assert.equal(image.getAttribute('data-gb-resized-image'), null);
+    assert.equal(image.getAttribute('align'), null);
+    assert.equal(image.getAttribute('width'), '245');
+    assert.equal(image.style.display, 'block');
+    assert.equal(image.style.marginLeft, '0px');
+    assert.equal(image.style.marginRight, 'auto');
+  });
+
+  it('preserves intentional inline-attachment center alignment', () => {
+    const p = buildPaPayload({
+      from: 'a@b', to: 'c@d', subject: 's', replyMode: 'standalone',
+      htmlBody: '<img src="https://example.test/a.png" width="220" data-gb-image-align="center" style="display:block;height:auto;max-width:100%;margin:8px auto">',
+    });
+    const body = document.createElement('div');
+    body.innerHTML = p.emails[0].htmlBody;
+    const image = body.querySelector('img');
+    assert.equal(image.getAttribute('data-gb-image-align'), null);
+    assert.equal(image.style.margin, '8px auto');
   });
 
   it('carries template, variation, and recipient context for worker-side verification', () => {

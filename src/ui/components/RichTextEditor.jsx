@@ -213,8 +213,8 @@ function ensureStyle() {
     }
     .gb-rte-att:hover .gb-rte-att-resize { opacity: .9; }
     .gb-rte-image {
-      display: inline-block; position: relative; max-width: 100%; vertical-align: bottom;
-      margin: 2px; outline: 1px solid transparent; border-radius: 3px !important;
+      display: block; position: relative; max-width: 100%;
+      margin: 2px auto 2px 0; outline: 1px solid transparent; border-radius: 3px !important;
     }
     .gb-rte-image:hover { outline-color: var(--gb-brand-tint-border); }
     .gb-rte-image img { display: block; max-width: 100%; height: auto; }

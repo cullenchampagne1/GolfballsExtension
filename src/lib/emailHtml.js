@@ -42,6 +42,26 @@ export function normalizeEmailHtml(html) {
     setDefaultStyle(item, 'margin', '0');
   }
   for (const image of template.content.querySelectorAll('img')) {
+    // The resize feature originally saved a block image without horizontal
+    // margins. Inside a centered/right-aligned paragraph, Outlook then chose
+    // an unpredictable position. New saves carry the marker; the responsive
+    // sizing signature catches templates saved by the affected release.
+    // Attachment variables carry their intentional alignment in a marker, so
+    // preserve those center/right placements while repairing every legacy
+    // editor-resized image — including pasted markup that brought bad margins.
+    const attachmentAlignment = image.getAttribute('data-gb-image-align');
+    const resizedEditorImage = image.hasAttribute('data-gb-resized-image')
+      || (image.style.display === 'block'
+        && image.style.maxWidth === '100%'
+        && image.style.height === 'auto');
+    if (resizedEditorImage && !attachmentAlignment) {
+      image.removeAttribute('align');
+      image.style.marginLeft = '0';
+      image.style.marginRight = 'auto';
+      image.style.display = 'block';
+    }
+    image.removeAttribute('data-gb-resized-image');
+    image.removeAttribute('data-gb-image-align');
     const width = Math.max(0, Number.parseFloat(image.getAttribute('width') || image.style.width || ''));
     if (width) {
       image.setAttribute('width', String(Math.round(width)));

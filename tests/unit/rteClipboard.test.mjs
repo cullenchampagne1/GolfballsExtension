@@ -78,12 +78,27 @@ describe('rich paste normalization', () => {
     );
   });
 
-  it('adds a resize handle to pasted images and strips only the editor chrome on save', () => {
-    const decorated = decorateEditorImages('<img src="https://example.test/a.png" width="240">');
+  it('anchors a resized image left even when pasted into centered content', () => {
+    const decorated = decorateEditorImages('<p style="text-align:center"><img src="https://example.test/a.png" width="240" align="right" style="margin:8px auto"></p>');
     assert.match(decorated, /class="gb-rte-image"/);
     assert.match(decorated, /class="gb-rte-image-resize"/);
+    const decoratedRoot = frag(decorated);
+    const wrapper = decoratedRoot.querySelector('.gb-rte-image');
+    assert.equal(wrapper.style.display, 'block');
+    assert.equal(wrapper.style.marginLeft, '0px');
+    assert.equal(wrapper.style.marginRight, 'auto');
     const stored = stripEditorDecorations(decorated);
     assert.doesNotMatch(stored, /gb-rte-image/);
-    assert.match(stored, /<img[^>]*width="240"[^>]*style="width: 240px; max-width: 100%; height: auto; display: block;">/);
+    const storedRoot = frag(stored);
+    const image = storedRoot.querySelector('img');
+    assert.equal(image.getAttribute('align'), null);
+    assert.equal(image.getAttribute('data-gb-resized-image'), 'true');
+    assert.equal(image.getAttribute('width'), '240');
+    assert.equal(image.style.width, '240px');
+    assert.equal(image.style.maxWidth, '100%');
+    assert.equal(image.style.height, 'auto');
+    assert.equal(image.style.display, 'block');
+    assert.equal(image.style.marginLeft, '0px');
+    assert.equal(image.style.marginRight, 'auto');
   });
 });

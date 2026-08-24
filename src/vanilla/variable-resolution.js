@@ -219,10 +219,11 @@
     const fname = def.filename || 'attachment';
     if ((def.mode || 'inline') === 'inline') {
       const w = Math.max(24, Math.min(600, Number(def.width) || 220));
-      const align = def.align === 'center' ? 'margin:8px auto;'
-        : def.align === 'right' ? 'margin:8px 0 8px auto;'
+      const placement = def.align === 'center' ? 'center' : def.align === 'right' ? 'right' : 'left';
+      const align = placement === 'center' ? 'margin:8px auto;'
+        : placement === 'right' ? 'margin:8px 0 8px auto;'
         : 'margin:8px auto 8px 0;';
-      return `<img src="${esc(s)}" width="${w}" alt="${esc(fname)}" style="display:block; height:auto; max-width:100%; ${align}" />`;
+      return `<img src="${esc(s)}" width="${w}" alt="${esc(fname)}" data-gb-image-align="${placement}" style="display:block; height:auto; max-width:100%; ${align}" />`;
     }
     return `<span data-gb-attach="${esc(s)}" data-gb-attach-name="${esc(fname)}" style="display:none">&#8203;</span>`;
   }
