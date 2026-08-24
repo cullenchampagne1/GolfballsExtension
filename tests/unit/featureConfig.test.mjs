@@ -106,8 +106,10 @@ describe('featureRegistry · Sales Fantasy event', () => {
     assert.match(popupSource, /flags\.salesFantasyEnabled === true/);
     assert.match(popupSource, /action: 'openSalesFantasy'/);
     assert.match(popupSource, />\s*Sales Fantasy\s*</);
-    assert.match(popupSource, /linear-gradient\(180deg, var\(--gb-brand\) 0%, var\(--gb-brand-dark\) 100%\)/);
-    assert.match(popupSource, /boxShadow: '0 8px 16px color-mix\(in srgb, var\(--gb-brand\) 28%, transparent\)/);
+    assert.match(popupSource, /linear-gradient\(180deg, var\(--gb-fill-subtle\) 36%, color-mix\(in srgb, var\(--gb-brand-label\) 11%, var\(--gb-fill-subtle\)\) 100%\)/);
+    assert.match(popupSource, /inset 0 -10px 16px color-mix\(in srgb, var\(--gb-brand-label\) 9%, transparent\)/);
+    assert.match(popupSource, /border: '1px solid var\(--gb-border-default\)'/);
+    assert.match(popupSource, /background: 'var\(--gb-brand-tint-soft\)'/);
     assert.doesNotMatch(popupSource, /#4c1d95|#7c3aed|#db2777/);
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
