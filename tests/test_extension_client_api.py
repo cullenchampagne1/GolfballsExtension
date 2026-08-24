@@ -631,6 +631,32 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             raised.exception.detail["code"], "email_template_submission_conflict",
         )
 
+    def test_managed_recipient_can_submit_when_local_library_policy_blocks_authoring(self):
+        draft = {
+            "name": "Managed recipient draft", "type": "order",
+            "subject": "Review me", "body": "<p>Hello</p>",
+        }
+
+        recipient_view = self._payload(self.api.get_email_template_submissions(
+            self._request(self.recipient),
+        ))
+        self.assertTrue(recipient_view["can_submit"])
+
+        submitted = self._payload(self.api.create_email_template_submission(
+            client_api_module.EmailTemplateSubmissionCreate(
+                client_submission_id="managed-recipient-draft", template=draft,
+            ), self._request(self.recipient),
+        ))
+        self.assertEqual(submitted["pending_count"], 1)
+        self.assertEqual(submitted["submissions"][0]["template"], draft)
+
+        self.assertFalse(self._payload(self.api.get_email_template_submissions(
+            self._request(self.unmanaged),
+        ))["can_submit"])
+        self.assertFalse(self._payload(self.api.get_email_template_submissions(
+            self._request(self.owner),
+        ))["can_submit"])
+
     def test_dashboard_cleanup_can_clear_one_template_or_a_former_parent_source(self):
         first = self._payload(self.api.update_managed_email_bucket(
             self._managed_body([self._managed_write({

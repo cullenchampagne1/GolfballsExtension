@@ -22,6 +22,7 @@
 import { migrateTemplates } from '../lib/templateMigration.js';
 import { blankCustomAction, normalizeCustomAction } from '../lib/customActions.js';
 import {
+  canSubmitEmailTemplate,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
   isManagedEmailTemplate,
@@ -294,9 +295,8 @@ async function newTemplate() {
 
 async function newEmailTemplateSubmission() {
   emailTemplateCapabilities = await readEmailTemplateCapabilities();
-  if (emailTemplateCapabilities.allowParentAccount
-      || emailTemplateCapabilities.allowCreation) {
-    toast('Template submissions are available when template creation is disabled.', true);
+  if (!canSubmitEmailTemplate(emailTemplateCapabilities)) {
+    toast('Template submissions are available when local template authoring is disabled.', true);
     return;
   }
   const clientSubmissionId = `submission_${uid()}`;

@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.4.8",
-  "generatedAt": "2026-08-23",
+  "generatedAt": "2026-08-24",
   "tree": [
     {
       "title": "Getting Started",

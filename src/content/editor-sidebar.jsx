@@ -22,6 +22,7 @@ import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { ownedTemplateShares } from '../lib/templateShareSync.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
+  canSubmitEmailTemplate,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
   managedEmailTemplate,
@@ -936,7 +937,7 @@ function TemplateSidebar() {
   const capabilities = resolveEmailTemplateCapabilities(devSettings);
   const allowLocalTemplates = capabilities.allowLocalTemplateUsage;
   const canAuthorTemplates = allowLocalTemplates || capabilities.allowParentAccount;
-  const canSubmitTemplates = !capabilities.allowParentAccount && !capabilities.allowCreation;
+  const canSubmitTemplates = canSubmitEmailTemplate(capabilities);
   const showSubmissions = capabilities.allowParentAccount || canSubmitTemplates;
   const [importOpen,  setImportOpen]  = useState(false);
   const [shareTemplate, setShareTemplate] = useState(null);

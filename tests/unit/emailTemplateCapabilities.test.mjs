@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMAIL_TEMPLATE_CAPABILITY_KEYS,
+  canSubmitEmailTemplate,
   emailTemplateIsBucketEnrolled,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
@@ -32,6 +33,26 @@ describe('managed email-template capabilities', () => {
       allowLocalTemplateUsage: false,
       allowParentAccount: false,
     });
+  });
+
+  it('offers submissions whenever a non-parent cannot author a local template', () => {
+    const allowedByCreationPolicy = resolveEmailTemplateCapabilities({
+      'emailTemplates.allowCreation': false,
+    });
+    const allowedByLocalLibraryPolicy = resolveEmailTemplateCapabilities({
+      'emailTemplates.allowLocalTemplateUsage': false,
+    });
+    const unrestricted = resolveEmailTemplateCapabilities();
+    const parent = resolveEmailTemplateCapabilities({
+      'emailTemplates.allowParentAccount': true,
+      'emailTemplates.allowCreation': false,
+      'emailTemplates.allowLocalTemplateUsage': false,
+    });
+
+    assert.equal(canSubmitEmailTemplate(allowedByCreationPolicy), true);
+    assert.equal(canSubmitEmailTemplate(allowedByLocalLibraryPolicy), true);
+    assert.equal(canSubmitEmailTemplate(unrestricted), false);
+    assert.equal(canSubmitEmailTemplate(parent), false);
   });
 
   it('projects local templates out without mutating or deleting the stored library', () => {

@@ -167,7 +167,8 @@ describe('settings menus', () => {
   });
 
   it('keeps restricted submissions separate and gives parents the full review editor', () => {
-    assert.match(sidebarSource, /const canSubmitTemplates = !capabilities\.allowParentAccount && !capabilities\.allowCreation/);
+    assert.match(sidebarSource, /const canSubmitTemplates = canSubmitEmailTemplate\(capabilities\)/);
+    assert.match(editorBridgeSource, /!canSubmitEmailTemplate\(emailTemplateCapabilities\)/);
     assert.match(sidebarSource, /capabilities\.allowParentAccount \? 'Submissions' : 'My submissions'/);
     assert.match(sidebarSource, /badge=\{submissionCache\?\.pendingCount \|\| 0\}/);
     assert.match(sidebarSource, />\s*Submit template\s*</);

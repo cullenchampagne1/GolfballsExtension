@@ -30,6 +30,17 @@ export function resolveEmailTemplateCapabilities(devSettings = {}) {
       ]),
   ));
 }
+
+/** A non-parent may submit whenever managed policy removes either part of
+ * local authoring: permission to create, or permission to use the local
+ * library where that new template would live. */
+export function canSubmitEmailTemplate(capabilities) {
+  const resolved = capabilities || resolveEmailTemplateCapabilities();
+  return resolved.allowParentAccount !== true
+    && (resolved.allowCreation === false
+      || resolved.allowLocalTemplateUsage === false);
+}
+
 export function filterLocalEmailTemplates(templates, devSettings = {}) {
   const all = Array.isArray(templates) ? templates : [];
   const capabilities = resolveEmailTemplateCapabilities(devSettings);
