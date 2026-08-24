@@ -789,41 +789,43 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Temporary-event treatment is intentionally distinct from normal tool rows:
-   a saturated gradient, glow, and EVENT badge make the time-boxed launcher
-   recognizable without changing the shared button design system. */
+/* Temporary-event treatment stays inside the active theme's primary palette.
+   Elevation + the EVENT badge distinguish it from normal tool rows without a
+   fixed campaign color fighting Light, Cream, Nord, Rosé, or dark themes. */
 function SalesFantasyButton({ onClick }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      whileHover={{ y: -1, scale: 1.01 }}
-      whileTap={{ y: 0, scale: 0.985 }}
+      whileHover={{ y: -2, filter: 'brightness(1.06)' }}
+      whileTap={{ y: 0, scale: 0.99 }}
       transition={{ duration: 0.14 }}
       aria-label="Open Sales Fantasy event"
       style={{
-        width: '100%', minHeight: 38, padding: '7px 9px 7px 11px',
+        width: '100%', minHeight: 34, padding: '5px 8px 5px 9px',
         display: 'flex', alignItems: 'center', gap: 8,
         borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
-        border: '1px solid rgba(255,255,255,.38)',
-        background: 'linear-gradient(115deg, #4c1d95 0%, #7c3aed 48%, #db2777 100%)',
-        boxShadow: '0 7px 20px rgba(124,58,237,.28), inset 0 1px 0 rgba(255,255,255,.18)',
-        color: '#fff', fontFamily: 'var(--gb-font-sans)',
+        border: '1px solid var(--gb-brand-border)',
+        background: 'linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)',
+        boxShadow: '0 8px 16px color-mix(in srgb, var(--gb-brand) 28%, transparent), 0 2px 4px rgba(0,0,0,.24), inset 0 1px 0 color-mix(in srgb, var(--gb-text-on-brand) 24%, transparent)',
+        color: 'var(--gb-text-on-brand)', fontFamily: 'var(--gb-font-sans)',
       }}
     >
       <span style={{
-        width: 23, height: 23, borderRadius: 8, flexShrink: 0,
+        width: 21, height: 21, borderRadius: 7, flexShrink: 0,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.2)',
+        background: 'color-mix(in srgb, var(--gb-text-on-brand) 13%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--gb-text-on-brand) 20%, transparent)',
       }}>
-        <I.sparkle size={13} />
+        <I.sparkle size={12} />
       </span>
       <span style={{ flex: 1, textAlign: 'left', fontSize: 11.5, fontWeight: 800, letterSpacing: -.05 }}>
         Sales Fantasy
       </span>
       <span style={{
         padding: '3px 6px', borderRadius: 999, flexShrink: 0,
-        background: 'rgba(255,255,255,.16)', border: '1px solid rgba(255,255,255,.24)',
+        background: 'color-mix(in srgb, var(--gb-text-on-brand) 12%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--gb-text-on-brand) 22%, transparent)',
         fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1.2,
       }}>
         EVENT
