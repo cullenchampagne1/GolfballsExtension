@@ -123,9 +123,12 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-border-strong\)'/);
     assert.match(salesFantasyButtonSource, /boxShadow: 'none'/);
     assert.match(salesFantasyButtonSource, /<linearGradient id="sales-fantasy-wave"/);
-    assert.match(salesFantasyButtonSource, /stopColor="var\(--gb-brand-dark\)"/);
-    assert.match(salesFantasyButtonSource, /stopColor="var\(--gb-brand\)"/);
+    assert.match(salesFantasyButtonSource, /stopColor="var\(--gb-brand-dark\)" stopOpacity="0\.12"/);
+    assert.match(salesFantasyButtonSource, /stopColor="var\(--gb-brand\)" stopOpacity="0\.3"/);
     assert.match(salesFantasyButtonSource, /fill="url\(#sales-fantasy-wave\)"/);
+    assert.match(salesFantasyButtonSource, /stroke="var\(--gb-brand-label\)"/);
+    assert.match(salesFantasyButtonSource, /strokeWidth="1\.25"/);
+    assert.match(salesFantasyButtonSource, /vectorEffect="non-scaling-stroke"/);
     assert.doesNotMatch(salesFantasyButtonSource, /whileHover|whileTap|boxShadow: 'inset|blur|rgba\(/);
     assert.doesNotMatch(salesFantasyButtonSource, /#4c1d95|#7c3aed|#db2777/);
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);

@@ -791,9 +791,9 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Flat event launcher with one theme-primary wave inside the button. The wave
-   is decorative SVG rather than a shadow, so the outer border stays crisp and
-   the surface never reads as beveled or raised. */
+/* Flat event launcher with one theme-primary wave inside the button. Its
+   translucent gradient lets the base surface show through while a separate
+   solid crest gives the wave crisp definition without a shadow or bevel. */
 function SalesFantasyButton({ onClick }) {
   return (
     <Btn
@@ -815,13 +815,21 @@ function SalesFantasyButton({ onClick }) {
       >
         <defs>
           <linearGradient id="sales-fantasy-wave" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="var(--gb-brand-dark)" />
-            <stop offset="1" stopColor="var(--gb-brand)" />
+            <stop offset="0" stopColor="var(--gb-brand-dark)" stopOpacity="0.12" />
+            <stop offset="1" stopColor="var(--gb-brand)" stopOpacity="0.3" />
           </linearGradient>
         </defs>
         <path
           d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0 L360 34 Z"
           fill="url(#sales-fantasy-wave)"
+        />
+        <path
+          d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0"
+          fill="none"
+          stroke="var(--gb-brand-label)"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
         />
       </svg>
       <span style={{
@@ -838,8 +846,7 @@ function SalesFantasyButton({ onClick }) {
       <span style={{
         position: 'relative', zIndex: 1,
         padding: '2px 5px', borderRadius: 999, flexShrink: 0,
-        color: 'var(--gb-text-on-brand)',
-        background: 'color-mix(in srgb, var(--gb-surface-deep) 24%, transparent)',
+        color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)',
         fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1,
       }}>
         EVENT
