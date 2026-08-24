@@ -7,7 +7,7 @@
  * doubling as the presence heartbeat when there is nothing to report; the
  * envelope rejecting anything that is not a known content-free event; the
  * buffer's drop-oldest ceiling; and installation-auth timing real round-trips
- * through the sink without sampling the flush POST itself.
+ * through the sink without sampling the flush POST or notification long poll.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,6 +18,7 @@ import {
 
 const TELEMETRY_URL = `${API_ORIGIN}/projects/golfballs-extension/client/telemetry`;
 const HEALTH_PATH = '/projects/golfballs-extension/client/health';
+const NOTIFICATION_PATH = '/projects/golfballs-extension/client/notifications';
 
 /** installation-auth + usage-telemetry in one sandbox, with the sink wired. */
 function loadTelemetry({ fetchImpl } = {}) {
@@ -152,6 +153,27 @@ describe('usage telemetry', () => {
     // The flush POST is itself an API call. Sampling it would make the reporter
     // measure its own reporting and regrow a batch every time it drained one.
     assert.equal(reporter.pending(), 0, 'the flush must not sample itself');
+  });
+
+  it('does not report the intentional notification wait as session latency', async () => {
+    const { context, reporter } = loadTelemetry({ fetchImpl: recordingFetch([]) });
+
+    await context.GBInstallationAuth.apiJson(
+      `${NOTIFICATION_PATH}?after=0&limit=50&wait_seconds=25`,
+    );
+    assert.equal(
+      reporter.pending(), 0,
+      'the server-held notification GET is transport wait, not user-facing latency',
+    );
+
+    await context.GBInstallationAuth.apiJson(`${NOTIFICATION_PATH}/receipts`, {
+      method: 'POST',
+      body: JSON.stringify({ notification_ids: [12], state: 'delivered' }),
+    });
+    assert.equal(
+      reporter.pending(), 1,
+      'ordinary notification writes remain part of backend latency health',
+    );
   });
 
   it('marks a failed request as a wait that still happened', async () => {
