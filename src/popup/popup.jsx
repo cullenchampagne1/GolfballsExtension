@@ -791,9 +791,9 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Keep the event launcher on the normal secondary-button surface. A crisp
-   inner brand edge, icon, and EVENT badge distinguish it without blur or
-   bespoke hover motion. */
+/* Flat event launcher with one theme-primary wave inside the button. The wave
+   is decorative SVG rather than a shadow, so the outer border stays crisp and
+   the surface never reads as beveled or raised. */
 function SalesFantasyButton({ onClick }) {
   return (
     <Btn
@@ -802,26 +802,44 @@ function SalesFantasyButton({ onClick }) {
       onClick={onClick}
       aria-label="Open Sales Fantasy event"
       style={{
-        height: 34, padding: '0 8px', justifyContent: 'flex-start', gap: 7,
+        height: 36, padding: '0 8px', justifyContent: 'flex-start', gap: 7,
         border: '1px solid var(--gb-border-strong)',
-        boxShadow: 'inset 0 -2px 0 var(--gb-brand-tint-border)',
+        background: 'var(--gb-fill-subtle)', boxShadow: 'none', overflow: 'hidden',
       }}
     >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 360 34"
+        preserveAspectRatio="none"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+      >
+        <defs>
+          <linearGradient id="sales-fantasy-wave" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="var(--gb-brand-dark)" />
+            <stop offset="1" stopColor="var(--gb-brand)" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0 L360 34 Z"
+          fill="url(#sales-fantasy-wave)"
+        />
+      </svg>
       <span style={{
+        position: 'relative', zIndex: 1,
         width: 18, height: 18, borderRadius: 5, flexShrink: 0,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)',
-        border: '1px solid var(--gb-brand-tint-border)',
+        color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)',
       }}>
         <I.sparkle size={11} />
       </span>
-      <span style={{ flex: 1, textAlign: 'left', fontWeight: 700 }}>
+      <span style={{ position: 'relative', zIndex: 1, flex: 1, textAlign: 'left', fontWeight: 700 }}>
         Sales Fantasy
       </span>
       <span style={{
+        position: 'relative', zIndex: 1,
         padding: '2px 5px', borderRadius: 999, flexShrink: 0,
-        color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)',
-        border: '1px solid var(--gb-brand-tint-border)',
+        color: 'var(--gb-text-on-brand)',
+        background: 'color-mix(in srgb, var(--gb-surface-deep) 24%, transparent)',
         fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1,
       }}>
         EVENT
