@@ -119,12 +119,23 @@ describe('featureRegistry · Sales Fantasy event', () => {
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
     assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
+    assert.match(salesFantasyHtml, /<body data-gb-scale="editor">/);
     assert.match(salesFantasyHtml, /react-dist\/sales-fantasy\/sales-fantasy\.js/);
     for (const label of ['Overview', 'Matchups', 'Standings', 'Pods']) {
       assert.match(salesFantasySource, new RegExp(`label: '${label}'`));
     }
     assert.match(salesFantasySource, /10 pods · 3 reps each · weekly head-to-head competition/);
-    assert.match(salesFantasySource, /Individual scoring metrics/);
+    assert.match(salesFantasySource, /import \{ AnimatePresence, motion \} from 'motion\/react'/);
+    assert.match(salesFantasySource, /data-gb-ui-root/);
+    assert.match(salesFantasySource, /prefers-reduced-motion: reduce/);
+    assert.match(salesFantasySource, /overflow-wrap: anywhere/);
+    for (const pointLabel of ['Sales', 'Margin', 'Orders', 'Total']) {
+      assert.match(salesFantasySource, new RegExp(`>${pointLabel}<`));
+    }
+    assert.match(salesFantasySource, /all three rep totals make the POD score above/);
+    assert.match(salesFantasySource, /aria-label=\{`Pod \$\{pod\.number\}`\}>\{pod\.number\}/);
+    assert.doesNotMatch(salesFantasySource, /Pin Seekers|Fairway Force|Avery Cole|pin-seekers/);
+    assert.doesNotMatch(salesFantasySource, /min-width: 680px|line-height: 30px|height: 29px/);
   });
 });
 

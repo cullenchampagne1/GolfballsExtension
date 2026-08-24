@@ -1,67 +1,45 @@
 /**
  * Sales Fantasy league model.
  *
- * The first event release uses structured sample data so the UI can be built
- * and reviewed before a production metrics endpoint exists. Keep the view
- * layer pointed at these helpers: replacing the fixture with server data then
- * becomes a data-adapter change rather than a dashboard rewrite.
+ * The event UI currently runs on deterministic preview data while the live
+ * metrics feed is being connected. Pod identity, scheduling, and the scoring
+ * contract live here so the server adapter can replace only the fixture data.
  */
 
 export const SALES_FANTASY_CURRENT_WEEK = 4;
 
-const MEMBER_NAMES = [
-  ['Avery Cole', 'Jordan Reed', 'Taylor Lane'],
-  ['Morgan Lee', 'Casey Brooks', 'Riley Grant'],
-  ['Cameron Wells', 'Quinn Harper', 'Jamie Stone'],
-  ['Parker Young', 'Reese Bailey', 'Drew Collins'],
-  ['Skyler Price', 'Emerson Gray', 'Hayden Scott'],
-  ['Rowan James', 'Finley Moore', 'Dakota Bell'],
-  ['Alexis Ward', 'Charlie Hayes', 'Kendall Ross'],
-  ['Blake Perry', 'Sage Bennett', 'Logan Foster'],
-  ['Marley Cook', 'Robin Hughes', 'Arden Powell'],
-  ['Sydney Long', 'Elliot Bryant', 'Micah Kelly'],
-];
+const POD_COUNT = 10;
+const MEMBERS_PER_POD = 3;
 
-const POD_DEFS = [
-  ['pin-seekers', 'Pin Seekers', 'PS'],
-  ['fairway-force', 'Fairway Force', 'FF'],
-  ['birdie-bureau', 'Birdie Bureau', 'BB'],
-  ['green-jackets', 'Green Jackets', 'GJ'],
-  ['flag-hunters', 'Flag Hunters', 'FH'],
-  ['back-nine', 'Back Nine', 'BN'],
-  ['clubhouse-crew', 'Clubhouse Crew', 'CC'],
-  ['ace-makers', 'Ace Makers', 'AM'],
-  ['long-drivers', 'Long Drivers', 'LD'],
-  ['sunday-bags', 'Sunday Bags', 'SB'],
-];
-
-function initials(name) {
-  return name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-}
-
-function memberMetrics(podIndex, memberIndex) {
-  const seed = (podIndex + 2) * 17 + (memberIndex + 3) * 11;
+function memberMetrics(podNumber, memberNumber) {
+  const seed = podNumber * 29 + memberNumber * 17;
   return {
-    fantasyPoints: Number((82 + (seed % 41) + memberIndex * 2.7).toFixed(1)),
-    revenue: 21800 + ((seed * 907) % 17800),
+    revenue: 22000 + ((seed * 907) % 17800),
     margin: Number((31.4 + ((seed * 13) % 91) / 10).toFixed(1)),
     orders: 19 + (seed % 23),
   };
 }
 
-export const SALES_FANTASY_PODS = POD_DEFS.map(([id, name, short], podIndex) => ({
-  id,
-  name,
-  short,
-  seed: podIndex + 1,
-  members: MEMBER_NAMES[podIndex].map((name, memberIndex) => ({
-    id: `${id}-${memberIndex + 1}`,
-    name,
-    initials: initials(name),
-    role: memberIndex === 0 ? 'Pod captain' : 'Sales rep',
-    metrics: memberMetrics(podIndex, memberIndex),
-  })),
-}));
+export const SALES_FANTASY_PODS = Array.from({ length: POD_COUNT }, (_, podIndex) => {
+  const number = podIndex + 1;
+  const id = `pod-${number}`;
+  return {
+    id,
+    number,
+    name: `POD ${number}`,
+    seed: number,
+    members: Array.from({ length: MEMBERS_PER_POD }, (_, memberIndex) => {
+      const memberNumber = memberIndex + 1;
+      return {
+        id: `${id}-rep-${memberNumber}`,
+        number: memberNumber,
+        name: `Rep ${memberNumber}`,
+        role: memberNumber === 1 ? 'Pod captain' : 'Sales rep',
+        metrics: memberMetrics(number, memberNumber),
+      };
+    }),
+  };
+});
 
 /** Standard circle-method round robin for an even number of pods. */
 export function buildRoundRobinSchedule(pods = SALES_FANTASY_PODS) {
@@ -132,11 +110,50 @@ export function buildFantasySchedule(pods = SALES_FANTASY_PODS) {
   });
 }
 
-export function fantasyScore(podId, weekNumber, pods = SALES_FANTASY_PODS) {
+const oneDecimal = (value) => Number(value.toFixed(1));
+
+/**
+ * Explainable weekly score for one rep. Each category is already expressed
+ * as points so the UI can show the exact addition without hiding a formula.
+ */
+export function memberWeekPointSplit(podId, memberId, weekNumber, pods = SALES_FANTASY_PODS) {
   const podIndex = pods.findIndex((pod) => pod.id === podId);
-  if (podIndex < 0 || !Number.isInteger(weekNumber) || weekNumber < 1) return 0;
-  const whole = 246 + ((podIndex * 47 + weekNumber * 31 + podIndex * weekNumber * 7) % 104);
-  return Number((whole + ((podIndex + weekNumber * 3) % 10) / 10).toFixed(1));
+  const pod = pods[podIndex];
+  const memberIndex = pod?.members.findIndex((member) => member.id === memberId) ?? -1;
+  if (podIndex < 0 || memberIndex < 0 || !Number.isInteger(weekNumber) || weekNumber < 1) return null;
+
+  const podNumber = podIndex + 1;
+  const memberNumber = memberIndex + 1;
+  const sales = oneDecimal(42 + ((podNumber * 19 + memberNumber * 13 + weekNumber * 17) % 257) / 10);
+  const margin = oneDecimal(18 + ((podNumber * 11 + memberNumber * 23 + weekNumber * 7) % 137) / 10);
+  const orders = oneDecimal(12 + ((podNumber * 17 + memberNumber * 5 + weekNumber * 19) % 103) / 10);
+  return {
+    memberId,
+    memberName: pod.members[memberIndex].name,
+    sales,
+    margin,
+    orders,
+    total: oneDecimal(sales + margin + orders),
+  };
+}
+
+/** The three rep splits and their reconciled pod total for a single week. */
+export function podWeekPointSplit(podId, weekNumber, pods = SALES_FANTASY_PODS) {
+  const pod = pods.find((item) => item.id === podId);
+  if (!pod) return null;
+  const members = pod.members
+    .map((member) => memberWeekPointSplit(podId, member.id, weekNumber, pods))
+    .filter(Boolean);
+  return {
+    podId,
+    week: weekNumber,
+    members,
+    total: oneDecimal(members.reduce((sum, member) => sum + member.total, 0)),
+  };
+}
+
+export function fantasyScore(podId, weekNumber, pods = SALES_FANTASY_PODS) {
+  return podWeekPointSplit(podId, weekNumber, pods)?.total || 0;
 }
 
 export function weekState(weekNumber, currentWeek = SALES_FANTASY_CURRENT_WEEK) {
@@ -184,7 +201,7 @@ export function buildStandings(
       || right.pointsFor - left.pointsFor
       || left.podId.localeCompare(right.podId)
     ))
-    .map((record, index) => ({ ...record, rank: index + 1, pointsFor: Number(record.pointsFor.toFixed(1)) }));
+    .map((record, index) => ({ ...record, rank: index + 1, pointsFor: oneDecimal(record.pointsFor) }));
 }
 
 export function podForId(podId, pods = SALES_FANTASY_PODS) {
