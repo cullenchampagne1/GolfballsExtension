@@ -15,6 +15,7 @@ import { normalizeFeatureConfig, featureShowsOnPage, featureShowsInPopup, pageAp
 const popupSource = await readFile(new URL('../../src/popup/popup.jsx', import.meta.url), 'utf8');
 const backgroundSource = await readFile(new URL('../../background.js', import.meta.url), 'utf8');
 const salesFantasyHtml = await readFile(new URL('../../sales-fantasy.html', import.meta.url), 'utf8');
+const salesFantasyButtonSource = popupSource.match(/function SalesFantasyButton[\s\S]*?\n}\n/)?.[0] || '';
 
 describe('featureRegistry · surfaces', () => {
   it('a dual-surface feature has popup + a page-scoped shelf', () => {
@@ -105,12 +106,13 @@ describe('featureRegistry · Sales Fantasy event', () => {
   it('gates the special popup button and opens the Coming soon event window', () => {
     assert.match(popupSource, /flags\.salesFantasyEnabled === true/);
     assert.match(popupSource, /action: 'openSalesFantasy'/);
-    assert.match(popupSource, />\s*Sales Fantasy\s*</);
-    assert.match(popupSource, /linear-gradient\(180deg, var\(--gb-fill-subtle\) 36%, color-mix\(in srgb, var\(--gb-brand-label\) 11%, var\(--gb-fill-subtle\)\) 100%\)/);
-    assert.match(popupSource, /inset 0 -10px 16px color-mix\(in srgb, var\(--gb-brand-label\) 9%, transparent\)/);
-    assert.match(popupSource, /border: '1px solid var\(--gb-border-default\)'/);
-    assert.match(popupSource, /background: 'var\(--gb-brand-tint-soft\)'/);
-    assert.doesNotMatch(popupSource, /#4c1d95|#7c3aed|#db2777/);
+    assert.match(salesFantasyButtonSource, /<Btn\s+full\s+size="sm"/);
+    assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
+    assert.match(salesFantasyButtonSource, /boxShadow: 'inset 0 -2px 0 var\(--gb-brand-tint-border\)'/);
+    assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-border-strong\)'/);
+    assert.match(salesFantasyButtonSource, /background: 'var\(--gb-brand-tint-soft\)'/);
+    assert.doesNotMatch(salesFantasyButtonSource, /whileHover|whileTap|linear-gradient|blur|rgba\(/);
+    assert.doesNotMatch(salesFantasyButtonSource, /#4c1d95|#7c3aed|#db2777/);
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);

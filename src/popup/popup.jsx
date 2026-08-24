@@ -789,48 +789,42 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Start from the normal secondary action surface, then add a restrained inner
-   brand glow. The icon + EVENT badge carry the event identity without turning
-   the entire row into a loud campaign-colored block. */
+/* Keep the event launcher on the normal secondary-button surface. A crisp
+   inner brand edge, icon, and EVENT badge distinguish it without blur or
+   bespoke hover motion. */
 function SalesFantasyButton({ onClick }) {
   return (
-    <motion.button
-      type="button"
+    <Btn
+      full
+      size="sm"
       onClick={onClick}
-      whileHover={{ y: -1, filter: 'brightness(1.03)' }}
-      whileTap={{ y: 0, scale: 0.99 }}
-      transition={{ duration: 0.14 }}
       aria-label="Open Sales Fantasy event"
       style={{
-        width: '100%', minHeight: 32, padding: '4px 8px',
-        display: 'flex', alignItems: 'center', gap: 8,
-        borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
-        border: '1px solid var(--gb-border-default)',
-        background: 'linear-gradient(180deg, var(--gb-fill-subtle) 36%, color-mix(in srgb, var(--gb-brand-label) 11%, var(--gb-fill-subtle)) 100%)',
-        boxShadow: '0 3px 8px rgba(0,0,0,.14), inset 0 1px 0 var(--gb-fill-faint), inset 0 -10px 16px color-mix(in srgb, var(--gb-brand-label) 9%, transparent)',
-        color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-sans)',
+        padding: '0 8px', justifyContent: 'flex-start', gap: 7,
+        border: '1px solid var(--gb-border-strong)',
+        boxShadow: 'inset 0 -2px 0 var(--gb-brand-tint-border)',
       }}
     >
       <span style={{
-        width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)',
         border: '1px solid var(--gb-brand-tint-border)',
       }}>
-        <I.sparkle size={12} />
+        <I.sparkle size={11} />
       </span>
-      <span style={{ flex: 1, textAlign: 'left', fontSize: 11.5, fontWeight: 700, letterSpacing: -.05 }}>
+      <span style={{ flex: 1, textAlign: 'left', fontWeight: 700 }}>
         Sales Fantasy
       </span>
       <span style={{
-        padding: '3px 6px', borderRadius: 999, flexShrink: 0,
+        padding: '2px 5px', borderRadius: 999, flexShrink: 0,
         color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)',
         border: '1px solid var(--gb-brand-tint-border)',
-        fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1.2,
+        fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1,
       }}>
         EVENT
       </span>
-    </motion.button>
+    </Btn>
   );
 }
 
