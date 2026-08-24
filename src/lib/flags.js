@@ -27,6 +27,9 @@ export const FEATURE_DEFAULTS = {
   phoneFinderEnabled:       true,
   emailTemplatesEnabled:    true,
   powerAutomateEnabled:     false,
+  // Temporary opt-in event. Managed policy can enable this at launch without
+  // requiring another extension build.
+  salesFantasyEnabled:      false,
   // ── Features that previously had no flag (now toggleable) ──
   actionsShelfEnabled:      true,   // the bottom-right quick-actions shelf itself
   giftCatalogEnabled:       true,   // Gifting Catalog (+ Customize + Monogram)
@@ -75,6 +78,7 @@ export const FEATURE_FLAGS = [
   { key: 'workflowManagerEnabled', section: 'Tools', name: 'Workflow Manager', desc: 'Run one reusable set of steps for each selected account or contact.', icon: 'megaphone' },
   { key: 'notificationsEnabled', section: 'Tools', name: 'Notifications', desc: 'Receive targeted messages and completion alerts in the toolbar notification center.', icon: 'alert' },
   { key: 'trackersEnabled', section: 'Tools', name: 'Trackers', desc: 'Track opportunities, proposals, and recent orders in the background as you work.', icon: 'eye' },
+  { key: 'salesFantasyEnabled', section: 'Events', name: 'Sales Fantasy', desc: 'Show the temporary Sales Fantasy event launcher in the extension popup.', icon: 'sparkle' },
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
   { key: 'crmNewContactEnabled',   section: 'CRM & Contacts', name: 'New Contact',       desc: 'Quick-create a CRM contact (Ctrl+Q).',             icon: 'user' },

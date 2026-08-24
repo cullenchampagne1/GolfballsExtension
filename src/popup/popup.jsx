@@ -241,7 +241,7 @@ function PopupApp() {
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-        notificationsEnabled: true,
+        notificationsEnabled: true, salesFantasyEnabled: false,
         ...(data.featureFlags || {}),
       };
       // Read ignorePageContext directly from storage on init so we can branch
@@ -481,7 +481,7 @@ function PopupApp() {
         setFlags({
           chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true,
           taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-          notificationsEnabled: true,
+          notificationsEnabled: true, salesFantasyEnabled: false,
           ...next,
         });
       }
@@ -508,6 +508,15 @@ function PopupApp() {
     } catch {}
   };
 
+  const openSalesFantasy = () => {
+    try {
+      chrome.runtime.sendMessage(
+        { action: 'openSalesFantasy' },
+        () => void chrome.runtime.lastError,
+      );
+    } catch {}
+  };
+
   /* ── stage routes ── */
   // templateCount in the header reflects the user's total enabled templates
   // (not the page-filtered subset), so it's a stable "how many templates do
@@ -520,7 +529,7 @@ function PopupApp() {
   const emailTemplatesOn = flags.emailTemplatesEnabled !== false;
   const shellMinHeight = emailTemplatesOn ? 340 : 0;
   if (stage === 'loading') return <Shell templateCount={templateCount} minHeight={shellMinHeight}><LoadingState /></Shell>;
-  if (stage === 'empty')   return <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
+  if (stage === 'empty')   return <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}><EmptyState onCreate={openManager} salesFantasyEnabled={flags.salesFantasyEnabled === true} onOpenSalesFantasy={openSalesFantasy} /></Shell>;
   if (stage === 'revoked') return <Shell templateCount={0} minHeight={shellMinHeight}><RevokedNotice /></Shell>;
 
   const tpl = visibleTemplates.find((t) => t.id === selectedId);
@@ -564,6 +573,7 @@ function PopupApp() {
           ignoreProof={ignoreProof}
           ignorePageContext={ignorePageContext}
           onOpenWatchAdd={() => setWatchModalOpen(true)}
+          onOpenSalesFantasy={openSalesFantasy}
           onOpenProof={() => {
             if (!tab) return;
             const orderId    = pageInfo.orderNo   || '';
@@ -748,9 +758,14 @@ function RevokedNotice() {
    STAGE — EMPTY
 ============================================================ */
 
-function EmptyState({ onCreate }) {
+function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy }) {
   return (
     <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--gb-text-muted)', fontSize: 12, lineHeight: 1.7 }}>
+      {salesFantasyEnabled && (
+        <div style={{ marginBottom: 18 }}>
+          <SalesFantasyButton onClick={onOpenSalesFantasy} />
+        </div>
+      )}
       <div style={{
         width: 38, height: 38, margin: '0 auto 10px',
         borderRadius: 'var(--gb-r-md)',
@@ -771,6 +786,49 @@ function EmptyState({ onCreate }) {
         </Btn>
       </div>
     </div>
+  );
+}
+
+/* Temporary-event treatment is intentionally distinct from normal tool rows:
+   a saturated gradient, glow, and EVENT badge make the time-boxed launcher
+   recognizable without changing the shared button design system. */
+function SalesFantasyButton({ onClick }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileHover={{ y: -1, scale: 1.01 }}
+      whileTap={{ y: 0, scale: 0.985 }}
+      transition={{ duration: 0.14 }}
+      aria-label="Open Sales Fantasy event"
+      style={{
+        width: '100%', minHeight: 38, padding: '7px 9px 7px 11px',
+        display: 'flex', alignItems: 'center', gap: 8,
+        borderRadius: 'var(--gb-r-md)', cursor: 'pointer',
+        border: '1px solid rgba(255,255,255,.38)',
+        background: 'linear-gradient(115deg, #4c1d95 0%, #7c3aed 48%, #db2777 100%)',
+        boxShadow: '0 7px 20px rgba(124,58,237,.28), inset 0 1px 0 rgba(255,255,255,.18)',
+        color: '#fff', fontFamily: 'var(--gb-font-sans)',
+      }}
+    >
+      <span style={{
+        width: 23, height: 23, borderRadius: 8, flexShrink: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.2)',
+      }}>
+        <I.sparkle size={13} />
+      </span>
+      <span style={{ flex: 1, textAlign: 'left', fontSize: 11.5, fontWeight: 800, letterSpacing: -.05 }}>
+        Sales Fantasy
+      </span>
+      <span style={{
+        padding: '3px 6px', borderRadius: 999, flexShrink: 0,
+        background: 'rgba(255,255,255,.16)', border: '1px solid rgba(255,255,255,.24)',
+        fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1.2,
+      }}>
+        EVENT
+      </span>
+    </motion.button>
   );
 }
 
@@ -801,7 +859,7 @@ function MainView({
   tpl,
   resolving, resolvedVars, resolvedTo, pageInfo, flags, featureCfg = {}, paConfigured, watchList, notifications = [], tab,
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
-  onOpenWatchAdd, onOpenProof,
+  onOpenWatchAdd, onOpenProof, onOpenSalesFantasy,
 }) {
   // ── derived button states ──
   // hasRecipient = real recipient resolved by content scripts. Required for
@@ -1142,6 +1200,11 @@ function MainView({
             Each wrapped in <Reveal> so flipping its feature flag collapses
             the height + opacity with siblings sliding to fill the gap. */}
         <AnimatePresence initial={false}>
+          {flags.salesFantasyEnabled === true && (
+            <Reveal key="sales-fantasy">
+              <SalesFantasyButton onClick={onOpenSalesFantasy} />
+            </Reveal>
+          )}
           {flags.chargeEnabled && (
             <Reveal key="charge">
               <Btn full size="sm"

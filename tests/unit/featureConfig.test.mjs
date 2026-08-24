@@ -7,8 +7,14 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { FEATURE_DEFAULTS, FEATURE_FLAG_META } from '../../src/lib/flags.js';
 import { FEATURE_REGISTRY, featureByKey, shelfFeatures, popupFeatures, shelfActionDefs } from '../../src/lib/features/featureRegistry.js';
 import { normalizeFeatureConfig, featureShowsOnPage, featureShowsInPopup, pageApplies, urlMatches, surfaceSummary, togglePage } from '../../src/lib/features/featureConfig.js';
+
+const popupSource = await readFile(new URL('../../src/popup/popup.jsx', import.meta.url), 'utf8');
+const backgroundSource = await readFile(new URL('../../background.js', import.meta.url), 'utf8');
+const salesFantasyHtml = await readFile(new URL('../../sales-fantasy.html', import.meta.url), 'utf8');
 
 describe('featureRegistry · surfaces', () => {
   it('a dual-surface feature has popup + a page-scoped shelf', () => {
@@ -83,6 +89,28 @@ describe('featureRegistry · surfaces', () => {
     assert.equal(crm.dynamic, false);
     // call log contributes TWO actions under one feature
     assert.equal(defs.filter((d) => d.key === 'callLogEnabled').length, 2);
+  });
+});
+
+describe('featureRegistry · Sales Fantasy event', () => {
+  it('is a managed-ready, default-off event without a generic page launcher', () => {
+    assert.equal(FEATURE_DEFAULTS.salesFantasyEnabled, false);
+    assert.equal(FEATURE_FLAG_META.find((item) => item.key === 'salesFantasyEnabled')?.name, 'Sales Fantasy');
+    const event = featureByKey('salesFantasyEnabled');
+    assert.ok(event);
+    assert.equal(event.surfaces.popup, false);
+    assert.equal(event.surfaces.shelf, null);
+  });
+
+  it('gates the special popup button and opens the Coming soon event window', () => {
+    assert.match(popupSource, /flags\.salesFantasyEnabled === true/);
+    assert.match(popupSource, /action: 'openSalesFantasy'/);
+    assert.match(popupSource, />\s*Sales Fantasy\s*</);
+    assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
+    assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
+    assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
+    assert.match(salesFantasyHtml, /<title>Sales Fantasy · Coming soon<\/title>/);
+    assert.match(salesFantasyHtml, /<p class="coming-soon">Coming soon<\/p>/);
   });
 });
 

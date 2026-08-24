@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sales Fantasy · Coming soon</title>
+  <script src="theme-init.js"></script>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      color: var(--gb-text-primary);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(124, 58, 237, .22), transparent 34%),
+        radial-gradient(circle at 84% 88%, rgba(219, 39, 119, .17), transparent 38%),
+        var(--gb-surface-canvas);
+      font-family: var(--gb-font-sans);
+    }
+    .event-card {
+      position: relative;
+      width: min(560px, calc(100vw - 64px));
+      min-height: 330px;
+      padding: 54px 52px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border-radius: 28px;
+      border: 1px solid color-mix(in srgb, var(--gb-border-default) 72%, #a78bfa 28%);
+      background: color-mix(in srgb, var(--gb-surface-1) 93%, #7c3aed 7%);
+      box-shadow: 0 28px 80px rgba(15, 10, 35, .25), inset 0 1px 0 rgba(255, 255, 255, .06);
+    }
+    .event-card::before {
+      content: "";
+      position: absolute;
+      width: 280px;
+      height: 280px;
+      top: -190px;
+      right: -100px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, rgba(124, 58, 237, .5), rgba(219, 39, 119, .18));
+      filter: blur(2px);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      margin-bottom: 22px;
+      border: 1px solid rgba(167, 139, 250, .42);
+      border-radius: 999px;
+      color: #c4b5fd;
+      background: rgba(124, 58, 237, .13);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .9px;
+      text-transform: uppercase;
+    }
+    .spark { font-size: 13px; line-height: 1; }
+    h1 {
+      margin: 0;
+      color: var(--gb-text-primary);
+      font-size: clamp(38px, 7vw, 62px);
+      line-height: .98;
+      letter-spacing: -2.5px;
+    }
+    .gradient {
+      color: transparent;
+      background: linear-gradient(100deg, #a78bfa 5%, #f0abfc 55%, #fb7185 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+    }
+    .coming-soon {
+      margin: 22px 0 0;
+      color: var(--gb-text-secondary);
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: .2px;
+    }
+    .rule {
+      width: 52px;
+      height: 3px;
+      margin-top: 26px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #7c3aed, #db2777);
+      box-shadow: 0 0 16px rgba(168, 85, 247, .5);
+    }
+  </style>
+</head>
+<body>
+  <main class="event-card" aria-labelledby="event-title">
+    <div class="badge"><span class="spark" aria-hidden="true">✦</span> Limited event</div>
+    <h1 id="event-title">Sales <span class="gradient">Fantasy</span></h1>
+    <p class="coming-soon">Coming soon</p>
+    <div class="rule" aria-hidden="true"></div>
+  </main>
+</body>
+</html>

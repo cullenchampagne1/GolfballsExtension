@@ -4,7 +4,7 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.9",
+  "version": "3.4.10",
   "generatedAt": "2026-08-24",
   "tree": [
     {
@@ -2280,7 +2280,7 @@ export const HELP_CONTENT = {
               "Pick a theme — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night. Changes apply live everywhere.",
               "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It starts blank and must be configured before Power Automate delivery.",
               "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
-              "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
+              "Review feature toggles — most features are on by default, while Power Automate, Trackers, and temporary event flags start off. Turn off what you won't use.",
               "Open a team settings link — paste the URL under Shared Settings Templates, preview it, and choose which scopes to import."
             ]
           },
@@ -4576,12 +4576,15 @@ export const HELP_CONTENT = {
       ],
       "summary": "Every feature can be switched on or off independently. This reference is generated from the live registry, so it always matches your build.",
       "covers": [],
+      "coversFlags": [
+        "salesFantasyEnabled"
+      ],
       "coversAllFlags": true,
       "body": {
         "beginner": [
           {
             "type": "p",
-            "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Everything defaults to ON except Power Automate."
+            "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Most features default to ON; Power Automate, Trackers, and temporary event flags start off."
           },
           {
             "type": "heading",
@@ -4688,6 +4691,30 @@ export const HELP_CONTENT = {
                 "giftCatalogEnabled",
                 "mockupStudioEnabled",
                 "actionsShelfEnabled"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "Events"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Feature",
+              "Default",
+              "What it controls"
+            ],
+            "rows": [
+              [
+                "Sales Fantasy",
+                "Off",
+                "Show the temporary Sales Fantasy event launcher in the extension popup."
+              ]
+            ],
+            "meta": {
+              "flagKeys": [
+                "salesFantasyEnabled"
               ]
             }
           },
@@ -7434,7 +7461,7 @@ export const HELP_CONTENT = {
           "action": "Review Settings → Features and switch off anything you won't use.",
           "expected": "Disabled features vanish from shelves, popups, and shortcuts immediately.",
           "visualCue": "Features section, grouped by area.",
-          "tip": "Everything except Power Automate is on by default. Leaving it all on is fine."
+          "tip": "Most features start on. Power Automate, Trackers, and temporary event flags are opt-in."
         },
         {
           "action": "(If your team shares config) paste its URL under Settings → Shared Settings Templates and select Preview.",
@@ -9657,6 +9684,18 @@ export const HELP_CONTENT = {
       "description": "Track opportunities, proposals, and recent orders in the background as you work.",
       "article": "feature-toggles",
       "flag": "trackersEnabled"
+    },
+    {
+      "id": "flag:salesFantasyEnabled",
+      "category": "Settings",
+      "title": "Sales Fantasy",
+      "keywords": [
+        "salesFantasyEnabled",
+        "Events"
+      ],
+      "description": "Show the temporary Sales Fantasy event launcher in the extension popup.",
+      "article": "feature-toggles",
+      "flag": "salesFantasyEnabled"
     },
     {
       "id": "flag:crmSearchEnabled",

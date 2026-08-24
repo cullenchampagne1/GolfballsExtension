@@ -30,6 +30,7 @@ export const RUNTIME_ROOT_FILES = Object.freeze([
   'editor.html',
   'guide.html',
   'popup.html',
+  'sales-fantasy.html',
   'sandbox.html',
   'settings-registry.js',
   'theme-init.js',

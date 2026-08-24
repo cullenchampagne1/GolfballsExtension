@@ -234,7 +234,12 @@ try {
 } catch { /* no storage */ }
 
 let editorWindowId   = null;
+let salesFantasyWindowId = null;
 let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
+
+// Event windows deliberately match the Manager/Settings window so temporary
+// experiences have the same predictable desktop footprint.
+const MANAGER_WINDOW_BOUNDS = Object.freeze({ width: 860, height: 700 });
 
 const GB_PAGE_ENGINE_TAB_PATTERNS = [
   'https://www.golfballs.com/*',
@@ -2787,6 +2792,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'openSalesFantasy') {
+    if (salesFantasyWindowId !== null) {
+      chrome.windows.get(salesFantasyWindowId, (win) => {
+        if (chrome.runtime.lastError || !win) {
+          salesFantasyWindowId = null;
+          createSalesFantasyWindow();
+        } else {
+          chrome.windows.update(salesFantasyWindowId, { focused: true });
+        }
+        sendResponse({ success: true });
+      });
+    } else {
+      createSalesFantasyWindow();
+      sendResponse({ success: true });
+    }
+    return true;
+  }
+
   // ── Start pick: inject content script, switch to order tab ─
   if (msg.action === 'startPick') {
     const fieldId = typeof msg.fieldId === 'string' ? msg.fieldId.trim().slice(0, 200) : '';
@@ -3095,7 +3118,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 function createEditorWindow() {
   chrome.windows.create({
     url: chrome.runtime.getURL('editor.html'),
-    type: 'popup', width: 860, height: 700
+    type: 'popup', ...MANAGER_WINDOW_BOUNDS
   }, (win) => {
     editorWindowId = win.id;
     chrome.tabs.query({ windowId: win.id }, (tabs) => {
@@ -3104,8 +3127,18 @@ function createEditorWindow() {
   });
 }
 
+function createSalesFantasyWindow() {
+  chrome.windows.create({
+    url: chrome.runtime.getURL('sales-fantasy.html'),
+    type: 'popup', ...MANAGER_WINDOW_BOUNDS
+  }, (win) => {
+    salesFantasyWindowId = win?.id ?? null;
+  });
+}
+
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === editorWindowId) editorWindowId = null;
+  if (windowId === salesFantasyWindowId) salesFantasyWindowId = null;
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

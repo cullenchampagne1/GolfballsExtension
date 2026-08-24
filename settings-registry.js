@@ -94,6 +94,12 @@
       "label": "Power Automate",
       "managedDefault": true
     },
+    "salesFantasyEnabled": {
+      "type": "bool",
+      "default": false,
+      "label": "Sales Fantasy",
+      "managedDefault": true
+    },
     "actionsShelfEnabled": {
       "type": "bool",
       "default": true,
