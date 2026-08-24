@@ -174,6 +174,19 @@ class SettingsPolicyTests(unittest.TestCase):
         restored, _ = self.store.resolve("install-1")
         self.assertTrue(restored["features"]["featureEnabled"]["value"])
 
+    def test_resolve_many_matches_individual_effective_policies(self):
+        self.store.set_override(
+            "install-1", ["features", "featureEnabled"],
+            value_mode="override", value=False,
+            hidden_mode="inherit", managed_mode="inherit",
+        )
+        resolved = self.store.resolve_many(["install-1", "install-2", "install-1"])
+
+        self.assertEqual(list(resolved), ["install-1", "install-2"])
+        self.assertFalse(resolved["install-1"][0]["features"]["featureEnabled"]["value"])
+        self.assertTrue(resolved["install-2"][0]["features"]["featureEnabled"]["value"])
+        self.assertEqual(resolved["install-1"], self.store.resolve("install-1"))
+
     def test_registry_type_validation_rejects_invalid_values(self):
         with self.assertRaises(settings_policy.SettingsPolicyError):
             self.store.update_global(

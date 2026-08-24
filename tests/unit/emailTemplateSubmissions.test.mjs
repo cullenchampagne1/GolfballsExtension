@@ -124,4 +124,34 @@ describe('email-template submission cache', () => {
     assert.equal(h.requests[1].path, `${h.api.PATH}/${id}/approve`);
     assert.equal(h.managedSyncs(), 1);
   });
+
+  it('coalesces in-flight autosaves to the newest submission document', async () => {
+    const id = 'S'.repeat(32);
+    let releaseFirst;
+    const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+    const h = harness(async (request, index) => {
+      if (index === 1) await firstGate;
+      return payload(submission({
+        version: index + 1,
+        template: request.body.template,
+      }));
+    }, {
+      gbEmailTemplateSubmissions: {
+        schemaVersion: 1, revision: 'one', submissions: [submission()],
+      },
+    });
+
+    const first = h.api.update(id, { ...submission().template, subject: 'First draft' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = h.api.update(id, { ...submission().template, subject: 'Skipped draft' });
+    const final = h.api.update(id, { ...submission().template, subject: 'Newest draft' });
+
+    assert.equal(h.requests.length, 1, 'only the active write should be on the wire');
+    releaseFirst();
+    const results = await Promise.all([first, second, final]);
+
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.requests[1].body.template.subject, 'Newest draft');
+    assert.deepEqual(results.map((row) => row.version), [3, 3, 3]);
+  });
 });

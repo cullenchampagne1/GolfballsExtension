@@ -948,6 +948,7 @@ function TemplateSidebar() {
   const [noteFolders, setNoteFolders] = useState([]);
   const [emailSends,  setEmailSends]  = useState([]);
   const [submissionCache, setSubmissionCache] = useState(null);
+  const [catalogSyncError, setCatalogSyncError] = useState('');
   const [search,      setSearch]      = useState('');
   const [currentId,   setCurrentId]   = useState(null);
   const draggingId = useRef(null);
@@ -959,10 +960,16 @@ function TemplateSidebar() {
       // Do not let a valid-looking local revision suppress the open-time
       // server check. If the request is unavailable, retain the cached catalog
       // as an offline fallback and let the notification/alarm path retry.
-      await Promise.allSettled([
+      const [managedResult] = await Promise.allSettled([
         sendBackgroundMessage('gbSyncManagedEmailTemplates'),
         sendBackgroundMessage('gbSyncEmailTemplateSubmissions'),
       ]);
+      if (!alive) return;
+      setCatalogSyncError(
+        managedResult.status === 'rejected'
+          ? (managedResult.reason?.message || 'Managed templates could not be refreshed.')
+          : '',
+      );
       const d = await loadAll();
       if (!alive) return;
       setTemplates(d.templates || []);
@@ -973,7 +980,10 @@ function TemplateSidebar() {
       setSubmissionCache(d.gbEmailTemplateSubmissions || null);
     };
     const onChange = (changes) => {
-      if (changes.templates)       setTemplates(changes.templates.newValue || []);
+      if (changes.templates) {
+        setTemplates(changes.templates.newValue || []);
+        setCatalogSyncError('');
+      }
       if (changes.noteTemplates)   setNotes(changes.noteTemplates.newValue || []);
       if (changes.templateFolders) setTplFolders(changes.templateFolders.newValue || []);
       if (changes.noteFolders)     setNoteFolders(changes.noteFolders.newValue || []);
@@ -1003,11 +1013,7 @@ function TemplateSidebar() {
   }, [capabilities.allowLinkImport, canAuthorTemplates]);
 
   useEffect(() => {
-    if (!showSubmissions) {
-      if (tab === 'submissions') setTab('templates');
-      return;
-    }
-    sendBackgroundMessage('gbSyncEmailTemplateSubmissions').catch(() => {});
+    if (!showSubmissions && tab === 'submissions') setTab('templates');
   }, [showSubmissions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isSubmissions = tab === 'submissions';
@@ -1423,7 +1429,17 @@ function TemplateSidebar() {
               </motion.div>
             )}
 
-            {!isSubmissions && allItems.length === 0 && (
+            {!isSubmissions && !isNote && allItems.length === 0 && catalogSyncError && (
+              <div style={{
+                margin: '8px 4px', padding: 12, borderRadius: 9,
+                background: 'var(--gb-warning-tint-soft)',
+                border: '1px solid var(--gb-warning-tint-border)',
+                color: 'var(--gb-warning-fg)', fontSize: 10.5, lineHeight: 1.45,
+              }}>
+                Managed templates could not be refreshed. The cached catalog is shown; reopen the manager to retry.
+              </div>
+            )}
+            {!isSubmissions && allItems.length === 0 && (!catalogSyncError || isNote) && (
               <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
                 No {isNote ? 'notes' : 'templates'} yet.
               </div>

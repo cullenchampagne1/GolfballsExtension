@@ -20,6 +20,7 @@ import {
 } from '../../lib/helpWaitingGame.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
+const RUNTIME_STATE_KEY = 'gbRuntimeState';
 
 const EMPTY_STATE = Object.freeze({
   version: 1,
@@ -193,12 +194,38 @@ export function useHelpAssistant(page) {
     }
   }, [service]);
 
-  // The Actions shelf uses this result to decide whether the Help entry exists
-  // at all. A disabled grant, invalid credential, or unhealthy provider never
-  // leaves a dead chat affordance in the UI.
+  // Runtime bootstrap already checks /client/health every three minutes and
+  // persists whether the assistant grant is enabled. Reuse that decision for
+  // shelf visibility instead of issuing /assistant/health from every page's
+  // ActionsShelf mount. Opening the Help destination still performs the one
+  // live provider check below.
   useEffect(() => {
-    checkStatus({ force: true }).catch(() => {});
-  }, []); // one authenticated health decision per mounted shelf
+    const applyRuntimeState = (value) => {
+      const ready = (value?.o === 1 || value?.o === true)
+        && (value?.h === 1 || value?.h === true);
+      setService({
+        phase: ready ? 'ready' : 'unavailable',
+        ready,
+        checkedAt: Number(value?.s || 0),
+        error: ready ? '' : 'Help assistant is not enabled',
+      });
+    };
+    try {
+      chrome.storage.local.get(RUNTIME_STATE_KEY, (result) => {
+        void chrome.runtime.lastError;
+        applyRuntimeState(result?.[RUNTIME_STATE_KEY]);
+      });
+    } catch { applyRuntimeState(null); }
+    const onRuntimeState = (changes, area) => {
+      if (area === 'local' && changes?.[RUNTIME_STATE_KEY]) {
+        applyRuntimeState(changes[RUNTIME_STATE_KEY].newValue);
+      }
+    };
+    try { chrome.storage.onChanged.addListener(onRuntimeState); } catch { /* */ }
+    return () => {
+      try { chrome.storage.onChanged.removeListener(onRuntimeState); } catch { /* */ }
+    };
+  }, []);
 
   return {
     state,

@@ -72,8 +72,8 @@ function mount() {
   createRoot(host).render(<EditorSettings />);
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', mount);
-} else {
-  mount();
-}
+// The editor window is opened far more often than its Settings destination.
+// Keep the large SettingsPanel (and all of its server-backed child effects)
+// dormant until the user actually asks for that view.
+window.__gbMountEditorSettings = mount;
+window.addEventListener('gb:open-editor-settings', mount);

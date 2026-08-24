@@ -25,6 +25,14 @@ const sourceEnd = routes.indexOf('@router.post("/managed-email-templates/clear")
 const sourceRoute = sourceStart >= 0 && sourceEnd > sourceStart
   ? routes.slice(sourceStart, sourceEnd)
   : '';
+const editorSettings = localRuntimeAvailable
+  ? readFileSync(resolve(root, 'src/content/editor-settings.jsx'), 'utf8') : '';
+const editorBridge = localRuntimeAvailable
+  ? readFileSync(resolve(root, 'src/content/editor-bridge.jsx'), 'utf8') : '';
+const editorSidebar = localRuntimeAvailable
+  ? readFileSync(resolve(root, 'src/content/editor-sidebar.jsx'), 'utf8') : '';
+const helpCompanion = localRuntimeAvailable
+  ? readFileSync(resolve(root, 'src/ui/components/HelpCompanion.jsx'), 'utf8') : '';
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
@@ -70,8 +78,21 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     )?.[0] || '';
 
     assert.match(notificationRoute, /wait_seconds: int = 25/);
-    assert.match(notificationRoute, /await asyncio\.sleep\(0\.5\)/);
-    assert.match(notificationRoute, /payload\["notifications"\]/);
+    assert.match(notificationRoute, /await asyncio\.to_thread/);
+    assert.match(notificationRoute, /wait_for_poll/);
+    assert.doesNotMatch(notificationRoute, /asyncio\.sleep\(0\.5\)/);
+  });
+
+  it('defers Settings traffic, avoids duplicate submission sync, and reuses runtime Help capability', () => {
+    assert.match(editorSettings, /window\.addEventListener\('gb:open-editor-settings', mount\)/);
+    assert.doesNotMatch(editorSettings, /DOMContentLoaded', mount/);
+    assert.match(editorBridge, /dispatchEvent\(new CustomEvent\('gb:open-editor-settings'\)\)/);
+    assert.equal(
+      [...editorSidebar.matchAll(/sendBackgroundMessage\('gbSyncEmailTemplateSubmissions'\)/g)].length,
+      1,
+    );
+    assert.match(helpCompanion, /RUNTIME_STATE_KEY = 'gbRuntimeState'/);
+    assert.doesNotMatch(helpCompanion, /checkStatus\(\{ force: true \}\)/);
   });
 
   it('exposes managed-template inventory and former-parent cleanup blocks', () => {

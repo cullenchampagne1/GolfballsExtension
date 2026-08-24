@@ -478,10 +478,10 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertEqual(
             invalidation["credential_ids"],
             [
-                "owner-install", "parent-two", "recipient-install",
+                "parent-two", "recipient-install",
                 "creation-disabled-install",
             ],
-            "only parents and restricted users need bucket invalidations",
+            "only other parents and restricted users need bucket invalidations",
         )
 
         bucket_id = created["templates"][0]["id"]
@@ -566,7 +566,8 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(
             self.notifications.fanouts[-1]["credential_ids"],
-            ["owner-install", "parent-two", "creation-disabled-install"],
+            ["owner-install", "parent-two"],
+            "the mutation response is authoritative for its origin installation",
         )
 
         parent_view = self._payload(self.api.get_email_template_submissions(

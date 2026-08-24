@@ -103,6 +103,36 @@ describe('extension API guard', () => {
     }, /HTTP 429/);
   });
 
+  it('honors Retry-After per lane without letting notification transport block interactive work', async () => {
+    const { fetchMock, requests } = createFetchMock((url) => (
+      new URL(url).pathname === `${CLIENT_BASE}/notifications`
+        ? jsonResponse({ detail: 'Transport quota reached' }, 429, { 'Retry-After': '17' })
+        : jsonResponse({ ok: true })
+    ));
+    const { client } = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation() },
+      fetchImpl: fetchMock,
+    });
+
+    await assert.rejects(
+      client.apiJson(`${CLIENT_BASE}/notifications?after=0&wait_seconds=25`),
+      /Transport quota reached/,
+    );
+    await assert.rejects(async () => {
+      try {
+        await client.apiFetch(`${CLIENT_BASE}/notifications?after=0&wait_seconds=25`);
+      } catch (error) {
+        assert.equal(error.localRateLimit, true);
+        assert.equal(error.retryAfterSeconds, 17);
+        throw error;
+      }
+    }, /rate limited/);
+
+    const interactive = await client.apiFetch(`${CLIENT_BASE}/email-template-bucket`);
+    assert.equal(interactive.status, 200);
+    assert.equal(requests.length, 2, 'the repeated poll is rejected before fetch');
+  });
+
   it('closes the product runtime on rejected installation credentials', async () => {
     for (const status of [401, 403]) {
       const { fetchMock } = createFetchMock(() => jsonResponse({ detail: 'Denied' }, status));

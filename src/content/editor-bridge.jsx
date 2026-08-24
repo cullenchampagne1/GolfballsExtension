@@ -663,6 +663,7 @@ function openSettings() {
   const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-action-form'];
   _settingsPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
   views.forEach((v) => $(v)?.classList.add('hidden'));
+  window.dispatchEvent(new CustomEvent('gb:open-editor-settings'));
   show('ed-settings');
   animateView('ed-settings');
 }
