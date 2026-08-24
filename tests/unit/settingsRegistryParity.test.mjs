@@ -71,6 +71,16 @@ describe('settings registry · extension/backend parity', () => {
     assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.inspectTerritory'), false);
   });
 
+  it('places Sales Fantasy only in the backend-managed developer policy', () => {
+    assert.equal(Object.hasOwn(registry.features, 'salesFantasyEnabled'), false);
+    assert.deepEqual(registry.developerSettings['salesFantasy.enabled'], {
+      type: 'bool',
+      default: false,
+      label: 'Sales Fantasy',
+      managedDefault: true,
+    });
+  });
+
   it('registers every email capability control as managed by default', () => {
     const expected = {
       'emailTemplates.allowCreation': {

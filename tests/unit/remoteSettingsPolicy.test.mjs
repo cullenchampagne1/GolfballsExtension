@@ -27,6 +27,7 @@ before(async () => {
       personalUnknownFlag: true,
       campaignManagerEnabled: false,
       submitProofEnabled: false,
+      salesFantasyEnabled: true,
     },
     devSettings: {
       'numberDisplay.durationMs': 777,
@@ -116,13 +117,16 @@ describe('remote settings policy', () => {
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75, 'renamed unmanaged setting keeps its local value');
     assert.equal(Object.hasOwn(stored.featureFlags, 'campaignManagerEnabled'), false);
     assert.equal(Object.hasOwn(stored.featureFlags, 'submitProofEnabled'), false);
+    assert.equal(Object.hasOwn(stored.featureFlags, 'salesFantasyEnabled'), false);
     assert.equal(Object.hasOwn(stored.devSettings, 'campaignManager.scale'), false);
+    assert.equal(stored.devSettings['salesFantasy.enabled'], false);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
     assert.equal(stored.gbRemoteSettingsPolicy.hiddenCustomPageScopes.all, true);
     assert.equal(stored.gbRemoteSettingsPolicy.managedFeatures.copyIdsEnabled, false);
     assert.equal(Object.hasOwn(stored.gbRemoteSettingsPolicy.managedFeatures, 'workflowManagerEnabled'), false);
     assert.equal(stored.gbRemoteSettingsPolicy.managedDeveloperSettings['numberDisplay.durationMs'], 400);
+    assert.equal(stored.gbRemoteSettingsPolicy.managedDeveloperSettings['salesFantasy.enabled'], false);
     assert.equal(Object.hasOwn(stored.gbRemoteSettingsPolicy.managedDeveloperSettings, 'workflowManager.scale'), false);
     assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, true);
     assert.deepEqual(
@@ -136,6 +140,8 @@ describe('remote settings policy', () => {
     assert.equal(stored.gbRemoteSettingsBackup.featureFlags.workflowManagerEnabled, false);
     assert.equal(Object.hasOwn(stored.gbRemoteSettingsBackup.featureFlags, 'campaignManagerEnabled'), false);
     assert.equal(Object.hasOwn(stored.gbRemoteSettingsBackup.featureFlags, 'submitProofEnabled'), false);
+    assert.equal(Object.hasOwn(stored.gbRemoteSettingsBackup.featureFlags, 'salesFantasyEnabled'), false);
+    assert.equal(stored.gbRemoteSettingsBackup.devSettings['salesFantasy.enabled'], true);
     assert.ok(alarms.some(({ options }) => options.periodInMinutes === 1));
   });
 
@@ -204,6 +210,8 @@ describe('remote settings policy', () => {
     assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds, 'admin bypass restores the canonical all-pages choice');
     assert.equal(stored.featureFlags.workflowManagerEnabled, false);
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75);
+    assert.equal(stored.devSettings['salesFantasy.enabled'], true);
+    assert.equal(Object.hasOwn(stored.featureFlags, 'salesFantasyEnabled'), false);
     assert.equal(stored.gbRemoteSettingsPolicy.adminBypass, true);
     assert.deepEqual(Object.keys(stored.gbRemoteSettingsPolicy.managedFeatures), []);
     assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, null);

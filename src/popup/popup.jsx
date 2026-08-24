@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
-import { useDevSettings } from '../lib/devSettings.js';
+import { SALES_FANTASY_SETTING_KEY, useDevSettings } from '../lib/devSettings.js';
 import { filterLocalEmailTemplates } from '../lib/emailTemplateCapabilities.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
@@ -191,6 +191,7 @@ function PopupApp() {
   const ignoreWatch       = !!devSettings['popup.ignoreContext.watch'];
   const ignoreProof       = !!devSettings['popup.ignoreContext.submitProof'];
   const forceMatchedCount = Math.max(0, Math.floor(devSettings['popup.forceMatchedCount'] || 0));
+  const salesFantasyEnabled = devSettings[SALES_FANTASY_SETTING_KEY] === true;
 
   // ── selected template + resolved data ──
   const [selectedId, setSelectedId] = useState(null);
@@ -241,7 +242,7 @@ function PopupApp() {
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-        notificationsEnabled: true, salesFantasyEnabled: false,
+        notificationsEnabled: true,
         ...(data.featureFlags || {}),
       };
       // Read ignorePageContext directly from storage on init so we can branch
@@ -481,7 +482,7 @@ function PopupApp() {
         setFlags({
           chargeEnabled: true, orderEditEnabled: true, imagePreviewEnabled: true,
           taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-          notificationsEnabled: true, salesFantasyEnabled: false,
+          notificationsEnabled: true,
           ...next,
         });
       }
@@ -529,7 +530,7 @@ function PopupApp() {
   const emailTemplatesOn = flags.emailTemplatesEnabled !== false;
   const shellMinHeight = emailTemplatesOn ? 340 : 0;
   if (stage === 'loading') return <Shell templateCount={templateCount} minHeight={shellMinHeight}><LoadingState /></Shell>;
-  if (stage === 'empty')   return <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}><EmptyState onCreate={openManager} salesFantasyEnabled={flags.salesFantasyEnabled === true} onOpenSalesFantasy={openSalesFantasy} /></Shell>;
+  if (stage === 'empty')   return <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}><EmptyState onCreate={openManager} salesFantasyEnabled={salesFantasyEnabled} onOpenSalesFantasy={openSalesFantasy} /></Shell>;
   if (stage === 'revoked') return <Shell templateCount={0} minHeight={shellMinHeight}><RevokedNotice /></Shell>;
 
   const tpl = visibleTemplates.find((t) => t.id === selectedId);
@@ -562,6 +563,7 @@ function PopupApp() {
           resolvedTo={resolvedTo}
           pageInfo={pageInfo}
           flags={flags}
+          salesFantasyEnabled={salesFantasyEnabled}
           featureCfg={featureCfg}
           paConfigured={paConfigured}
           watchList={watchList}
@@ -853,7 +855,7 @@ function MainView({
   pendingVars = [], toPending = false,
   selectedVariationId, onSelectVariation,
   tpl,
-  resolving, resolvedVars, resolvedTo, pageInfo, flags, featureCfg = {}, paConfigured, watchList, notifications = [], tab,
+  resolving, resolvedVars, resolvedTo, pageInfo, flags, salesFantasyEnabled = false, featureCfg = {}, paConfigured, watchList, notifications = [], tab,
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof, onOpenSalesFantasy,
 }) {
@@ -1196,7 +1198,7 @@ function MainView({
             Each wrapped in <Reveal> so flipping its feature flag collapses
             the height + opacity with siblings sliding to fill the gap. */}
         <AnimatePresence initial={false}>
-          {flags.salesFantasyEnabled === true && (
+          {salesFantasyEnabled && (
             <Reveal key="sales-fantasy">
               <SalesFantasyButton onClick={onOpenSalesFantasy} />
             </Reveal>

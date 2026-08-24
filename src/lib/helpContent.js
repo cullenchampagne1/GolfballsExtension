@@ -4,7 +4,7 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.17",
+  "version": "3.4.18",
   "generatedAt": "2026-08-24",
   "tree": [
     {
@@ -4576,15 +4576,12 @@ export const HELP_CONTENT = {
       ],
       "summary": "Every feature can be switched on or off independently. This reference is generated from the live registry, so it always matches your build.",
       "covers": [],
-      "coversFlags": [
-        "salesFantasyEnabled"
-      ],
       "coversAllFlags": true,
       "body": {
         "beginner": [
           {
             "type": "p",
-            "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Most features default to ON; Power Automate, Trackers, and temporary event flags start off."
+            "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Most features default to ON; Power Automate and Trackers start off."
           },
           {
             "type": "heading",
@@ -4691,30 +4688,6 @@ export const HELP_CONTENT = {
                 "giftCatalogEnabled",
                 "mockupStudioEnabled",
                 "actionsShelfEnabled"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "Events"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Feature",
-              "Default",
-              "What it controls"
-            ],
-            "rows": [
-              [
-                "Sales Fantasy",
-                "Off",
-                "Show the temporary Sales Fantasy event launcher in the extension popup."
-              ]
-            ],
-            "meta": {
-              "flagKeys": [
-                "salesFantasyEnabled"
               ]
             }
           },
@@ -5202,6 +5175,34 @@ export const HELP_CONTENT = {
                 "popup.ignoreContext.orderEdit",
                 "popup.ignoreContext.watch",
                 "popup.ignoreContext.submitProof"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "salesFantasy"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Sales Fantasy",
+                "bool",
+                "Off",
+                "",
+                "Show the temporary Sales Fantasy event launcher in the extension popup."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "salesFantasy.enabled"
               ]
             }
           },
@@ -9686,18 +9687,6 @@ export const HELP_CONTENT = {
       "flag": "trackersEnabled"
     },
     {
-      "id": "flag:salesFantasyEnabled",
-      "category": "Settings",
-      "title": "Sales Fantasy",
-      "keywords": [
-        "salesFantasyEnabled",
-        "Events"
-      ],
-      "description": "Show the temporary Sales Fantasy event launcher in the extension popup.",
-      "article": "feature-toggles",
-      "flag": "salesFantasyEnabled"
-    },
-    {
       "id": "flag:crmSearchEnabled",
       "category": "Settings",
       "title": "CRM Search",
@@ -9929,6 +9918,16 @@ export const HELP_CONTENT = {
         "popup.ignorePageContext"
       ],
       "description": "Show all order + account templates in the popup regardless of the current page. Variables resolve as unmatched.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:salesFantasy.enabled",
+      "category": "Settings",
+      "title": "Sales Fantasy",
+      "keywords": [
+        "salesFantasy.enabled"
+      ],
+      "description": "Show the temporary Sales Fantasy event launcher in the extension popup.",
       "article": "developer-settings"
     },
     {

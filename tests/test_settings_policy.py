@@ -437,6 +437,69 @@ class SettingsPolicyTests(unittest.TestCase):
             "features", "workflowManagerEnabled",
         ]))
 
+    def test_sales_fantasy_moves_into_managed_developer_policy(self):
+        self.store.registry["developerSettings"]["salesFantasy.enabled"] = {
+            "type": "bool", "default": False, "label": "Sales Fantasy",
+            "managedDefault": True,
+        }
+        legacy_document = json.loads(json.dumps(self.document))
+        legacy_document["features"]["salesFantasyEnabled"] = {
+            "value": True, "hidden": True, "managed": False,
+            "label": "Sales Fantasy Event",
+        }
+
+        now = datetime.utcnow()
+        with Session(self.engine) as session:
+            session.add(Policy(
+                policy_id=settings_policy.GLOBAL_POLICY_ID,
+                document=legacy_document,
+                seeded_from="existing database",
+                created_at=now,
+                updated_at=now,
+            ))
+            session.add(Override(
+                credential_id="install-fantasy",
+                setting_path=settings_policy._path_key(
+                    ["features", "salesFantasyEnabled"]
+                ),
+                has_value_override=True,
+                value_override=False,
+                hidden_override=False,
+                managed_override=True,
+                created_at=now,
+                updated_at=now,
+            ))
+            session.commit()
+
+        migrated = self.store.global_document()
+        self.assertNotIn("salesFantasyEnabled", migrated["features"])
+        self.assertEqual(
+            migrated["developer_settings"]["salesFantasy.enabled"],
+            {
+                "value": True, "hidden": True, "managed": False,
+                "label": "Sales Fantasy",
+            },
+        )
+
+        resolved, _ = self.store.resolve("install-fantasy")
+        self.assertEqual(
+            resolved["developer_settings"]["salesFantasy.enabled"],
+            {
+                "value": False, "hidden": False, "managed": True,
+                "label": "Sales Fantasy",
+            },
+        )
+        overrides = self.store.overrides("install-fantasy")
+        self.assertEqual(overrides[0]["path"], [
+            "developer_settings", "salesFantasy.enabled",
+        ])
+        self.assertEqual(
+            overrides[0]["path_key"],
+            settings_policy._path_key([
+                "developer_settings", "salesFantasy.enabled",
+            ]),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,11 +28,10 @@
       "keywords": ["enable", "disable", "toggle", "flag", "feature", "turn off", "turn on"],
       "summary": "Every feature can be switched on or off independently. This reference is generated from the live registry, so it always matches your build.",
       "covers": [],
-      "coversFlags": ["salesFantasyEnabled"],
       "coversAllFlags": true,
       "body": {
         "beginner": [
-          { "type": "p", "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Most features default to ON; Power Automate, Trackers, and temporary event flags start off." },
+          { "type": "p", "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Most features default to ON; Power Automate and Trackers start off." },
           { "type": "generated", "source": "featureFlags" },
           { "type": "callout", "kind": "info", "text": "Missing a toggle from this list in your Settings? An admin may have hidden it — see \"Hidden Settings\" in the Power User Corner." }
         ]

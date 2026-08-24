@@ -69,6 +69,8 @@ const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
   ];
 });
 
+export const SALES_FANTASY_SETTING_KEY = 'salesFantasy.enabled';
+
 export function formatPageEngineTerritoryNotice(info = {}) {
   const territoryId = String(info.territoryId || '').trim();
   const territoryName = String(info.territoryName || '').trim();
@@ -125,6 +127,13 @@ export const DEV_SETTINGS = [
     key:     'popup.ignorePageContext',
     label:   'Popup: ignore page context',
     desc:    'Show all order + account templates in the popup regardless of the current page. Variables resolve as unmatched.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     SALES_FANTASY_SETTING_KEY,
+    label:   'Sales Fantasy',
+    desc:    'Show the temporary Sales Fantasy event launcher in the extension popup.',
     type:    'bool',
     default: false,
   },
@@ -740,9 +749,18 @@ export function loadDevSettings() {
       resolve(defaultDevSettings());
       return;
     }
-    chrome.storage.local.get(STORAGE_KEY, (d) => {
+    chrome.storage.local.get([STORAGE_KEY, 'featureFlags'], (d) => {
       const { settings, changed } = normalizeStoredDevSettings(d[STORAGE_KEY]);
-      if (changed) chrome.storage.local.set({ [STORAGE_KEY]: settings });
+      const flags = d.featureFlags && typeof d.featureFlags === 'object'
+        && !Array.isArray(d.featureFlags) ? { ...d.featureFlags } : {};
+      const hadLegacySalesFantasy = typeof flags.salesFantasyEnabled === 'boolean';
+      if (!Object.hasOwn(settings, SALES_FANTASY_SETTING_KEY) && hadLegacySalesFantasy) {
+        settings[SALES_FANTASY_SETTING_KEY] = flags.salesFantasyEnabled;
+      }
+      if (hadLegacySalesFantasy) delete flags.salesFantasyEnabled;
+      if (changed || hadLegacySalesFantasy) {
+        chrome.storage.local.set({ [STORAGE_KEY]: settings, featureFlags: flags });
+      }
       resolve({ ...DEFAULTS, ...settings });
     });
   });

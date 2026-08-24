@@ -94,12 +94,6 @@
       "label": "Power Automate",
       "managedDefault": true
     },
-    "salesFantasyEnabled": {
-      "type": "bool",
-      "default": false,
-      "label": "Sales Fantasy",
-      "managedDefault": true
-    },
     "actionsShelfEnabled": {
       "type": "bool",
       "default": true,
@@ -180,6 +174,12 @@
       "type": "bool",
       "default": false,
       "label": "Popup: ignore page context",
+      "managedDefault": true
+    },
+    "salesFantasy.enabled": {
+      "type": "bool",
+      "default": false,
+      "label": "Sales Fantasy",
       "managedDefault": true
     },
     "proposalDebug.enabled": {

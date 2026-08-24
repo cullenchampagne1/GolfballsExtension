@@ -9,6 +9,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { FEATURE_DEFAULTS, FEATURE_FLAG_META } from '../../src/lib/flags.js';
+import { DEV_SETTINGS, SALES_FANTASY_SETTING_KEY } from '../../src/lib/devSettings.js';
 import { FEATURE_REGISTRY, featureByKey, shelfFeatures, popupFeatures, shelfActionDefs } from '../../src/lib/features/featureRegistry.js';
 import { normalizeFeatureConfig, featureShowsOnPage, featureShowsInPopup, pageApplies, urlMatches, surfaceSummary, togglePage } from '../../src/lib/features/featureConfig.js';
 
@@ -94,18 +95,27 @@ describe('featureRegistry · surfaces', () => {
   });
 });
 
-describe('featureRegistry · Sales Fantasy event', () => {
-  it('is a managed-ready, default-off event without a generic page launcher', () => {
-    assert.equal(FEATURE_DEFAULTS.salesFantasyEnabled, false);
-    assert.equal(FEATURE_FLAG_META.find((item) => item.key === 'salesFantasyEnabled')?.name, 'Sales Fantasy');
-    const event = featureByKey('salesFantasyEnabled');
-    assert.ok(event);
-    assert.equal(event.surfaces.popup, false);
-    assert.equal(event.surfaces.shelf, null);
+describe('developer settings · Sales Fantasy event', () => {
+  it('is a managed-ready developer setting instead of a feature or Events section', () => {
+    const setting = DEV_SETTINGS.find((item) => item.key === SALES_FANTASY_SETTING_KEY);
+    assert.deepEqual(setting, {
+      key: 'salesFantasy.enabled',
+      label: 'Sales Fantasy',
+      desc: 'Show the temporary Sales Fantasy event launcher in the extension popup.',
+      type: 'bool',
+      default: false,
+    });
+    assert.equal(Object.hasOwn(FEATURE_DEFAULTS, 'salesFantasyEnabled'), false);
+    assert.equal(FEATURE_FLAG_META.some((item) => item.key === 'salesFantasyEnabled'), false);
+    assert.equal(featureByKey('salesFantasyEnabled'), null);
+    assert.equal(FEATURE_FLAG_META.some((item) => item.section === 'Events'), false);
   });
 
   it('gates the event launcher and opens the full Sales Fantasy window', () => {
-    assert.match(popupSource, /flags\.salesFantasyEnabled === true/);
+    assert.match(popupSource, /devSettings\[SALES_FANTASY_SETTING_KEY\] === true/);
+    assert.match(popupSource, /salesFantasyEnabled=\{salesFantasyEnabled\}/);
+    assert.match(popupSource, /\{salesFantasyEnabled && \(/);
+    assert.doesNotMatch(popupSource, /flags\.salesFantasyEnabled/);
     assert.match(popupSource, /action: 'openSalesFantasy'/);
     assert.match(salesFantasyButtonSource, /<Btn\s+full\s+size="sm"/);
     assert.match(salesFantasyButtonSource, /height: 34, padding: '0 8px'/);

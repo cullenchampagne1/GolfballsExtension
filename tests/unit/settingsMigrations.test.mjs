@@ -2,7 +2,11 @@ import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { normalizeStoredFlags } from '../../src/lib/flags.js';
-import { normalizeStoredDevSettings } from '../../src/lib/devSettings.js';
+import {
+  loadDevSettings,
+  normalizeStoredDevSettings,
+  SALES_FANTASY_SETTING_KEY,
+} from '../../src/lib/devSettings.js';
 import {
   CUSTOM_PAGE_SECTIONS,
   normalizeStoredCustomPages,
@@ -92,6 +96,39 @@ describe('settings migration · workflow and Custom Pages namespaces', () => {
       pages,
       { all: CUSTOM_PAGE_SECTIONS[0].items.map((item) => item.id) },
     );
+  });
+
+  it('moves the Sales Fantasy feature value into developer settings', async () => {
+    const stored = installStorage({
+      featureFlags: {
+        copyIdsEnabled: false,
+        salesFantasyEnabled: true,
+      },
+      devSettings: {
+        'numberDisplay.durationMs': 900,
+      },
+    });
+
+    const settings = await loadDevSettings();
+
+    assert.equal(settings[SALES_FANTASY_SETTING_KEY], true);
+    assert.equal(stored.devSettings[SALES_FANTASY_SETTING_KEY], true);
+    assert.equal(stored.devSettings['numberDisplay.durationMs'], 900);
+    assert.equal(stored.featureFlags.copyIdsEnabled, false);
+    assert.equal(Object.hasOwn(stored.featureFlags, 'salesFantasyEnabled'), false);
+  });
+
+  it('keeps the canonical Sales Fantasy developer value during migration', async () => {
+    const stored = installStorage({
+      featureFlags: { salesFantasyEnabled: true },
+      devSettings: { [SALES_FANTASY_SETTING_KEY]: false },
+    });
+
+    const settings = await loadDevSettings();
+
+    assert.equal(settings[SALES_FANTASY_SETTING_KEY], false);
+    assert.equal(stored.devSettings[SALES_FANTASY_SETTING_KEY], false);
+    assert.equal(Object.hasOwn(stored.featureFlags, 'salesFantasyEnabled'), false);
   });
 
   it('moves saved records to workflows and never writes the legacy storage key again', async () => {
