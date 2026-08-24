@@ -15,6 +15,7 @@ import { directContactVariables } from '../lib/contactImport.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { cachedSnapshotForContact } from '../lib/page-engine/cache-actions.js';
 import { contactPageFetchError } from '../lib/contactPageFetch.js';
+import { createPauseGate, waitForPausableDelay } from '../lib/emailRunControl.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -277,6 +278,10 @@ export function EmailRunner({
   const [skipRecent, setSkipRecent] = useState(false);     // emailed within N days
   const [skipRecentDays, setSkipRecentDays] = useState(30);
   const [status, setStatus] = useState('idle');  // 'idle' | 'running' | 'done'
+  /* Pausing is deliberately separate from status/cancellation: the run stays
+     active with the same token, counts, trail, row states, and remaining
+     recipients. Only the next safe checkpoint is held. */
+  const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [counts, setCounts] = useState({ sent: 0, failed: 0, skipped: 0 });
   /* Per-row tail shown inside the panel — last 4 names with status
@@ -307,6 +312,8 @@ export function EmailRunner({
      a fresh run) stops the orchestrator cleanly without leaving stale
      row spinners behind. */
   const runTokenRef = useRef(0);
+  const pauseGateRef = useRef(null);
+  if (!pauseGateRef.current) pauseGateRef.current = createPauseGate();
   const capabilityRef = useRef({ allowBulkSending, allowLocalTemplateUsage });
   capabilityRef.current = { allowBulkSending, allowLocalTemplateUsage };
 
@@ -344,10 +351,12 @@ export function EmailRunner({
   useEffect(() => {
     if (allowBulkSending) return;
     runTokenRef.current += 1;
+    pauseGateRef.current.reset();
     setTemplates([]);
     setSelectedId('');
     setSelectedVariationId(null);
     setStatus('idle');
+    setPaused(false);
     setCurrent(null);
     setDelayState(null);
     onRunStateChange?.(false);
@@ -367,7 +376,9 @@ export function EmailRunner({
          post-run state and the rep couldn't start a new run without
          hard-closing the parent list to remount us. */
       runTokenRef.current += 1;
+      pauseGateRef.current.reset();
       setStatus('idle');
+      setPaused(false);
       setCounts({ sent: 0, failed: 0, skipped: 0 });
       setProgress({ current: 0, total: 0 });
       setTrail([]);
@@ -387,6 +398,7 @@ export function EmailRunner({
      iteration guard short-circuits. */
   useEffect(() => () => {
     runTokenRef.current += 1;
+    pauseGateRef.current.reset();
   }, []);
 
   useEffect(() => { ensureNoScrollStyle(); }, []);
@@ -468,6 +480,32 @@ export function EmailRunner({
     && contacts.length > 0
     && status !== 'running';
 
+  const pauseRun = () => {
+    if (status !== 'running' || paused) return;
+    pauseGateRef.current.pause();
+    setPaused(true);
+  };
+
+  const resumeRun = () => {
+    if (status !== 'running' || !paused) return;
+    pauseGateRef.current.resume();
+    setPaused(false);
+  };
+
+  const cancelRun = () => {
+    runTokenRef.current += 1;
+    pauseGateRef.current.reset();
+    setStatus('idle');
+    setPaused(false);
+    setCounts({ sent: 0, failed: 0, skipped: 0 });
+    setProgress({ current: 0, total: 0 });
+    setTrail([]);
+    setCurrent(null);
+    setDelayState(null);
+    setMeta({ startedAt: 0, finishedAt: 0 });
+    onRunStateChange?.(false);
+  };
+
   const onRun = async () => {
     const liveCapabilities = useMock
       ? capabilityRef.current
@@ -495,6 +533,8 @@ export function EmailRunner({
     onRowsQueued?.(contacts.map((c) => c.contactId));
     runTokenRef.current += 1;
     const token = runTokenRef.current;
+    pauseGateRef.current.reset();
+    setPaused(false);
     setCounts({ sent: 0, failed: 0, skipped: 0 });
     setProgress({ current: 0, total: contacts.length });
     setTrail([]);
@@ -534,10 +574,13 @@ export function EmailRunner({
     const emailLog = useMock ? {} : await readEmailLog();
     const recentCutoff = Math.max(1, Number(skipRecentDays) || 30) * DAY_MS;
     const followUpFailures = [];
+    const isRunActive = () => runTokenRef.current === token
+      && capabilityRef.current.allowBulkSending;
 
     for (let i = 0; i < contacts.length; i++) {
-      if (runTokenRef.current !== token
-          || !capabilityRef.current.allowBulkSending) return; // cancelled or revoked
+      /* Pause before a recipient begins. The existing run token stays valid,
+         so queued row badges and aggregate progress remain untouched. */
+      if (!(await pauseGateRef.current.waitUntilResumed(isRunActive))) return;
       const c = contacts[i];
       setProgress({ current: i + 1, total: contacts.length });
       setDelayState(null);
@@ -672,8 +715,11 @@ export function EmailRunner({
           /* Last-chance cancel guard before the actual send — catches a
              cancel that arrived DURING the variable-resolution await
              above, which would otherwise fire one more send. */
-          if (runTokenRef.current !== token
-              || !capabilityRef.current.allowBulkSending) return;
+          if (!isRunActive()) return;
+          /* A pause requested while page data was resolving stops here, before
+             the irreversible delivery dispatch. A request already dispatched
+             is allowed to settle, then the next recipient is held. */
+          if (!(await pauseGateRef.current.waitUntilResumed(isRunActive))) return;
           const res = await sendEmailTemplateWithFollowUps({
             email: {
               from, to: toEmail, subject, htmlBody, replyMode, signature,
@@ -727,7 +773,7 @@ export function EmailRunner({
         outcome = { status: 'error', error: e?.message || 'failed' };
       }
 
-      if (runTokenRef.current !== token) return; // cancelled mid-iteration
+      if (!isRunActive()) return; // cancelled/revoked mid-iteration
       onRowDone?.(c.contactId, outcome);
       setCounts((cur) => (
         outcome.status === 'sent'
@@ -766,18 +812,14 @@ export function EmailRunner({
       if (i < contacts.length - 1 && outcome.status !== 'skipped') {
         setCurrent(null);
         const ms = (lo + Math.random() * (hi - lo)) * 1000;
-        const waitStart = Date.now();
-        setDelayState({ remaining: ms, total: ms });
-        await new Promise((res) => {
-          const tick = setInterval(() => {
-            if (runTokenRef.current !== token) { clearInterval(tick); res(true); return; }
-            const remaining = Math.max(0, ms - (Date.now() - waitStart));
-            setDelayState({ remaining, total: ms });
-            if (remaining <= 0) { clearInterval(tick); res(true); }
-          }, 80);
+        const completed = await waitForPausableDelay({
+          durationMs: ms,
+          pauseGate: pauseGateRef.current,
+          isActive: isRunActive,
+          onProgress: setDelayState,
         });
         setDelayState(null);
-        if (runTokenRef.current !== token) return;
+        if (!completed) return;
       }
     }
 
@@ -791,6 +833,8 @@ export function EmailRunner({
       );
     }
 
+    pauseGateRef.current.reset();
+    setPaused(false);
     setStatus('done');
     setCurrent(null);
     setDelayState(null);
@@ -808,7 +852,7 @@ export function EmailRunner({
   const subtitle = status === 'idle'
     ? `${contacts.length} contact${contacts.length === 1 ? '' : 's'} selected`
     : running
-      ? `Sending… · ${settled} of ${contacts.length}`
+      ? `${paused ? 'Paused' : 'Sending…'} · ${settled} of ${contacts.length}`
       : [counts.sent ? `${counts.sent} sent` : '', counts.skipped ? `${counts.skipped} skipped` : '', counts.failed ? `${counts.failed} failed` : ''].filter(Boolean).join(' · ') || `All ${counts.sent} delivered`;
 
   return (
@@ -822,13 +866,13 @@ export function EmailRunner({
       icon={<I.send size={13} />}
       title="Quick Send"
       subtitle={subtitle}
-      closeDisabled={status === 'running'}
+      closeDisabled={running}
       enterFrom="right"
     >
       {/* Hero — the persistent shared ring; only its centre cross-dissolves
           (count → live % → check) and its accent tweens brand→success. */}
       <div style={{ flexShrink: 0, display: 'grid', placeItems: 'center', padding: '22px 0 16px', background: 'linear-gradient(180deg, var(--gb-surface-1) 0%, transparent 100%)' }}>
-        <HeroRing status={status} settled={settled} total={contacts.length} count={contacts.length} />
+        <HeroRing status={status} paused={paused} settled={settled} total={contacts.length} count={contacts.length} />
       </div>
 
       {/* Body — keyed cross-fade; the surface + hero persist, the content
@@ -906,7 +950,7 @@ export function EmailRunner({
               </Field>
             </div>
           )}
-          {running && <RunningView current={current} delay={delayState} counts={counts} progress={progress} trail={trail} />}
+          {running && <RunningView paused={paused} current={current} delay={delayState} counts={counts} progress={progress} trail={trail} />}
           {status === 'done' && <DoneView counts={counts} trail={trail} meta={meta} />}
         </div>
       </div>
@@ -922,19 +966,13 @@ export function EmailRunner({
         )}
         {running && (
           <>
-            <Btn size="sm" variant="tinted" status="error" icon={<StopIcon size={11} />} onClick={() => {
-              runTokenRef.current += 1;
-              setStatus('idle');
-              setCounts({ sent: 0, failed: 0, skipped: 0 });
-              setProgress({ current: 0, total: 0 });
-              setTrail([]);
-              setCurrent(null);
-              setDelayState(null);
-              setMeta({ startedAt: 0, finishedAt: 0 });
-              onRunStateChange?.(false);
-            }}>Cancel run</Btn>
+            <Btn size="sm" variant="tinted" status="error" icon={<StopIcon size={11} />} onClick={cancelRun}>Cancel run</Btn>
             <div style={{ flex: 1 }} />
-            <Btn size="sm" variant="tinted" status="brand" icon={<Spinner size={11} />} disabled>Sending…</Btn>
+            {paused ? (
+              <Btn size="sm" variant="tinted" status="brand" icon={<I.play size={11} />} onClick={resumeRun}>Resume</Btn>
+            ) : (
+              <Btn size="sm" variant="secondary" icon={<I.pause size={11} />} onClick={pauseRun}>Pause</Btn>
+            )}
           </>
         )}
         {status === 'done' && (
@@ -980,8 +1018,9 @@ const QS_CLOCK = (
 
 const RING_BOX = 132, RING_R = 56, RING_SW = 7, RING_CIRC = 2 * Math.PI * RING_R;
 
-function HeroRing({ status, settled, total, count }) {
+function HeroRing({ status, paused, settled, total, count }) {
   const running = status === 'running';
+  const animating = running && !paused;
   const done = status === 'done';
   const pct = total > 0 ? Math.min(1, settled / total) : (done ? 1 : 0);
   const accent = done ? 'var(--gb-success)' : 'var(--gb-brand-label)';
@@ -991,11 +1030,11 @@ function HeroRing({ status, settled, total, count }) {
       <div aria-hidden style={{
         position: 'absolute', inset: -10, borderRadius: '50%',
         background: `radial-gradient(circle, ${done ? 'var(--gb-success-tint-strong)' : 'var(--gb-brand-tint-strong)'} 0%, transparent 68%)`,
-        opacity: running ? 0.9 : done ? 1 : 0.32, filter: 'blur(6px)',
+        opacity: animating ? 0.9 : running ? 0.45 : done ? 1 : 0.32, filter: 'blur(6px)',
         transition: 'opacity .5s ease, background .6s ease',
-        animation: running ? 'qs-breathe 2.4s ease-in-out infinite' : 'none',
+        animation: animating ? 'qs-breathe 2.4s ease-in-out infinite' : 'none',
       }} />
-      {running && (
+      {animating && (
         <div aria-hidden style={{
           position: 'absolute', inset: 0, borderRadius: '50%',
           background: 'conic-gradient(from 0deg, transparent 0deg, transparent 250deg, var(--gb-brand-label) 340deg, transparent 360deg)',
@@ -1019,7 +1058,7 @@ function HeroRing({ status, settled, total, count }) {
           opacity: 0.5, animation: 'qs-rotate 6s linear infinite',
         }} />
       )}
-      {running && settled > 0 && (
+      {animating && settled > 0 && (
         <span key={settled} aria-hidden style={{ position: 'absolute', inset: 6, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', animation: 'qs-ripple .7s cubic-bezier(.2,.7,.3,1) forwards', pointerEvents: 'none' }} />
       )}
       {done && <QsBurst />}
@@ -1036,7 +1075,7 @@ function HeroRing({ status, settled, total, count }) {
               <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                 {Math.round(pct * 100)}<span style={{ fontSize: 15, color: 'var(--gb-text-tertiary)' }}>%</span>
               </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{settled} / {total}</div>
+              <div style={{ fontSize: 10, fontWeight: 750, color: 'var(--gb-brand-label)', fontFamily: paused ? 'var(--gb-font-sans)' : 'var(--gb-font-mono)', marginTop: 4, fontVariantNumeric: 'tabular-nums', letterSpacing: paused ? 0.6 : 0, textTransform: paused ? 'uppercase' : 'none', transition: 'all .2s ease' }}>{paused ? 'paused' : `${settled} / ${total}`}</div>
             </div>
           )}
           {done && (
@@ -1064,7 +1103,21 @@ function QsBurst() {
   );
 }
 
-function NowSending({ current, delay }) {
+function NowSending({ current, delay, paused }) {
+  if (paused) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', animation: 'qs-now-in .3s ease both' }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)', flexShrink: 0 }}><I.pause size={15} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 750, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-brand-label)' }}>Send paused</div>
+          <div style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--gb-text-primary)', marginTop: 2 }}>Progress saved · resume when ready</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>
+            {delay ? `Pacing held at ${(delay.remaining / 1000).toFixed(1)}s.` : 'No new contact will start until you resume.'}
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!current && delay) {
     const frac = delay.total > 0 ? delay.remaining / delay.total : 0;
     return (
@@ -1176,11 +1229,11 @@ function TrailRow({ r, dim, last, fresh }) {
   );
 }
 
-function RunningView({ current, delay, counts, progress, trail }) {
+function RunningView({ paused, current, delay, counts, progress, trail }) {
   const queued = Math.max(0, progress.total - counts.sent - counts.failed - (counts.skipped || 0));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <NowSending current={current} delay={delay} />
+      <NowSending paused={paused} current={current} delay={delay} />
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <CountChip tone="success" value={counts.sent} label="sent" />
         <CountChip tone="neutral" value={queued} label="queued" />

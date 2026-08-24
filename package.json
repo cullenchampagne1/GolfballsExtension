@@ -1,7 +1,7 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.16",
+  "version": "3.4.17",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
@@ -259,6 +259,10 @@
     {
       "name": "email \u00b7 recently-emailed guard reads native history",
       "file": "tests/unit/contactEmailRows.test.mjs"
+    },
+    {
+      "name": "email \u00b7 bulk send pause/resume preserves queue",
+      "file": "tests/unit/emailRunControl.test.mjs"
     },
     {
       "name": "email \u00b7 template editor clipboard (vars + bullets)",

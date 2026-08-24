@@ -84,4 +84,13 @@ describe('bulk email presentation · managed capability', () => {
     assert.match(emailRunnerSource, /filterLocalEmailTemplates/);
     assert.match(emailRunnerSource, /open=\{effectiveOpen\}/);
   });
+
+  it('offers pause and resume separately from destructive run cancellation', () => {
+    assert.match(emailRunnerSource, /createPauseGate/);
+    assert.match(emailRunnerSource, /waitUntilResumed/);
+    assert.match(emailRunnerSource, /waitForPausableDelay/);
+    assert.match(emailRunnerSource, />Pause<\/Btn>/);
+    assert.match(emailRunnerSource, />Resume<\/Btn>/);
+    assert.match(emailRunnerSource, /onClick=\{cancelRun\}>Cancel run<\/Btn>/);
+  });
 });
