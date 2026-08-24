@@ -15,6 +15,7 @@ import { normalizeFeatureConfig, featureShowsOnPage, featureShowsInPopup, pageAp
 const popupSource = await readFile(new URL('../../src/popup/popup.jsx', import.meta.url), 'utf8');
 const backgroundSource = await readFile(new URL('../../background.js', import.meta.url), 'utf8');
 const salesFantasyHtml = await readFile(new URL('../../sales-fantasy.html', import.meta.url), 'utf8');
+const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales-fantasy.jsx', import.meta.url), 'utf8');
 const salesFantasyButtonSource = popupSource.match(/function SalesFantasyButton[\s\S]*?\n}\n/)?.[0] || '';
 
 describe('featureRegistry · surfaces', () => {
@@ -103,10 +104,11 @@ describe('featureRegistry · Sales Fantasy event', () => {
     assert.equal(event.surfaces.shelf, null);
   });
 
-  it('gates the special popup button and opens the Coming soon event window', () => {
+  it('gates the event launcher and opens the full Sales Fantasy window', () => {
     assert.match(popupSource, /flags\.salesFantasyEnabled === true/);
     assert.match(popupSource, /action: 'openSalesFantasy'/);
     assert.match(salesFantasyButtonSource, /<Btn\s+full\s+size="sm"/);
+    assert.match(salesFantasyButtonSource, /height: 34, padding: '0 8px'/);
     assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
     assert.match(salesFantasyButtonSource, /boxShadow: 'inset 0 -2px 0 var\(--gb-brand-tint-border\)'/);
     assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-border-strong\)'/);
@@ -116,8 +118,13 @@ describe('featureRegistry · Sales Fantasy event', () => {
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
-    assert.match(salesFantasyHtml, /<title>Sales Fantasy · Coming soon<\/title>/);
-    assert.match(salesFantasyHtml, /<p class="coming-soon">Coming soon<\/p>/);
+    assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
+    assert.match(salesFantasyHtml, /react-dist\/sales-fantasy\/sales-fantasy\.js/);
+    for (const label of ['Overview', 'Matchups', 'Standings', 'Pods']) {
+      assert.match(salesFantasySource, new RegExp(`label: '${label}'`));
+    }
+    assert.match(salesFantasySource, /10 pods · 3 reps each · weekly head-to-head competition/);
+    assert.match(salesFantasySource, /Individual scoring metrics/);
   });
 });
 

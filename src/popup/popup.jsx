@@ -800,7 +800,7 @@ function SalesFantasyButton({ onClick }) {
       onClick={onClick}
       aria-label="Open Sales Fantasy event"
       style={{
-        padding: '0 8px', justifyContent: 'flex-start', gap: 7,
+        height: 34, padding: '0 8px', justifyContent: 'flex-start', gap: 7,
         border: '1px solid var(--gb-border-strong)',
         boxShadow: 'inset 0 -2px 0 var(--gb-brand-tint-border)',
       }}

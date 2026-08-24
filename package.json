@@ -1,7 +1,7 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.14",
+  "version": "3.4.15",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
@@ -479,6 +479,10 @@
     {
       "name": "settings \u00b7 feature surface config + registry",
       "file": "tests/unit/featureConfig.test.mjs"
+    },
+    {
+      "name": "event \u00b7 Sales Fantasy league model",
+      "file": "tests/unit/salesFantasy.test.mjs"
     },
     {
       "name": "settings \u00b7 custom actions store + sample pages",

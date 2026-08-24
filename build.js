@@ -53,13 +53,14 @@ function silenceThreeDuplicateInstanceDiagnostic() {
   };
 }
 
-// Each surface = one src dir → one react-dist dir. The first three are
-// React components (.jsx → IIFE); the fourth is ES-module bridge entries
+// Each surface = one src dir → one react-dist dir. The React surfaces use
+// .jsx → IIFE; the final two are ES-module bridge entries
 // (`*.entry.js`) used to expose pure-JS engine modules to legacy vanilla
 // content scripts via a `window.__gb*` global.
 const surfaces = [
   { srcDir: 'src/content',       outDir: 'react-dist/content',    suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/popup',         outDir: 'react-dist/popup',      suffix: '.jsx',      stripSuffix: '.jsx' },
+  { srcDir: 'src/sales-fantasy', outDir: 'react-dist/sales-fantasy', suffix: '.jsx',    stripSuffix: '.jsx' },
   { srcDir: 'src/guide',         outDir: 'react-dist/guide',      suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/vanilla-build', outDir: 'react-dist/vanilla',    suffix: '.entry.js', stripSuffix: '.entry.js' },
   { srcDir: 'src/sandbox',       outDir: 'react-dist/sandbox',    suffix: '.entry.js', stripSuffix: '.entry.js' },
