@@ -11,9 +11,11 @@ import {
   buildFantasySchedule,
   buildStandings,
   fantasyScore,
+  memberWeekPointSplit,
   matchupForPod,
   podForId,
   podWeekPointSplit,
+  scoreRoleMetrics,
   weekState,
 } from '../lib/salesFantasy.js';
 
@@ -23,20 +25,24 @@ const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
 
 const FantasyIcon = {
-  overview: (props) => <Icon {...props}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></Icon>,
+  performance: (props) => <Icon {...props}><path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /><path d="M2 19h20" /></Icon>,
   matchup: (props) => <Icon {...props}><path d="M8 5l4 4 4-4" /><path d="M8 19l4-4 4 4" /><path d="M12 9v6" /><path d="M3 12h5M16 12h5" /></Icon>,
   standings: (props) => <Icon {...props}><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7" /></Icon>,
+  rules: (props) => <Icon {...props}><path d="M6 3h12a2 2 0 012 2v16l-4-2-4 2-4-2-4 2V5a2 2 0 012-2z" /><path d="M8 8h8M8 12h8M8 16h5" /></Icon>,
   trophy: (props) => <Icon {...props}><path d="M8 4h8v5a4 4 0 01-8 0V4z" /><path d="M8 6H4v2a4 4 0 004 4M16 6h4v2a4 4 0 01-4 4M12 13v4M8 21h8M9 17h6" /></Icon>,
   arrowLeft: (props) => <Icon {...props}><path d="M15 18l-6-6 6-6" /></Icon>,
   arrowRight: (props) => <Icon {...props}><path d="M9 18l6-6-6-6" /></Icon>,
 };
 
 const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview', navLabel: 'Home', icon: FantasyIcon.overview },
+  { id: 'performance', label: 'Performance', navLabel: 'My Stats', icon: FantasyIcon.performance },
   { id: 'matchups', label: 'Matchups', icon: FantasyIcon.matchup },
   { id: 'standings', label: 'Standings', icon: FantasyIcon.standings },
-  { id: 'pods', label: 'Pods', icon: I.users },
+  { id: 'rules', label: 'Rules', icon: FantasyIcon.rules },
 ];
+const POD_PAGE = { id: 'pods', label: 'POD Standing' };
+const PAGES = [...NAV_ITEMS, POD_PAGE];
+const VIEW_ORDER = ['performance', 'matchups', 'pods', 'standings', 'rules'];
 
 const CSS = `
   button { color: inherit; font: inherit; }
@@ -60,7 +66,7 @@ const CSS = `
     border: 1px solid var(--gb-brand-tint-border);
   }
   .sf-brand-mark { width: 38px; height: 38px; border-radius: 12px; }
-  .sf-brand-copy, .sf-team-copy, .sf-pod-copy { min-width: 0; }
+  .sf-brand-copy, .sf-team-copy { min-width: 0; }
   .sf-brand-name { color: var(--gb-text-primary); font-size: 14px; font-weight: 850; letter-spacing: -.25px; overflow-wrap: anywhere; }
   .sf-kicker { margin-top: 3px; color: var(--gb-text-muted); font-size: 10px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; }
   .sf-appbar-meta { margin-top: 2px; display: flex; align-items: center; gap: 6px; color: var(--gb-text-muted); font-size: 9.5px; font-weight: 700; }
@@ -111,13 +117,21 @@ const CSS = `
   .sf-match-status { display: flex; align-items: center; gap: 6px; color: var(--gb-text-muted); font-size: 9px; font-weight: 800; letter-spacing: .55px; text-transform: uppercase; white-space: nowrap; }
   .sf-match-status.live { color: var(--gb-success-fg); }
   .sf-match-status-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
-  .sf-score-hero { padding: var(--sf-4); display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--sf-3); background: var(--gb-fill-faint); }
-  .sf-score-team { min-width: 0; display: flex; align-items: center; gap: var(--sf-3); }
-  .sf-score-team.away { flex-direction: row-reverse; text-align: right; }
+  .sf-matchup-board { display: grid; grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr); align-items: stretch; border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
+  .sf-matchup-entry { min-width: 0; padding: var(--sf-4); display: grid; align-content: center; gap: var(--sf-3); border-top: 3px solid transparent; }
+  .sf-matchup-entry.leading { border-top-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
+  .sf-matchup-entry.away { text-align: right; }
+  .sf-matchup-team { min-width: 0; display: flex; align-items: center; gap: var(--sf-3); }
+  .sf-matchup-entry.away .sf-matchup-team { flex-direction: row-reverse; }
+  .sf-matchup-side { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .65px; text-transform: uppercase; }
   .sf-team-name { color: var(--gb-text-primary); font-size: 13px; font-weight: 750; overflow-wrap: anywhere; }
   .sf-team-record { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; line-height: 1.4; }
-  .sf-score { margin-top: var(--sf-1); color: var(--gb-text-primary); font-size: 27px; line-height: 1.05; font-weight: 850; letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
-  .sf-vs { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--gb-border-default); border-radius: 50%; color: var(--gb-text-muted); background: var(--gb-surface-1); font-size: 9px; font-weight: 850; }
+  .sf-board-score { color: var(--gb-text-primary); font-size: 31px; line-height: 1; font-weight: 850; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+  .sf-board-score-unit { margin-left: 5px; color: var(--gb-text-muted); font-size: 8px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .sf-matchup-centerline { padding: var(--sf-3) var(--sf-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--gb-text-muted); border-inline: 1px solid var(--gb-border-default); background: var(--gb-surface-1); text-align: center; }
+  .sf-matchup-centerline::before { content: ''; width: 24px; height: 2px; background: var(--gb-border-strong); }
+  .sf-matchup-week { font-size: 8.5px; font-weight: 800; letter-spacing: .65px; text-transform: uppercase; }
+  .sf-matchup-margin { color: var(--gb-text-primary); font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .sf-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--gb-border-subtle); }
   .sf-pod-split { min-width: 0; }
   .sf-pod-split + .sf-pod-split { border-left: 1px solid var(--gb-border-subtle); }
@@ -142,12 +156,7 @@ const CSS = `
   .sf-bye-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; color: var(--gb-brand-label); border: 1px solid var(--gb-brand-tint-border); border-radius: var(--gb-r-md); background: var(--gb-brand-tint-soft); }
   .sf-bye-title { color: var(--gb-text-primary); font-size: 12px; font-weight: 750; }
   .sf-bye-pods { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; overflow-wrap: anywhere; }
-  .sf-standing-list { padding: var(--sf-1) 0; }
-  .sf-standing-row { padding: var(--sf-2) var(--sf-3); display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: var(--sf-2); border-bottom: 1px solid var(--gb-border-subtle); }
-  .sf-standing-row:last-child { border-bottom: 0; }
-  .sf-standing-rank { color: var(--gb-text-muted); font-size: 10px; font-weight: 750; text-align: center; }
   .sf-standing-team { min-width: 0; display: flex; align-items: center; gap: var(--sf-2); }
-  .sf-standing-name { color: var(--gb-text-secondary); font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
   .sf-standing-record { color: var(--gb-text-tertiary); font-size: 10px; font-weight: 750; }
   .sf-link-button { min-height: 30px; padding: 4px 7px; border: 0; border-radius: var(--gb-r-sm); background: transparent; color: var(--gb-brand-label); cursor: pointer; font-size: 10.5px; font-weight: 750; transition: background-color .16s ease; }
   .sf-link-button:hover { background: var(--gb-brand-tint-soft); }
@@ -189,24 +198,44 @@ const CSS = `
   .sf-margin-summary { padding-top: var(--sf-2); display: flex; flex-wrap: wrap; gap: 4px; }
   .sf-margin-chip { padding: 3px 5px; color: var(--gb-text-muted); border: 1px solid var(--gb-border-subtle); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); font-size: 8.5px; white-space: nowrap; }
   .sf-margin-chip.hit { color: var(--gb-brand-label); border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); }
-  .sf-scoring-rules { border-top: 1px solid var(--gb-border-default); }
-  .sf-scoring-key { padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--gb-text-muted); border-top: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); font-size: 9px; }
-  .sf-scoring-rules .sf-scoring-key:first-child { border-top: 0; }
-  .sf-scoring-key strong { margin-right: 3px; color: var(--gb-text-secondary); }
-  .sf-tier-rule { padding: 3px 6px; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-pill); background: var(--gb-surface-1); white-space: nowrap; }
-  .sf-pod-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sf-2); }
-  .sf-pod-tile { min-width: 0; padding: var(--sf-2); display: flex; align-items: center; gap: var(--sf-2); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
-  .sf-pod-tile:hover { background: var(--gb-fill-soft); border-color: var(--gb-border-strong); }
-  .sf-pod-tile.active { color: var(--gb-brand-label); border-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); box-shadow: none; }
-  .sf-pod-tile-name { color: var(--gb-text-primary); font-size: 10.5px; font-weight: 700; overflow-wrap: anywhere; }
-  .sf-pod-tile-meta { margin-top: 1px; color: var(--gb-text-muted); font-size: 9px; }
-  .sf-pod-hero { padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); }
-  .sf-pod-hero-copy { min-width: 0; flex: 1; }
-  .sf-pod-hero-name { color: var(--gb-text-primary); font-size: 17px; font-weight: 800; letter-spacing: -.25px; }
-  .sf-pod-hero-meta { margin-top: 3px; color: var(--gb-text-muted); font-size: 10.5px; line-height: 1.4; overflow-wrap: anywhere; }
-  .sf-pod-hero-score { text-align: right; }
-  .sf-pod-hero-value { color: var(--gb-text-primary); font-size: 20px; line-height: 1.15; font-weight: 850; font-variant-numeric: tabular-nums; }
-  .sf-pod-hero-label { margin-top: 2px; color: var(--gb-text-muted); font-size: 9px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+  .sf-member-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sf-2); }
+  .sf-member-tab { min-width: 0; min-height: 54px; padding: var(--sf-2) var(--sf-3); display: flex; align-items: center; gap: var(--sf-2); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; }
+  .sf-member-tab.active { color: var(--gb-brand-label); border-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
+  .sf-member-tab-copy { min-width: 0; }
+  .sf-member-tab-name { display: block; color: var(--gb-text-primary); font-size: 11px; font-weight: 800; }
+  .sf-member-tab-role { display: block; margin-top: 2px; overflow: hidden; color: var(--gb-text-muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-performance-hero { padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
+  .sf-performance-copy { min-width: 0; flex: 1; }
+  .sf-performance-name { color: var(--gb-text-primary); font-size: 16px; font-weight: 850; }
+  .sf-performance-meta { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; }
+  .sf-performance-score { text-align: right; }
+  .sf-performance-score-value { color: var(--gb-brand-label); font-size: 25px; line-height: 1; font-weight: 850; font-variant-numeric: tabular-nums; }
+  .sf-performance-score-label { margin-top: 3px; color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .sf-week-trend { padding: var(--sf-3) var(--sf-4) var(--sf-4); display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); align-items: end; gap: 5px; min-height: 122px; }
+  .sf-week-bar-button { min-width: 0; height: 88px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; border: 0; cursor: pointer; color: var(--gb-text-muted); background: transparent; }
+  .sf-week-bar-value { font-size: 8px; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .sf-week-bar-track { width: 100%; max-width: 24px; height: 54px; display: flex; align-items: flex-end; border-radius: 4px 4px 2px 2px; background: var(--gb-fill-subtle); overflow: hidden; }
+  .sf-week-bar-fill { width: 100%; min-height: 3px; border-radius: inherit; background: var(--gb-border-strong); }
+  .sf-week-bar-button.active { color: var(--gb-brand-label); }
+  .sf-week-bar-button.active .sf-week-bar-fill { background: var(--gb-brand-label); }
+  .sf-week-bar-label { font-size: 8px; font-weight: 800; text-transform: uppercase; }
+  .sf-rule-intro { padding: var(--sf-4); color: var(--gb-text-secondary); font-size: 11px; line-height: 1.6; }
+  .sf-rule-callout { margin: 0 var(--sf-4) var(--sf-4); padding: var(--sf-3); border-left: 3px solid var(--gb-brand-label); background: var(--gb-brand-tint-soft); color: var(--gb-text-secondary); font-size: 10.5px; line-height: 1.55; }
+  .sf-rule-section { min-width: 0; }
+  .sf-rule-section-body { padding: var(--sf-3) var(--sf-4) var(--sf-4); }
+  .sf-rule-list { margin: 0; padding-left: 18px; color: var(--gb-text-secondary); font-size: 10.5px; line-height: 1.65; }
+  .sf-rule-table-wrap { min-width: 0; overflow-x: auto; }
+  .sf-rule-table { width: 100%; min-width: 500px; border-collapse: collapse; table-layout: fixed; }
+  .sf-rule-table th, .sf-rule-table td { padding: 9px var(--sf-3); border-bottom: 1px solid var(--gb-border-subtle); font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
+  .sf-rule-table th { color: var(--gb-text-muted); background: var(--gb-fill-faint); font-size: 8.5px; letter-spacing: .5px; text-transform: uppercase; }
+  .sf-rule-table th:first-child, .sf-rule-table td:first-child { width: 40%; text-align: left; }
+  .sf-rule-table tr:last-child td { border-bottom: 0; }
+  .sf-rule-zero { color: var(--gb-text-ghost); }
+  .sf-example-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
+  .sf-example { padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-fill-faint); }
+  .sf-example-label { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .sf-example-value { margin-top: var(--sf-1); color: var(--gb-text-primary); font-size: 18px; font-weight: 850; font-variant-numeric: tabular-nums; }
+  .sf-example-detail { margin-top: var(--sf-1); color: var(--gb-text-muted); font-size: 9.5px; line-height: 1.5; }
   .sf-data-note { color: var(--gb-text-ghost); font-size: 9.5px; line-height: 1.4; text-align: right; }
   .sf-empty { padding: 32px var(--sf-4); color: var(--gb-text-muted); text-align: center; }
   .sf-bottom-nav {
@@ -237,10 +266,11 @@ const CSS = `
     box-shadow: 0 4px 10px rgba(0, 0, 0, .2); transition: filter .18s ease, box-shadow .18s ease;
   }
   .sf-bottom-center:hover { filter: brightness(1.06); box-shadow: 0 5px 12px rgba(0, 0, 0, .22); }
+  .sf-bottom-center.active { box-shadow: 0 0 0 3px var(--gb-brand-tint-medium), 0 5px 12px rgba(0, 0, 0, .22); }
   .sf-bottom-center-icon { height: 15px; display: grid; place-items: center; }
   .sf-bottom-center-week { font-size: 11px; line-height: 1.1; font-weight: 850; letter-spacing: -.1px; }
   .sf-bottom-center-rank { font-size: 8px; line-height: 1.1; font-weight: 750; opacity: .82; text-transform: uppercase; letter-spacing: .45px; }
-  .sf-bottom-item:focus-visible, .sf-bottom-center:focus-visible, .sf-icon-button:focus-visible, .sf-pod-tile:focus-visible, .sf-compact-matchup:focus-visible, .sf-link-button:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
+  .sf-bottom-item:focus-visible, .sf-bottom-center:focus-visible, .sf-icon-button:focus-visible, .sf-compact-matchup:focus-visible, .sf-link-button:focus-visible, .sf-member-tab:focus-visible, .sf-week-bar-button:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
   @media (max-width: 760px) {
     .sf-appbar { padding-inline: var(--sf-4); }
     .sf-content { padding-inline: var(--sf-4); }
@@ -258,8 +288,16 @@ const CSS = `
     .sf-page-subtitle { max-width: 280px; font-size: 10px; }
     .sf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-split-grid, .sf-scoreboard-grid, .sf-matchup-list { grid-template-columns: 1fr; }
+    .sf-matchup-board { grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); }
+    .sf-matchup-entry { padding: var(--sf-3); }
+    .sf-matchup-team { gap: var(--sf-2); }
+    .sf-matchup-entry .sf-pod-mark { display: none; }
+    .sf-board-score { font-size: 25px; }
+    .sf-member-tabs { gap: var(--sf-1); }
+    .sf-member-tab { padding-inline: var(--sf-2); }
+    .sf-member-tab-role { display: none; }
+    .sf-example-grid { grid-template-columns: 1fr; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
-    .sf-pod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
     .sf-bottom-item::before, .sf-bottom-active { inset-inline: 5%; }
     .sf-bottom-center { top: -24px; width: 76px; min-height: 63px; border-radius: 20px; }
@@ -291,16 +329,12 @@ function formatMetricValue(row) {
   return Number(row.value).toLocaleString('en-US');
 }
 
-function referralRateLabel(rule) {
-  if (rule.format === 'money') return `+${rule.pointsPerUnit * 1000}/$1k closed`;
-  return `+${rule.pointsPerUnit}/order`;
-}
-
 function pageSubtitle(view, week) {
+  if (view === 'performance') return `POD 1 individual contribution · Week ${week}`;
   if (view === 'matchups') return `Week ${week} · audit every role contribution`;
   if (view === 'standings') return '10 pods · wins rank first; completed-week points break ties';
-  if (view === 'pods') return `POD 1–10 · SR, SA, and BDR · Week ${week}`;
-  return '10 pods · SR, SA, and BDR · weekly head-to-head competition';
+  if (view === 'rules') return 'Attribution, role rates, margin tiers, and worked scoring examples';
+  return `Current POD standing · SR, SA, and BDR · Week ${week}`;
 }
 
 function WeekControl({ week, direction, onChange }) {
@@ -350,13 +384,14 @@ function BottomNav({ view, rank, onView, onCurrentWeek }) {
       <div className="sf-bottom-center-slot">
         <button
           type="button"
-          className="sf-bottom-center"
-          aria-label={`Return to current Week ${SALES_FANTASY_CURRENT_WEEK} overview; POD 1 is rank ${rank}`}
+          className={`sf-bottom-center ${view === 'pods' ? 'active' : ''}`}
+          aria-current={view === 'pods' ? 'page' : undefined}
+          aria-label={`Open POD 1 current Week ${SALES_FANTASY_CURRENT_WEEK} standing; league rank ${rank}`}
           onClick={onCurrentWeek}
         >
           <span className="sf-bottom-center-icon"><FantasyIcon.trophy size={14} /></span>
-          <span className="sf-bottom-center-week">Week {SALES_FANTASY_CURRENT_WEEK}</span>
-          <span className="sf-bottom-center-rank">Rank #{rank}</span>
+          <span className="sf-bottom-center-week">POD 1</span>
+          <span className="sf-bottom-center-rank">W{SALES_FANTASY_CURRENT_WEEK} · Rank #{rank}</span>
         </button>
       </div>
       {NAV_ITEMS.slice(2).map(renderItem)}
@@ -369,7 +404,7 @@ function SplitPanel({ pod, week }) {
   return (
     <section className="sf-pod-split" aria-label={`${pod.name} point split`}>
       <div className="sf-split-head"><span className="sf-split-title">{pod.name} roles</span><span className="sf-split-total">{split.total.toFixed(1)}</span></div>
-      <RoleBreakdowns pod={pod} week={week} showScoringKey={false} />
+      <RoleBreakdowns pod={pod} week={week} />
       <div className="sf-equation">
         {split.members.map((member, index) => <React.Fragment key={member.memberId}><span>{member.memberName} {member.total.toFixed(1)}</span>{index < split.members.length - 1 && <span>+</span>}</React.Fragment>)}
         <span>=</span><strong>{split.total.toFixed(1)}</strong>
@@ -385,19 +420,30 @@ function MatchupBreakdown({ game, week, standings, title = 'Current matchup' }) 
   const homeRecord = standings.find((row) => row.podId === home.id);
   const awayRecord = standings.find((row) => row.podId === away.id);
   const state = weekState(week);
+  const homeScore = fantasyScore(home.id, week);
+  const awayScore = fantasyScore(away.id, week);
+  const margin = Math.abs(homeScore - awayScore);
   return (
     <article className="sf-card">
       <div className="sf-card-head">
-        <div><div className="sf-card-title">{title}</div><div className="sf-card-caption">Week {week} · every total is SR + SA + BDR</div></div>
+        <div><div className="sf-card-title">{title}</div><div className="sf-card-caption">Week {week} · official role contribution ledger</div></div>
         <div className={`sf-match-status ${state}`}><span className="sf-match-status-dot" />{statusLabel(state)}</div>
       </div>
-      <div className="sf-score-hero">
-        <div className="sf-score-team"><PodMark pod={home} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{home.name}</div><div className="sf-team-record">{recordLabel(homeRecord)} · rank #{homeRecord?.rank || '—'}</div><div className="sf-score">{fantasyScore(home.id, week).toFixed(1)}</div></div></div>
-        <div className="sf-vs">VS</div>
-        <div className="sf-score-team away"><PodMark pod={away} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{away.name}</div><div className="sf-team-record">{recordLabel(awayRecord)} · rank #{awayRecord?.rank || '—'}</div><div className="sf-score">{fantasyScore(away.id, week).toFixed(1)}</div></div></div>
+      <div className="sf-matchup-board" aria-label={`${home.name} ${homeScore.toFixed(1)}, ${away.name} ${awayScore.toFixed(1)}`}>
+        <section className={`sf-matchup-entry ${homeScore > awayScore ? 'leading' : ''}`}>
+          <div className="sf-matchup-side">Home · rank #{homeRecord?.rank || '—'}</div>
+          <div className="sf-matchup-team"><PodMark pod={home} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{home.name}</div><div className="sf-team-record">{recordLabel(homeRecord)} season record</div></div></div>
+          <div className="sf-board-score">{homeScore.toFixed(1)}<span className="sf-board-score-unit">points</span></div>
+        </section>
+        <div className="sf-matchup-centerline"><span className="sf-matchup-week">Week {week}</span><strong className="sf-matchup-margin">{margin ? `${margin.toFixed(1)} pt margin` : 'Scores level'}</strong></div>
+        <section className={`sf-matchup-entry away ${awayScore > homeScore ? 'leading' : ''}`}>
+          <div className="sf-matchup-side">Away · rank #{awayRecord?.rank || '—'}</div>
+          <div className="sf-matchup-team"><PodMark pod={away} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{away.name}</div><div className="sf-team-record">{recordLabel(awayRecord)} season record</div></div></div>
+          <div className="sf-board-score">{awayScore.toFixed(1)}<span className="sf-board-score-unit">points</span></div>
+        </section>
       </div>
       <div className="sf-split-grid"><SplitPanel pod={home} week={week} /><SplitPanel pod={away} week={week} /></div>
-      <div className="sf-score-note"><strong>How it adds up:</strong> each role earns Activity and owned Sales points. BDRs also earn additive Referred points on above-$500 orders they originate; SA/SR closers keep full credit. The SR, SA, and BDR totals make the POD score above.</div>
+      <div className="sf-score-note"><strong>How it adds up:</strong> SR and SA earn Activity plus identical Sales rates. BDR earns Activity and Referred points only. The three role totals reconcile to the official POD score.</div>
     </article>
   );
 }
@@ -419,18 +465,104 @@ function ByeCard({ byes }) {
   return <div className="sf-bye-card"><span className="sf-bye-icon"><I.pause size={14} /></span><div><div className="sf-bye-title">Bye week</div><div className="sf-bye-pods">{names}</div></div></div>;
 }
 
-function StandingsPreview({ standings, onViewAll }) {
+function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
+  const pod = podForId(MY_POD_ID);
+  const split = podWeekPointSplit(pod.id, week);
+  const memberIndex = Math.max(0, pod.members.findIndex((member) => member.id === selectedMemberId));
+  const member = pod.members[memberIndex];
+  const points = split.members[memberIndex];
+  const comparison = points.sales || points.referred;
+  const share = split.total ? points.total / split.total * 100 : 0;
+  const weekScores = Array.from({ length: SCHEDULE.length }, (_, index) => memberWeekPointSplit(pod.id, member.id, index + 1).total);
+  const maximum = Math.max(...weekScores, 1);
+  const previous = week > 1 ? weekScores[week - 2] : null;
+  const change = previous === null ? null : Number((points.total - previous).toFixed(1));
   return (
-    <article className="sf-card">
-      <div className="sf-card-head"><div><div className="sf-card-title">League leaders</div><div className="sf-card-caption">Through Week {SALES_FANTASY_CURRENT_WEEK - 1}</div></div><button type="button" className="sf-link-button" onClick={onViewAll}>View all</button></div>
-      <div className="sf-standing-list">
-        {standings.slice(0, 5).map((row) => { const pod = podForId(row.podId); return <div className="sf-standing-row" key={row.podId}><div className="sf-standing-rank">{row.rank}</div><div className="sf-standing-team"><PodMark pod={pod} size="small" /><span className="sf-standing-name">{pod.name}</span></div><div className="sf-standing-record">{recordLabel(row)}</div></div>; })}
+    <div className="sf-stack">
+      <div className="sf-member-tabs" aria-label="Select individual performance">
+        {pod.members.map((candidate) => <button type="button" className={`sf-member-tab ${candidate.id === member.id ? 'active' : ''}`} aria-pressed={candidate.id === member.id} key={candidate.id} onClick={() => onSelectMember(candidate.id)}><span className="sf-avatar">{candidate.name}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>)}
       </div>
-    </article>
+      <article className="sf-card">
+        <div className="sf-performance-hero"><span className="sf-avatar">{member.name}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
+        <div className="sf-stat-grid">
+          <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
+          <div className="sf-stat"><div className="sf-stat-label">{points.sales ? 'Sales' : 'Referred'}</div><div className="sf-stat-value">{comparison.total.toFixed(1)}</div><div className="sf-stat-detail">{points.sales ? 'Owned economic result' : 'BDR-originated closed value'}</div></div>
+          <div className="sf-stat"><div className="sf-stat-label">POD share</div><div className="sf-stat-value">{share.toFixed(1)}%</div><div className="sf-stat-detail">Of Week {week} total</div></div>
+          <div className="sf-stat"><div className="sf-stat-label">Week change</div><div className="sf-stat-value">{change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}`}</div><div className={`sf-stat-detail ${change > 0 ? 'sf-positive' : ''}`}>{previous === null ? 'First scored week' : `From ${previous.toFixed(1)} points`}</div></div>
+        </div>
+        <div className="sf-role-categories">
+          <MetricCategory name="Activity" score={points.activity} />
+          {points.sales && <MetricCategory name="Sales" score={points.sales} />}
+          {points.referred && <MetricCategory name="Referred" score={points.referred} />}
+        </div>
+      </article>
+      <article className="sf-card">
+        <div className="sf-card-head"><div><div className="sf-card-title">Weekly performance</div><div className="sf-card-caption">Select a week to audit this individual’s score</div></div></div>
+        <div className="sf-week-trend">
+          {weekScores.map((score, index) => <button type="button" className={`sf-week-bar-button ${week === index + 1 ? 'active' : ''}`} aria-label={`Week ${index + 1}: ${score.toFixed(1)} points`} aria-pressed={week === index + 1} key={index + 1} onClick={() => onSelectWeek(index + 1)}><span className="sf-week-bar-value">{score.toFixed(0)}</span><span className="sf-week-bar-track"><span className="sf-week-bar-fill" style={{ height: `${Math.max(5, score / maximum * 100)}%` }} /></span><span className="sf-week-bar-label">W{index + 1}</span></button>)}
+        </div>
+      </article>
+      <div className="sf-data-note">Every displayed point reconciles to the raw metric rows above.</div>
+    </div>
   );
 }
 
-function Overview({ week, standings, onView }) {
+function ruleRate(rule, roleId) {
+  const rate = rule.pointsByRole?.[roleId] || 0;
+  if (!rate) return 'No points';
+  if (rule.format === 'money') return `${rate * 1000} / $1k`;
+  return `${rate} each`;
+}
+
+function Rules() {
+  const scoringDays = SALES_FANTASY_SCORING.scoringDaysPerWeek;
+  const highOutput = scoreRoleMetrics({ activity: { emailsSent: 400 * scoringDays, emailsReplied: 25, outboundCalls: 65 * scoringDays, inboundCalls: 0 } }, 'bdr');
+  const minimumOutput = scoreRoleMetrics({ activity: { emailsSent: 100 * scoringDays, emailsReplied: 0, outboundCalls: 20 * scoringDays, inboundCalls: 0 } }, 'bdr');
+  return (
+    <div className="sf-stack">
+      <article className="sf-card">
+        <div className="sf-card-head"><div><div className="sf-card-title">Scoring principles</div><div className="sf-card-caption">Weekly points reward contribution, not order-entry ownership</div></div></div>
+        <div className="sf-rule-intro">Each POD total is the SR, SA, and BDR individual score combined. SR remains the primary economic driver through larger owned deals. SA uses the exact same economic point rates. BDR competes through verified activity and opportunities they originate that close above $500.</div>
+        <div className="sf-rule-callout"><strong>Order placement never changes credit.</strong> If a BDR enters an order for a busy SA or SR, the appropriate SA/SR tier keeps the order, profit, sales, proposal, and margin points. Processing the order alone does not create BDR referral credit.</div>
+      </article>
+
+      <article className="sf-card sf-rule-section">
+        <div className="sf-card-head"><div><div className="sf-card-title">1 · Work routing and attribution</div><div className="sf-card-caption">Dollar bands say who should work the opportunity</div></div></div>
+        <div className="sf-rule-section-body"><ul className="sf-rule-list">{SALES_FANTASY_SCORING.ownershipBands.map((band) => <li key={band.roleId}><strong>{band.roleId.toUpperCase()}</strong> work band: {band.label}.</li>)}<li>BDR-owned orders at $500 or below earn no Sales points.</li><li>A referral requires the BDR to originate the opportunity and the completed order to exceed $500.</li><li>The closing SA/SR keeps 100% of their normal points when a qualifying BDR referral is also awarded.</li></ul></div>
+      </article>
+
+      <article className="sf-card sf-rule-section">
+        <div className="sf-card-head"><div><div className="sf-card-title">2 · Activity rates</div><div className="sf-card-caption">Raw verified actions × role rate; scored over {scoringDays} business days</div></div></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Activity</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{SALES_FANTASY_SCORING.activity.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
+      </article>
+
+      <article className="sf-card sf-rule-section">
+        <div className="sf-card-head"><div><div className="sf-card-title">3 · SA and SR economic rates</div><div className="sf-card-caption">Identical rates; SR’s larger deal band creates the natural advantage</div></div></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Sales metric</th><th>SR</th><th>SA</th><th>BDR</th></tr></thead><tbody>{SALES_FANTASY_SCORING.sales.map((rule) => <tr key={rule.id}><td>{rule.label}</td><td>{ruleRate(rule, 'sr')}</td><td>{ruleRate(rule, 'sa')}</td><td className="sf-rule-zero">No points</td></tr>)}</tbody></table></div>
+      </article>
+
+      <article className="sf-card sf-rule-section">
+        <div className="sf-card-head"><div><div className="sf-card-title">4 · Margin quality bonuses</div><div className="sf-card-caption">One highest qualifying tier per SA/SR proposal and completed order</div></div></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Margin</th><th>Proposal</th><th>Order</th><th>BDR</th></tr></thead><tbody>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.proposalBonusPoints}</td><td>+{tier.orderBonusPoints}</td><td className="sf-rule-zero">No points</td></tr>)}</tbody></table></div>
+      </article>
+
+      <article className="sf-card sf-rule-section">
+        <div className="sf-card-head"><div><div className="sf-card-title">5 · BDR referral and activity path</div><div className="sf-card-caption">Quality outreach plus originated closed value</div></div></div>
+        <div className="sf-rule-section-body">
+          <ul className="sf-rule-list"><li>Referred order: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredOrders').pointsPerUnit} points per qualifying close.</li><li>Referred dollars: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredSales').pointsPerUnit * 1000} points per $1,000 closed.</li><li>Emails and calls create a competitive path, while replies carry enough weight to distinguish productive contact work from minimum-volume activity.</li></ul>
+          <div className="sf-example-grid">
+            <div className="sf-example"><div className="sf-example-label">High-output week</div><div className="sf-example-value">{highOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">400 emails/day + 65 outbound calls/day for {scoringDays} days + 25 replies, before referral points.</div></div>
+            <div className="sf-example"><div className="sf-example-label">Minimum week · no replies</div><div className="sf-example-value">{minimumOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">100 emails/day + 20 outbound calls/day for {scoringDays} days and zero replies.</div></div>
+          </div>
+        </div>
+      </article>
+
+      <div className="sf-data-note">Point rates are defined once in the scoring contract used by this page, individual ledgers, POD totals, matchups, and standings.</div>
+    </div>
+  );
+}
+
+function PodDashboard({ week, standings, onView }) {
   const weekData = SCHEDULE[week - 1];
   const myStanding = standings.find((row) => row.podId === MY_POD_ID);
   const game = matchupForPod(weekData, MY_POD_ID);
@@ -446,7 +578,6 @@ function Overview({ week, standings, onView }) {
       <MatchupBreakdown game={game} week={week} standings={standings} title="POD 1 matchup" />
       <div className="sf-section-label"><h2 className="sf-section-title">Week {week} around the league</h2><button type="button" className="sf-link-button" onClick={() => onView('matchups')}>Open scoreboard</button></div>
       <div className="sf-scoreboard-grid">{weekData.games.filter((item) => item !== game).map((item) => <CompactMatchup game={item} week={week} key={item.id} selected={false} onSelect={() => onView('matchups')} />)}<ByeCard byes={weekData.byes} /></div>
-      <StandingsPreview standings={standings} onViewAll={() => onView('standings')} />
       <div className="sf-data-note">Preview scoring is deterministic until the production metrics feed is connected.</div>
     </div>
   );
@@ -503,9 +634,8 @@ function MetricCategory({ name, score }) {
   );
 }
 
-function RoleBreakdowns({ pod, week, showScoringKey = true }) {
+function RoleBreakdowns({ pod, week }) {
   const split = podWeekPointSplit(pod.id, week);
-  const outboundRule = SALES_FANTASY_SCORING.activity.find((rule) => rule.id === 'outboundCalls');
   return (
     <div className="sf-role-list">
       {pod.members.map((member, index) => {
@@ -519,69 +649,42 @@ function RoleBreakdowns({ pod, week, showScoringKey = true }) {
             </div>
             <div className="sf-role-categories">
               <MetricCategory name="Activity" score={points.activity} />
-              <MetricCategory name="Sales" score={points.sales} />
+              {points.sales && <MetricCategory name="Sales" score={points.sales} />}
               {points.referred && <MetricCategory name="Referred" score={points.referred} />}
             </div>
           </section>
         );
       })}
-      {showScoringKey && (
-        <div className="sf-scoring-rules">
-          <div className="sf-scoring-key"><strong>Deal ownership</strong>{SALES_FANTASY_SCORING.ownershipBands.map((band) => <span className="sf-tier-rule" key={band.roleId}>{band.roleId.toUpperCase()} · {band.label}</span>)}</div>
-          <div className="sf-scoring-key"><strong>Outbound calls</strong>{SALES_FANTASY_ROLES.map((role) => <span className="sf-tier-rule" key={role.id}>{role.label} · +{outboundRule.pointsByRole[role.id]}/call</span>)}</div>
-          <div className="sf-scoring-key"><strong>Margin bonus</strong>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <span className="sf-tier-rule" key={tier.id}>{tier.label} · proposal +{tier.proposalBonusPoints} · order +{tier.orderBonusPoints}</span>)}</div>
-          <div className="sf-scoring-key"><strong>BDR referral · above $500</strong>{SALES_FANTASY_SCORING.referral.map((rule) => <span className="sf-tier-rule" key={rule.id}>{rule.label} · {referralRateLabel(rule)}</span>)}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Pods({ week, selectedPodId, onSelect, standings }) {
-  const pod = podForId(selectedPodId);
-  const record = standings.find((row) => row.podId === pod.id);
-  const split = podWeekPointSplit(pod.id, week);
-  return (
-    <div className="sf-stack">
-      <div className="sf-pod-grid">{SALES_FANTASY_PODS.map((item) => <button type="button" className={`sf-pod-tile ${item.id === pod.id ? 'active' : ''}`} key={item.id} onClick={() => onSelect(item.id)}><PodMark pod={item} size="small" /><span className="sf-pod-copy"><span className="sf-pod-tile-name">{item.name}</span><span className="sf-pod-tile-meta">Seed {item.seed}</span></span></button>)}</div>
-      <AnimatePresence initial={false} mode="wait">
-        <motion.section className="sf-card" key={`${pod.id}-${week}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={PAGE_TRANSITION}>
-          <div className="sf-pod-hero"><PodMark pod={pod} size="large" /><div className="sf-pod-hero-copy"><div className="sf-pod-hero-name">{pod.name}</div><div className="sf-pod-hero-meta">Seed {pod.seed} · rank #{record.rank} · record {recordLabel(record)}</div></div><div className="sf-pod-hero-score"><div className="sf-pod-hero-value">{split.total.toFixed(1)}</div><div className="sf-pod-hero-label">Week {week} points</div></div></div>
-          <RoleBreakdowns pod={pod} week={week} />
-          <div className="sf-score-note"><strong>Reconciled total:</strong> {split.members.map((member) => member.total.toFixed(1)).join(' + ')} = {split.total.toFixed(1)}</div>
-        </motion.section>
-      </AnimatePresence>
-      <div className="sf-data-note">Role metrics use deterministic preview activity and order data until the production feed is connected.</div>
     </div>
   );
 }
 
 function SalesFantasyApp() {
-  const [view, setView] = useState('overview');
+  const [view, setView] = useState('pods');
   const [week, setWeek] = useState(SALES_FANTASY_CURRENT_WEEK);
   const [direction, setDirection] = useState(1);
-  const [selectedPodId, setSelectedPodId] = useState(MY_POD_ID);
+  const [selectedMemberId, setSelectedMemberId] = useState(SALES_FANTASY_PODS[0].members[0].id);
   const [selectedGameId, setSelectedGameId] = useState(matchupForPod(SCHEDULE[SALES_FANTASY_CURRENT_WEEK - 1], MY_POD_ID)?.id || '');
   const standings = useMemo(() => buildStandings(SALES_FANTASY_PODS, SCHEDULE, SALES_FANTASY_CURRENT_WEEK), []);
   const myPod = podForId(MY_POD_ID);
   const myStanding = standings.find((row) => row.podId === MY_POD_ID);
-  const page = NAV_ITEMS.find((item) => item.id === view) || NAV_ITEMS[0];
-  const showWeekControl = view !== 'standings';
+  const page = PAGES.find((item) => item.id === view) || POD_PAGE;
+  const showWeekControl = view !== 'standings' && view !== 'rules';
 
   const changeWeek = (nextWeek) => {
     setDirection(nextWeek > week ? 1 : -1);
     setWeek(nextWeek);
   };
   const changeView = (nextView) => {
-    const currentIndex = NAV_ITEMS.findIndex((item) => item.id === view);
-    const nextIndex = NAV_ITEMS.findIndex((item) => item.id === nextView);
+    const currentIndex = VIEW_ORDER.indexOf(view);
+    const nextIndex = VIEW_ORDER.indexOf(nextView);
     setDirection(nextIndex >= currentIndex ? 1 : -1);
     setView(nextView);
   };
   const returnToCurrentWeek = () => {
     setDirection(SALES_FANTASY_CURRENT_WEEK >= week ? 1 : -1);
     setWeek(SALES_FANTASY_CURRENT_WEEK);
-    setView('overview');
+    setView('pods');
   };
   const contentKey = showWeekControl ? `${view}-${week}` : view;
 
@@ -610,10 +713,11 @@ function SalesFantasyApp() {
           </AnimatePresence>
           <AnimatePresence initial={false} mode="wait" custom={direction}>
             <motion.div className="sf-view-motion" key={contentKey} custom={direction} initial={(travel) => ({ opacity: 0, x: travel * 14 })} animate={{ opacity: 1, x: 0 }} exit={(travel) => ({ opacity: 0, x: travel * -14 })} transition={PAGE_TRANSITION}>
-              {view === 'overview' && <Overview week={week} standings={standings} onView={changeView} />}
+              {view === 'performance' && <Performance week={week} selectedMemberId={selectedMemberId} onSelectMember={setSelectedMemberId} onSelectWeek={changeWeek} />}
               {view === 'matchups' && <Matchups week={week} standings={standings} selectedGameId={selectedGameId} onSelectGame={setSelectedGameId} />}
               {view === 'standings' && <Standings standings={standings} />}
-              {view === 'pods' && <Pods week={week} selectedPodId={selectedPodId} onSelect={setSelectedPodId} standings={standings} />}
+              {view === 'rules' && <Rules />}
+              {view === 'pods' && <PodDashboard week={week} standings={standings} onView={changeView} />}
             </motion.div>
           </AnimatePresence>
         </div>

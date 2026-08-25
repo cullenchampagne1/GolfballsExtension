@@ -20,28 +20,30 @@ export const SALES_FANTASY_ROLES = Object.freeze([
 ]);
 
 /**
- * Role-balanced preview scoring contract. Deal ownership follows the sales
- * team's hard dollar bands. BDR referral credit is additive: an SA/SR keeps
- * every owner point while the BDR who created the opportunity earns a separate
- * Referred score after the order closes.
+ * Role-balanced preview scoring contract. Work routing follows the sales
+ * team's hard dollar bands, but only SA/SR receive economic points and both use
+ * the same rates. BDR referral credit is additive: an SA/SR keeps every point
+ * while the BDR who originated the opportunity earns a separate Referred score.
  */
 export const SALES_FANTASY_SCORING = Object.freeze({
+  scoringDaysPerWeek: 5,
+  salesEligibleRoles: Object.freeze(['sr', 'sa']),
   ownershipBands: Object.freeze([
     Object.freeze({ roleId: 'bdr', label: '$500 and under', minSale: 0, maxSale: 500, minInclusive: true, maxInclusive: true }),
     Object.freeze({ roleId: 'sa', label: '$500.01–$1,499.99', minSale: 500, maxSale: 1500, minInclusive: false, maxInclusive: false }),
     Object.freeze({ roleId: 'sr', label: '$1,500 and above', minSale: 1500, maxSale: null, minInclusive: true, maxInclusive: true }),
   ]),
   activity: Object.freeze([
-    Object.freeze({ id: 'emailsSent', label: 'Emails sent', pointsByRole: roleRates(0.04, 0.05, 0.06) }),
-    Object.freeze({ id: 'emailsReplied', label: 'Emails replied', pointsByRole: roleRates(0.5, 0.6, 0.75) }),
-    Object.freeze({ id: 'outboundCalls', label: 'Outbound calls', pointsByRole: roleRates(0.4, 0.65, 1.25) }),
-    Object.freeze({ id: 'inboundCalls', label: 'Inbound calls', pointsByRole: roleRates(0.25, 0.35, 0.5) }),
+    Object.freeze({ id: 'emailsSent', label: 'Emails sent', pointsByRole: roleRates(0.01, 0.01, 0.005) }),
+    Object.freeze({ id: 'emailsReplied', label: 'Emails replied', pointsByRole: roleRates(0.5, 0.75, 1.25) }),
+    Object.freeze({ id: 'outboundCalls', label: 'Outbound calls', pointsByRole: roleRates(0.1, 0.15, 0.2) }),
+    Object.freeze({ id: 'inboundCalls', label: 'Inbound calls', pointsByRole: roleRates(0.1, 0.1, 0.1) }),
   ]),
   sales: Object.freeze([
-    Object.freeze({ id: 'proposalsSent', label: 'Proposals sent', pointsByRole: roleRates(2, 2.5, 1) }),
-    Object.freeze({ id: 'orders', label: 'Owned orders', pointsByRole: roleRates(5, 6, 7) }),
-    Object.freeze({ id: 'totalSales', label: 'Owned sales', pointsByRole: roleRates(0.0015, 0.0025, 0.004), format: 'money' }),
-    Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(0.006, 0.008, 0.01), format: 'money' }),
+    Object.freeze({ id: 'proposalsSent', label: 'Proposals sent', pointsByRole: roleRates(2.5, 2.5, 0) }),
+    Object.freeze({ id: 'orders', label: 'Owned orders', pointsByRole: roleRates(6, 6, 0) }),
+    Object.freeze({ id: 'totalSales', label: 'Owned sales', pointsByRole: roleRates(0.001, 0.001, 0), format: 'money' }),
+    Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(0.008, 0.008, 0), format: 'money' }),
   ]),
   marginTiers: Object.freeze([
     Object.freeze({ id: 'base', label: 'Under 30%', minMargin: 0, proposalBonusPoints: 0, orderBonusPoints: 0 }),
@@ -158,12 +160,12 @@ function roleDeals(podNumber, roleIndex, weekNumber, kind) {
   return Array.from({ length: count }, (_, dealIndex) => {
     const sale = dealSale(seed, dealIndex, roleId, kind);
     const marginPercent = 26 + ((seed + dealIndex * 11 + roleIndex * 7 + (kind === 'proposal' ? 5 : 0)) % 31);
-    const createdByRoleId = roleId !== 'bdr' && (seed + dealIndex * 7) % 3 === 0 ? 'bdr' : roleId;
+    const opportunityCreatedByRoleId = roleId !== 'bdr' && (seed + dealIndex * 7) % 3 === 0 ? 'bdr' : roleId;
     return {
       id: `preview-${kind}-${podNumber}-${roleIndex + 1}-${weekNumber}-${dealIndex + 1}`,
       sale: money(sale),
       profit: money(sale * marginPercent / 100),
-      createdByRoleId,
+      opportunityCreatedByRoleId,
     };
   });
 }
@@ -172,22 +174,22 @@ function roleWeekMetrics(podNumber, roleIndex, weekNumber) {
   const seed = podNumber * 97 + (roleIndex + 1) * 53 + weekNumber * 31;
   const roleId = SALES_FANTASY_ROLES[roleIndex].id;
   const roleActivity = [
-    { emailsSent: 39, emailsReplied: 8, outboundCalls: 17, inboundCalls: 7 },
-    { emailsSent: 31, emailsReplied: 6, outboundCalls: 11, inboundCalls: 9 },
-    { emailsSent: 57, emailsReplied: 10, outboundCalls: 25, inboundCalls: 5 },
+    { emailsSent: 165 + (seed % 101), emailsReplied: 12 + (seed % 8), outboundCalls: 45 + (seed % 31), inboundCalls: 12 + (seed % 7) },
+    { emailsSent: 250 + (seed % 101), emailsReplied: 15 + (seed % 8), outboundCalls: 70 + (seed % 41), inboundCalls: 15 + (seed % 7) },
+    { emailsSent: 1000 + (seed % 801), emailsReplied: 15 + (seed % 16), outboundCalls: 175 + (seed % 126), inboundCalls: 8 + (seed % 7) },
   ][roleIndex];
   const activity = {
-    emailsSent: roleActivity.emailsSent + (seed % 21),
-    emailsReplied: roleActivity.emailsReplied + (seed % 8),
-    outboundCalls: roleActivity.outboundCalls + (seed % 15),
-    inboundCalls: roleActivity.inboundCalls + (seed % 7),
+    emailsSent: roleActivity.emailsSent,
+    emailsReplied: roleActivity.emailsReplied,
+    outboundCalls: roleActivity.outboundCalls,
+    inboundCalls: roleActivity.inboundCalls,
   };
   const orders = roleDeals(podNumber, roleIndex, weekNumber, 'order');
   const proposals = roleDeals(podNumber, roleIndex, weekNumber, 'proposal');
   const referrals = roleId === 'bdr'
     ? SALES_FANTASY_ROLES.slice(0, 2)
       .flatMap((_, ownerIndex) => roleDeals(podNumber, ownerIndex, weekNumber, 'order'))
-      .filter((order) => order.createdByRoleId === 'bdr')
+      .filter((order) => order.opportunityCreatedByRoleId === 'bdr')
     : [];
   return {
     activity,
@@ -232,9 +234,9 @@ export function ownerRoleForDeal(deal, rules = SALES_FANTASY_SCORING) {
 }
 
 /**
- * Allocate a pod's shared closed-order feed without stealing credit. BDR
- * referrals are the above-$500 orders they originated; the SA/SR order remains
- * in its full owner bucket.
+ * Allocate a pod's shared closed-order feed by operational work band. A BDR
+ * bucket does not imply fantasy Sales points. BDR referrals are the above-$500
+ * orders they originated; the SA/SR order remains in its full owner bucket.
  */
 export function allocatePodOrders(orders, rules = SALES_FANTASY_SCORING) {
   const owned = Object.fromEntries(SALES_FANTASY_ROLES.map((role) => [role.id, []]));
@@ -243,7 +245,7 @@ export function allocatePodOrders(orders, rules = SALES_FANTASY_SCORING) {
     const ownerRoleId = ownerRoleForDeal(order, rules);
     if (!ownerRoleId) continue;
     owned[ownerRoleId].push(order);
-    if (ownerRoleId !== 'bdr' && order?.createdByRoleId === 'bdr') referred.push(order);
+    if (ownerRoleId !== 'bdr' && order?.opportunityCreatedByRoleId === 'bdr') referred.push(order);
   }
   return { owned, referred };
 }
@@ -266,13 +268,20 @@ function scoreMetric(metric, value, roleId) {
 /** Score one role's normalized weekly CRM metrics into auditable rows. */
 export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_SCORING) {
   const activityValues = metrics?.activity || {};
+  const earnsSalesPoints = rules.salesEligibleRoles.includes(roleId);
   const suppliedOrders = Array.isArray(metrics?.sales?.orders) ? metrics.sales.orders : [];
-  const completedOrders = suppliedOrders.filter((order) => ownerRoleForDeal(order, rules) === roleId);
+  const completedOrders = earnsSalesPoints
+    ? suppliedOrders.filter((order) => ownerRoleForDeal(order, rules) === roleId)
+    : [];
   const suppliedProposals = Array.isArray(metrics?.sales?.proposals) ? metrics.sales.proposals : [];
-  const proposals = suppliedProposals.filter((proposal) => ownerRoleForDeal(proposal, rules) === roleId);
-  const proposalCount = suppliedProposals.length
-    ? proposals.length
-    : Math.max(0, Number(metrics?.sales?.proposalsSent) || 0);
+  const proposals = earnsSalesPoints
+    ? suppliedProposals.filter((proposal) => ownerRoleForDeal(proposal, rules) === roleId)
+    : [];
+  const proposalCount = !earnsSalesPoints
+    ? 0
+    : (suppliedProposals.length
+      ? proposals.length
+      : Math.max(0, Number(metrics?.sales?.proposalsSent) || 0));
   const totalSales = money(completedOrders.reduce((sum, order) => sum + (Number(order?.sale) || 0), 0));
   const totalProfit = money(completedOrders.reduce((sum, order) => sum + (Number(order?.profit) || 0), 0));
   const salesValues = {
@@ -282,7 +291,9 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
     totalProfit,
   };
   const activityRows = rules.activity.map((metric) => scoreMetric(metric, activityValues[metric.id], roleId));
-  const salesRows = rules.sales.map((metric) => scoreMetric(metric, salesValues[metric.id], roleId));
+  const salesRows = earnsSalesPoints
+    ? rules.sales.map((metric) => scoreMetric(metric, salesValues[metric.id], roleId))
+    : [];
   const proposalTierCounts = new Map(rules.marginTiers.map((tier) => [tier.id, 0]));
   let proposalMarginBonusPoints = 0;
   proposals.forEach((proposal) => {
@@ -291,13 +302,15 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
     proposalTierCounts.set(tier.id, (proposalTierCounts.get(tier.id) || 0) + 1);
     proposalMarginBonusPoints += tier.proposalBonusPoints;
   });
-  salesRows.splice(1, 0, {
-    id: 'proposalMarginBonus',
-    label: 'Proposal margin bonus',
-    value: proposals.length,
-    format: 'proposals',
-    points: oneDecimal(proposalMarginBonusPoints),
-  });
+  if (earnsSalesPoints) {
+    salesRows.splice(1, 0, {
+      id: 'proposalMarginBonus',
+      label: 'Proposal margin bonus',
+      value: proposals.length,
+      format: 'proposals',
+      points: oneDecimal(proposalMarginBonusPoints),
+    });
+  }
   const orderTierCounts = new Map(rules.marginTiers.map((tier) => [tier.id, 0]));
   let orderMarginBonusPoints = 0;
   completedOrders.forEach((order) => {
@@ -313,17 +326,19 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
     proposalPoints: oneDecimal((proposalTierCounts.get(tier.id) || 0) * tier.proposalBonusPoints),
     orderPoints: oneDecimal((orderTierCounts.get(tier.id) || 0) * tier.orderBonusPoints),
   }));
-  salesRows.push({
-    id: 'orderMarginBonus',
-    label: 'Order margin bonus',
-    value: completedOrders.length,
-    format: 'orders',
-    points: oneDecimal(orderMarginBonusPoints),
-  });
+  if (earnsSalesPoints) {
+    salesRows.push({
+      id: 'orderMarginBonus',
+      label: 'Order margin bonus',
+      value: completedOrders.length,
+      format: 'orders',
+      points: oneDecimal(orderMarginBonusPoints),
+    });
+  }
   const referredOrders = roleId === 'bdr' && Array.isArray(metrics?.referred?.orders)
     ? metrics.referred.orders.filter((order) => {
       const ownerRoleId = ownerRoleForDeal(order, rules);
-      return order?.createdByRoleId === 'bdr' && (ownerRoleId === 'sa' || ownerRoleId === 'sr');
+      return order?.opportunityCreatedByRoleId === 'bdr' && (ownerRoleId === 'sa' || ownerRoleId === 'sr');
     })
     : [];
   const referredValues = {
@@ -339,7 +354,7 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
   return {
     raw: { activity: activityValues, sales: salesValues, proposals, completedOrders, referredOrders },
     activity: { rows: activityRows, total: activityTotal },
-    sales: { rows: salesRows, marginTiers, total: salesTotal },
+    sales: earnsSalesPoints ? { rows: salesRows, marginTiers, total: salesTotal } : null,
     referred: roleId === 'bdr' ? { rows: referredRows, total: referredTotal } : null,
     total: oneDecimal(activityTotal + salesTotal + referredTotal),
   };

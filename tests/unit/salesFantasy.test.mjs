@@ -38,7 +38,7 @@ describe('salesFantasy · league model', () => {
     }
   });
 
-  it('scores the four activity and six sales rows plus BDR referrals into role and pod totals', () => {
+  it('scores SA/SR Activity and Sales while BDR has Activity and Referred only', () => {
     for (const pod of SALES_FANTASY_PODS) {
       for (let week = 1; week <= 9; week += 1) {
         const split = podWeekPointSplit(pod.id, week);
@@ -47,15 +47,16 @@ describe('salesFantasy · league model', () => {
           assert.deepEqual(member.activity.rows.map((row) => row.id), [
             'emailsSent', 'emailsReplied', 'outboundCalls', 'inboundCalls',
           ]);
-          assert.deepEqual(member.sales.rows.map((row) => row.id), [
-            'proposalsSent', 'proposalMarginBonus', 'orders', 'totalSales', 'totalProfit', 'orderMarginBonus',
-          ]);
           if (member.roleId === 'bdr') {
+            assert.equal(member.sales, null);
             assert.deepEqual(member.referred.rows.map((row) => row.id), ['referredOrders', 'referredSales']);
           } else {
+            assert.deepEqual(member.sales.rows.map((row) => row.id), [
+              'proposalsSent', 'proposalMarginBonus', 'orders', 'totalSales', 'totalProfit', 'orderMarginBonus',
+            ]);
             assert.equal(member.referred, null);
           }
-          assert.equal(member.total, Number((member.activity.total + member.sales.total + (member.referred?.total || 0)).toFixed(1)), member.memberId);
+          assert.equal(member.total, Number((member.activity.total + (member.sales?.total || 0) + (member.referred?.total || 0)).toFixed(1)), member.memberId);
           assert.deepEqual(member, memberWeekPointSplit(pod.id, member.memberId, week));
         }
         assert.equal(split.total, Number(split.members.reduce((sum, member) => sum + member.total, 0).toFixed(1)), `${pod.name} week ${week}`);
@@ -105,14 +106,15 @@ describe('salesFantasy · league model', () => {
     assert.equal(ownerRoleForDeal({}), null);
 
     const orders = [
-      { id: 'bdr-owned', sale: 500, profit: 200, createdByRoleId: 'bdr' },
-      { id: 'sa-referred', sale: 750, profit: 300, createdByRoleId: 'bdr' },
-      { id: 'sr-referred', sale: 1500, profit: 600, createdByRoleId: 'bdr' },
-      { id: 'sr-direct', sale: 2000, profit: 800, createdByRoleId: 'sr' },
+      { id: 'bdr-owned', sale: 500, profit: 200, opportunityCreatedByRoleId: 'bdr' },
+      { id: 'sa-referred', sale: 750, profit: 300, opportunityCreatedByRoleId: 'bdr' },
+      { id: 'sa-processed-by-bdr', sale: 900, profit: 360, opportunityCreatedByRoleId: 'sa', placedByRoleId: 'bdr' },
+      { id: 'sr-referred', sale: 1500, profit: 600, opportunityCreatedByRoleId: 'bdr' },
+      { id: 'sr-direct', sale: 2000, profit: 800, opportunityCreatedByRoleId: 'sr' },
     ];
     const allocation = allocatePodOrders(orders);
     assert.deepEqual(allocation.owned.bdr.map((order) => order.id), ['bdr-owned']);
-    assert.deepEqual(allocation.owned.sa.map((order) => order.id), ['sa-referred']);
+    assert.deepEqual(allocation.owned.sa.map((order) => order.id), ['sa-referred', 'sa-processed-by-bdr']);
     assert.deepEqual(allocation.owned.sr.map((order) => order.id), ['sr-referred', 'sr-direct']);
     assert.deepEqual(allocation.referred.map((order) => order.id), ['sa-referred', 'sr-referred']);
 
@@ -122,24 +124,38 @@ describe('salesFantasy · league model', () => {
       sales: { proposalsSent: 0, orders: allocation.owned.bdr },
       referred: { orders: allocation.referred },
     }, 'bdr');
-    assert.equal(sa.raw.sales.totalSales, 750);
+    assert.equal(sa.raw.sales.totalSales, 1650);
     assert.equal(sr.raw.sales.totalSales, 3500);
-    assert.equal(bdr.raw.sales.totalSales, 500);
+    assert.equal(bdr.raw.sales.totalSales, 0);
+    assert.equal(bdr.sales, null);
     assert.equal(bdr.raw.referredOrders.length, 2);
     assert.equal(bdr.referred.rows.find((row) => row.id === 'referredSales').value, 2250);
     assert.equal(bdr.referred.total, 17);
   });
 
-  it('weights BDR outbound calls and referred dollars while rewarding high-margin SA/SR work', () => {
-    const calls = scoreRoleMetrics({ activity: { outboundCalls: 40 } }, 'bdr');
-    const emails = scoreRoleMetrics({ activity: { emailsSent: 500 } }, 'bdr');
+  it('lets high-output BDR activity compete while minimum work without replies cannot', () => {
+    const highOutput = scoreRoleMetrics({ activity: {
+      emailsSent: 400 * SALES_FANTASY_SCORING.scoringDaysPerWeek,
+      emailsReplied: 25,
+      outboundCalls: 65 * SALES_FANTASY_SCORING.scoringDaysPerWeek,
+    } }, 'bdr');
+    const minimumOutput = scoreRoleMetrics({ activity: {
+      emailsSent: 100 * SALES_FANTASY_SCORING.scoringDaysPerWeek,
+      emailsReplied: 0,
+      outboundCalls: 20 * SALES_FANTASY_SCORING.scoringDaysPerWeek,
+    } }, 'bdr');
     const referral = scoreRoleMetrics({
-      referred: { orders: [{ sale: 10000, profit: 4000, createdByRoleId: 'bdr' }] },
+      referred: { orders: [{ sale: 10000, profit: 4000, opportunityCreatedByRoleId: 'bdr' }] },
     }, 'bdr');
-    assert.equal(calls.activity.rows.find((row) => row.id === 'outboundCalls').points, 50);
-    assert.equal(emails.activity.rows.find((row) => row.id === 'emailsSent').points, 30);
+    assert.equal(highOutput.activity.rows.find((row) => row.id === 'emailsSent').points, 10);
+    assert.equal(highOutput.activity.rows.find((row) => row.id === 'outboundCalls').points, 65);
+    assert.equal(highOutput.activity.rows.find((row) => row.id === 'emailsReplied').points, 31.3);
+    assert.equal(highOutput.total, 106.3);
+    assert.equal(minimumOutput.total, 22.5);
     assert.equal(referral.referred.total, 44);
+  });
 
+  it('rewards high-margin SA/SR work at one shared economic rate card', () => {
     const lowMargin = scoreRoleMetrics({ sales: {
       proposals: [{ sale: 2000, profit: 500 }],
       orders: [{ sale: 2000, profit: 500 }],
@@ -153,6 +169,10 @@ describe('salesFantasy · league model', () => {
     assert.equal(highMargin.sales.rows.find((row) => row.id === 'proposalMarginBonus').points, 6);
     assert.equal(highMargin.sales.rows.find((row) => row.id === 'orderMarginBonus').points, 12);
     assert.ok(highMargin.total > lowMargin.total);
+    for (const rule of SALES_FANTASY_SCORING.sales) {
+      assert.equal(rule.pointsByRole.sr, rule.pointsByRole.sa, rule.id);
+      assert.equal(rule.pointsByRole.bdr, 0, rule.id);
+    }
   });
 
   it('keeps every weight and margin break in one explicit scoring contract', () => {
@@ -171,6 +191,8 @@ describe('salesFantasy · league model', () => {
     assert.deepEqual(SALES_FANTASY_SCORING.referral.map((rule) => [rule.label, rule.pointsPerUnit]), [
       ['Referred orders', 4], ['Referred dollars', 0.004],
     ]);
+    assert.equal(SALES_FANTASY_SCORING.scoringDaysPerWeek, 5);
+    assert.deepEqual(SALES_FANTASY_SCORING.salesEligibleRoles, ['sr', 'sa']);
   });
 
   it('keeps preview role contributions on the same playing field across a full season', () => {
@@ -185,7 +207,7 @@ describe('salesFantasy · league model', () => {
     for (const [roleId, share] of Object.entries(shares)) {
       assert.ok(share >= 0.28 && share <= 0.38, `${roleId} contribution share ${share}`);
     }
-    assert.ok(totals.sr > totals.sa, 'larger SR-owned sales remain a driving factor');
+    assert.ok(totals.sr > totals.sa && totals.sr > totals.bdr, 'SR remains the largest contribution driver');
   });
 
   it('builds nine head-to-head weeks with every pod present once per week', () => {
@@ -213,8 +235,8 @@ describe('salesFantasy · league model', () => {
 
   it('produces stable scores, live state, matchups, and ranked records', () => {
     const schedule = buildFantasySchedule();
-    assert.equal(fantasyScore('pod-1', 4), 307.9);
-    assert.deepEqual(podWeekPointSplit('pod-1', 4).members.map((member) => member.total), [108.8, 89.7, 109.4]);
+    assert.equal(fantasyScore('pod-1', 4), 316.2);
+    assert.deepEqual(podWeekPointSplit('pod-1', 4).members.map((member) => member.total), [119, 94.8, 102.4]);
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK), 'live');
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK - 1), 'final');
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK + 1), 'scheduled');

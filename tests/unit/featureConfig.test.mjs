@@ -144,10 +144,11 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
     assert.match(salesFantasyHtml, /<body data-gb-scale="editor">/);
     assert.match(salesFantasyHtml, /react-dist\/sales-fantasy\/sales-fantasy\.js/);
-    for (const label of ['Overview', 'Matchups', 'Standings', 'Pods']) {
+    for (const label of ['Performance', 'Matchups', 'Standings', 'Rules']) {
       assert.match(salesFantasySource, new RegExp(`label: '${label}'`));
     }
-    assert.match(salesFantasySource, /10 pods · SR, SA, and BDR · weekly head-to-head competition/);
+    assert.match(salesFantasySource, /const POD_PAGE = \{ id: 'pods', label: 'POD Standing' \}/);
+    assert.doesNotMatch(salesFantasySource, /label: 'Overview'|id: 'overview'/);
     assert.match(salesFantasySource, /import \{ AnimatePresence, motion \} from 'motion\/react'/);
     assert.match(salesFantasySource, /data-gb-ui-root/);
     assert.match(salesFantasySource, /prefers-reduced-motion: reduce/);
@@ -162,12 +163,14 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /\.sf-bottom-item::before, \.sf-bottom-active \{ position: absolute; z-index: -1; inset: 5px 12%;/);
     assert.match(salesFantasySource, /\.sf-bottom-item:hover:not\(\.active\)::before \{ opacity: 1; \}/);
     assert.doesNotMatch(salesFantasySource, /\.sf-bottom-item:hover \{[^}]*background:/);
-    assert.match(salesFantasySource, /className="sf-bottom-center"/);
+    assert.match(salesFantasySource, /sf-bottom-center \$\{view === 'pods' \? 'active' : ''\}/);
     assert.match(salesFantasySource, /box-shadow: 0 4px 10px rgba\(0, 0, 0, \.2\)/);
     assert.doesNotMatch(salesFantasySource, /0 9px 22px var\(--gb-brand-tint-strong\)|0 11px 26px var\(--gb-brand-tint-strong\)/);
-    assert.match(salesFantasySource, /Week \{SALES_FANTASY_CURRENT_WEEK\}/);
-    assert.match(salesFantasySource, /className="sf-bottom-center-rank">Rank #\{rank\}/);
+    assert.match(salesFantasySource, /Open POD 1 current Week \$\{SALES_FANTASY_CURRENT_WEEK\} standing/);
+    assert.match(salesFantasySource, /className="sf-bottom-center-week">POD 1/);
+    assert.match(salesFantasySource, /className="sf-bottom-center-rank">W\{SALES_FANTASY_CURRENT_WEEK\} · Rank #\{rank\}/);
     assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
+    assert.match(salesFantasySource, /setView\('pods'\)/);
     assert.match(salesFantasySource, /key=\{`head-\$\{page\.id\}-\$\{week\}`\}/);
     assert.match(salesFantasySource, /className="sf-page-subtitle">\{pageSubtitle\(view, week\)\}/);
     assert.doesNotMatch(salesFantasySource, /sf-view-head|sf-view-heading|sf-view-copy/);
@@ -178,7 +181,10 @@ describe('developer settings · Sales Fantasy event', () => {
     for (const metricLabel of ['Emails sent', 'Emails replied', 'Outbound calls', 'Inbound calls', 'Proposals sent', 'Owned orders', 'Owned sales', 'Owned profit', 'Referred orders', 'Referred dollars']) {
       assert.match(salesFantasyModelSource, new RegExp(metricLabel, 'i'));
     }
-    assert.match(salesFantasySource, /The SR, SA, and BDR totals make the POD score above/);
+    assert.match(salesFantasySource, /The three role totals reconcile to the official POD score/);
+    assert.match(salesFantasySource, /className="sf-matchup-board"/);
+    assert.match(salesFantasySource, /official role contribution ledger/);
+    assert.doesNotMatch(salesFantasySource, /className="sf-vs">VS|\.sf-vs \{/);
     assert.match(salesFantasySource, /aria-label=\{`Pod \$\{pod\.number\}`\}>\{pod\.number\}/);
     assert.doesNotMatch(salesFantasySource, /Pin Seekers|Fairway Force|Avery Cole|pin-seekers/);
     assert.doesNotMatch(salesFantasySource, /min-width: 680px|line-height: 30px|height: 29px/);
@@ -186,21 +192,34 @@ describe('developer settings · Sales Fantasy event', () => {
 
   it('shows role metric rows and the BDR Referred category in pod and matchup breakdowns', () => {
     const splitPanelSource = salesFantasySource.match(/function SplitPanel[\s\S]*?\n}\n\nfunction MatchupBreakdown/)?.[0] || '';
-    const roleBreakdownsSource = salesFantasySource.match(/function RoleBreakdowns[\s\S]*?\n}\n\nfunction Pods/)?.[0] || '';
+    const roleBreakdownsSource = salesFantasySource.match(/function RoleBreakdowns[\s\S]*?\n}\n\nfunction SalesFantasyApp/)?.[0] || '';
     const metricCategorySource = salesFantasySource.match(/function MetricCategory[\s\S]*?\n}\n\nfunction RoleBreakdowns/)?.[0] || '';
 
-    assert.match(splitPanelSource, /<RoleBreakdowns pod=\{pod\} week=\{week\} showScoringKey=\{false\} \/>/);
+    assert.match(splitPanelSource, /<RoleBreakdowns pod=\{pod\} week=\{week\} \/>/);
     assert.match(roleBreakdownsSource, /pod\.members\.map/);
     assert.match(roleBreakdownsSource, /<MetricCategory name="Activity" score=\{points\.activity\} \/>/);
-    assert.match(roleBreakdownsSource, /<MetricCategory name="Sales" score=\{points\.sales\} \/>/);
+    assert.match(roleBreakdownsSource, /points\.sales && <MetricCategory name="Sales" score=\{points\.sales\} \/>/);
     assert.match(roleBreakdownsSource, /points\.referred && <MetricCategory name="Referred" score=\{points\.referred\} \/>/);
-    assert.match(roleBreakdownsSource, /Deal ownership/);
-    assert.match(roleBreakdownsSource, /BDR referral/);
     assert.match(metricCategorySource, /score\.rows\.map/);
     assert.match(metricCategorySource, /className="sf-metric-row"/);
     assert.match(salesFantasySource, /\.sf-role-categories \{ display: grid; grid-template-columns: 1fr; \}/);
     assert.match(salesFantasySource, /\.sf-category \+ \.sf-category \{ border-top:/);
     assert.doesNotMatch(salesFantasySource, /sf-split-columns|sf-rep-split|sf-point-part|sf-point-total/);
+  });
+
+  it('adds individual weekly Performance and detailed Rules pages', () => {
+    const performanceSource = salesFantasySource.match(/function Performance[\s\S]*?\n}\n\nfunction ruleRate/)?.[0] || '';
+    const rulesSource = salesFantasySource.match(/function Rules[\s\S]*?\n}\n\nfunction PodDashboard/)?.[0] || '';
+
+    assert.match(performanceSource, /memberWeekPointSplit/);
+    assert.match(performanceSource, /Select individual performance/);
+    assert.match(performanceSource, /Weekly performance/);
+    assert.match(performanceSource, /sf-week-bar-button/);
+    assert.match(rulesSource, /Scoring principles/);
+    assert.match(rulesSource, /Order placement never changes credit/);
+    assert.match(rulesSource, /BDR-owned orders at \$500 or below earn no Sales points/);
+    assert.match(rulesSource, /High-output week/);
+    assert.match(rulesSource, /Minimum week · no replies/);
   });
 });
 
