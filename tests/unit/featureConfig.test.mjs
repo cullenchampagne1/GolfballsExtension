@@ -17,6 +17,7 @@ const popupSource = await readFile(new URL('../../src/popup/popup.jsx', import.m
 const backgroundSource = await readFile(new URL('../../background.js', import.meta.url), 'utf8');
 const salesFantasyHtml = await readFile(new URL('../../sales-fantasy.html', import.meta.url), 'utf8');
 const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales-fantasy.jsx', import.meta.url), 'utf8');
+const salesFantasyModelSource = await readFile(new URL('../../src/lib/salesFantasy.js', import.meta.url), 'utf8');
 const salesFantasyButtonSource = popupSource.match(/function SalesFantasyButton[\s\S]*?\n}\n/)?.[0] || '';
 
 describe('featureRegistry · surfaces', () => {
@@ -146,7 +147,7 @@ describe('developer settings · Sales Fantasy event', () => {
     for (const label of ['Overview', 'Matchups', 'Standings', 'Pods']) {
       assert.match(salesFantasySource, new RegExp(`label: '${label}'`));
     }
-    assert.match(salesFantasySource, /10 pods · 3 reps each · weekly head-to-head competition/);
+    assert.match(salesFantasySource, /10 pods · SR, SA, and BDR · weekly head-to-head competition/);
     assert.match(salesFantasySource, /import \{ AnimatePresence, motion \} from 'motion\/react'/);
     assert.match(salesFantasySource, /data-gb-ui-root/);
     assert.match(salesFantasySource, /prefers-reduced-motion: reduce/);
@@ -171,10 +172,13 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /className="sf-page-subtitle">\{pageSubtitle\(view, week\)\}/);
     assert.doesNotMatch(salesFantasySource, /sf-view-head|sf-view-heading|sf-view-copy/);
     assert.doesNotMatch(salesFantasySource, /sf-sidebar|<aside|sf-nav-button|sf-topbar/);
-    for (const pointLabel of ['Sales', 'Margin', 'Orders', 'Total']) {
+    for (const pointLabel of ['Activity', 'Sales', 'Total']) {
       assert.match(salesFantasySource, new RegExp(`>${pointLabel}<`));
     }
-    assert.match(salesFantasySource, /all three rep totals make the POD score above/);
+    for (const metricLabel of ['Emails sent', 'Emails replied', 'Outbound calls', 'Inbound calls', 'Proposals sent', 'Orders', 'Total sales', 'Total profit']) {
+      assert.match(salesFantasyModelSource, new RegExp(metricLabel, 'i'));
+    }
+    assert.match(salesFantasySource, /The SR, SA, and BDR totals make the POD score above/);
     assert.match(salesFantasySource, /aria-label=\{`Pod \$\{pod\.number\}`\}>\{pod\.number\}/);
     assert.doesNotMatch(salesFantasySource, /Pin Seekers|Fairway Force|Avery Cole|pin-seekers/);
     assert.doesNotMatch(salesFantasySource, /min-width: 680px|line-height: 30px|height: 29px/);
