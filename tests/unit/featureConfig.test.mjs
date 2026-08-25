@@ -144,7 +144,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
     assert.match(salesFantasyHtml, /<body data-gb-scale="editor">/);
     assert.match(salesFantasyHtml, /react-dist\/sales-fantasy\/sales-fantasy\.js/);
-    for (const label of ['Performance', 'Matchups', 'Standings', 'Rules']) {
+    for (const label of ['Performance', 'Matchups', 'Standings', 'Brackets', 'Rules']) {
       assert.match(salesFantasySource, new RegExp(`label: '${label}'`));
     }
     assert.match(salesFantasySource, /const POD_PAGE = \{ id: 'pods', label: 'POD Standing' \}/);
@@ -155,7 +155,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /overflow-wrap: anywhere/);
     assert.match(salesFantasySource, /<header className="sf-appbar">/);
     assert.match(salesFantasySource, /<nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">/);
-    assert.match(salesFantasySource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+    assert.match(salesFantasySource, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
     assert.match(salesFantasySource, /\.sf-week-control \{ min-height: 30px;/);
     assert.match(salesFantasySource, /\.sf-icon-button \{ width: 29px; min-height: 28px;/);
     assert.match(salesFantasySource, /\.sf-week-label \{ position: relative; width: 56px; min-height: 28px;/);
@@ -249,7 +249,7 @@ describe('developer settings · Sales Fantasy event', () => {
   });
 
   it('keeps the official matchup ledger compact above detailed role rows', () => {
-    const matchupSource = salesFantasySource.match(/function MatchupBreakdown[\s\S]*?\n}\n\nfunction CompactMatchup/)?.[0] || '';
+    const matchupSource = salesFantasySource.match(/function MatchupBreakdown[\s\S]*?\n}\n\nfunction MatchupTab/)?.[0] || '';
 
     assert.match(salesFantasySource, /\.sf-matchup-card-head \{ padding-block: var\(--sf-2\); \}/);
     assert.match(salesFantasySource, /\.sf-matchup-entry \{ min-width: 0; min-height: 64px; padding: var\(--sf-2\) var\(--sf-3\); display: flex;/);
@@ -257,6 +257,28 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(matchupSource, /className="sf-card-head sf-matchup-card-head"/);
     assert.equal((matchupSource.match(/size="small"/g) || []).length, 2);
     assert.doesNotMatch(matchupSource, /size="large"/);
+  });
+
+  it('uses a top matchup switcher and a pannable winner and loser bracket page', () => {
+    const matchupsSource = salesFantasySource.match(/function Matchups[\s\S]*?\n}\n\nfunction Standings/)?.[0] || '';
+    const bracketsSource = salesFantasySource.match(/function BracketSlot[\s\S]*?\n}\n\nfunction MetricCategory/)?.[0] || '';
+
+    assert.match(salesFantasySource, /\{ id: 'brackets', label: 'Brackets', icon: FantasyIcon\.brackets \}/);
+    assert.match(salesFantasySource, /const VIEW_ORDER = \['performance', 'matchups', 'pods', 'standings', 'brackets', 'rules'\]/);
+    assert.match(matchupsSource, /className="sf-matchup-switcher"/);
+    assert.match(matchupsSource, /className="sf-matchup-switcher-track"/);
+    assert.match(matchupsSource, /<MatchupTab game=\{game\} week=\{week\} index=\{index\}/);
+    assert.ok(matchupsSource.indexOf('sf-matchup-switcher') < matchupsSource.indexOf('<AnimatePresence'), 'the matchup selector stays above the active ledger');
+    assert.doesNotMatch(matchupsSource, /sf-matchup-list|<CompactMatchup/);
+    assert.match(bracketsSource, /buildPlayoffBracket\(standings\)/);
+    assert.match(bracketsSource, /Winner Bracket/);
+    assert.match(bracketsSource, /Loser Bracket/);
+    assert.match(bracketsSource, /className="sf-bracket-viewport" aria-label="Pannable winner and loser bracket" tabIndex=\{0\}/);
+    assert.match(bracketsSource, /drag="x" dragConstraints=\{\{ left: -320, right: 0 \}\}/);
+    assert.match(bracketsSource, /Drag to pan/);
+    assert.match(salesFantasySource, /view === 'brackets' && <Brackets standings=\{standings\} \/>/);
+    assert.match(salesFantasySource, /!\['standings', 'brackets', 'rules'\]\.includes\(view\)/);
+    assert.match(salesFantasyModelSource, /export function buildPlayoffBracket/);
   });
 });
 

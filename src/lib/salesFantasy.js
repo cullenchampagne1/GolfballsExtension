@@ -463,6 +463,63 @@ export function buildStandings(
     .map((record, index) => ({ ...record, rank: index + 1, pointsFor: oneDecimal(record.pointsFor) }));
 }
 
+function bracketPodSlot(record, pods) {
+  const pod = pods.find((candidate) => candidate.id === record.podId);
+  return {
+    kind: 'pod',
+    podId: record.podId,
+    name: pod?.name || record.podId,
+    seed: record.rank,
+  };
+}
+
+const bracketPendingSlot = (label) => ({ kind: 'pending', label });
+
+function fivePodBracket(id, label, records, pods) {
+  const entrants = records.map((record) => bracketPodSlot(record, pods));
+  const [first, second, third, fourth, fifth] = entrants;
+  return {
+    id,
+    label,
+    entrants,
+    rounds: [
+      {
+        id: `${id}-opening`,
+        label: 'Opening',
+        games: [{ id: `${id}-opening-1`, slots: [fourth, fifth] }],
+      },
+      {
+        id: `${id}-semifinals`,
+        label: 'Semifinals',
+        games: [
+          { id: `${id}-semifinal-1`, slots: [first, bracketPendingSlot('Winner · Opening')] },
+          { id: `${id}-semifinal-2`, slots: [second, third] },
+        ],
+      },
+      {
+        id: `${id}-final`,
+        label: 'Final',
+        games: [{
+          id: `${id}-final-1`,
+          slots: [bracketPendingSlot('Winner · Semifinal 1'), bracketPendingSlot('Winner · Semifinal 2')],
+        }],
+      },
+    ],
+  };
+}
+
+/** Current postseason projection: seeds 1–5 upper, seeds 6–10 lower. */
+export function buildPlayoffBracket(standings, pods = SALES_FANTASY_PODS) {
+  if (!Array.isArray(standings) || standings.length !== 10) {
+    throw new TypeError('Sales Fantasy bracket projection requires ten standings rows');
+  }
+  const ordered = [...standings].sort((left, right) => left.rank - right.rank);
+  return {
+    winnerBracket: fivePodBracket('winner', 'Winner Bracket', ordered.slice(0, 5), pods),
+    loserBracket: fivePodBracket('loser', 'Loser Bracket', ordered.slice(5), pods),
+  };
+}
+
 export function podForId(podId, pods = SALES_FANTASY_PODS) {
   return pods.find((pod) => pod.id === podId) || null;
 }

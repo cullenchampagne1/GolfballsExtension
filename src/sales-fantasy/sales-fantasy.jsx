@@ -9,6 +9,7 @@ import {
   SALES_FANTASY_ROLES,
   SALES_FANTASY_SCORING,
   buildFantasySchedule,
+  buildPlayoffBracket,
   buildStandings,
   fantasyScore,
   memberInitials,
@@ -29,6 +30,7 @@ const FantasyIcon = {
   performance: (props) => <Icon {...props}><path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /><path d="M2 19h20" /></Icon>,
   matchup: (props) => <Icon {...props}><path d="M8 5l4 4 4-4" /><path d="M8 19l4-4 4 4" /><path d="M12 9v6" /><path d="M3 12h5M16 12h5" /></Icon>,
   standings: (props) => <Icon {...props}><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7" /></Icon>,
+  brackets: (props) => <Icon {...props}><path d="M3 3h6v5H3zM3 16h6v5H3zM15 9.5h6v5h-6z" /><path d="M9 5.5h2a4 4 0 014 4v2M9 18.5h2a4 4 0 004-4v-2" /></Icon>,
   rules: (props) => <Icon {...props}><path d="M6 3h12a2 2 0 012 2v16l-4-2-4 2-4-2-4 2V5a2 2 0 012-2z" /><path d="M8 8h8M8 12h8M8 16h5" /></Icon>,
   trophy: (props) => <Icon {...props}><path d="M8 4h8v5a4 4 0 01-8 0V4z" /><path d="M8 6H4v2a4 4 0 004 4M16 6h4v2a4 4 0 01-4 4M12 13v4M8 21h8M9 17h6" /></Icon>,
   arrowLeft: (props) => <Icon {...props}><path d="M15 18l-6-6 6-6" /></Icon>,
@@ -39,11 +41,12 @@ const NAV_ITEMS = [
   { id: 'performance', label: 'Performance', navLabel: 'My Stats', icon: FantasyIcon.performance },
   { id: 'matchups', label: 'Matchups', icon: FantasyIcon.matchup },
   { id: 'standings', label: 'Standings', icon: FantasyIcon.standings },
+  { id: 'brackets', label: 'Brackets', icon: FantasyIcon.brackets },
   { id: 'rules', label: 'Rules', icon: FantasyIcon.rules },
 ];
 const POD_PAGE = { id: 'pods', label: 'POD Standing' };
 const PAGES = [...NAV_ITEMS, POD_PAGE];
-const VIEW_ORDER = ['performance', 'matchups', 'pods', 'standings', 'rules'];
+const VIEW_ORDER = ['performance', 'matchups', 'pods', 'standings', 'brackets', 'rules'];
 
 const CSS = `
   button { color: inherit; font: inherit; }
@@ -147,7 +150,7 @@ const CSS = `
   .sf-score-note strong { color: var(--gb-text-secondary); }
   .sf-status-pill.final { color: var(--gb-text-tertiary); background: var(--gb-fill-subtle); border-color: var(--gb-border-default); }
   .sf-status-pill.scheduled { color: var(--gb-info-fg); background: var(--gb-info-tint-soft); border-color: var(--gb-info-tint-border); }
-  .sf-scoreboard-grid, .sf-matchup-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
+  .sf-scoreboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
   .sf-compact-matchup { min-width: 0; padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: inherit; background: var(--gb-surface-1); text-align: left; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
   .sf-compact-matchup:hover { border-color: var(--gb-border-strong); background: var(--gb-fill-soft); }
   .sf-compact-matchup.selected { border-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); box-shadow: none; }
@@ -155,6 +158,20 @@ const CSS = `
   .sf-compact-team { min-width: 0; padding: 3px 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sf-2); }
   .sf-compact-name { min-width: 0; color: var(--gb-text-secondary); font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
   .sf-compact-score { color: var(--gb-text-primary); font-size: 13px; font-weight: 850; font-variant-numeric: tabular-nums; }
+  .sf-matchup-switcher { min-width: 0; padding: var(--sf-2); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-fill-faint); box-shadow: inset 0 1px 0 var(--gb-fill-subtle); }
+  .sf-matchup-switcher-head { min-height: 25px; padding: 0 var(--sf-1) var(--sf-2); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); }
+  .sf-matchup-switcher-title { color: var(--gb-text-primary); font-size: 9px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; }
+  .sf-matchup-switcher-meta { overflow: hidden; color: var(--gb-text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-matchup-switcher-track { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(126px, 1fr); gap: 6px; overflow-x: auto; padding: 1px 1px 3px; scrollbar-width: thin; scrollbar-color: var(--gb-border-strong) transparent; scroll-snap-type: x proximity; }
+  .sf-matchup-tab { position: relative; isolation: isolate; min-width: 0; min-height: 65px; padding: 7px 9px; overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; scroll-snap-align: start; transition: border-color .2s ease, color .2s ease; }
+  .sf-matchup-tab:hover:not(.selected) { border-color: var(--gb-border-strong); }
+  .sf-matchup-tab.selected { color: var(--gb-brand-label); border-color: var(--gb-brand-label); }
+  .sf-matchup-tab-active { position: absolute; z-index: 0; inset: 0; background: var(--gb-brand-tint-soft); }
+  .sf-matchup-tab > :not(.sf-matchup-tab-active) { position: relative; z-index: 1; }
+  .sf-matchup-tab-kicker { display: block; margin-bottom: 3px; color: var(--gb-text-muted); font-size: 7.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .sf-matchup-tab-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; font-size: 10px; font-weight: 750; }
+  .sf-matchup-tab-row + .sf-matchup-tab-row { margin-top: 2px; }
+  .sf-matchup-tab-row strong { color: var(--gb-text-primary); font-size: 11px; font-weight: 850; font-variant-numeric: tabular-nums; }
   .sf-bye-card { min-height: 70px; padding: var(--sf-3); display: flex; align-items: center; gap: var(--sf-3); border: 1px dashed var(--gb-border-strong); border-radius: var(--gb-r-lg); background: var(--gb-fill-faint); }
   .sf-bye-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; color: var(--gb-brand-label); border: 1px solid var(--gb-brand-tint-border); border-radius: var(--gb-r-md); background: var(--gb-brand-tint-soft); }
   .sf-bye-title { color: var(--gb-text-primary); font-size: 12px; font-weight: 750; }
@@ -250,9 +267,32 @@ const CSS = `
   .sf-role-rule-value { color: var(--gb-text-primary); font-size: 9px; font-weight: 800; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .sf-data-note { color: var(--gb-text-ghost); font-size: 9.5px; line-height: 1.4; text-align: right; }
   .sf-empty { padding: 32px var(--sf-4); color: var(--gb-text-muted); text-align: center; }
+  .sf-bracket-shell { min-width: 0; overflow: hidden; }
+  .sf-bracket-head-actions { display: flex; align-items: center; gap: var(--sf-2); }
+  .sf-pan-hint { min-height: 27px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--gb-brand-label); border: 1px solid var(--gb-brand-tint-border); border-radius: var(--gb-r-pill); background: var(--gb-brand-tint-soft); font-size: 8.5px; font-weight: 800; letter-spacing: .35px; text-transform: uppercase; white-space: nowrap; }
+  .sf-bracket-viewport { min-width: 0; overflow-x: auto; overflow-y: hidden; background: linear-gradient(90deg, var(--gb-fill-faint), transparent 18%, transparent 82%, var(--gb-fill-faint)); scrollbar-width: thin; scrollbar-color: var(--gb-border-strong) transparent; overscroll-behavior-x: contain; }
+  .sf-bracket-canvas { width: 980px; padding: var(--sf-4); display: grid; gap: var(--sf-4); cursor: grab; touch-action: pan-y; }
+  .sf-bracket-lane { position: relative; padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-surface-1); }
+  .sf-bracket-lane.winner { border-color: var(--gb-brand-tint-border); background: linear-gradient(90deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 34%); }
+  .sf-bracket-lane-label { margin-bottom: var(--sf-3); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); }
+  .sf-bracket-lane-title { color: var(--gb-text-primary); font-size: 12px; font-weight: 850; }
+  .sf-bracket-lane-seeds { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
+  .sf-bracket-rounds { display: grid; grid-template-columns: repeat(3, 260px); gap: 74px; }
+  .sf-bracket-round { min-width: 0; min-height: 184px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+  .sf-bracket-round-label { margin-bottom: var(--sf-1); color: var(--gb-text-muted); font-size: 8px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; }
+  .sf-bracket-game { position: relative; min-width: 0; overflow: visible; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-surface-1); box-shadow: 0 2px 7px rgba(0, 0, 0, .09); }
+  .sf-bracket-game::after { content: ''; position: absolute; top: 50%; left: calc(100% + 1px); width: 74px; border-top: 1px solid var(--gb-border-strong); }
+  .sf-bracket-round:last-child .sf-bracket-game::after { display: none; }
+  .sf-bracket-slot { min-height: 35px; padding: 6px 8px; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 7px; color: var(--gb-text-secondary); }
+  .sf-bracket-slot + .sf-bracket-slot { border-top: 1px solid var(--gb-border-subtle); }
+  .sf-bracket-slot.mine { color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
+  .sf-bracket-seed { width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid var(--gb-border-default); border-radius: 50%; color: var(--gb-text-muted); background: var(--gb-fill-faint); font-size: 8px; font-weight: 850; }
+  .sf-bracket-slot-name { min-width: 0; overflow: hidden; color: var(--gb-text-primary); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-bracket-slot.pending .sf-bracket-slot-name { color: var(--gb-text-muted); font-size: 9px; font-weight: 700; }
+  .sf-bracket-note { padding: 0 var(--sf-4) var(--sf-4); color: var(--gb-text-muted); font-size: 9.5px; line-height: 1.5; }
   .sf-bottom-nav {
     position: relative; z-index: 5; flex: 0 0 76px; min-height: 76px;
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch;
     padding: 7px max(12px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     border-top: 1px solid var(--gb-border-default); background: var(--gb-surface-1);
     background: color-mix(in srgb, var(--gb-surface-1) 96%, var(--gb-brand-tint-soft));
@@ -316,7 +356,7 @@ const CSS = `
     .sf-page-title { font-size: 18px; }
     .sf-page-subtitle { max-width: 280px; font-size: 10px; }
     .sf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .sf-split-grid, .sf-scoreboard-grid, .sf-matchup-list { grid-template-columns: 1fr; }
+    .sf-split-grid, .sf-scoreboard-grid { grid-template-columns: 1fr; }
     .sf-matchup-board { grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr); }
     .sf-matchup-entry { padding: var(--sf-2); gap: 6px; }
     .sf-matchup-team { gap: var(--sf-2); }
@@ -327,6 +367,9 @@ const CSS = `
     .sf-member-tab-role { display: none; }
     .sf-role-rule-grid { grid-template-columns: 1fr; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
+    .sf-matchup-switcher-track { grid-auto-columns: minmax(118px, 1fr); }
+    .sf-bracket-canvas { padding: var(--sf-3); }
+    .sf-pan-hint { padding-inline: 6px; font-size: 8px; }
     .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
     .sf-bottom-item::before, .sf-bottom-active { inset-inline: 5%; }
     .sf-bottom-center { top: -24px; width: 76px; min-height: 63px; border-radius: 20px; }
@@ -362,6 +405,7 @@ function pageSubtitle(view, week) {
   if (view === 'performance') return `POD 1 individual contribution · Week ${week}`;
   if (view === 'matchups') return `Week ${week} · audit every role contribution`;
   if (view === 'standings') return '10 pods · wins rank first; completed-week points break ties';
+  if (view === 'brackets') return `If the season ended today · seeds 1–5 Winner Bracket · seeds 6–10 Loser Bracket`;
   if (view === 'rules') return 'Attribution, role rates, margin tiers, and worked scoring examples';
   return `Current POD standing · SR, SA, and BDR · Week ${week}`;
 }
@@ -479,6 +523,25 @@ function MatchupBreakdown({ game, week, standings, title = 'Current matchup' }) 
       <div className="sf-split-grid"><SplitPanel pod={home} week={week} /><SplitPanel pod={away} week={week} /></div>
       <div className="sf-score-note"><strong>How it adds up:</strong> SR, SA, and BDR earn Activity and Sales at the rates shown in Rules. BDR can also earn Referred points from qualifying orders on BDR-owned accounts. The three role totals reconcile to the official POD score.</div>
     </article>
+  );
+}
+
+function MatchupTab({ game, week, index, selected, onSelect }) {
+  const pods = [podForId(game.home), podForId(game.away)];
+  return (
+    <motion.button
+      type="button"
+      className={`sf-matchup-tab ${selected ? 'selected' : ''}`}
+      aria-pressed={selected}
+      aria-label={`Game ${index + 1}: ${pods[0].name} versus ${pods[1].name}`}
+      onClick={onSelect}
+      whileTap={{ scale: 0.97 }}
+      transition={NAV_TRANSITION}
+    >
+      {selected && <motion.span className="sf-matchup-tab-active" layoutId="sf-matchup-tab-active" transition={NAV_TRANSITION} />}
+      <span className="sf-matchup-tab-kicker">Game {index + 1}</span>
+      {pods.map((pod) => <span className="sf-matchup-tab-row" key={pod.id}><span>{pod.name}</span><strong>{fantasyScore(pod.id, week).toFixed(1)}</strong></span>)}
+    </motion.button>
   );
 }
 
@@ -651,16 +714,20 @@ function Matchups({ week, standings, selectedGameId, onSelectGame }) {
   const weekData = SCHEDULE[week - 1];
   const myGame = matchupForPod(weekData, MY_POD_ID);
   const selectedGame = weekData.games.find((game) => game.id === selectedGameId) || myGame || weekData.games[0];
+  const byeNames = weekData.byes.map((podId) => podForId(podId).name).join(' + ');
   return (
     <div className="sf-stack">
+      <section className="sf-matchup-switcher" aria-label={`Week ${week} matchup selector`}>
+        <div className="sf-matchup-switcher-head"><span className="sf-matchup-switcher-title">Week {week} slate</span><span className="sf-matchup-switcher-meta">{weekData.games.length} games{byeNames ? ` · ${byeNames} bye` : ''}</span></div>
+        <div className="sf-matchup-switcher-track">
+          {weekData.games.map((game, index) => <MatchupTab game={game} week={week} index={index} key={game.id} selected={game.id === selectedGame.id} onSelect={() => onSelectGame(game.id)} />)}
+        </div>
+      </section>
       <AnimatePresence initial={false} mode="wait">
         <motion.div key={selectedGame?.id || `bye-${week}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={PAGE_TRANSITION}>
           <MatchupBreakdown game={selectedGame} week={week} standings={standings} />
         </motion.div>
       </AnimatePresence>
-      <div className="sf-section-label"><h2 className="sf-section-title">All Week {week} matchups</h2><span className="sf-section-note">{weekData.games.length} head to head</span></div>
-      <div className="sf-matchup-list">{weekData.games.map((game) => <CompactMatchup game={game} week={week} key={game.id} selected={game.id === selectedGame.id} onSelect={() => onSelectGame(game.id)} />)}</div>
-      <ByeCard byes={weekData.byes} />
     </div>
   );
 }
@@ -671,6 +738,48 @@ function Standings({ standings }) {
       <div className="sf-card sf-table-wrap"><table className="sf-league-table"><thead><tr><th>Rank</th><th>Pod</th><th>W</th><th>L</th><th>Bye</th><th>Points for</th></tr></thead><tbody>{standings.map((row) => { const pod = podForId(row.podId); return <tr className={pod.id === MY_POD_ID ? 'mine' : ''} key={pod.id}><td><span className={`sf-rank-badge ${row.rank <= 3 ? 'top' : ''}`}>{row.rank}</span></td><td><div className="sf-standing-team"><PodMark pod={pod} size="small" /><span className="sf-team-name">{pod.name}</span></div></td><td>{row.wins}</td><td>{row.losses}</td><td>{row.byes}</td><td className="sf-metric-primary">{row.pointsFor.toFixed(1)}</td></tr>; })}</tbody></table></div>
       <div className="sf-data-note">Standings include completed matchups only.</div>
     </div>
+  );
+}
+
+function BracketSlot({ slot }) {
+  if (slot.kind === 'pending') {
+    return <div className="sf-bracket-slot pending"><span className="sf-bracket-seed">—</span><span className="sf-bracket-slot-name">{slot.label}</span></div>;
+  }
+  return <div className={`sf-bracket-slot ${slot.podId === MY_POD_ID ? 'mine' : ''}`}><span className="sf-bracket-seed">{slot.seed}</span><span className="sf-bracket-slot-name">{slot.name}</span></div>;
+}
+
+function BracketLane({ bracket }) {
+  return (
+    <section className={`sf-bracket-lane ${bracket.id}`} aria-label={bracket.label}>
+      <div className="sf-bracket-lane-label"><span className="sf-bracket-lane-title">{bracket.label}</span><span className="sf-bracket-lane-seeds">Seeds {bracket.entrants[0].seed}–{bracket.entrants[bracket.entrants.length - 1].seed}</span></div>
+      <div className="sf-bracket-rounds">
+        {bracket.rounds.map((round) => (
+          <section className="sf-bracket-round" key={round.id} aria-label={`${bracket.label} ${round.label}`}>
+            <div className="sf-bracket-round-label">{round.label}</div>
+            {round.games.map((game) => <div className="sf-bracket-game" key={game.id}>{game.slots.map((slot, index) => <BracketSlot slot={slot} key={`${game.id}-${index}`} />)}</div>)}
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Brackets({ standings }) {
+  const bracket = buildPlayoffBracket(standings);
+  return (
+    <article className="sf-card sf-bracket-shell">
+      <div className="sf-card-head">
+        <div><div className="sf-card-title">Current playoff projection</div><div className="sf-card-caption">Based on completed standings through Week {SALES_FANTASY_CURRENT_WEEK - 1}</div></div>
+        <div className="sf-bracket-head-actions"><span className="sf-pan-hint"><FantasyIcon.brackets size={12} />Drag to pan</span></div>
+      </div>
+      <div className="sf-bracket-viewport" aria-label="Pannable winner and loser bracket" tabIndex={0}>
+        <motion.div className="sf-bracket-canvas" drag="x" dragConstraints={{ left: -320, right: 0 }} dragElastic={0.06} dragMomentum dragTransition={{ bounceStiffness: 300, bounceDamping: 30 }}>
+          <BracketLane bracket={bracket.winnerBracket} />
+          <BracketLane bracket={bracket.loserBracket} />
+        </motion.div>
+      </div>
+      <div className="sf-bracket-note">Seeds 1–5 currently qualify for the Winner Bracket. Seeds 6–10 enter the Loser Bracket. The projection updates as completed-week standings change.</div>
+    </article>
   );
 }
 
@@ -733,7 +842,7 @@ function SalesFantasyApp() {
   const myPod = podForId(MY_POD_ID);
   const myStanding = standings.find((row) => row.podId === MY_POD_ID);
   const page = PAGES.find((item) => item.id === view) || POD_PAGE;
-  const showWeekControl = view !== 'standings' && view !== 'rules';
+  const showWeekControl = !['standings', 'brackets', 'rules'].includes(view);
 
   const changeWeek = (nextWeek) => {
     setDirection(nextWeek > week ? 1 : -1);
@@ -780,6 +889,7 @@ function SalesFantasyApp() {
               {view === 'performance' && <Performance week={week} selectedMemberId={selectedMemberId} onSelectMember={setSelectedMemberId} onSelectWeek={changeWeek} />}
               {view === 'matchups' && <Matchups week={week} standings={standings} selectedGameId={selectedGameId} onSelectGame={setSelectedGameId} />}
               {view === 'standings' && <Standings standings={standings} />}
+              {view === 'brackets' && <Brackets standings={standings} />}
               {view === 'rules' && <Rules />}
               {view === 'pods' && <PodDashboard week={week} standings={standings} onView={changeView} />}
             </motion.div>

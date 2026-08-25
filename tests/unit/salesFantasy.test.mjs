@@ -8,6 +8,7 @@ import {
   SALES_FANTASY_SCORING,
   allocatePodOrders,
   buildFantasySchedule,
+  buildPlayoffBracket,
   buildStandings,
   fantasyScore,
   marginTierForOrder,
@@ -275,5 +276,22 @@ describe('salesFantasy · league model', () => {
     assert.equal(standings.length, 10);
     assert.deepEqual(standings.map((record) => record.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     assert.equal(standings.reduce((sum, record) => sum + record.wins, 0), standings.reduce((sum, record) => sum + record.losses, 0));
+  });
+
+  it('projects every POD into a five-seed winner or loser bracket', () => {
+    const schedule = buildFantasySchedule();
+    const standings = buildStandings(SALES_FANTASY_PODS, schedule, SALES_FANTASY_CURRENT_WEEK);
+    const bracket = buildPlayoffBracket(standings);
+
+    assert.deepEqual(bracket.winnerBracket.entrants.map((entry) => entry.podId), standings.slice(0, 5).map((row) => row.podId));
+    assert.deepEqual(bracket.winnerBracket.entrants.map((entry) => entry.seed), [1, 2, 3, 4, 5]);
+    assert.deepEqual(bracket.loserBracket.entrants.map((entry) => entry.podId), standings.slice(5).map((row) => row.podId));
+    assert.deepEqual(bracket.loserBracket.entrants.map((entry) => entry.seed), [6, 7, 8, 9, 10]);
+    assert.deepEqual(bracket.winnerBracket.rounds.map((round) => [round.label, round.games.length]), [
+      ['Opening', 1], ['Semifinals', 2], ['Final', 1],
+    ]);
+    assert.deepEqual(bracket.winnerBracket.rounds[0].games[0].slots.map((slot) => slot.seed), [4, 5]);
+    assert.deepEqual(bracket.loserBracket.rounds[0].games[0].slots.map((slot) => slot.seed), [9, 10]);
+    assert.throws(() => buildPlayoffBracket(standings.slice(0, 9)), /requires ten standings rows/);
   });
 });
