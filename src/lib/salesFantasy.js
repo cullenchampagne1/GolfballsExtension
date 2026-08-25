@@ -19,6 +19,20 @@ export const SALES_FANTASY_ROLES = Object.freeze([
   Object.freeze({ id: 'bdr', label: 'BDR', title: 'Business Development Representative' }),
 ]);
 
+/** POD assignments imported from the 2026-08-24 Sales Fantasy lineup export. */
+export const SALES_FANTASY_LINEUPS = Object.freeze([
+  Object.freeze({ sr: 'Lorie Ojeman', sa: 'Alex Sylvester', bdr: 'JP Furman' }),
+  Object.freeze({ sr: 'Melanie DeMoss', sa: 'Ryan Garrison', bdr: 'Hayden Fabre' }),
+  Object.freeze({ sr: 'Scott Bienvenu', sa: 'Tyler Carney', bdr: 'Kade Kelemen' }),
+  Object.freeze({ sr: 'Andy Melancon', sa: 'Sam Reutling', bdr: 'Joshua Faulk' }),
+  Object.freeze({ sr: 'Seth Dupre', sa: 'Matthew LaGrange', bdr: 'Cullen Champagne' }),
+  Object.freeze({ sr: 'Brendan Begue', sa: 'Brodie Graham', bdr: 'Braxton Terrebonne' }),
+  Object.freeze({ sr: 'Joby Lasseigne', sa: 'Cameron Burkstaller', bdr: 'Bryce Sutterfield' }),
+  Object.freeze({ sr: 'Collin Duplechain', sa: 'Ashlund Thibodeaux', bdr: 'Clay Landry' }),
+  Object.freeze({ sr: 'Mitch Cope', sa: 'Kevin Toms', bdr: 'Cam Burke' }),
+  Object.freeze({ sr: 'Logan Bex', sa: 'Logan Bex', bdr: 'Logan Bex' }),
+]);
+
 /** Shared weekly scoring contract for every role ledger and pod total. */
 export const SALES_FANTASY_SCORING = Object.freeze({
   scoringDaysPerWeek: 5,
@@ -63,7 +77,7 @@ export const SALES_FANTASY_PODS = Array.from({ length: POD_COUNT }, (_, podIndex
     members: SALES_FANTASY_ROLES.map((role, memberIndex) => ({
       id: `${id}-${role.id}`,
       number: memberIndex + 1,
-      name: role.label,
+      name: SALES_FANTASY_LINEUPS[podIndex][role.id],
       role: role.title,
       roleId: role.id,
     })),

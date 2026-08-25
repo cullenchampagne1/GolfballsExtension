@@ -138,7 +138,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.doesNotMatch(salesFantasyButtonSource, /whileHover|whileTap|boxShadow: 'inset|blur|rgba\(/);
     assert.doesNotMatch(salesFantasyButtonSource, /#4c1d95|#7c3aed|#db2777/);
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
-    assert.match(backgroundSource, /const SALES_FANTASY_WINDOW_BOUNDS = Object\.freeze\(\{ width: 700, height: 820 \}\)/);
+    assert.match(backgroundSource, /const SALES_FANTASY_WINDOW_BOUNDS = Object\.freeze\(\{ width: 700, height: 900 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.SALES_FANTASY_WINDOW_BOUNDS/);
     assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
@@ -163,8 +163,14 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /\.sf-bottom-item::before, \.sf-bottom-active \{ position: absolute; z-index: -1; inset: 5px 12%;/);
     assert.match(salesFantasySource, /\.sf-bottom-item:hover:not\(\.active\)::before \{ opacity: 1; \}/);
     assert.doesNotMatch(salesFantasySource, /\.sf-bottom-item:hover \{[^}]*background:/);
-    assert.match(salesFantasySource, /sf-bottom-center \$\{view === 'pods' \? 'active' : ''\}/);
-    assert.match(salesFantasySource, /box-shadow: 0 4px 10px rgba\(0, 0, 0, \.2\)/);
+    assert.match(salesFantasySource, /background: var\(--gb-surface-canvas\)/);
+    assert.match(salesFantasySource, /\.sf-appbar \{[\s\S]*?box-shadow: none;/);
+    assert.doesNotMatch(salesFantasySource, /var\(--gb-brand-tint-soft\) 0, var\(--gb-surface-canvas\) 150px/);
+    assert.match(salesFantasySource, /const NAV_TRANSITION = \{ type: 'spring', stiffness: 430, damping: 34, mass: 0\.72 \}/);
+    assert.match(salesFantasySource, /sf-bottom-center \$\{centerActive \? 'active' : ''\}/);
+    assert.match(salesFantasySource, /className="sf-bottom-center-selected"/);
+    assert.match(salesFantasySource, /animate=\{centerActive \? \{ y: -3, scale: 1\.035 \} : \{ y: 0, scale: 1 \}\}/);
+    assert.match(salesFantasySource, /\.sf-bottom-center\.active \{[\s\S]*?background: linear-gradient\(180deg, var\(--gb-brand\) 0%, var\(--gb-brand-dark\) 100%\)/);
     assert.doesNotMatch(salesFantasySource, /0 9px 22px var\(--gb-brand-tint-strong\)|0 11px 26px var\(--gb-brand-tint-strong\)/);
     assert.match(salesFantasySource, /Open POD 1 current Week \$\{SALES_FANTASY_CURRENT_WEEK\} standing/);
     assert.match(salesFantasySource, /className="sf-bottom-center-week">POD 1/);

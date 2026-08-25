@@ -22,6 +22,7 @@ const MY_POD_ID = 'pod-1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
 const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
+const NAV_TRANSITION = { type: 'spring', stiffness: 430, damping: 34, mass: 0.72 };
 
 const FantasyIcon = {
   performance: (props) => <Icon {...props}><path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /><path d="M2 19h20" /></Icon>,
@@ -50,12 +51,13 @@ const CSS = `
     width: 100%; height: 100%; min-width: 0;
     display: flex; flex-direction: column; overflow: hidden;
     color: var(--gb-text-secondary);
-    background: linear-gradient(180deg, var(--gb-brand-tint-soft) 0, var(--gb-surface-canvas) 150px);
+    background: var(--gb-surface-canvas);
     font-family: var(--gb-font-sans); font-size: 12px; line-height: 1.4;
   }
   .sf-appbar {
     flex: 0 0 auto; min-height: 68px; padding: 9px var(--sf-5);
     border-bottom: 1px solid var(--gb-border-default); background: var(--gb-surface-1);
+    box-shadow: none;
   }
   .sf-appbar-inner { width: 100%; max-width: 760px; min-height: 50px; margin: 0 auto; display: flex; align-items: center; gap: var(--sf-4); }
   .sf-appbar-brand { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
@@ -252,30 +254,47 @@ const CSS = `
     display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;
     padding: 7px max(12px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     border-top: 1px solid var(--gb-border-default); background: var(--gb-surface-1);
+    background: color-mix(in srgb, var(--gb-surface-1) 96%, var(--gb-brand-tint-soft));
+    box-shadow: 0 -1px 0 var(--gb-fill-subtle);
   }
   .sf-bottom-item {
     position: relative; isolation: isolate; min-width: 0; min-height: 58px; padding: 7px 4px 4px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     border: 0; border-radius: var(--gb-r-md); cursor: pointer; background: transparent;
-    color: var(--gb-text-muted); transition: color .18s ease;
+    color: var(--gb-text-muted); transition: color .24s cubic-bezier(.22, 1, .36, 1);
   }
   .sf-bottom-item::before, .sf-bottom-active { position: absolute; z-index: -1; inset: 5px 12%; border-radius: var(--gb-r-md); }
-  .sf-bottom-item::before { content: ''; background: var(--gb-fill-subtle); opacity: 0; transition: opacity .18s ease; }
+  .sf-bottom-item::before { content: ''; background: var(--gb-fill-subtle); opacity: 0; transition: opacity .24s cubic-bezier(.22, 1, .36, 1); }
   .sf-bottom-item:hover:not(.active) { color: var(--gb-text-primary); }
   .sf-bottom-item:hover:not(.active)::before { opacity: 1; }
   .sf-bottom-item.active { color: var(--gb-brand-label); }
-  .sf-bottom-active { background: var(--gb-brand-tint-soft); }
+  .sf-bottom-active { border: 1px solid var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); box-shadow: inset 0 1px 0 var(--gb-fill-subtle); }
+  .sf-bottom-item-icon { height: 18px; display: grid; place-items: center; transform-origin: center bottom; }
   .sf-bottom-label { max-width: 100%; overflow: hidden; font-size: 9px; font-weight: 750; letter-spacing: .1px; text-overflow: ellipsis; white-space: nowrap; }
   .sf-bottom-center-slot { position: relative; display: flex; justify-content: center; }
   .sf-bottom-center {
     position: absolute; top: -27px; width: 84px; min-height: 68px; padding: 7px 6px 6px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     border: 1px solid var(--gb-brand-border); border-radius: 22px; cursor: pointer;
-    color: var(--gb-text-on-brand); background: linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, .2); transition: filter .18s ease, box-shadow .18s ease;
+    color: var(--gb-brand-label); background: var(--gb-surface-1);
+    box-shadow: 0 3px 9px rgba(0, 0, 0, .14), inset 0 1px 0 var(--gb-fill-subtle);
+    transition: color .24s cubic-bezier(.22, 1, .36, 1), background .24s cubic-bezier(.22, 1, .36, 1), border-color .24s cubic-bezier(.22, 1, .36, 1), filter .24s cubic-bezier(.22, 1, .36, 1), box-shadow .24s cubic-bezier(.22, 1, .36, 1);
   }
-  .sf-bottom-center:hover { filter: brightness(1.06); box-shadow: 0 5px 12px rgba(0, 0, 0, .22); }
-  .sf-bottom-center.active { box-shadow: 0 0 0 3px var(--gb-brand-tint-medium), 0 5px 12px rgba(0, 0, 0, .22); }
+  .sf-bottom-center:hover { filter: brightness(1.04); box-shadow: 0 5px 13px rgba(0, 0, 0, .18), inset 0 1px 0 var(--gb-fill-subtle); }
+  .sf-bottom-center.active {
+    color: var(--gb-text-on-brand); border-color: var(--gb-brand-label);
+    background: linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%);
+    box-shadow: 0 7px 16px rgba(0, 0, 0, .22);
+  }
+  .sf-bottom-center-selected {
+    position: absolute; inset: -5px; pointer-events: none;
+    border: 2px solid var(--gb-brand-label); border-radius: 27px;
+    box-shadow: 0 0 0 3px var(--gb-brand-tint-medium);
+  }
+  .sf-bottom-center-selected::after {
+    content: ''; position: absolute; top: 4px; right: 7px; width: 7px; height: 7px;
+    border: 2px solid var(--gb-brand); border-radius: 50%; background: var(--gb-text-on-brand);
+  }
   .sf-bottom-center-icon { height: 15px; display: grid; place-items: center; }
   .sf-bottom-center-week { font-size: 11px; line-height: 1.1; font-weight: 850; letter-spacing: -.1px; }
   .sf-bottom-center-rank { font-size: 8px; line-height: 1.1; font-weight: 750; opacity: .82; text-transform: uppercase; letter-spacing: .45px; }
@@ -369,21 +388,24 @@ function WeekControl({ week, direction, onChange }) {
 }
 
 function BottomNav({ view, rank, onView, onCurrentWeek }) {
+  const centerActive = view === 'pods';
   const renderItem = (item) => {
     const NavIcon = item.icon;
     const active = view === item.id;
     return (
-      <button
+      <motion.button
         type="button"
         key={item.id}
         className={`sf-bottom-item ${active ? 'active' : ''}`}
         aria-current={active ? 'page' : undefined}
         onClick={() => onView(item.id)}
+        whileTap={{ scale: 0.96 }}
+        transition={NAV_TRANSITION}
       >
-        {active && <motion.span className="sf-bottom-active" layoutId="sf-bottom-active" transition={PAGE_TRANSITION} />}
-        <NavIcon size={17} />
+        {active && <motion.span className="sf-bottom-active" layoutId="sf-bottom-active" transition={NAV_TRANSITION} />}
+        <motion.span className="sf-bottom-item-icon" animate={active ? { y: -1, scale: 1.08 } : { y: 0, scale: 1 }} transition={NAV_TRANSITION}><NavIcon size={17} /></motion.span>
         <span className="sf-bottom-label">{item.navLabel || item.label}</span>
-      </button>
+      </motion.button>
     );
   };
 
@@ -391,17 +413,21 @@ function BottomNav({ view, rank, onView, onCurrentWeek }) {
     <nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">
       {NAV_ITEMS.slice(0, 2).map(renderItem)}
       <div className="sf-bottom-center-slot">
-        <button
+        <motion.button
           type="button"
-          className={`sf-bottom-center ${view === 'pods' ? 'active' : ''}`}
-          aria-current={view === 'pods' ? 'page' : undefined}
+          className={`sf-bottom-center ${centerActive ? 'active' : ''}`}
+          aria-current={centerActive ? 'page' : undefined}
           aria-label={`Open POD 1 current Week ${SALES_FANTASY_CURRENT_WEEK} standing; league rank ${rank}`}
           onClick={onCurrentWeek}
+          animate={centerActive ? { y: -3, scale: 1.035 } : { y: 0, scale: 1 }}
+          whileTap={{ scale: centerActive ? 1 : 0.96 }}
+          transition={NAV_TRANSITION}
         >
+          <AnimatePresence initial={false}>{centerActive && <motion.span className="sf-bottom-center-selected" initial={{ opacity: 0, scale: 0.88 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }} transition={NAV_TRANSITION} />}</AnimatePresence>
           <span className="sf-bottom-center-icon"><FantasyIcon.trophy size={14} /></span>
           <span className="sf-bottom-center-week">POD 1</span>
           <span className="sf-bottom-center-rank">W{SALES_FANTASY_CURRENT_WEEK} · Rank #{rank}</span>
-        </button>
+        </motion.button>
       </div>
       {NAV_ITEMS.slice(2).map(renderItem)}
     </nav>

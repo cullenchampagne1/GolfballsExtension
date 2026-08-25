@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SALES_FANTASY_CURRENT_WEEK,
+  SALES_FANTASY_LINEUPS,
   SALES_FANTASY_PODS,
   SALES_FANTASY_ROLES,
   SALES_FANTASY_SCORING,
@@ -21,14 +22,27 @@ import {
 
 describe('salesFantasy · league model', () => {
   it('defines POD 1 through POD 10 with one SR, SA, and BDR each', () => {
+    const expectedLineups = [
+      { sr: 'Lorie Ojeman', sa: 'Alex Sylvester', bdr: 'JP Furman' },
+      { sr: 'Melanie DeMoss', sa: 'Ryan Garrison', bdr: 'Hayden Fabre' },
+      { sr: 'Scott Bienvenu', sa: 'Tyler Carney', bdr: 'Kade Kelemen' },
+      { sr: 'Andy Melancon', sa: 'Sam Reutling', bdr: 'Joshua Faulk' },
+      { sr: 'Seth Dupre', sa: 'Matthew LaGrange', bdr: 'Cullen Champagne' },
+      { sr: 'Brendan Begue', sa: 'Brodie Graham', bdr: 'Braxton Terrebonne' },
+      { sr: 'Joby Lasseigne', sa: 'Cameron Burkstaller', bdr: 'Bryce Sutterfield' },
+      { sr: 'Collin Duplechain', sa: 'Ashlund Thibodeaux', bdr: 'Clay Landry' },
+      { sr: 'Mitch Cope', sa: 'Kevin Toms', bdr: 'Cam Burke' },
+      { sr: 'Logan Bex', sa: 'Logan Bex', bdr: 'Logan Bex' },
+    ];
     assert.equal(SALES_FANTASY_PODS.length, 10);
+    assert.deepEqual(SALES_FANTASY_LINEUPS, expectedLineups);
     assert.equal(new Set(SALES_FANTASY_PODS.map((pod) => pod.id)).size, 10);
     assert.deepEqual(SALES_FANTASY_PODS.map((pod) => pod.id), Array.from({ length: 10 }, (_, index) => `pod-${index + 1}`));
     assert.deepEqual(SALES_FANTASY_PODS.map((pod) => pod.name), Array.from({ length: 10 }, (_, index) => `POD ${index + 1}`));
     assert.deepEqual(SALES_FANTASY_PODS.map((pod) => pod.number), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     for (const [podIndex, pod] of SALES_FANTASY_PODS.entries()) {
       assert.equal(pod.members.length, 3, pod.name);
-      assert.deepEqual(pod.members.map((member) => member.name), ['SR', 'SA', 'BDR']);
+      assert.deepEqual(pod.members.map((member) => member.name), SALES_FANTASY_ROLES.map((role) => expectedLineups[podIndex][role.id]));
       assert.deepEqual(pod.members.map((member) => member.roleId), SALES_FANTASY_ROLES.map((role) => role.id));
       for (const [memberIndex, member] of pod.members.entries()) {
         assert.equal(member.id, `pod-${podIndex + 1}-${SALES_FANTASY_ROLES[memberIndex].id}`);

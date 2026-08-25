@@ -240,7 +240,7 @@ let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focu
 // Keep editor dimensions stable while the fantasy experience uses a taller,
 // phone-like portrait footprint of its own.
 const MANAGER_WINDOW_BOUNDS = Object.freeze({ width: 860, height: 700 });
-const SALES_FANTASY_WINDOW_BOUNDS = Object.freeze({ width: 700, height: 820 });
+const SALES_FANTASY_WINDOW_BOUNDS = Object.freeze({ width: 700, height: 900 });
 
 const GB_PAGE_ENGINE_TAB_PATTERNS = [
   'https://www.golfballs.com/*',
