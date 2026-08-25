@@ -150,6 +150,14 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /data-gb-ui-root/);
     assert.match(salesFantasySource, /prefers-reduced-motion: reduce/);
     assert.match(salesFantasySource, /overflow-wrap: anywhere/);
+    assert.match(salesFantasySource, /<header className="sf-appbar">/);
+    assert.match(salesFantasySource, /<nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">/);
+    assert.match(salesFantasySource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+    assert.match(salesFantasySource, /className="sf-bottom-center"/);
+    assert.match(salesFantasySource, /Week \{SALES_FANTASY_CURRENT_WEEK\}/);
+    assert.match(salesFantasySource, /className="sf-bottom-center-rank">Rank #\{rank\}/);
+    assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
+    assert.doesNotMatch(salesFantasySource, /sf-sidebar|<aside|sf-nav-button|sf-topbar/);
     for (const pointLabel of ['Sales', 'Margin', 'Orders', 'Total']) {
       assert.match(salesFantasySource, new RegExp(`>${pointLabel}<`));
     }

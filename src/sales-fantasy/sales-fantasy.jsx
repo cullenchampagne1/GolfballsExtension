@@ -30,7 +30,7 @@ const FantasyIcon = {
 };
 
 const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview', icon: FantasyIcon.overview },
+  { id: 'overview', label: 'Overview', navLabel: 'Home', icon: FantasyIcon.overview },
   { id: 'matchups', label: 'Matchups', icon: FantasyIcon.matchup },
   { id: 'standings', label: 'Standings', icon: FantasyIcon.standings },
   { id: 'pods', label: 'Pods', icon: I.users },
@@ -41,56 +41,43 @@ const CSS = `
   .sf-app {
     --sf-1: 4px; --sf-2: 8px; --sf-3: 12px; --sf-4: 16px; --sf-5: 20px;
     width: 100%; height: 100%; min-width: 0;
-    display: grid; grid-template-columns: 176px minmax(0, 1fr);
-    color: var(--gb-text-secondary); background: var(--gb-surface-canvas);
+    display: flex; flex-direction: column; overflow: hidden;
+    color: var(--gb-text-secondary);
+    background: linear-gradient(180deg, var(--gb-brand-tint-soft) 0, var(--gb-surface-canvas) 150px);
     font-family: var(--gb-font-sans); font-size: 12px; line-height: 1.4;
   }
-  .sf-sidebar {
-    min-width: 0; display: flex; flex-direction: column;
-    background: var(--gb-surface-1); border-right: 1px solid var(--gb-border-default);
+  .sf-appbar {
+    flex: 0 0 auto; min-height: 68px; padding: 9px var(--sf-5);
+    border-bottom: 1px solid var(--gb-border-default); background: var(--gb-surface-1);
   }
-  .sf-brand { min-height: 76px; padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-subtle); }
+  .sf-appbar-inner { width: 100%; max-width: 760px; min-height: 50px; margin: 0 auto; display: flex; align-items: center; gap: var(--sf-4); }
+  .sf-appbar-brand { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
   .sf-brand-mark, .sf-pod-mark {
     display: grid; place-items: center; flex: 0 0 auto;
     color: var(--gb-brand-label); background: var(--gb-brand-tint-medium);
     border: 1px solid var(--gb-brand-tint-border);
   }
-  .sf-brand-mark { width: 38px; height: 38px; border-radius: var(--gb-r-lg); box-shadow: inset 0 -2px 0 var(--gb-brand-tint-border); }
-  .sf-brand-copy, .sf-topbar-copy, .sf-team-copy, .sf-pod-copy { min-width: 0; }
-  .sf-brand-name { color: var(--gb-text-primary); font-size: 14px; font-weight: 800; letter-spacing: -.2px; overflow-wrap: anywhere; }
+  .sf-brand-mark { width: 38px; height: 38px; border-radius: 12px; }
+  .sf-brand-copy, .sf-team-copy, .sf-pod-copy { min-width: 0; }
+  .sf-brand-name { color: var(--gb-text-primary); font-size: 14px; font-weight: 850; letter-spacing: -.25px; overflow-wrap: anywhere; }
   .sf-kicker { margin-top: 3px; color: var(--gb-text-muted); font-size: 10px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; }
-  .sf-nav { display: grid; gap: var(--sf-1); padding: var(--sf-4) var(--sf-2); }
-  .sf-nav-button {
-    position: relative; isolation: isolate; width: 100%; min-height: 40px; padding: var(--sf-2) var(--sf-3);
-    display: flex; align-items: center; gap: 10px; border: 0; border-radius: var(--gb-r-md);
-    cursor: pointer; background: transparent; color: var(--gb-text-tertiary); font-weight: 650; text-align: left;
-    transition: color .16s ease, background-color .16s ease;
-  }
-  .sf-nav-button:hover { color: var(--gb-text-primary); background: var(--gb-fill-subtle); }
-  .sf-nav-button.active { color: var(--gb-brand-label); }
-  .sf-nav-active { position: absolute; z-index: -1; inset: 0; border: 1px solid var(--gb-brand-tint-border); border-radius: inherit; background: var(--gb-brand-tint-soft); }
-  .sf-nav-label { min-width: 0; overflow-wrap: anywhere; }
-  .sf-season-card { margin: auto var(--sf-2) var(--sf-2); padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); background: var(--gb-fill-faint); }
-  .sf-season-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-2); }
-  .sf-season-title { color: var(--gb-text-primary); font-size: 12px; font-weight: 700; }
+  .sf-appbar-meta { margin-top: 2px; display: flex; align-items: center; gap: 6px; color: var(--gb-text-muted); font-size: 9.5px; font-weight: 700; }
+  .sf-appbar-meta .sf-live-dot { color: var(--gb-success-fg); }
   .sf-live-pill, .sf-status-pill, .sf-event-pill {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     border-radius: var(--gb-r-pill); font-weight: 800; text-transform: uppercase;
   }
   .sf-live-pill { padding: 4px 7px; color: var(--gb-success-fg); background: var(--gb-success-tint-soft); border: 1px solid var(--gb-success-tint-border); font-size: 9px; letter-spacing: .5px; }
   .sf-live-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
-  .sf-season-meta { margin-top: var(--sf-2); color: var(--gb-text-muted); font-size: 10.5px; line-height: 1.5; }
-  .sf-my-pod { margin: 0 var(--sf-2) var(--sf-3); padding: var(--sf-2); display: flex; align-items: center; gap: var(--sf-2); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); background: var(--gb-fill-subtle); }
   .sf-pod-mark { width: 32px; height: 32px; border-radius: var(--gb-r-md); font-size: 13px; font-weight: 850; font-variant-numeric: tabular-nums; }
   .sf-pod-mark.small { width: 28px; height: 28px; border-radius: var(--gb-r-sm); font-size: 11px; }
   .sf-pod-mark.large { width: 46px; height: 46px; border-radius: var(--gb-r-lg); font-size: 17px; }
-  .sf-my-pod-name { color: var(--gb-text-primary); font-size: 12px; font-weight: 750; }
-  .sf-my-pod-meta { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; }
-  .sf-main { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-  .sf-topbar { min-height: 76px; padding: var(--sf-3) var(--sf-5); display: flex; align-items: center; gap: var(--sf-4); border-bottom: 1px solid var(--gb-border-default); background: var(--gb-surface-1); }
-  .sf-topbar-copy { flex: 1; }
+  .sf-appbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--sf-2); }
+  .sf-standing-chip { min-height: 38px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--gb-brand-tint-border); border-radius: var(--gb-r-md); color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); font-size: 10px; font-weight: 800; }
+  .sf-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .sf-mobile-page-head { width: 100%; max-width: 760px; margin: 0 auto var(--sf-4); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sf-4); }
   .sf-page-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sf-2); }
-  .sf-page-title { margin: 0; color: var(--gb-text-primary); font-size: 19px; line-height: 1.2; letter-spacing: -.4px; overflow-wrap: anywhere; }
+  .sf-page-title { margin: 0; color: var(--gb-text-primary); font-size: 20px; line-height: 1.15; letter-spacing: -.45px; overflow-wrap: anywhere; }
   .sf-page-subtitle { margin-top: var(--sf-1); color: var(--gb-text-muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
   .sf-event-pill { padding: 4px 7px; color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); border: 1px solid var(--gb-brand-tint-border); font-size: 9px; letter-spacing: .6px; }
   .sf-week-wrap { flex: 0 0 auto; }
@@ -100,9 +87,10 @@ const CSS = `
   .sf-icon-button:disabled { cursor: default; color: var(--gb-text-ghost); }
   .sf-week-label { position: relative; width: 82px; min-height: 36px; overflow: hidden; color: var(--gb-text-primary); border-inline: 1px solid var(--gb-border-default); font-size: 11px; font-weight: 750; text-align: center; }
   .sf-week-label-inner { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--sf-1) var(--sf-2); }
-  .sf-content { flex: 1; min-height: 0; overflow: auto; padding: 18px var(--sf-5) 28px; scrollbar-width: thin; scrollbar-color: var(--gb-border-strong) transparent; }
+  .sf-content { flex: 1; min-height: 0; overflow: auto; padding: 18px var(--sf-5) 50px; scrollbar-width: thin; scrollbar-color: var(--gb-border-strong) transparent; }
   .sf-content::-webkit-scrollbar { width: 7px; }
   .sf-content::-webkit-scrollbar-thumb { background: var(--gb-border-strong); border: 2px solid transparent; border-radius: 99px; background-clip: padding-box; }
+  .sf-view-motion { width: 100%; max-width: 760px; margin: 0 auto; }
   .sf-view-motion, .sf-stack { min-width: 0; }
   .sf-stack { display: grid; gap: var(--sf-4); }
   .sf-card { min-width: 0; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-surface-1); box-shadow: 0 8px 24px rgba(0, 0, 0, .16), inset 0 1px 0 var(--gb-fill-subtle); overflow: hidden; }
@@ -150,7 +138,7 @@ const CSS = `
   .sf-scoreboard-grid, .sf-matchup-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
   .sf-compact-matchup { min-width: 0; padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: inherit; background: var(--gb-surface-1); text-align: left; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
   .sf-compact-matchup:hover { border-color: var(--gb-border-strong); background: var(--gb-fill-soft); }
-  .sf-compact-matchup.selected { border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); box-shadow: inset 0 -2px 0 var(--gb-brand-tint-border); }
+  .sf-compact-matchup.selected { border-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); box-shadow: none; }
   .sf-compact-top { margin-bottom: var(--sf-2); display: flex; justify-content: space-between; align-items: center; gap: var(--sf-2); color: var(--gb-text-muted); font-size: 9px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
   .sf-compact-team { min-width: 0; padding: 3px 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sf-2); }
   .sf-compact-name { min-width: 0; color: var(--gb-text-secondary); font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
@@ -187,7 +175,7 @@ const CSS = `
   .sf-pod-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sf-2); }
   .sf-pod-tile { min-width: 0; padding: var(--sf-2); display: flex; align-items: center; gap: var(--sf-2); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
   .sf-pod-tile:hover { background: var(--gb-fill-soft); border-color: var(--gb-border-strong); }
-  .sf-pod-tile.active { color: var(--gb-brand-label); border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); box-shadow: inset 0 -2px 0 var(--gb-brand-tint-border); }
+  .sf-pod-tile.active { color: var(--gb-brand-label); border-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); box-shadow: none; }
   .sf-pod-tile-name { color: var(--gb-text-primary); font-size: 10.5px; font-weight: 700; overflow-wrap: anywhere; }
   .sf-pod-tile-meta { margin-top: 1px; color: var(--gb-text-muted); font-size: 9px; }
   .sf-pod-hero { padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); }
@@ -199,22 +187,61 @@ const CSS = `
   .sf-pod-hero-label { margin-top: 2px; color: var(--gb-text-muted); font-size: 9px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
   .sf-data-note { color: var(--gb-text-ghost); font-size: 9.5px; line-height: 1.4; text-align: right; }
   .sf-empty { padding: 32px var(--sf-4); color: var(--gb-text-muted); text-align: center; }
-  .sf-nav-button:focus-visible, .sf-icon-button:focus-visible, .sf-pod-tile:focus-visible, .sf-compact-matchup:focus-visible, .sf-link-button:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
+  .sf-bottom-nav {
+    position: relative; z-index: 5; flex: 0 0 76px; min-height: 76px;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;
+    padding: 7px max(12px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    border-top: 1px solid var(--gb-border-default); background: var(--gb-surface-1);
+  }
+  .sf-bottom-item {
+    position: relative; isolation: isolate; min-width: 0; min-height: 58px; padding: 7px 4px 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    border: 0; border-radius: var(--gb-r-md); cursor: pointer; background: transparent;
+    color: var(--gb-text-muted); transition: color .18s ease, background-color .18s ease;
+  }
+  .sf-bottom-item:hover { color: var(--gb-text-primary); background: var(--gb-fill-subtle); }
+  .sf-bottom-item.active { color: var(--gb-brand-label); }
+  .sf-bottom-active { position: absolute; z-index: -1; inset: 5px 12%; border-radius: var(--gb-r-md); background: var(--gb-brand-tint-soft); }
+  .sf-bottom-label { max-width: 100%; overflow: hidden; font-size: 9px; font-weight: 750; letter-spacing: .1px; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-bottom-center-slot { position: relative; display: flex; justify-content: center; }
+  .sf-bottom-center {
+    position: absolute; top: -27px; width: 84px; min-height: 68px; padding: 7px 6px 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 1px solid var(--gb-brand-border); border-radius: 22px; cursor: pointer;
+    color: var(--gb-text-on-brand); background: linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%);
+    box-shadow: 0 9px 22px var(--gb-brand-tint-strong); transition: filter .18s ease, box-shadow .18s ease;
+  }
+  .sf-bottom-center:hover { filter: brightness(1.08); box-shadow: 0 11px 26px var(--gb-brand-tint-strong); }
+  .sf-bottom-center-icon { height: 15px; display: grid; place-items: center; }
+  .sf-bottom-center-week { font-size: 11px; line-height: 1.1; font-weight: 850; letter-spacing: -.1px; }
+  .sf-bottom-center-rank { font-size: 8px; line-height: 1.1; font-weight: 750; opacity: .82; text-transform: uppercase; letter-spacing: .45px; }
+  .sf-bottom-item:focus-visible, .sf-bottom-center:focus-visible, .sf-icon-button:focus-visible, .sf-pod-tile:focus-visible, .sf-compact-matchup:focus-visible, .sf-link-button:focus-visible { outline: none; box-shadow: var(--gb-focus-ring); }
   @media (max-width: 760px) {
-    .sf-app { grid-template-columns: 64px minmax(0, 1fr); }
-    .sf-brand { padding: var(--sf-3); justify-content: center; }
-    .sf-brand-copy, .sf-nav-label, .sf-season-card, .sf-my-pod-copy, .sf-nav > .sf-kicker { display: none; }
-    .sf-nav { padding-inline: var(--sf-2); }
-    .sf-nav-button { justify-content: center; padding-inline: var(--sf-2); }
-    .sf-my-pod { justify-content: center; padding: var(--sf-2) 4px; }
-    .sf-topbar { padding-inline: var(--sf-4); }
+    .sf-appbar { padding-inline: var(--sf-4); }
     .sf-content { padding-inline: var(--sf-4); }
   }
   @media (max-width: 620px) {
+    .sf-appbar { min-height: 62px; padding: 7px var(--sf-3); }
+    .sf-appbar-inner { gap: var(--sf-2); }
+    .sf-brand-mark { width: 34px; height: 34px; border-radius: 10px; }
+    .sf-brand-name { font-size: 13px; }
+    .sf-appbar-meta { font-size: 8.5px; }
+    .sf-appbar-actions > .sf-pod-mark { display: none; }
+    .sf-week-control { min-height: 34px; }
+    .sf-icon-button { width: 31px; min-height: 32px; }
+    .sf-week-label { width: 65px; min-height: 32px; font-size: 10px; }
+    .sf-content { padding: 14px var(--sf-3) 48px; }
+    .sf-mobile-page-head { margin-bottom: var(--sf-3); }
+    .sf-page-title { font-size: 18px; }
+    .sf-page-subtitle { max-width: 280px; font-size: 10px; }
     .sf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-split-grid, .sf-scoreboard-grid, .sf-matchup-list { grid-template-columns: 1fr; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .sf-pod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
+    .sf-bottom-active { inset-inline: 5%; }
+    .sf-bottom-center { top: -24px; width: 76px; min-height: 63px; border-radius: 20px; }
+    .sf-bottom-label { font-size: 8px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .sf-app *, .sf-app *::before, .sf-app *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
@@ -252,6 +279,45 @@ function WeekControl({ week, direction, onChange }) {
       </div>
       <button className="sf-icon-button" type="button" aria-label="Next week" disabled={week >= SCHEDULE.length} onClick={() => onChange(week + 1)}><FantasyIcon.arrowRight size={14} /></button>
     </div>
+  );
+}
+
+function BottomNav({ view, rank, onView, onCurrentWeek }) {
+  const renderItem = (item) => {
+    const NavIcon = item.icon;
+    const active = view === item.id;
+    return (
+      <button
+        type="button"
+        key={item.id}
+        className={`sf-bottom-item ${active ? 'active' : ''}`}
+        aria-current={active ? 'page' : undefined}
+        onClick={() => onView(item.id)}
+      >
+        {active && <motion.span className="sf-bottom-active" layoutId="sf-bottom-active" transition={PAGE_TRANSITION} />}
+        <NavIcon size={17} />
+        <span className="sf-bottom-label">{item.navLabel || item.label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">
+      {NAV_ITEMS.slice(0, 2).map(renderItem)}
+      <div className="sf-bottom-center-slot">
+        <button
+          type="button"
+          className="sf-bottom-center"
+          aria-label={`Return to current Week ${SALES_FANTASY_CURRENT_WEEK} overview; POD 1 is rank ${rank}`}
+          onClick={onCurrentWeek}
+        >
+          <span className="sf-bottom-center-icon"><FantasyIcon.trophy size={14} /></span>
+          <span className="sf-bottom-center-week">Week {SALES_FANTASY_CURRENT_WEEK}</span>
+          <span className="sf-bottom-center-rank">Rank #{rank}</span>
+        </button>
+      </div>
+      {NAV_ITEMS.slice(2).map(renderItem)}
+    </nav>
   );
 }
 
@@ -433,19 +499,35 @@ function SalesFantasyApp() {
     setDirection(nextIndex >= currentIndex ? 1 : -1);
     setView(nextView);
   };
+  const returnToCurrentWeek = () => {
+    setDirection(SALES_FANTASY_CURRENT_WEEK >= week ? 1 : -1);
+    setWeek(SALES_FANTASY_CURRENT_WEEK);
+    setView('overview');
+  };
   const contentKey = showWeekControl ? `${view}-${week}` : view;
 
   return (
     <><style>{CSS}</style><div className="sf-app" data-gb-ui-root>
-      <aside className="sf-sidebar">
-        <div className="sf-brand"><span className="sf-brand-mark"><FantasyIcon.trophy size={18} /></span><div className="sf-brand-copy"><div className="sf-brand-name">Sales Fantasy</div><div className="sf-kicker">Limited event</div></div></div>
-        <nav className="sf-nav" aria-label="Sales Fantasy"><div className="sf-kicker" style={{ padding: '0 12px 6px' }}>League</div>{NAV_ITEMS.map((item) => { const NavIcon = item.icon; const active = view === item.id; return <button type="button" key={item.id} className={`sf-nav-button ${active ? 'active' : ''}`} onClick={() => changeView(item.id)}>{active && <motion.span className="sf-nav-active" layoutId="sf-nav-active" transition={PAGE_TRANSITION} />}<NavIcon size={15} /><span className="sf-nav-label">{item.label}</span></button>; })}</nav>
-        <div className="sf-season-card"><div className="sf-season-row"><span className="sf-season-title">Season 01</span><span className="sf-live-pill"><span className="sf-live-dot" />Live</span></div><div className="sf-season-meta">Week {SALES_FANTASY_CURRENT_WEEK} of {SCHEDULE.length}<br />Every pod receives one bye</div></div>
-        <div className="sf-my-pod"><PodMark pod={myPod} /><div className="sf-my-pod-copy"><div className="sf-my-pod-name">{myPod.name}</div><div className="sf-my-pod-meta">Your pod · rank #{myStanding.rank}</div></div></div>
-      </aside>
+      <header className="sf-appbar">
+        <div className="sf-appbar-inner">
+          <div className="sf-appbar-brand"><span className="sf-brand-mark"><FantasyIcon.trophy size={17} /></span><div className="sf-brand-copy"><div className="sf-brand-name">Sales Fantasy</div><div className="sf-appbar-meta"><span className="sf-live-dot" />Season 01 · Week {SALES_FANTASY_CURRENT_WEEK} of {SCHEDULE.length}</div></div></div>
+          <div className="sf-appbar-actions">
+            <AnimatePresence initial={false} mode="wait">
+              {showWeekControl
+                ? <motion.div className="sf-week-wrap" key="week-control" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} transition={PAGE_TRANSITION}><WeekControl week={week} direction={direction} onChange={changeWeek} /></motion.div>
+                : <motion.div className="sf-standing-chip" key="standing-chip" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} transition={PAGE_TRANSITION}><FantasyIcon.standings size={13} />Rank #{myStanding.rank}</motion.div>}
+            </AnimatePresence>
+            <PodMark pod={myPod} size="small" />
+          </div>
+        </div>
+      </header>
       <main className="sf-main">
-        <header className="sf-topbar"><div className="sf-topbar-copy"><div className="sf-page-title-row"><h1 className="sf-page-title">{page.label}</h1><span className="sf-event-pill">EVENT</span></div><div className="sf-page-subtitle">10 pods · 3 reps each · weekly head-to-head competition</div></div><AnimatePresence initial={false}>{showWeekControl && <motion.div className="sf-week-wrap" key="week-control" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }} transition={PAGE_TRANSITION}><WeekControl week={week} direction={direction} onChange={changeWeek} /></motion.div>}</AnimatePresence></header>
         <div className="sf-content">
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div className="sf-mobile-page-head" key={`head-${page.id}`} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={PAGE_TRANSITION}>
+              <div><div className="sf-page-title-row"><h1 className="sf-page-title">{page.label}</h1><span className="sf-event-pill">EVENT</span></div><div className="sf-page-subtitle">10 pods · 3 reps each · weekly head-to-head competition</div></div>
+            </motion.div>
+          </AnimatePresence>
           <AnimatePresence initial={false} mode="wait" custom={direction}>
             <motion.div className="sf-view-motion" key={contentKey} custom={direction} initial={(travel) => ({ opacity: 0, x: travel * 14 })} animate={{ opacity: 1, x: 0 }} exit={(travel) => ({ opacity: 0, x: travel * -14 })} transition={PAGE_TRANSITION}>
               {view === 'overview' && <Overview week={week} standings={standings} onView={changeView} />}
@@ -456,6 +538,7 @@ function SalesFantasyApp() {
           </AnimatePresence>
         </div>
       </main>
+      <BottomNav view={view} rank={myStanding.rank} onView={changeView} onCurrentWeek={returnToCurrentWeek} />
     </div></>
   );
 }
