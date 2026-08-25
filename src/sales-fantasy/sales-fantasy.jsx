@@ -81,11 +81,11 @@ const CSS = `
   .sf-page-subtitle { margin-top: var(--sf-1); color: var(--gb-text-muted); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
   .sf-event-pill { padding: 4px 7px; color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); border: 1px solid var(--gb-brand-tint-border); font-size: 9px; letter-spacing: .6px; }
   .sf-week-wrap { flex: 0 0 auto; }
-  .sf-week-control { min-height: 38px; display: flex; align-items: stretch; border: 1px solid var(--gb-border-strong); border-radius: var(--gb-r-md); background: var(--gb-fill-subtle); overflow: hidden; }
-  .sf-icon-button { width: 36px; min-height: 36px; padding: 0; display: grid; place-items: center; border: 0; cursor: pointer; color: var(--gb-text-tertiary); background: transparent; transition: color .16s ease, background-color .16s ease; }
+  .sf-week-control { min-height: 30px; display: flex; align-items: stretch; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); overflow: hidden; }
+  .sf-icon-button { width: 29px; min-height: 28px; padding: 0; display: grid; place-items: center; border: 0; cursor: pointer; color: var(--gb-text-tertiary); background: transparent; transition: color .16s ease, background-color .16s ease; }
   .sf-icon-button:hover:not(:disabled) { color: var(--gb-text-primary); background: var(--gb-fill-soft); }
   .sf-icon-button:disabled { cursor: default; color: var(--gb-text-ghost); }
-  .sf-week-label { position: relative; width: 82px; min-height: 36px; overflow: hidden; color: var(--gb-text-primary); border-inline: 1px solid var(--gb-border-default); font-size: 11px; font-weight: 750; text-align: center; }
+  .sf-week-label { position: relative; width: 56px; min-height: 28px; overflow: hidden; color: var(--gb-text-primary); border-inline: 1px solid var(--gb-border-default); font-size: 9.5px; font-weight: 750; text-align: center; }
   .sf-week-label-inner { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--sf-1) var(--sf-2); }
   .sf-content { flex: 1; min-height: 0; overflow: auto; padding: 18px var(--sf-5) 50px; scrollbar-width: thin; scrollbar-color: var(--gb-border-strong) transparent; }
   .sf-content::-webkit-scrollbar { width: 7px; }
@@ -97,10 +97,9 @@ const CSS = `
   .sf-card-head { padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-subtle); }
   .sf-card-title { color: var(--gb-text-primary); font-size: 13px; font-weight: 750; overflow-wrap: anywhere; }
   .sf-card-caption { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
-  .sf-section-label, .sf-view-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); }
-  .sf-section-title, .sf-view-heading { margin: 0; color: var(--gb-text-primary); font-size: 15px; line-height: 1.3; letter-spacing: -.2px; }
-  .sf-section-note, .sf-view-copy { color: var(--gb-text-muted); font-size: 10.5px; line-height: 1.4; }
-  .sf-view-copy { margin-top: var(--sf-1); }
+  .sf-section-label { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); }
+  .sf-section-title { margin: 0; color: var(--gb-text-primary); font-size: 15px; line-height: 1.3; letter-spacing: -.2px; }
+  .sf-section-note { color: var(--gb-text-muted); font-size: 10.5px; line-height: 1.4; }
   .sf-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sf-2); }
   .sf-stat { min-width: 0; padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); background: var(--gb-surface-1); }
   .sf-stat-label { color: var(--gb-text-muted); font-size: 10px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; overflow-wrap: anywhere; }
@@ -197,11 +196,14 @@ const CSS = `
     position: relative; isolation: isolate; min-width: 0; min-height: 58px; padding: 7px 4px 4px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     border: 0; border-radius: var(--gb-r-md); cursor: pointer; background: transparent;
-    color: var(--gb-text-muted); transition: color .18s ease, background-color .18s ease;
+    color: var(--gb-text-muted); transition: color .18s ease;
   }
-  .sf-bottom-item:hover { color: var(--gb-text-primary); background: var(--gb-fill-subtle); }
+  .sf-bottom-item::before, .sf-bottom-active { position: absolute; z-index: -1; inset: 5px 12%; border-radius: var(--gb-r-md); }
+  .sf-bottom-item::before { content: ''; background: var(--gb-fill-subtle); opacity: 0; transition: opacity .18s ease; }
+  .sf-bottom-item:hover:not(.active) { color: var(--gb-text-primary); }
+  .sf-bottom-item:hover:not(.active)::before { opacity: 1; }
   .sf-bottom-item.active { color: var(--gb-brand-label); }
-  .sf-bottom-active { position: absolute; z-index: -1; inset: 5px 12%; border-radius: var(--gb-r-md); background: var(--gb-brand-tint-soft); }
+  .sf-bottom-active { background: var(--gb-brand-tint-soft); }
   .sf-bottom-label { max-width: 100%; overflow: hidden; font-size: 9px; font-weight: 750; letter-spacing: .1px; text-overflow: ellipsis; white-space: nowrap; }
   .sf-bottom-center-slot { position: relative; display: flex; justify-content: center; }
   .sf-bottom-center {
@@ -227,9 +229,6 @@ const CSS = `
     .sf-brand-name { font-size: 13px; }
     .sf-appbar-meta { font-size: 8.5px; }
     .sf-appbar-actions > .sf-pod-mark { display: none; }
-    .sf-week-control { min-height: 34px; }
-    .sf-icon-button { width: 31px; min-height: 32px; }
-    .sf-week-label { width: 65px; min-height: 32px; font-size: 10px; }
     .sf-content { padding: 14px var(--sf-3) 48px; }
     .sf-mobile-page-head { margin-bottom: var(--sf-3); }
     .sf-page-title { font-size: 18px; }
@@ -239,7 +238,7 @@ const CSS = `
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .sf-pod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
-    .sf-bottom-active { inset-inline: 5%; }
+    .sf-bottom-item::before, .sf-bottom-active { inset-inline: 5%; }
     .sf-bottom-center { top: -24px; width: 76px; min-height: 63px; border-radius: 20px; }
     .sf-bottom-label { font-size: 8px; }
   }
@@ -258,6 +257,13 @@ function recordLabel(record) {
 
 function statusLabel(state) {
   return state === 'live' ? 'Live scoring' : state === 'final' ? 'Final' : 'Scheduled';
+}
+
+function pageSubtitle(view, week) {
+  if (view === 'matchups') return `Week ${week} · audit every rep contribution`;
+  if (view === 'standings') return '10 pods · wins rank first; completed-week points break ties';
+  if (view === 'pods') return `POD 1–10 · 3 reps per pod · Week ${week}`;
+  return '10 pods · 3 reps each · weekly head-to-head competition';
 }
 
 function WeekControl({ week, direction, onChange }) {
@@ -424,7 +430,6 @@ function Matchups({ week, standings, selectedGameId, onSelectGame }) {
   const selectedGame = weekData.games.find((game) => game.id === selectedGameId) || myGame || weekData.games[0];
   return (
     <div className="sf-stack">
-      <div className="sf-view-head"><div><h2 className="sf-view-heading">Week {week} point splits</h2><div className="sf-view-copy">Select any matchup to audit every rep contribution.</div></div><span className={`sf-status-pill sf-live-pill ${weekState(week)}`}><span className="sf-live-dot" />{statusLabel(weekState(week))}</span></div>
       <AnimatePresence initial={false} mode="wait">
         <motion.div key={selectedGame?.id || `bye-${week}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={PAGE_TRANSITION}>
           <MatchupBreakdown game={selectedGame} week={week} standings={standings} />
@@ -440,7 +445,6 @@ function Matchups({ week, standings, selectedGameId, onSelectGame }) {
 function Standings({ standings }) {
   return (
     <div className="sf-stack">
-      <div className="sf-view-head"><div><h2 className="sf-view-heading">League standings</h2><div className="sf-view-copy">Wins rank first; completed-week points break ties.</div></div><span className="sf-section-note">10 pods · 30 reps</span></div>
       <div className="sf-card sf-table-wrap"><table className="sf-league-table"><thead><tr><th>Rank</th><th>Pod</th><th>W</th><th>L</th><th>Bye</th><th>Points for</th></tr></thead><tbody>{standings.map((row) => { const pod = podForId(row.podId); return <tr className={pod.id === MY_POD_ID ? 'mine' : ''} key={pod.id}><td><span className={`sf-rank-badge ${row.rank <= 3 ? 'top' : ''}`}>{row.rank}</span></td><td><div className="sf-standing-team"><PodMark pod={pod} size="small" /><span className="sf-team-name">{pod.name}</span></div></td><td>{row.wins}</td><td>{row.losses}</td><td>{row.byes}</td><td className="sf-metric-primary">{row.pointsFor.toFixed(1)}</td></tr>; })}</tbody></table></div>
       <div className="sf-data-note">Standings include completed matchups only.</div>
     </div>
@@ -463,7 +467,6 @@ function Pods({ week, selectedPodId, onSelect, standings }) {
   const split = podWeekPointSplit(pod.id, week);
   return (
     <div className="sf-stack">
-      <div className="sf-view-head"><div><h2 className="sf-view-heading">POD 1–10</h2><div className="sf-view-copy">The pod number is its league mark. Select one to inspect Week {week}.</div></div><span className="sf-section-note">3 reps per pod</span></div>
       <div className="sf-pod-grid">{SALES_FANTASY_PODS.map((item) => <button type="button" className={`sf-pod-tile ${item.id === pod.id ? 'active' : ''}`} key={item.id} onClick={() => onSelect(item.id)}><PodMark pod={item} size="small" /><span className="sf-pod-copy"><span className="sf-pod-tile-name">{item.name}</span><span className="sf-pod-tile-meta">Seed {item.seed}</span></span></button>)}</div>
       <AnimatePresence initial={false} mode="wait">
         <motion.section className="sf-card" key={`${pod.id}-${week}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={PAGE_TRANSITION}>
@@ -524,8 +527,9 @@ function SalesFantasyApp() {
       <main className="sf-main">
         <div className="sf-content">
           <AnimatePresence initial={false} mode="wait">
-            <motion.div className="sf-mobile-page-head" key={`head-${page.id}`} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={PAGE_TRANSITION}>
-              <div><div className="sf-page-title-row"><h1 className="sf-page-title">{page.label}</h1><span className="sf-event-pill">EVENT</span></div><div className="sf-page-subtitle">10 pods · 3 reps each · weekly head-to-head competition</div></div>
+            <motion.div className="sf-mobile-page-head" key={`head-${page.id}-${week}`} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={PAGE_TRANSITION}>
+              <div><div className="sf-page-title-row"><h1 className="sf-page-title">{page.label}</h1><span className="sf-event-pill">EVENT</span></div><div className="sf-page-subtitle">{pageSubtitle(view, week)}</div></div>
+              {view === 'matchups' && <span className={`sf-status-pill sf-live-pill ${weekState(week)}`}><span className="sf-live-dot" />{statusLabel(weekState(week))}</span>}
             </motion.div>
           </AnimatePresence>
           <AnimatePresence initial={false} mode="wait" custom={direction}>

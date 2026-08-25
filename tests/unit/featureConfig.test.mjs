@@ -154,12 +154,22 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /<header className="sf-appbar">/);
     assert.match(salesFantasySource, /<nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">/);
     assert.match(salesFantasySource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+    assert.match(salesFantasySource, /\.sf-week-control \{ min-height: 30px;/);
+    assert.match(salesFantasySource, /\.sf-icon-button \{ width: 29px; min-height: 28px;/);
+    assert.match(salesFantasySource, /\.sf-week-label \{ position: relative; width: 56px; min-height: 28px;/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-week-control \{ min-height: 38px|\.sf-icon-button \{ width: 36px|\.sf-week-label \{ position: relative; width: 82px/);
+    assert.match(salesFantasySource, /\.sf-bottom-item::before, \.sf-bottom-active \{ position: absolute; z-index: -1; inset: 5px 12%;/);
+    assert.match(salesFantasySource, /\.sf-bottom-item:hover:not\(\.active\)::before \{ opacity: 1; \}/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-bottom-item:hover \{[^}]*background:/);
     assert.match(salesFantasySource, /className="sf-bottom-center"/);
     assert.match(salesFantasySource, /box-shadow: 0 4px 10px rgba\(0, 0, 0, \.2\)/);
     assert.doesNotMatch(salesFantasySource, /0 9px 22px var\(--gb-brand-tint-strong\)|0 11px 26px var\(--gb-brand-tint-strong\)/);
     assert.match(salesFantasySource, /Week \{SALES_FANTASY_CURRENT_WEEK\}/);
     assert.match(salesFantasySource, /className="sf-bottom-center-rank">Rank #\{rank\}/);
     assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
+    assert.match(salesFantasySource, /key=\{`head-\$\{page\.id\}-\$\{week\}`\}/);
+    assert.match(salesFantasySource, /className="sf-page-subtitle">\{pageSubtitle\(view, week\)\}/);
+    assert.doesNotMatch(salesFantasySource, /sf-view-head|sf-view-heading|sf-view-copy/);
     assert.doesNotMatch(salesFantasySource, /sf-sidebar|<aside|sf-nav-button|sf-topbar/);
     for (const pointLabel of ['Sales', 'Margin', 'Orders', 'Total']) {
       assert.match(salesFantasySource, new RegExp(`>${pointLabel}<`));
