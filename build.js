@@ -61,6 +61,7 @@ const surfaces = [
   { srcDir: 'src/content',       outDir: 'react-dist/content',    suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/popup',         outDir: 'react-dist/popup',      suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/sales-fantasy', outDir: 'react-dist/sales-fantasy', suffix: '.jsx',    stripSuffix: '.jsx' },
+  { srcDir: 'src/page-engine-inspector', outDir: 'react-dist/page-engine-inspector', suffix: '.jsx', stripSuffix: '.jsx' },
   { srcDir: 'src/guide',         outDir: 'react-dist/guide',      suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/vanilla-build', outDir: 'react-dist/vanilla',    suffix: '.entry.js', stripSuffix: '.entry.js' },
   { srcDir: 'src/sandbox',       outDir: 'react-dist/sandbox',    suffix: '.entry.js', stripSuffix: '.entry.js' },

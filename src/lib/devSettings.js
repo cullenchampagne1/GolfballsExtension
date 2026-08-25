@@ -104,6 +104,16 @@ export async function inspectCurrentPageTerritory() {
   }
 }
 
+export async function openPageEngineInspector() {
+  try {
+    return await sendBackgroundMessage('openPageEngineInspector');
+  } catch (error) {
+    const message = error?.message || 'Unable to open the Page Engine inspector.';
+    globalThis.window?.__gbToast?.error?.(message, { duration: 6_000 });
+    return { ok: false, error: message };
+  }
+}
+
 export const DEV_SETTINGS = [
   {
     key:     'numberDisplay.enabled',
@@ -174,6 +184,15 @@ export const DEV_SETTINGS = [
     buttonLabel: 'Extract territory',
     buttonIcon:  'search',
     runner:      inspectCurrentPageTerritory,
+  },
+  {
+    key:         'pageEngine.liveInspector',
+    label:       'Page Engine live inspector',
+    desc:        'Open a live developer window showing every Page Engine variable resolved from the active Contact, Account, Order, or Opportunity page.',
+    type:        'action',
+    buttonLabel: 'Open inspector',
+    buttonIcon:  'code',
+    runner:      openPageEngineInspector,
   },
   {
     key:     'pageEngine.cachedContacts',

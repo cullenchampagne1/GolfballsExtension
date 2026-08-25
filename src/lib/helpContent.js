@@ -4,7 +4,7 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.38",
+  "version": "3.4.39",
   "generatedAt": "2026-08-25",
   "tree": [
     {
@@ -5298,6 +5298,13 @@ export const HELP_CONTENT = {
                 "Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification."
               ],
               [
+                "Page Engine live inspector",
+                "action",
+                "—",
+                "",
+                "Open a live developer window showing every Page Engine variable resolved from the active Contact, Account, Order, or Opportunity page."
+              ],
+              [
                 "Cached contacts",
                 "stat",
                 "—",
@@ -5310,6 +5317,7 @@ export const HELP_CONTENT = {
                 "pageEngine.indexingEnabled",
                 "pageEngine.territory",
                 "pageEngine.inspectTerritory",
+                "pageEngine.liveInspector",
                 "pageEngine.cachedContacts"
               ]
             }
@@ -9978,6 +9986,16 @@ export const HELP_CONTENT = {
         "pageEngine.inspectTerritory"
       ],
       "description": "Runs the Page Engine against the Account or Contact page that opened the manager and shows its Territory value and name in a notification.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:pageEngine.liveInspector",
+      "category": "Settings",
+      "title": "Page Engine live inspector",
+      "keywords": [
+        "pageEngine.liveInspector"
+      ],
+      "description": "Open a live developer window showing every Page Engine variable resolved from the active Contact, Account, Order, or Opportunity page.",
       "article": "developer-settings"
     },
     {

@@ -278,6 +278,40 @@ describe('Page Engine index roundtrip', () => {
     assert.equal(inspected.territoryName, 'P5 / BDR (Cullen)');
   });
 
+  it('routes a live inspector refresh to the exact active tab and preserves its metadata', async () => {
+    background.chrome.tabs.get = (tabId, callback) => callback({
+      id: tabId,
+      windowId: 9,
+      title: 'Grace Hopper',
+      url: 'https://api.golfballs.com/Golfballs/AdminNew/Default.aspx?Page=240&customerID=88',
+      active: true,
+      status: 'complete',
+      lastAccessed: 200,
+    });
+    background.chrome.tabs.sendMessage = (tabId, message, callback) => {
+      assert.equal(tabId, 37);
+      assert.equal(message.action, 'pageEngineDebugSnapshot');
+      callback({
+        ok: true,
+        supported: true,
+        inspectedAt: 300,
+        page: { title: 'Grace Hopper', pageType: 'contact', schemaId: 'contact' },
+        ids: { order: null, contact: '88', account: '902', item: null },
+        data: { contact: { firstName: 'Grace' } },
+        variables: [{ path: 'contact.firstName', present: true, value: 'Grace' }],
+        errors: [],
+        warnings: [],
+      });
+    };
+
+    const inspected = await background.sendMessage({ action: 'pageEngineDebugSnapshot', tabId: 37 });
+    assert.equal(inspected.ok, true, inspected.error);
+    assert.equal(inspected.tab.id, 37);
+    assert.equal(inspected.tab.windowId, 9);
+    assert.equal(inspected.page.schemaId, 'contact');
+    assert.equal(inspected.variables[0].value, 'Grace');
+  });
+
   it('never stores standalone Order or Opportunity page snapshots', async () => {
     const before = fakeDb.pageEntities.size;
     assert.deepEqual(

@@ -528,6 +528,20 @@ function __gbAccessAllowed(st, now) {
       return true;
     }
 
+    if (msg.action === 'pageEngineDebugSnapshot') {
+      const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+      if (!engine || typeof engine.debugSnapshot !== 'function') {
+        sendResponse({ ok: false, error: 'Page Engine is unavailable on this page.' });
+        return true;
+      }
+      try {
+        sendResponse({ ok: true, ...engine.debugSnapshot(document) });
+      } catch (error) {
+        sendResponse({ ok: false, error: error?.message || 'Unable to inspect the current page.' });
+      }
+      return true;
+    }
+
 
     if (msg.action === 'getPageInfo') {
       // Async: grouped rule trees evaluate through the page engine

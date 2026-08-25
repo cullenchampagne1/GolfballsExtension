@@ -69,6 +69,7 @@ describe('settings registry · extension/backend parity', () => {
     // Read-only rows hold no value, so a server policy has nothing to manage.
     assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.cachedContacts'), false);
     assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.inspectTerritory'), false);
+    assert.equal(Object.hasOwn(registry.developerSettings, 'pageEngine.liveInspector'), false);
   });
 
   it('places Sales Fantasy only in the backend-managed developer policy', () => {

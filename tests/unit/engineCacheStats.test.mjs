@@ -107,6 +107,7 @@ describe('engine cache stat · registry wiring', () => {
     const defaults = defaultDevSettings();
     assert.equal(Object.hasOwn(defaults, 'pageEngine.cachedContacts'), false);
     assert.equal(Object.hasOwn(defaults, 'pageEngine.inspectTerritory'), false);
+    assert.equal(Object.hasOwn(defaults, 'pageEngine.liveInspector'), false);
     assert.equal(defaults['pageEngine.indexingEnabled'], false);
   });
 

@@ -20,7 +20,12 @@ export function runEngine(doc, options = {}) {
   }
   const result = extract(schema, doc);
   docCache.set(doc, result);
-  queueEngineSnapshot(result, { doc, sourceUrl: options.sourceUrl }).catch(() => {});
+  /* Diagnostics need a fresh canonical extraction without turning a read into
+     a write every time their live preview refreshes. Normal callers retain the
+     automatic indexing behavior; only an explicit internal opt-out skips it. */
+  if (options.skipIndex !== true) {
+    queueEngineSnapshot(result, { doc, sourceUrl: options.sourceUrl }).catch(() => {});
+  }
   return result;
 }
 

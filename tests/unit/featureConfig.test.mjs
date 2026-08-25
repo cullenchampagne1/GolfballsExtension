@@ -229,6 +229,8 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(performanceSource, /initial=\{\{ opacity: 0, y: 8 \}\}/);
     assert.match(performanceSource, /Weekly performance/);
     assert.match(performanceSource, /sf-week-bar-button/);
+    assert.match(salesFantasySource, /grid-template-columns: repeat\(10, minmax\(0, 1fr\)\)/);
+    assert.doesNotMatch(salesFantasySource, /grid-template-columns: repeat\(9, minmax\(0, 1fr\)\)/);
     assert.match(salesFantasySource, /\.sf-member-tab \{ position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var\(--sf-3\) var\(--sf-4\);/);
     assert.match(salesFantasySource, /\.sf-member-active \{ position: absolute; z-index: 0; inset: 0;/);
     assert.match(rulesSource, /Scoring overview/);

@@ -235,12 +235,14 @@ try {
 
 let editorWindowId   = null;
 let salesFantasyWindowId = null;
+let pageEngineInspectorWindowId = null;
 let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
 
 // Keep editor dimensions stable while the fantasy experience uses a taller,
 // phone-like portrait footprint of its own.
 const MANAGER_WINDOW_BOUNDS = Object.freeze({ width: 860, height: 700 });
 const SALES_FANTASY_WINDOW_BOUNDS = Object.freeze({ width: 700, height: 900 });
+const PAGE_ENGINE_INSPECTOR_WINDOW_BOUNDS = Object.freeze({ width: 900, height: 780 });
 
 const GB_PAGE_ENGINE_TAB_PATTERNS = [
   'https://www.golfballs.com/*',
@@ -308,6 +310,66 @@ function gbRequestPageEngineTerritory(tabId) {
       reject(error);
     }
   });
+}
+
+function gbPublicInspectorTab(tab) {
+  return {
+    id: tab?.id ?? null,
+    windowId: tab?.windowId ?? null,
+    title: String(tab?.title || ''),
+    url: String(tab?.url || ''),
+    status: String(tab?.status || ''),
+  };
+}
+
+function gbRequestPageEngineDebugSnapshot(tabId) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { action: 'pageEngineDebugSnapshot' }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error || 'Page Engine did not return a debug snapshot.'));
+          return;
+        }
+        resolve(response);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function gbInspectPageEngineDebugTab(tabId) {
+  const tab = await gbGetTab(tabId);
+  if (!tab) throw new Error('The active tab is no longer available.');
+  const publicTab = gbPublicInspectorTab(tab);
+  if (!gbPageEngineTabAllowed(tab)) {
+    return {
+      supported: false,
+      inspectedAt: Date.now(),
+      tab: publicTab,
+      page: {
+        title: publicTab.title,
+        url: publicTab.url,
+        pageType: 'unsupported',
+        schemaId: null,
+      },
+      ids: { order: null, contact: null, account: null, item: null },
+      data: null,
+      variables: [],
+      errors: [],
+      warnings: [],
+    };
+  }
+  const snapshot = await gbRequestPageEngineDebugSnapshot(tabId);
+  return {
+    ...snapshot,
+    supported: snapshot.supported !== false,
+    tab: publicTab,
+  };
 }
 
 async function gbInspectCurrentPageTerritory() {
@@ -1587,6 +1649,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to inspect the page territory' }));
     return true;
   }
+  if (msg.action === 'pageEngineDebugSnapshot') {
+    const tabId = Number.isInteger(msg.tabId) ? msg.tabId : null;
+    if (tabId === null) {
+      sendResponse({ ok: false, error: 'A valid active tab is required.' });
+      return true;
+    }
+    gbInspectPageEngineDebugTab(tabId)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to inspect the active tab' }));
+    return true;
+  }
   if (msg.action === 'pageEngineIndexPut') {
     GBPageEngineIndex.indexSnapshot(msg.snapshot)
       .then((result) => sendResponse({ ok: true, ...result }))
@@ -2811,6 +2884,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'openPageEngineInspector') {
+    if (pageEngineInspectorWindowId !== null) {
+      chrome.windows.get(pageEngineInspectorWindowId, (win) => {
+        if (chrome.runtime.lastError || !win) {
+          pageEngineInspectorWindowId = null;
+          createPageEngineInspectorWindow();
+        } else {
+          chrome.windows.update(pageEngineInspectorWindowId, { focused: true });
+        }
+        sendResponse({ ok: true, success: true });
+      });
+    } else {
+      createPageEngineInspectorWindow();
+      sendResponse({ ok: true, success: true });
+    }
+    return true;
+  }
+
   // ── Start pick: inject content script, switch to order tab ─
   if (msg.action === 'startPick') {
     const fieldId = typeof msg.fieldId === 'string' ? msg.fieldId.trim().slice(0, 200) : '';
@@ -3137,9 +3228,19 @@ function createSalesFantasyWindow() {
   });
 }
 
+function createPageEngineInspectorWindow() {
+  chrome.windows.create({
+    url: chrome.runtime.getURL('page-engine-inspector.html'),
+    type: 'popup', ...PAGE_ENGINE_INSPECTOR_WINDOW_BOUNDS
+  }, (win) => {
+    pageEngineInspectorWindowId = win?.id ?? null;
+  });
+}
+
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === editorWindowId) editorWindowId = null;
   if (windowId === salesFantasyWindowId) salesFantasyWindowId = null;
+  if (windowId === pageEngineInspectorWindowId) pageEngineInspectorWindowId = null;
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

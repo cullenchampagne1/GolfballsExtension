@@ -234,10 +234,10 @@ const CSS = `
   .sf-performance-score { text-align: right; }
   .sf-performance-score-value { color: var(--gb-brand-label); font-size: 25px; line-height: 1; font-weight: 850; font-variant-numeric: tabular-nums; }
   .sf-performance-score-label { margin-top: 3px; color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
-  .sf-week-trend { padding: var(--sf-3) var(--sf-4) var(--sf-4); display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); align-items: end; gap: 5px; min-height: 122px; }
+  .sf-week-trend { padding: var(--sf-3) var(--sf-4) var(--sf-4); display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: end; gap: 3px; min-height: 122px; }
   .sf-week-bar-button { min-width: 0; height: 88px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; border: 0; cursor: pointer; color: var(--gb-text-muted); background: transparent; }
   .sf-week-bar-value { font-size: 8px; font-weight: 750; font-variant-numeric: tabular-nums; }
-  .sf-week-bar-track { width: 100%; max-width: 24px; height: 54px; display: flex; align-items: flex-end; border-radius: 4px 4px 2px 2px; background: var(--gb-fill-subtle); overflow: hidden; }
+  .sf-week-bar-track { width: 100%; max-width: 22px; height: 54px; display: flex; align-items: flex-end; border-radius: 4px 4px 2px 2px; background: var(--gb-fill-subtle); overflow: hidden; }
   .sf-week-bar-fill { width: 100%; min-height: 3px; border-radius: inherit; background: var(--gb-border-strong); }
   .sf-week-bar-button.active { color: var(--gb-brand-label); }
   .sf-week-bar-button.active .sf-week-bar-fill { background: var(--gb-brand-label); }

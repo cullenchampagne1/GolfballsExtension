@@ -38,6 +38,7 @@ import { orderSchema } from '../lib/page-schemas/order.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
 import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
 import { getPageContext, detectPageType } from '../lib/pageContext.js';
+import { buildPageEngineDebugSnapshot } from '../lib/page-engine/debug-snapshot.js';
 import { PAGE_TYPE } from '../lib/constants.js';
 
 /* Single namespace so we can grow the API without sprawling
@@ -60,6 +61,7 @@ const api = Object.freeze({
      here so the vanilla content scripts share one source of truth. */
   getPageContext,
   detectPageType,
+  debugSnapshot: buildPageEngineDebugSnapshot,
   PAGE_TYPE,
 
   /* Lower-level — exposed for the editor UI's picker + the
