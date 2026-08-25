@@ -144,7 +144,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
     assert.match(salesFantasyHtml, /<body data-gb-scale="editor">/);
     assert.match(salesFantasyHtml, /react-dist\/sales-fantasy\/sales-fantasy\.js/);
-    for (const label of ['Performance', 'Matchups', 'Standings', 'Brackets', 'Rules']) {
+    for (const label of ['Performance', 'Matchups', 'Standings', 'Rules']) {
       assert.match(salesFantasySource, new RegExp(`label: '${label}'`));
     }
     assert.match(salesFantasySource, /const POD_PAGE = \{ id: 'pods', label: 'POD Standing' \}/);
@@ -155,7 +155,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /overflow-wrap: anywhere/);
     assert.match(salesFantasySource, /<header className="sf-appbar">/);
     assert.match(salesFantasySource, /<nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">/);
-    assert.match(salesFantasySource, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+    assert.match(salesFantasySource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
     assert.match(salesFantasySource, /\.sf-week-control \{ min-height: 30px;/);
     assert.match(salesFantasySource, /\.sf-icon-button \{ width: 29px; min-height: 28px;/);
     assert.match(salesFantasySource, /\.sf-week-label \{ position: relative; width: 56px; min-height: 28px;/);
@@ -259,25 +259,31 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.doesNotMatch(matchupSource, /size="large"/);
   });
 
-  it('uses a top matchup switcher and a pannable winner and loser bracket page', () => {
+  it('uses a top matchup switcher and connected brackets below standings', () => {
     const matchupsSource = salesFantasySource.match(/function Matchups[\s\S]*?\n}\n\nfunction Standings/)?.[0] || '';
+    const standingsSource = salesFantasySource.match(/function Standings[\s\S]*?\n}\n\nfunction BracketSlot/)?.[0] || '';
     const bracketsSource = salesFantasySource.match(/function BracketSlot[\s\S]*?\n}\n\nfunction MetricCategory/)?.[0] || '';
 
-    assert.match(salesFantasySource, /\{ id: 'brackets', label: 'Brackets', icon: FantasyIcon\.brackets \}/);
-    assert.match(salesFantasySource, /const VIEW_ORDER = \['performance', 'matchups', 'pods', 'standings', 'brackets', 'rules'\]/);
+    assert.doesNotMatch(salesFantasySource, /\{ id: 'brackets', label: 'Brackets'/);
+    assert.match(salesFantasySource, /const VIEW_ORDER = \['performance', 'matchups', 'pods', 'standings', 'rules'\]/);
     assert.match(matchupsSource, /className="sf-matchup-switcher"/);
     assert.match(matchupsSource, /className="sf-matchup-switcher-track"/);
     assert.match(matchupsSource, /<MatchupTab game=\{game\} week=\{week\} index=\{index\}/);
     assert.ok(matchupsSource.indexOf('sf-matchup-switcher') < matchupsSource.indexOf('<AnimatePresence'), 'the matchup selector stays above the active ledger');
     assert.doesNotMatch(matchupsSource, /sf-matchup-list|<CompactMatchup/);
+    assert.match(standingsSource, /<Brackets standings=\{standings\} \/>/);
     assert.match(bracketsSource, /buildPlayoffBracket\(standings\)/);
     assert.match(bracketsSource, /Winner Bracket/);
     assert.match(bracketsSource, /Loser Bracket/);
     assert.match(bracketsSource, /className="sf-bracket-viewport" aria-label="Pannable winner and loser bracket" tabIndex=\{0\}/);
     assert.match(bracketsSource, /drag="x" dragConstraints=\{\{ left: -320, right: 0 \}\}/);
     assert.match(bracketsSource, /Drag to pan/);
-    assert.match(salesFantasySource, /view === 'brackets' && <Brackets standings=\{standings\} \/>/);
-    assert.match(salesFantasySource, /!\['standings', 'brackets', 'rules'\]\.includes\(view\)/);
+    assert.match(bracketsSource, /viewBox="0 0 922 240"/);
+    assert.equal((bracketsSource.match(/className="sf-bracket-connector"/g) || []).length, 3);
+    for (const path of ['M258 132 H295 V89 H332', 'M590 72 H627 V114 H664', 'M590 194 H627 V149 H664']) assert.match(bracketsSource, new RegExp(path));
+    assert.match(salesFantasySource, /\.sf-bracket-connectors \{ position: absolute; z-index: 0;/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-bracket-game::after/);
+    assert.match(salesFantasySource, /view !== 'standings' && view !== 'rules'/);
     assert.match(salesFantasyModelSource, /export function buildPlayoffBracket/);
   });
 });

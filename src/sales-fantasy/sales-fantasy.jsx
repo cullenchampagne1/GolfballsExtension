@@ -41,12 +41,11 @@ const NAV_ITEMS = [
   { id: 'performance', label: 'Performance', navLabel: 'My Stats', icon: FantasyIcon.performance },
   { id: 'matchups', label: 'Matchups', icon: FantasyIcon.matchup },
   { id: 'standings', label: 'Standings', icon: FantasyIcon.standings },
-  { id: 'brackets', label: 'Brackets', icon: FantasyIcon.brackets },
   { id: 'rules', label: 'Rules', icon: FantasyIcon.rules },
 ];
 const POD_PAGE = { id: 'pods', label: 'POD Standing' };
 const PAGES = [...NAV_ITEMS, POD_PAGE];
-const VIEW_ORDER = ['performance', 'matchups', 'pods', 'standings', 'brackets', 'rules'];
+const VIEW_ORDER = ['performance', 'matchups', 'pods', 'standings', 'rules'];
 
 const CSS = `
   button { color: inherit; font: inherit; }
@@ -277,12 +276,16 @@ const CSS = `
   .sf-bracket-lane-label { margin-bottom: var(--sf-3); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); }
   .sf-bracket-lane-title { color: var(--gb-text-primary); font-size: 12px; font-weight: 850; }
   .sf-bracket-lane-seeds { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
-  .sf-bracket-rounds { display: grid; grid-template-columns: repeat(3, 260px); gap: 74px; }
-  .sf-bracket-round { min-width: 0; min-height: 184px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
-  .sf-bracket-round-label { margin-bottom: var(--sf-1); color: var(--gb-text-muted); font-size: 8px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; }
-  .sf-bracket-game { position: relative; min-width: 0; overflow: visible; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-surface-1); box-shadow: 0 2px 7px rgba(0, 0, 0, .09); }
-  .sf-bracket-game::after { content: ''; position: absolute; top: 50%; left: calc(100% + 1px); width: 74px; border-top: 1px solid var(--gb-border-strong); }
-  .sf-bracket-round:last-child .sf-bracket-game::after { display: none; }
+  .sf-bracket-rounds { position: relative; height: 240px; display: grid; grid-template-columns: repeat(3, 258px); gap: 74px; }
+  .sf-bracket-connectors { position: absolute; z-index: 0; inset: 0; width: 922px; height: 240px; pointer-events: none; overflow: visible; }
+  .sf-bracket-connector { fill: none; stroke: var(--gb-border-strong); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .sf-bracket-lane.winner .sf-bracket-connector { stroke: var(--gb-brand-label); opacity: .58; }
+  .sf-bracket-round { position: relative; z-index: 1; min-width: 0; height: 240px; }
+  .sf-bracket-round-label { position: absolute; top: 0; left: 0; color: var(--gb-text-muted); font-size: 8px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; }
+  .sf-bracket-game { position: absolute; left: 0; right: 0; min-width: 0; overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-surface-1); box-shadow: 0 2px 7px rgba(0, 0, 0, .09); }
+  .sf-bracket-round.opening .sf-bracket-game, .sf-bracket-round.final .sf-bracket-game { top: 96px; }
+  .sf-bracket-round.semifinals .sf-bracket-game-0 { top: 36px; }
+  .sf-bracket-round.semifinals .sf-bracket-game-1 { top: 158px; }
   .sf-bracket-slot { min-height: 35px; padding: 6px 8px; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 7px; color: var(--gb-text-secondary); }
   .sf-bracket-slot + .sf-bracket-slot { border-top: 1px solid var(--gb-border-subtle); }
   .sf-bracket-slot.mine { color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
@@ -292,7 +295,7 @@ const CSS = `
   .sf-bracket-note { padding: 0 var(--sf-4) var(--sf-4); color: var(--gb-text-muted); font-size: 9.5px; line-height: 1.5; }
   .sf-bottom-nav {
     position: relative; z-index: 5; flex: 0 0 76px; min-height: 76px;
-    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;
     padding: 7px max(12px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     border-top: 1px solid var(--gb-border-default); background: var(--gb-surface-1);
     background: color-mix(in srgb, var(--gb-surface-1) 96%, var(--gb-brand-tint-soft));
@@ -405,7 +408,6 @@ function pageSubtitle(view, week) {
   if (view === 'performance') return `POD 1 individual contribution · Week ${week}`;
   if (view === 'matchups') return `Week ${week} · audit every role contribution`;
   if (view === 'standings') return '10 pods · wins rank first; completed-week points break ties';
-  if (view === 'brackets') return `If the season ended today · seeds 1–5 Winner Bracket · seeds 6–10 Loser Bracket`;
   if (view === 'rules') return 'Attribution, role rates, margin tiers, and worked scoring examples';
   return `Current POD standing · SR, SA, and BDR · Week ${week}`;
 }
@@ -737,6 +739,7 @@ function Standings({ standings }) {
     <div className="sf-stack">
       <div className="sf-card sf-table-wrap"><table className="sf-league-table"><thead><tr><th>Rank</th><th>Pod</th><th>W</th><th>L</th><th>Bye</th><th>Points for</th></tr></thead><tbody>{standings.map((row) => { const pod = podForId(row.podId); return <tr className={pod.id === MY_POD_ID ? 'mine' : ''} key={pod.id}><td><span className={`sf-rank-badge ${row.rank <= 3 ? 'top' : ''}`}>{row.rank}</span></td><td><div className="sf-standing-team"><PodMark pod={pod} size="small" /><span className="sf-team-name">{pod.name}</span></div></td><td>{row.wins}</td><td>{row.losses}</td><td>{row.byes}</td><td className="sf-metric-primary">{row.pointsFor.toFixed(1)}</td></tr>; })}</tbody></table></div>
       <div className="sf-data-note">Standings include completed matchups only.</div>
+      <Brackets standings={standings} />
     </div>
   );
 }
@@ -753,10 +756,15 @@ function BracketLane({ bracket }) {
     <section className={`sf-bracket-lane ${bracket.id}`} aria-label={bracket.label}>
       <div className="sf-bracket-lane-label"><span className="sf-bracket-lane-title">{bracket.label}</span><span className="sf-bracket-lane-seeds">Seeds {bracket.entrants[0].seed}–{bracket.entrants[bracket.entrants.length - 1].seed}</span></div>
       <div className="sf-bracket-rounds">
+        <svg className="sf-bracket-connectors" viewBox="0 0 922 240" preserveAspectRatio="none" aria-hidden="true">
+          <motion.path className="sf-bracket-connector" d="M258 132 H295 V89 H332" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.42, ease: EASE }} />
+          <motion.path className="sf-bracket-connector" d="M590 72 H627 V114 H664" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.46, delay: 0.08, ease: EASE }} />
+          <motion.path className="sf-bracket-connector" d="M590 194 H627 V149 H664" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.46, delay: 0.12, ease: EASE }} />
+        </svg>
         {bracket.rounds.map((round) => (
-          <section className="sf-bracket-round" key={round.id} aria-label={`${bracket.label} ${round.label}`}>
+          <section className={`sf-bracket-round ${round.label.toLowerCase()}`} key={round.id} aria-label={`${bracket.label} ${round.label}`}>
             <div className="sf-bracket-round-label">{round.label}</div>
-            {round.games.map((game) => <div className="sf-bracket-game" key={game.id}>{game.slots.map((slot, index) => <BracketSlot slot={slot} key={`${game.id}-${index}`} />)}</div>)}
+            {round.games.map((game, gameIndex) => <div className={`sf-bracket-game sf-bracket-game-${gameIndex}`} key={game.id}>{game.slots.map((slot, index) => <BracketSlot slot={slot} key={`${game.id}-${index}`} />)}</div>)}
           </section>
         ))}
       </div>
@@ -842,7 +850,7 @@ function SalesFantasyApp() {
   const myPod = podForId(MY_POD_ID);
   const myStanding = standings.find((row) => row.podId === MY_POD_ID);
   const page = PAGES.find((item) => item.id === view) || POD_PAGE;
-  const showWeekControl = !['standings', 'brackets', 'rules'].includes(view);
+  const showWeekControl = view !== 'standings' && view !== 'rules';
 
   const changeWeek = (nextWeek) => {
     setDirection(nextWeek > week ? 1 : -1);
@@ -889,7 +897,6 @@ function SalesFantasyApp() {
               {view === 'performance' && <Performance week={week} selectedMemberId={selectedMemberId} onSelectMember={setSelectedMemberId} onSelectWeek={changeWeek} />}
               {view === 'matchups' && <Matchups week={week} standings={standings} selectedGameId={selectedGameId} onSelectGame={setSelectedGameId} />}
               {view === 'standings' && <Standings standings={standings} />}
-              {view === 'brackets' && <Brackets standings={standings} />}
               {view === 'rules' && <Rules />}
               {view === 'pods' && <PodDashboard week={week} standings={standings} onView={changeView} />}
             </motion.div>
