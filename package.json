@@ -1,7 +1,7 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.39",
+  "version": "3.4.40",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
@@ -297,7 +297,7 @@
       "file": "tests/unit/crmSolrSearch.test.mjs"
     },
     {
-      "name": "crm \u00b7 cached-account match-rule queries",
+      "name": "crm \u00b7 cached Contact & Account match-rule queries",
       "file": "tests/unit/crmCacheQuery.test.mjs"
     },
     {

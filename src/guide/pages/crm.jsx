@@ -256,19 +256,19 @@ export function QBPage() {
         <tbody>{QB_OPS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
       </table>
 
-      <h3 className="sub">Cached account fields</h3>
+      <h3 className="sub">Cached Contact &amp; Account fields</h3>
       <p>
         When Page Engine indexing is on and an Engine Territory is configured, the builder adds a
-        <strong> Cached account fields</strong> mode. It uses the same grouped match-rule picker as email
+        <strong> Cached page fields</strong> mode. It uses the same grouped match-rule picker as email
         templates, so you can filter on extracted account, order, address, and other Page Engine fields
-        that are not part of the CRM search index. The matching cached Account IDs are combined with any
-        regular CRM conditions before the search runs.
+        that are not part of the CRM search index. Rules evaluate every cached Contact and Account snapshot;
+        matching IDs are combined with any regular CRM conditions and the selected record type before the search runs.
       </p>
       <div className="docnote warn">
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Cached accounts only</div>
-          <p style={{ margin: 0 }}>A cache rule can only evaluate Account pages already cached on this device. Accounts that have not been cached are excluded from the results, even when they would otherwise satisfy the rule.</p>
+          <div className="dn-t">Cached records only</div>
+          <p style={{ margin: 0 }}>A cache rule can only evaluate Contact and Account pages already cached on this device. Records that have not been cached are excluded from the results, even when they would otherwise satisfy the rule.</p>
         </div>
       </div>
 

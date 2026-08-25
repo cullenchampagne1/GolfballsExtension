@@ -69,6 +69,11 @@ function writeUrlSearch(q, type, solrFq) {
   } catch (e) {}
 }
 
+function shareableSolrFq(filter) {
+  const cacheActive = cacheRuleTreeStatus(filter?.cacheRules || filter?.state?.cacheRules).active;
+  return cacheActive ? (filter?.nativeSolrFq || '') : (filter?.solrFq || '');
+}
+
 /* Segmented type switcher (All / Contacts / Accounts). */
 function TypeTabs({ value, onChange, floating = false }) {
   const shellRadius = floating ? 18 : 'var(--gb-r-md)';
@@ -452,7 +457,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     lastSearchRef.current = { q, t, qb };
     try {
       const { docs, numFound, nextStart, facets: fc } = await searchClient({
-        query: q, type: t, solrFq: qb?.solrFq || '',
+        query: q, type: t, solrFq: qb?.solrFqs || qb?.solrFq || '',
         filters: facetFilters(selRef.current),
         start: 0,
         rows: SOLR_ROWS,
@@ -490,7 +495,7 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
     try {
       const { q, t, qb } = lastSearchRef.current;
       const page = await searchClient({
-        query: q, type: t, solrFq: qb?.solrFq || '',
+        query: q, type: t, solrFq: qb?.solrFqs || qb?.solrFq || '',
         filters: facetFilters(selRef.current),
         start, rows: SOLR_ROWS, facet: false,
       });
@@ -551,18 +556,15 @@ export function CrmSearchPageApp({ store, initialSearch = null, searchClient = c
   }, []);   // eslint-disable-line
 
   const submit = () => {
-    writeUrlSearch(query.trim(), type, qbFilter?.solrFq || '');
+    writeUrlSearch(query.trim(), type, shareableSolrFq(qbFilter));
     runSearch(query.trim(), type, qbFilter);
   };
-  const onTypeChange = (t) => { setType(t); writeUrlSearch(query.trim(), t, qbFilter?.solrFq || ''); if (searched) runSearch(query.trim(), t, qbFilter); };
+  const onTypeChange = (t) => { setType(t); writeUrlSearch(query.trim(), t, shareableSolrFq(qbFilter)); if (searched) runSearch(query.trim(), t, qbFilter); };
   const applyQb = (filter) => {
-    const cacheActive = cacheRuleTreeStatus(filter?.cacheRules || filter?.state?.cacheRules).active;
-    const nextType = cacheActive ? 'account' : type;
-    if (cacheActive) setType('account');
     setQbFilter(filter);
     setQbOpen(false);
-    writeUrlSearch(query.trim(), nextType, filter?.solrFq || '');
-    runSearch(query.trim(), nextType, filter);
+    writeUrlSearch(query.trim(), type, shareableSolrFq(filter));
+    runSearch(query.trim(), type, filter);
   };
   const clearQb = () => { setQbFilter(null); writeUrlSearch(query.trim(), type, ''); runSearch(query.trim(), type, null); };
   const selectedResults = useMemo(() => selectedCrmRows(rows, selectedRows), [rows, selectedRows]);

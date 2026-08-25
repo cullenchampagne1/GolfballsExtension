@@ -47,6 +47,16 @@ describe('crm · Solr search query building', () => {
     assert.ok(b.includes('&fq=' + encodeURIComponent(fq)));
   });
 
+  it('keeps native and large-cache query-builder filters as separate fq parameters', () => {
+    const nativeFq = 'recordType_s:Contact';
+    const cacheFq = '{!terms f=id}contact_1,contact_2';
+    const b = buildSolrBody({ query: 'x', solrFq: [nativeFq, cacheFq] });
+
+    assert.ok(b.includes('&fq=' + encodeURIComponent(nativeFq)));
+    assert.ok(b.includes('&fq=' + encodeURIComponent(cacheFq)));
+    assert.equal((b.match(/&fq=/g) || []).length, 2);
+  });
+
   it('omits fq entirely when there is no filter', () => {
     assert.doesNotMatch(buildSolrBody({ query: 'x' }), /&fq=/);
   });

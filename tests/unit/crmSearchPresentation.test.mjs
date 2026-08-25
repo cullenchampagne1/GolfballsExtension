@@ -50,17 +50,21 @@ describe('CRM Search presentation · Page Engine cache control', () => {
     assert.ok(liveFetchAt > dataResolverAt);
   });
 
-  it('gates cached-account match rules on Page Engine settings and warns on every active search surface', () => {
+  it('gates cached Contact and Account match rules on Page Engine settings and warns on every active search surface', () => {
     assert.match(queryBuilderSource, /pageEngine\.indexingEnabled/);
     assert.match(queryBuilderSource, /pageEngine\.territory/);
     assert.match(queryBuilderSource, /cacheAvailable/);
     assert.match(queryBuilderSource, /<AccountConditions/);
-    assert.match(queryBuilderSource, /resolveCachedAccountFilter/);
+    assert.match(queryBuilderSource, /resolveCachedEntityFilter/);
     assert.match(queryBuilderSource, /<CacheQueryNotice/);
+    assert.doesNotMatch(queryBuilderSource, /conditionIndex === 0 \? \{ \.\.\.condition, val: 'Account' \}/);
 
     for (const source of [searchSource, pageSource]) {
       assert.match(source, /hasCacheQuery/);
       assert.match(source, /<CacheQueryNotice/);
+      assert.match(source, /qb\?\.solrFqs \|\| qb\?\.solrFq/);
+      assert.doesNotMatch(source, /cacheActive[^;]*\? 'account'/);
+      assert.doesNotMatch(source, /if \(cacheActive\) setType\('account'\)/);
     }
   });
 });

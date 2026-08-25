@@ -8,9 +8,10 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 import {
+  cachedMatchSummary,
   cacheRuleTreeStatus,
   combineCrmFilterFq,
-  resolveCachedAccountFilter,
+  resolveCachedEntityFilter,
 } from '../lib/crmCacheQuery.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -449,13 +450,6 @@ function buildInitial({ initialState, initialConditions }) {
       }],
     };
   }
-  if (cacheRuleTreeStatus(initialState?.cacheRules).active) {
-    const accountCondition = { ...newCondition(), val: 'Account' };
-    return {
-      outerJoiner: 'AND',
-      groups: [{ id: uid(), joiner: 'AND', conditions: [accountCondition] }],
-    };
-  }
   return { outerJoiner: 'AND', groups: [newGroup()] };
 }
 
@@ -485,16 +479,6 @@ function savedBuilderState(outerJoiner, groups, cacheRules) {
     })),
     cacheRules,
   };
-}
-
-function isPristineContactDefault(builder) {
-  const condition = builder?.groups?.[0]?.conditions?.[0];
-  return builder?.groups?.length === 1
-    && builder.groups[0].conditions.length === 1
-    && condition?.fieldKey === 'recordType_s'
-    && condition?.op === 'is'
-    && condition?.val === 'Contact'
-    && !condition?.not;
 }
 
 const emptyCacheRules = () => ({ outerJoiner: 'AND', groups: [] });
@@ -554,7 +538,7 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   const previewLabel = [
     label,
     cacheStatus.active
-      ? `${cacheStatus.count} cached account rule${cacheStatus.count === 1 ? '' : 's'}`
+      ? `${cacheStatus.count} cached record rule${cacheStatus.count === 1 ? '' : 's'}`
       : '',
   ].filter(Boolean).join(' · ');
 
@@ -647,23 +631,7 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
     setEditorMode(cacheAvailable && cacheRuleTreeStatus(st.cacheRules).active ? 'cache' : 'crm');
   };
   const handleCacheRulesChange = (next) => {
-    const wasActive = cacheRuleTreeStatus(cacheRules).active;
-    const isActive = cacheRuleTreeStatus(next).active;
     setCacheRules(next);
-    if (!wasActive && isActive) {
-      setBuilder((builder) => {
-        if (!isPristineContactDefault(builder)) return builder;
-        return {
-          ...builder,
-          groups: builder.groups.map((group, groupIndex) => groupIndex !== 0 ? group : {
-            ...group,
-            conditions: group.conditions.map((condition, conditionIndex) => (
-              conditionIndex === 0 ? { ...condition, val: 'Account' } : condition
-            )),
-          }),
-        };
-      });
-    }
   };
   const handleClear = () => {
     setBuilder({ outerJoiner: 'AND', groups: [newGroup()] });
@@ -679,16 +647,16 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
     const status = cacheRuleTreeStatus(currentCacheRules);
     if (!status.valid) throw new Error(status.reason);
     if (status.active && !cacheAvailable) {
-      throw new Error('Turn on Page Engine indexing and choose an Engine Territory to use cached-account rules.');
+      throw new Error('Turn on Page Engine indexing and choose an Engine Territory to use cached-record rules.');
     }
     const cacheResult = status.active
-      ? await resolveCachedAccountFilter(currentCacheRules)
-      : { solrFq: '', matchedAccounts: 0, scannedSnapshots: 0 };
+      ? await resolveCachedEntityFilter(currentCacheRules)
+      : {
+        solrFq: '', matchedRecords: 0, matchedByType: { contact: 0, account: 0 }, scannedSnapshots: 0,
+      };
     const resolvedLabel = [
       nativeLabel,
-      status.active
-        ? `${cacheResult.matchedAccounts} cached account${cacheResult.matchedAccounts === 1 ? '' : 's'} matched`
-        : '',
+      status.active ? cachedMatchSummary(cacheResult) : '',
     ].filter(Boolean).join(' · ');
     const payload = {
       label: resolvedLabel,
@@ -696,8 +664,10 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
       nativeSolrFq,
       cacheSolrFq: cacheResult.solrFq,
       cacheRules: currentCacheRules,
-      cacheMatchCount: cacheResult.matchedAccounts,
+      cacheMatchCount: cacheResult.matchedRecords,
+      cacheMatchCounts: cacheResult.matchedByType,
       cacheScannedCount: cacheResult.scannedSnapshots,
+      solrFqs: [nativeSolrFq, cacheResult.solrFq].filter(Boolean),
       solrFq: combineCrmFilterFq(nativeSolrFq, cacheResult.solrFq),
       conditions: flattenGroups(builderState.groups || []),
       /* Rich state for round-tripping; CRMSearch can stash this
@@ -721,7 +691,7 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
       }
       bindCloseRef.current?.();
     } catch (error) {
-      toast?.error?.(error?.message || 'Unable to apply cached-account rules.', { duration: 5000 });
+      toast?.error?.(error?.message || 'Unable to apply cached-record rules.', { duration: 5000 });
       if (rethrow) throw error;
     }
   };
@@ -881,7 +851,7 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
                   onChange={setEditorMode}
                   options={[
                     { id: 'crm', label: 'CRM fields', icon: <I.search /> },
-                    { id: 'cache', label: 'Cached account fields', icon: <I.cube /> },
+                    { id: 'cache', label: 'Cached page fields', icon: <I.cube /> },
                   ]}
                 />
                 <Tag tone="brand" size="sm">Page Engine cache</Tag>
@@ -912,8 +882,8 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
                 onChange={handleCacheRulesChange}
                 varNames={[]}
                 allowEmpty
-                label="Cached account match rules"
-                emptyHint="Add grouped AND/OR rules against any Page Engine account field. These rules run only against snapshots cached on this device."
+                label="Cached Contact & Account match rules"
+                emptyHint="Add grouped AND/OR rules against any cached Page Engine field. Rules evaluate Contact and Account snapshots cached on this device."
               />
             ) : (
               <>
@@ -1207,7 +1177,7 @@ function SavedQueryRow({ query, onLoad, onDelete, onPromote }) {
     || cacheRuleTreeStatus(query.cacheRules || query.state?.cacheRules).count;
   const querySummary = [
     query.query || '',
-    cacheRuleCount ? `${cacheRuleCount} cached account rule${cacheRuleCount === 1 ? '' : 's'}` : '',
+    cacheRuleCount ? `${cacheRuleCount} cached record rule${cacheRuleCount === 1 ? '' : 's'}` : '',
   ].filter(Boolean).join(' · ') || 'Empty query';
   return (
     <div

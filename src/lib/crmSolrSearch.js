@@ -88,7 +88,11 @@ export function buildSolrBody({ query = '', type = 'all', solrFq = '', filters =
   // Contacts/Accounts tab the user selected.
   const recordType = SOLR_RECORD_TYPES[String(type || '').toLowerCase()];
   if (recordType) body += `&fq=${encodeURIComponent(`recordType_s:"${recordType}"`)}`;
-  if (solrFq) body += `&fq=${encodeURIComponent(solrFq)}`;
+  // Query Builder keeps native CRM conditions and the Page Engine ID set as
+  // separate fq values. That lets a large ID set use Solr's top-level terms
+  // parser instead of being embedded inside a Boolean expression.
+  const queryBuilderFilters = Array.isArray(solrFq) ? solrFq : [solrFq];
+  for (const f of queryBuilderFilters) if (f) body += `&fq=${encodeURIComponent(f)}`;
   for (const f of (filters || [])) if (f) body += `&fq=${encodeURIComponent(f)}`;
   if (facet) {
     body += `&facet=true&facet.mincount=1&facet.limit=${facetLimit}&facet.sort=count`;

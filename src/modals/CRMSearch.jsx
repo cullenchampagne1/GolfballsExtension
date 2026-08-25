@@ -21,7 +21,10 @@ import {
   attachCachedPageEngineSnapshots, pageEngineIdentity,
 } from '../lib/page-engine/cache-actions.js';
 import { EngineCacheTag } from '../ui/components/EngineCacheTag.jsx';
-import { cacheRuleTreeStatus, combineCrmFilterFq } from '../lib/crmCacheQuery.js';
+import {
+  cachedMatchSummary, cacheRuleTreeStatus, combineCrmFilterFq,
+} from '../lib/crmCacheQuery.js';
+import { crmSolrQuery, SOLR_ROWS } from '../lib/crmSolrSearch.js';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -44,18 +47,6 @@ import { cacheRuleTreeStatus, combineCrmFilterFq } from '../lib/crmCacheQuery.js
    selected-contact audience and opens the Workflow Manager
    (window.__gbOpenWorkflowManager) to run the PA email / task flow there.
 ─────────────────────────────────────────────────────────────── */
-
-const ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIndexCrm.asmx/Query';
-// Per-field boosts (qf). Names are weighted heavily so a token that
-// matches a contact / account name dominates a token that happens to
-// appear inside an email or a phone string. IDs stay near the top in
-// case the user types an exact record key.
-const QF = 'id^100 accountID_s^100 contactName_t^120 accountName_t^120 email_tp^25 emails_tps^25 phones_ss^25';
-// Phrase fields (pf): edismax adds a boost when ALL query tokens
-// appear as a phrase. Bumps "Alex Morgan" above someone called
-// "Morgan Alex-Smith" who only matches the tokens separately.
-const PF = 'contactName_t^400 accountName_t^400 email_tp^60';
-const ROWS = 100;
 
 const TYPE_OPTS = [
   { id: 'all',     label: 'All types' },
@@ -280,51 +271,22 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   const [loadingMore, setLoadingMore] = useState(false);
 
   /* Issue ONE Solr page. `start` is the row offset (0 for the first
-     page); page size is constant ROWS. The function returns
+     page); page size is constant SOLR_ROWS. The function returns
      `{ docs, numFound }` so the caller can decide whether to append or
      replace, whether to bump `start`, etc. Pulled out of runSearch so
      loadMoreResults + indexAllMatches can hit the same backend without
      duplicating the body construction. */
   const fetchSolrPage = useCallback(async (q, qb, typeF, start) => {
-    const term = (q || '').trim();
-    /* Build the q string:
-       - Empty term → match-all so the sort + filters drive results.
-       - Otherwise, tokenise + append `~1` to each token of length ≥ 4
-         to allow one-character edits (typo tolerance). Exact matches
-         still rank higher than fuzzy because Solr's fuzzy score factor
-         decays with edit distance, and the pf= phrase boost (below)
-         further pushes exact phrases to the top.
-       - Short tokens (< 4 chars) keep their literal form to avoid the
-         combinatorial explosion of 1-edit matches on tiny inputs. */
-    const qStr = (() => {
-      if (!term) return '*:*';
-      const tokens = term.split(/\s+/).filter(Boolean);
-      if (!tokens.length) return '*:*';
-      return tokens.map((t) => (t.length >= 4 ? `${t}~1` : t)).join(' ');
-    })();
-    /* Sort: when a search term is present, the user wants relevance
-       first — score desc — with their column choice as a tiebreaker.
-       Without a term, fall back to the chosen sort directly so the
-       baseline listing (most-recent orders) still works. */
-    const effectiveSort = term
-      ? `score desc, ${sortKey} ${sortDir}`
-      : `${sortKey} ${sortDir}`;
-    const startPart = start > 0 ? `&start=${start}` : '';
-    let body = `${qStr}${startPart}&sort=${encodeURIComponent(effectiveSort)}&rows=${ROWS}&qf=${encodeURIComponent(QF)}&pf=${encodeURIComponent(PF)}&q.op=AND&sow=false&defType=edismax`;
-    if (qb?.solrFq) body += `&fq=${encodeURIComponent(qb.solrFq)}`;
-    const res = await fetch(ENDPOINT, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ str: body }),
+    const result = await crmSolrQuery({
+      query: q,
+      type: typeF,
+      solrFq: qb?.solrFqs || qb?.solrFq || '',
+      start,
+      rows: SOLR_ROWS,
+      sortKey,
+      sortDir,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    const data = JSON.parse(raw.d);
-    let docs = data.response?.docs || [];
-    const numFound = data.response?.numFound ?? docs.length;
-    if (typeF !== 'all') docs = docs.filter((r) => (r.recordType_s || '').toLowerCase() === typeF);
-    return { docs, numFound };
+    return { docs: result.docs, numFound: result.numFound };
   }, [sortKey, sortDir]);
 
   /* The first page of a CRM search as a declared source. Built in-component
@@ -708,9 +670,6 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
   }, [allowBulkSending, emailContacts, prepareActionContacts, toast]);
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
-    if (cacheRuleTreeStatus(filter?.cacheRules || filter?.state?.cacheRules).active) {
-      setType('account');
-    }
     setQbFilter(filter);   // triggers the auto re-run effect
     setQbOpen(false);
   };
@@ -732,8 +691,12 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         conditions: next,
         nativeSolrFq,
         nativeLabel,
+        solrFqs: [nativeSolrFq, cur.cacheSolrFq].filter(Boolean),
         solrFq: combineCrmFilterFq(nativeSolrFq, cur.cacheSolrFq),
-        label: [nativeLabel, cacheActive ? `${cur.cacheMatchCount ?? 0} cached accounts matched` : '']
+        label: [nativeLabel, cacheActive ? cachedMatchSummary({
+          matchedByType: cur.cacheMatchCounts,
+          matchedRecords: cur.cacheMatchCount,
+        }) : '']
           .filter(Boolean).join(' · '),
         state: {
           ...(cur.state || {}),
@@ -753,11 +716,13 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         ...cur,
         label: nativeLabel,
         solrFq: nativeSolrFq,
+        solrFqs: [nativeSolrFq].filter(Boolean),
         nativeLabel,
         nativeSolrFq,
         cacheSolrFq: '',
         cacheRules: null,
         cacheMatchCount: 0,
+        cacheMatchCounts: { contact: 0, account: 0 },
         cacheScannedCount: 0,
         state: { ...(cur.state || {}), cacheRules: null },
       };
@@ -1019,7 +984,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         ).active;
         if (savedCacheActive && !cacheOptionVisible) {
           toast?.warning?.(
-            'Turn on Page Engine indexing and choose an Engine Territory to run this cached-account query.',
+            'Turn on Page Engine indexing and choose an Engine Territory to run this cached-record query.',
             { duration: 4200 },
           );
           return;
@@ -1028,7 +993,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         // of recorded searches), then fire runSearch directly with
         // the saved filters — the setQuery/setQbFilter updates are
         // async so passing them inline guarantees the right inputs.
-        const savedType = savedCacheActive ? 'account' : (saved.typeFilter || 'all');
+        const savedType = saved.typeFilter || 'all';
         setQuery(saved.query || '');
         setType(savedType);
         setQbFilter(saved.qbFilter || null);
@@ -1244,7 +1209,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       </AnimatePresence>
 
       {/* Filter bar — one tag per native condition plus the optional
-          cached-account rule layer produced by Query Builder. */}
+          cached-record rule layer produced by Query Builder. */}
       <AnimatePresence initial={false}>
         {qbFilter && (qbFilter.conditions?.length > 0 || hasCacheQuery) && (
           <motion.div
@@ -1279,7 +1244,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
               })}
               {hasCacheQuery && (
                 <ConditionTag
-                  label={`${activeCacheQueryStatus.count} cached account rule${activeCacheQueryStatus.count === 1 ? '' : 's'} · ${qbFilter.cacheMatchCount ?? 0} matched`}
+                  label={`${activeCacheQueryStatus.count} cached record rule${activeCacheQueryStatus.count === 1 ? '' : 's'} · ${cachedMatchSummary({ matchedByType: qbFilter.cacheMatchCounts, matchedRecords: qbFilter.cacheMatchCount })}`}
                   onRemove={removeCacheFilter}
                 />
               )}
