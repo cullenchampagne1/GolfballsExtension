@@ -6,6 +6,7 @@ import { I, Icon } from '../ui';
 import {
   SALES_FANTASY_CURRENT_WEEK,
   SALES_FANTASY_PODS,
+  SALES_FANTASY_ROLES,
   SALES_FANTASY_SCORING,
   buildFantasySchedule,
   buildStandings,
@@ -188,7 +189,9 @@ const CSS = `
   .sf-margin-summary { padding-top: var(--sf-2); display: flex; flex-wrap: wrap; gap: 4px; }
   .sf-margin-chip { padding: 3px 5px; color: var(--gb-text-muted); border: 1px solid var(--gb-border-subtle); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); font-size: 8.5px; white-space: nowrap; }
   .sf-margin-chip.hit { color: var(--gb-brand-label); border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); }
+  .sf-scoring-rules { border-top: 1px solid var(--gb-border-default); }
   .sf-scoring-key { padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--gb-text-muted); border-top: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); font-size: 9px; }
+  .sf-scoring-rules .sf-scoring-key:first-child { border-top: 0; }
   .sf-scoring-key strong { margin-right: 3px; color: var(--gb-text-secondary); }
   .sf-tier-rule { padding: 3px 6px; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-pill); background: var(--gb-surface-1); white-space: nowrap; }
   .sf-pod-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sf-2); }
@@ -284,7 +287,13 @@ function formatMetricValue(row) {
     style: 'currency', currency: 'USD', maximumFractionDigits: 0,
   }).format(row.value);
   if (row.format === 'orders') return `${row.value} order${row.value === 1 ? '' : 's'}`;
+  if (row.format === 'proposals') return `${row.value} proposal${row.value === 1 ? '' : 's'}`;
   return Number(row.value).toLocaleString('en-US');
+}
+
+function referralRateLabel(rule) {
+  if (rule.format === 'money') return `+${rule.pointsPerUnit * 1000}/$1k closed`;
+  return `+${rule.pointsPerUnit}/order`;
 }
 
 function pageSubtitle(view, week) {
@@ -388,7 +397,7 @@ function MatchupBreakdown({ game, week, standings, title = 'Current matchup' }) 
         <div className="sf-score-team away"><PodMark pod={away} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{away.name}</div><div className="sf-team-record">{recordLabel(awayRecord)} · rank #{awayRecord?.rank || '—'}</div><div className="sf-score">{fantasyScore(away.id, week).toFixed(1)}</div></div></div>
       </div>
       <div className="sf-split-grid"><SplitPanel pod={home} week={week} /><SplitPanel pod={away} week={week} /></div>
-      <div className="sf-score-note"><strong>How it adds up:</strong> each role earns Activity and Sales points. Completed orders also earn the highest margin-tier bonus they qualify for. The SR, SA, and BDR totals make the POD score above.</div>
+      <div className="sf-score-note"><strong>How it adds up:</strong> each role earns Activity and owned Sales points. BDRs also earn additive Referred points on above-$500 orders they originate; SA/SR closers keep full credit. The SR, SA, and BDR totals make the POD score above.</div>
     </article>
   );
 }
@@ -482,10 +491,10 @@ function MetricCategory({ name, score }) {
         </div>
       ))}
       {score.marginTiers && (
-        <div className="sf-margin-summary" aria-label="Completed orders by margin tier">
+        <div className="sf-margin-summary" aria-label="Proposals and completed orders by margin tier">
           {score.marginTiers.map((tier) => (
-            <span className={`sf-margin-chip ${tier.orders ? 'hit' : ''}`} key={tier.id}>
-              {tier.label}: {tier.orders}
+            <span className={`sf-margin-chip ${tier.proposals || tier.orders ? 'hit' : ''}`} key={tier.id}>
+              {tier.label}: {tier.proposals}P / {tier.orders}O
             </span>
           ))}
         </div>
@@ -496,6 +505,7 @@ function MetricCategory({ name, score }) {
 
 function RoleBreakdowns({ pod, week, showScoringKey = true }) {
   const split = podWeekPointSplit(pod.id, week);
+  const outboundRule = SALES_FANTASY_SCORING.activity.find((rule) => rule.id === 'outboundCalls');
   return (
     <div className="sf-role-list">
       {pod.members.map((member, index) => {
@@ -510,11 +520,19 @@ function RoleBreakdowns({ pod, week, showScoringKey = true }) {
             <div className="sf-role-categories">
               <MetricCategory name="Activity" score={points.activity} />
               <MetricCategory name="Sales" score={points.sales} />
+              {points.referred && <MetricCategory name="Referred" score={points.referred} />}
             </div>
           </section>
         );
       })}
-      {showScoringKey && <div className="sf-scoring-key"><strong>Margin bonus per completed order</strong>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <span className="sf-tier-rule" key={tier.id}>{tier.label} · +{tier.bonusPoints}</span>)}</div>}
+      {showScoringKey && (
+        <div className="sf-scoring-rules">
+          <div className="sf-scoring-key"><strong>Deal ownership</strong>{SALES_FANTASY_SCORING.ownershipBands.map((band) => <span className="sf-tier-rule" key={band.roleId}>{band.roleId.toUpperCase()} · {band.label}</span>)}</div>
+          <div className="sf-scoring-key"><strong>Outbound calls</strong>{SALES_FANTASY_ROLES.map((role) => <span className="sf-tier-rule" key={role.id}>{role.label} · +{outboundRule.pointsByRole[role.id]}/call</span>)}</div>
+          <div className="sf-scoring-key"><strong>Margin bonus</strong>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <span className="sf-tier-rule" key={tier.id}>{tier.label} · proposal +{tier.proposalBonusPoints} · order +{tier.orderBonusPoints}</span>)}</div>
+          <div className="sf-scoring-key"><strong>BDR referral · above $500</strong>{SALES_FANTASY_SCORING.referral.map((rule) => <span className="sf-tier-rule" key={rule.id}>{rule.label} · {referralRateLabel(rule)}</span>)}</div>
+        </div>
+      )}
     </div>
   );
 }

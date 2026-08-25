@@ -172,10 +172,10 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /className="sf-page-subtitle">\{pageSubtitle\(view, week\)\}/);
     assert.doesNotMatch(salesFantasySource, /sf-view-head|sf-view-heading|sf-view-copy/);
     assert.doesNotMatch(salesFantasySource, /sf-sidebar|<aside|sf-nav-button|sf-topbar/);
-    for (const pointLabel of ['Activity', 'Sales']) {
+    for (const pointLabel of ['Activity', 'Sales', 'Referred']) {
       assert.match(salesFantasySource, new RegExp(`name="${pointLabel}"`));
     }
-    for (const metricLabel of ['Emails sent', 'Emails replied', 'Outbound calls', 'Inbound calls', 'Proposals sent', 'Orders', 'Total sales', 'Total profit']) {
+    for (const metricLabel of ['Emails sent', 'Emails replied', 'Outbound calls', 'Inbound calls', 'Proposals sent', 'Owned orders', 'Owned sales', 'Owned profit', 'Referred orders', 'Referred dollars']) {
       assert.match(salesFantasyModelSource, new RegExp(metricLabel, 'i'));
     }
     assert.match(salesFantasySource, /The SR, SA, and BDR totals make the POD score above/);
@@ -184,7 +184,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.doesNotMatch(salesFantasySource, /min-width: 680px|line-height: 30px|height: 29px/);
   });
 
-  it('shows Activity and Sales metric rows beneath every role in pod and matchup breakdowns', () => {
+  it('shows role metric rows and the BDR Referred category in pod and matchup breakdowns', () => {
     const splitPanelSource = salesFantasySource.match(/function SplitPanel[\s\S]*?\n}\n\nfunction MatchupBreakdown/)?.[0] || '';
     const roleBreakdownsSource = salesFantasySource.match(/function RoleBreakdowns[\s\S]*?\n}\n\nfunction Pods/)?.[0] || '';
     const metricCategorySource = salesFantasySource.match(/function MetricCategory[\s\S]*?\n}\n\nfunction RoleBreakdowns/)?.[0] || '';
@@ -193,6 +193,9 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(roleBreakdownsSource, /pod\.members\.map/);
     assert.match(roleBreakdownsSource, /<MetricCategory name="Activity" score=\{points\.activity\} \/>/);
     assert.match(roleBreakdownsSource, /<MetricCategory name="Sales" score=\{points\.sales\} \/>/);
+    assert.match(roleBreakdownsSource, /points\.referred && <MetricCategory name="Referred" score=\{points\.referred\} \/>/);
+    assert.match(roleBreakdownsSource, /Deal ownership/);
+    assert.match(roleBreakdownsSource, /BDR referral/);
     assert.match(metricCategorySource, /score\.rows\.map/);
     assert.match(metricCategorySource, /className="sf-metric-row"/);
     assert.match(salesFantasySource, /\.sf-role-categories \{ display: grid; grid-template-columns: 1fr; \}/);
