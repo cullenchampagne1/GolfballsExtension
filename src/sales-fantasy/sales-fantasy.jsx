@@ -118,18 +118,12 @@ const CSS = `
   .sf-score { margin-top: var(--sf-1); color: var(--gb-text-primary); font-size: 27px; line-height: 1.05; font-weight: 850; letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
   .sf-vs { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--gb-border-default); border-radius: 50%; color: var(--gb-text-muted); background: var(--gb-surface-1); font-size: 9px; font-weight: 850; }
   .sf-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--gb-border-subtle); }
-  .sf-pod-split { min-width: 0; padding: var(--sf-4); }
+  .sf-pod-split { min-width: 0; }
   .sf-pod-split + .sf-pod-split { border-left: 1px solid var(--gb-border-subtle); }
-  .sf-split-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sf-2); margin-bottom: var(--sf-2); }
+  .sf-split-head { padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-2); background: var(--gb-fill-faint); }
   .sf-split-title { color: var(--gb-text-primary); font-size: 11px; font-weight: 750; }
   .sf-split-total { color: var(--gb-brand-label); font-size: 12px; font-weight: 850; font-variant-numeric: tabular-nums; }
-  .sf-split-columns { display: grid; grid-template-columns: minmax(44px, 1fr) repeat(2, minmax(44px, auto)) minmax(46px, auto); gap: 8px; color: var(--gb-text-muted); font-size: 8.5px; font-weight: 750; letter-spacing: .25px; text-align: right; text-transform: uppercase; }
-  .sf-rep-split { min-width: 0; padding: 9px 0; display: grid; grid-template-columns: minmax(44px, 1fr) repeat(2, minmax(44px, auto)) minmax(46px, auto); align-items: center; gap: 8px; border-top: 1px solid var(--gb-border-subtle); }
-  .sf-rep-split:first-of-type { border-top: 0; }
-  .sf-rep-name { min-width: 0; color: var(--gb-text-secondary); font-size: 10.5px; font-weight: 700; overflow-wrap: anywhere; }
-  .sf-point-part { color: var(--gb-text-muted); font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
-  .sf-point-total { padding-left: 6px; color: var(--gb-brand-label); border-left: 1px solid var(--gb-border-default); font-size: 11px; font-weight: 850; text-align: right; font-variant-numeric: tabular-nums; }
-  .sf-equation { padding-top: var(--sf-2); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--gb-text-muted); border-top: 1px solid var(--gb-border-default); font-size: 9.5px; line-height: 1.5; }
+  .sf-equation { padding: var(--sf-3) var(--sf-4); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--gb-text-muted); border-top: 1px solid var(--gb-border-default); font-size: 9.5px; line-height: 1.5; }
   .sf-equation strong { color: var(--gb-text-primary); font-size: 11px; }
   .sf-score-note { padding: 0 var(--sf-4) var(--sf-4); color: var(--gb-text-muted); font-size: 10px; line-height: 1.5; }
   .sf-score-note strong { color: var(--gb-text-secondary); }
@@ -181,9 +175,9 @@ const CSS = `
   .sf-role-total { text-align: right; }
   .sf-role-total-value { color: var(--gb-brand-label); font-size: 16px; line-height: 1.1; font-weight: 850; font-variant-numeric: tabular-nums; }
   .sf-role-total-label { margin-top: 2px; color: var(--gb-text-muted); font-size: 8px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
-  .sf-role-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-role-categories { display: grid; grid-template-columns: 1fr; }
   .sf-category { min-width: 0; padding: var(--sf-3) var(--sf-4) var(--sf-4); }
-  .sf-category + .sf-category { border-left: 1px solid var(--gb-border-subtle); }
+  .sf-category + .sf-category { border-top: 1px solid var(--gb-border-subtle); }
   .sf-category-head { min-height: 25px; display: flex; align-items: center; justify-content: space-between; gap: var(--sf-2); border-bottom: 1px solid var(--gb-border-default); }
   .sf-category-name { color: var(--gb-text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .55px; text-transform: uppercase; }
   .sf-category-points { color: var(--gb-brand-label); font-size: 10.5px; font-weight: 850; font-variant-numeric: tabular-nums; }
@@ -262,8 +256,6 @@ const CSS = `
     .sf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-split-grid, .sf-scoreboard-grid, .sf-matchup-list { grid-template-columns: 1fr; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
-    .sf-role-categories { grid-template-columns: 1fr; }
-    .sf-category + .sf-category { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .sf-pod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
     .sf-bottom-item::before, .sf-bottom-active { inset-inline: 5%; }
@@ -368,15 +360,7 @@ function SplitPanel({ pod, week }) {
   return (
     <section className="sf-pod-split" aria-label={`${pod.name} point split`}>
       <div className="sf-split-head"><span className="sf-split-title">{pod.name} roles</span><span className="sf-split-total">{split.total.toFixed(1)}</span></div>
-      <div className="sf-split-columns" aria-hidden="true"><span /><span>Activity</span><span>Sales</span><span>Total</span></div>
-      {split.members.map((member) => (
-        <div className="sf-rep-split" key={member.memberId}>
-          <span className="sf-rep-name">{member.memberName}</span>
-          <span className="sf-point-part" title="Activity points">{member.activity.total.toFixed(1)}</span>
-          <span className="sf-point-part" title="Sales points">{member.sales.total.toFixed(1)}</span>
-          <strong className="sf-point-total">{member.total.toFixed(1)}</strong>
-        </div>
-      ))}
+      <RoleBreakdowns pod={pod} week={week} showScoringKey={false} />
       <div className="sf-equation">
         {split.members.map((member, index) => <React.Fragment key={member.memberId}><span>{member.memberName} {member.total.toFixed(1)}</span>{index < split.members.length - 1 && <span>+</span>}</React.Fragment>)}
         <span>=</span><strong>{split.total.toFixed(1)}</strong>
@@ -510,7 +494,7 @@ function MetricCategory({ name, score }) {
   );
 }
 
-function RoleBreakdowns({ pod, week }) {
+function RoleBreakdowns({ pod, week, showScoringKey = true }) {
   const split = podWeekPointSplit(pod.id, week);
   return (
     <div className="sf-role-list">
@@ -530,7 +514,7 @@ function RoleBreakdowns({ pod, week }) {
           </section>
         );
       })}
-      <div className="sf-scoring-key"><strong>Margin bonus per completed order</strong>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <span className="sf-tier-rule" key={tier.id}>{tier.label} · +{tier.bonusPoints}</span>)}</div>
+      {showScoringKey && <div className="sf-scoring-key"><strong>Margin bonus per completed order</strong>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <span className="sf-tier-rule" key={tier.id}>{tier.label} · +{tier.bonusPoints}</span>)}</div>}
     </div>
   );
 }
