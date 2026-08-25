@@ -63,8 +63,9 @@ describe('salesFantasy · league model', () => {
   });
 
   it('scores Activity and Sales for every role plus Referred points for BDR', () => {
+    const seasonWeeks = buildFantasySchedule().length;
     for (const pod of SALES_FANTASY_PODS) {
-      for (let week = 1; week <= 9; week += 1) {
+      for (let week = 1; week <= seasonWeeks; week += 1) {
         const split = podWeekPointSplit(pod.id, week);
         assert.equal(split.members.length, 3, `${pod.name} week ${week}`);
         for (const member of split.members) {
@@ -228,8 +229,9 @@ describe('salesFantasy · league model', () => {
 
   it('keeps preview role contributions on the same playing field across a full season', () => {
     const totals = Object.fromEntries(SALES_FANTASY_ROLES.map((role) => [role.id, 0]));
+    const seasonWeeks = buildFantasySchedule().length;
     for (const pod of SALES_FANTASY_PODS) {
-      for (let week = 1; week <= 9; week += 1) {
+      for (let week = 1; week <= seasonWeeks; week += 1) {
         for (const member of podWeekPointSplit(pod.id, week).members) totals[member.roleId] += member.total;
       }
     }
@@ -241,27 +243,37 @@ describe('salesFantasy · league model', () => {
     assert.ok(totals.sr > totals.sa && totals.sr > totals.bdr, 'SR remains the largest contribution driver');
   });
 
-  it('builds nine head-to-head weeks with every pod present once per week', () => {
+  it('builds ten head-to-head weeks with four games and two byes every week', () => {
     const schedule = buildFantasySchedule();
-    assert.equal(schedule.length, 9);
+    assert.equal(schedule.length, 10);
+    const matchupKeys = new Set();
     for (const week of schedule) {
       const active = week.games.flatMap((game) => [game.home, game.away]);
       const participants = [...active, ...week.byes];
       assert.equal(participants.length, 10, `week ${week.week}`);
       assert.equal(new Set(participants).size, 10, `week ${week.week}`);
-      assert.ok(week.games.length === 4 || week.games.length === 5, `week ${week.week}`);
-      assert.ok(week.byes.length === 0 || week.byes.length === 2, `week ${week.week}`);
+      assert.equal(week.games.length, 4, `week ${week.week}`);
+      assert.equal(week.byes.length, 2, `week ${week.week}`);
+      for (const game of week.games) {
+        const matchupKey = [game.home, game.away].sort().join(':');
+        assert.equal(matchupKeys.has(matchupKey), false, `${matchupKey} repeats`);
+        matchupKeys.add(matchupKey);
+      }
     }
+    assert.equal(matchupKeys.size, 40);
   });
 
-  it('gives every pod exactly one paired bye across the season', () => {
+  it('gives every pod exactly two byes and eight games across the season', () => {
     const schedule = buildFantasySchedule();
     const byeCounts = new Map(SALES_FANTASY_PODS.map((pod) => [pod.id, 0]));
+    const gameCounts = new Map(SALES_FANTASY_PODS.map((pod) => [pod.id, 0]));
     for (const week of schedule) {
       for (const podId of week.byes) byeCounts.set(podId, byeCounts.get(podId) + 1);
+      for (const podId of week.games.flatMap((game) => [game.home, game.away])) gameCounts.set(podId, gameCounts.get(podId) + 1);
     }
-    assert.deepEqual([...byeCounts.values()], Array(10).fill(1));
-    assert.equal(schedule.reduce((total, week) => total + week.byes.length, 0), 10);
+    assert.deepEqual([...byeCounts.values()], Array(10).fill(2));
+    assert.deepEqual([...gameCounts.values()], Array(10).fill(8));
+    assert.equal(schedule.reduce((total, week) => total + week.byes.length, 0), 20);
   });
 
   it('produces stable scores, live state, matchups, and ranked records', () => {
@@ -271,7 +283,7 @@ describe('salesFantasy · league model', () => {
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK), 'live');
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK - 1), 'final');
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK + 1), 'scheduled');
-    assert.deepEqual(matchupForPod(schedule[3], 'pod-1'), { home: 'pod-7', away: 'pod-1', id: 'week-4-game-1' });
+    assert.deepEqual(matchupForPod(schedule[3], 'pod-1'), { home: 'pod-8', away: 'pod-1', id: 'week-4-game-1' });
     const standings = buildStandings(SALES_FANTASY_PODS, schedule, SALES_FANTASY_CURRENT_WEEK);
     assert.equal(standings.length, 10);
     assert.deepEqual(standings.map((record) => record.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

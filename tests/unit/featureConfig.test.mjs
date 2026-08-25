@@ -219,6 +219,7 @@ describe('developer settings · Sales Fantasy event', () => {
   it('adds individual weekly Performance and detailed Rules pages', () => {
     const performanceSource = salesFantasySource.match(/function Performance[\s\S]*?\n}\n\nfunction ruleRate/)?.[0] || '';
     const roleScoringSource = salesFantasySource.match(/function RoleScoringDetails[\s\S]*?\n}\n\nfunction Rules/)?.[0] || '';
+    const scheduleSource = salesFantasySource.match(/function SeasonSchedule[\s\S]*?\n}\n\nfunction Rules/)?.[0] || '';
     const rulesSource = salesFantasySource.match(/function Rules[\s\S]*?\n}\n\nfunction PodDashboard/)?.[0] || '';
 
     assert.match(performanceSource, /memberWeekPointSplit/);
@@ -235,6 +236,13 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(rulesSource, /Scoring details by position/);
     assert.match(rulesSource, /Every position receives the same statistic-by-statistic breakdown/);
     assert.match(rulesSource, /SALES_FANTASY_ROLES\.map\(\(role\) => <RoleScoringDetails role=\{role\}/);
+    assert.match(rulesSource, /<SeasonSchedule \/>/);
+    assert.match(scheduleSource, /5 · Season schedule/);
+    assert.match(scheduleSource, /Ten weeks · four matchups and two PODs on bye every week/);
+    assert.match(scheduleSource, /SCHEDULE\.map\(\(week\)/);
+    assert.match(scheduleSource, /week\.games\.map/);
+    assert.match(scheduleSource, /week\.byes\.map/);
+    assert.match(salesFantasySource, /\.sf-schedule-week \{[^}]*grid-template-columns: 58px minmax\(0, 1fr\) 122px/);
     assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.activity/);
     assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.sales/);
     assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.marginTiers/);

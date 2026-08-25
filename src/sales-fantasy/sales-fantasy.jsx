@@ -263,6 +263,19 @@ const CSS = `
   .sf-role-rule-label { color: var(--gb-text-secondary); font-size: 9.5px; font-weight: 750; }
   .sf-role-rule-detail { display: block; margin-top: 1px; color: var(--gb-text-muted); font-size: 8px; line-height: 1.3; font-weight: 500; }
   .sf-role-rule-value { color: var(--gb-text-primary); font-size: 9px; font-weight: 800; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sf-schedule-list { padding: var(--sf-4); display: grid; gap: var(--sf-2); }
+  .sf-schedule-week { min-width: 0; padding: var(--sf-3); display: grid; grid-template-columns: 58px minmax(0, 1fr) 122px; align-items: start; gap: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); background: var(--gb-surface-1); }
+  .sf-schedule-week.live { border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); }
+  .sf-schedule-week-head { min-width: 0; display: grid; justify-items: start; gap: 5px; }
+  .sf-schedule-week-number { color: var(--gb-text-primary); font-size: 10px; font-weight: 850; white-space: nowrap; }
+  .sf-schedule-week-head .sf-status-pill { min-height: 18px; padding: 2px 5px; font-size: 7px; letter-spacing: .35px; }
+  .sf-schedule-games { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .sf-schedule-game { min-width: 0; min-height: 28px; padding: 5px 7px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 5px; border: 1px solid var(--gb-border-subtle); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); text-align: center; }
+  .sf-schedule-pod { min-width: 0; overflow: hidden; color: var(--gb-text-secondary); font-size: 8.5px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-schedule-versus { color: var(--gb-text-ghost); font-size: 7px; font-weight: 850; text-transform: uppercase; }
+  .sf-schedule-bye { min-width: 0; min-height: 28px; padding: 5px 7px; border: 1px dashed var(--gb-border-strong); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); }
+  .sf-schedule-bye-label { display: block; color: var(--gb-text-muted); font-size: 7px; font-weight: 850; letter-spacing: .4px; text-transform: uppercase; }
+  .sf-schedule-bye-pods { display: block; margin-top: 2px; overflow: hidden; color: var(--gb-text-primary); font-size: 8.5px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
   .sf-data-note { color: var(--gb-text-ghost); font-size: 9.5px; line-height: 1.4; text-align: right; }
   .sf-empty { padding: 32px var(--sf-4); color: var(--gb-text-muted); text-align: center; }
   .sf-bracket-shell { min-width: 0; overflow: hidden; }
@@ -366,6 +379,10 @@ const CSS = `
     .sf-member-tab { min-height: 58px; padding: var(--sf-2); gap: var(--sf-2); }
     .sf-member-tab-role { display: none; }
     .sf-role-rule-grid { grid-template-columns: 1fr; }
+    .sf-schedule-list { padding: var(--sf-3); }
+    .sf-schedule-week { grid-template-columns: 48px minmax(0, 1fr); gap: var(--sf-2); }
+    .sf-schedule-games { grid-template-columns: 1fr; }
+    .sf-schedule-bye { grid-column: 2; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .sf-matchup-switcher-track { grid-auto-columns: minmax(118px, 1fr); }
     .sf-bracket-canvas { padding: var(--sf-3); }
@@ -657,6 +674,27 @@ function RoleScoringDetails({ role }) {
   );
 }
 
+function SeasonSchedule() {
+  return (
+    <article className="sf-card sf-rule-section">
+      <div className="sf-card-head"><div><div className="sf-card-title">5 · Season schedule</div><div className="sf-card-caption">Ten weeks · four matchups and two PODs on bye every week</div></div></div>
+      <div className="sf-schedule-list">
+        {SCHEDULE.map((week) => {
+          const state = weekState(week.week);
+          const byeNames = week.byes.map((podId) => podForId(podId)).sort((left, right) => left.number - right.number).map((pod) => pod.name).join(' + ');
+          return (
+            <section className={`sf-schedule-week ${state}`} aria-label={`Week ${week.week} schedule`} key={week.week}>
+              <div className="sf-schedule-week-head"><span className="sf-schedule-week-number">Week {week.week}</span><span className={`sf-status-pill ${state}`}>{statusLabel(state)}</span></div>
+              <div className="sf-schedule-games">{week.games.map((game) => <div className="sf-schedule-game" key={game.id}><span className="sf-schedule-pod">{podForId(game.home).name}</span><span className="sf-schedule-versus">vs</span><span className="sf-schedule-pod">{podForId(game.away).name}</span></div>)}</div>
+              <div className="sf-schedule-bye"><span className="sf-schedule-bye-label">Bye</span><span className="sf-schedule-bye-pods">{byeNames}</span></div>
+            </section>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
 function Rules() {
   const scoringDays = SALES_FANTASY_SCORING.scoringDaysPerWeek;
   return (
@@ -685,6 +723,8 @@ function Rules() {
         <div className="sf-card-head"><div><div className="sf-card-title">4 · Scoring details by position</div><div className="sf-card-caption">Every position receives the same statistic-by-statistic breakdown</div></div></div>
         <div className="sf-role-rule-grid">{SALES_FANTASY_ROLES.map((role) => <RoleScoringDetails role={role} key={role.id} />)}</div>
       </article>
+
+      <SeasonSchedule />
 
       <div className="sf-data-note">All displayed totals use the rates shown on this page.</div>
     </div>

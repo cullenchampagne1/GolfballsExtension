@@ -112,52 +112,40 @@ export function buildRoundRobinSchedule(pods = SALES_FANTASY_PODS) {
   return weeks;
 }
 
-/* Pick one complete matchup from each of N/2 distinct weeks so every pod is
- * selected exactly once. Removing those games creates paired bye weeks: with
- * ten pods, a single-bye week would leave an odd nine pods and cannot support
- * head-to-head play. */
-function selectPairedByes(rounds, podCount) {
-  const target = podCount / 2;
-  const walk = (startWeek, usedPods, selections) => {
-    if (selections.length === target) return selections;
-    for (let weekIndex = startWeek; weekIndex < rounds.length; weekIndex += 1) {
-      for (let gameIndex = 0; gameIndex < rounds[weekIndex].length; gameIndex += 1) {
-        const game = rounds[weekIndex][gameIndex];
-        if (usedPods.has(game.home) || usedPods.has(game.away)) continue;
-        const nextUsed = new Set(usedPods);
-        nextUsed.add(game.home);
-        nextUsed.add(game.away);
-        const found = walk(weekIndex + 1, nextUsed, [...selections, { weekIndex, gameIndex }]);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  return walk(0, new Set(), []) || [];
+const FANTASY_BYE_IDS = Object.freeze(['__sales-fantasy-bye-a__', '__sales-fantasy-bye-b__']);
+const FANTASY_BYE_ID_SET = new Set(FANTASY_BYE_IDS);
+
+function isFantasyByeId(podId) {
+  return FANTASY_BYE_ID_SET.has(podId);
 }
 
 /**
- * Nine-week schedule for ten pods. Five weeks have two pods on bye and four
- * matchups; four weeks contain the full five matchups. Every pod gets one bye.
+ * Ten-week schedule for ten pods. Two virtual bye slots create four matchups
+ * and two real-pod byes every week. The virtual-vs-virtual round is omitted,
+ * leaving every pod with eight unique matchups and two byes.
  */
 export function buildFantasySchedule(pods = SALES_FANTASY_PODS) {
-  const rounds = buildRoundRobinSchedule(pods);
-  const byeSelections = selectPairedByes(rounds, pods.length);
-  if (byeSelections.length !== pods.length / 2) {
-    throw new Error('Unable to produce a balanced paired-bye schedule');
+  if (!Array.isArray(pods) || pods.length < 2 || pods.length % 2 !== 0) {
+    throw new TypeError('Sales Fantasy requires an even number of at least two pods');
   }
-  const byWeek = new Map(byeSelections.map((selection) => [selection.weekIndex, selection.gameIndex]));
-  return rounds.map((games, weekIndex) => {
-    const byeGameIndex = byWeek.get(weekIndex);
-    const byeGame = byeGameIndex === undefined ? null : games[byeGameIndex];
-    return {
-      week: weekIndex + 1,
-      games: games
-        .filter((_, gameIndex) => gameIndex !== byeGameIndex)
-        .map((game, gameIndex) => ({ ...game, id: `week-${weekIndex + 1}-game-${gameIndex + 1}` })),
-      byes: byeGame ? [byeGame.home, byeGame.away] : [],
-    };
-  });
+  if (pods.some((pod) => isFantasyByeId(pod.id))) {
+    throw new TypeError('Sales Fantasy pod ids cannot use reserved bye-slot ids');
+  }
+  const slots = [...pods];
+  slots.splice(1, 0, { id: FANTASY_BYE_IDS[0] });
+  slots.push({ id: FANTASY_BYE_IDS[1] });
+  const rounds = buildRoundRobinSchedule(slots)
+    .filter((games) => !games.some((game) => isFantasyByeId(game.home) && isFantasyByeId(game.away)));
+
+  return rounds.map((games, weekIndex) => ({
+    week: weekIndex + 1,
+    games: games
+      .filter((game) => !isFantasyByeId(game.home) && !isFantasyByeId(game.away))
+      .map((game, gameIndex) => ({ ...game, id: `week-${weekIndex + 1}-game-${gameIndex + 1}` })),
+    byes: games.flatMap((game) => (
+      isFantasyByeId(game.home) ? [game.away] : isFantasyByeId(game.away) ? [game.home] : []
+    )),
+  }));
 }
 
 function dealSale(seed, dealIndex, roleId, kind) {
