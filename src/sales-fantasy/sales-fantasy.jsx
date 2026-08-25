@@ -524,7 +524,7 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
 }
 
 function ruleRate(rule, roleId) {
-  const rate = rule.pointsByRole?.[roleId] || 0;
+  const rate = rule.pointsByRole?.[roleId] ?? rule.pointsPerUnit ?? 0;
   if (!rate) return 'No points';
   if (rule.format === 'money') return `${rate * 1000} / $1k`;
   return `${rate} each`;

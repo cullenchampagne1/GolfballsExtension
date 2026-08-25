@@ -231,6 +231,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.marginTiers/);
     assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.referral/);
     assert.match(roleScoringSource, /role\.id === 'bdr' \? ruleRate\(rule, role\.id\) : 'Not scored'/);
+    assert.match(salesFantasySource, /rule\.pointsByRole\?\.\[roleId\] \?\? rule\.pointsPerUnit \?\? 0/);
     assert.match(salesFantasySource, /Orders placed while the account is assigned to the BDR/);
     assert.doesNotMatch(rulesSource, /Work routing and attribution|primary economic driver|natural advantage|scoring contract/);
     assert.doesNotMatch(rulesSource, /BDR scoring details|highOutput|minimumOutput/);
