@@ -237,9 +237,10 @@ let editorWindowId   = null;
 let salesFantasyWindowId = null;
 let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
 
-// Event windows deliberately match the Manager/Settings window so temporary
-// experiences have the same predictable desktop footprint.
+// Keep editor dimensions stable while the fantasy experience uses a taller,
+// phone-like portrait footprint of its own.
 const MANAGER_WINDOW_BOUNDS = Object.freeze({ width: 860, height: 700 });
+const SALES_FANTASY_WINDOW_BOUNDS = Object.freeze({ width: 700, height: 820 });
 
 const GB_PAGE_ENGINE_TAB_PATTERNS = [
   'https://www.golfballs.com/*',
@@ -3130,7 +3131,7 @@ function createEditorWindow() {
 function createSalesFantasyWindow() {
   chrome.windows.create({
     url: chrome.runtime.getURL('sales-fantasy.html'),
-    type: 'popup', ...MANAGER_WINDOW_BOUNDS
+    type: 'popup', ...SALES_FANTASY_WINDOW_BOUNDS
   }, (win) => {
     salesFantasyWindowId = win?.id ?? null;
   });

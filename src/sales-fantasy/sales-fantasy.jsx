@@ -93,7 +93,7 @@ const CSS = `
   .sf-view-motion { width: 100%; max-width: 760px; margin: 0 auto; }
   .sf-view-motion, .sf-stack { min-width: 0; }
   .sf-stack { display: grid; gap: var(--sf-4); }
-  .sf-card { min-width: 0; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-surface-1); box-shadow: 0 8px 24px rgba(0, 0, 0, .16), inset 0 1px 0 var(--gb-fill-subtle); overflow: hidden; }
+  .sf-card { min-width: 0; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-surface-1); box-shadow: 0 3px 12px rgba(0, 0, 0, .11), inset 0 1px 0 var(--gb-fill-subtle); overflow: hidden; }
   .sf-card-head { padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-subtle); }
   .sf-card-title { color: var(--gb-text-primary); font-size: 13px; font-weight: 750; overflow-wrap: anywhere; }
   .sf-card-caption { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
@@ -209,9 +209,9 @@ const CSS = `
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     border: 1px solid var(--gb-brand-border); border-radius: 22px; cursor: pointer;
     color: var(--gb-text-on-brand); background: linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%);
-    box-shadow: 0 9px 22px var(--gb-brand-tint-strong); transition: filter .18s ease, box-shadow .18s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, .2); transition: filter .18s ease, box-shadow .18s ease;
   }
-  .sf-bottom-center:hover { filter: brightness(1.08); box-shadow: 0 11px 26px var(--gb-brand-tint-strong); }
+  .sf-bottom-center:hover { filter: brightness(1.06); box-shadow: 0 5px 12px rgba(0, 0, 0, .22); }
   .sf-bottom-center-icon { height: 15px; display: grid; place-items: center; }
   .sf-bottom-center-week { font-size: 11px; line-height: 1.1; font-weight: 850; letter-spacing: -.1px; }
   .sf-bottom-center-rank { font-size: 8px; line-height: 1.1; font-weight: 750; opacity: .82; text-transform: uppercase; letter-spacing: .45px; }

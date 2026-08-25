@@ -137,8 +137,9 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.doesNotMatch(salesFantasyButtonSource, /whileHover|whileTap|boxShadow: 'inset|blur|rgba\(/);
     assert.doesNotMatch(salesFantasyButtonSource, /#4c1d95|#7c3aed|#db2777/);
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
+    assert.match(backgroundSource, /const SALES_FANTASY_WINDOW_BOUNDS = Object\.freeze\(\{ width: 700, height: 820 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
-    assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
+    assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('sales-fantasy\.html'\),\s*type: 'popup', \.\.\.SALES_FANTASY_WINDOW_BOUNDS/);
     assert.match(salesFantasyHtml, /<title>Sales Fantasy<\/title>/);
     assert.match(salesFantasyHtml, /<body data-gb-scale="editor">/);
     assert.match(salesFantasyHtml, /react-dist\/sales-fantasy\/sales-fantasy\.js/);
@@ -154,6 +155,8 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /<nav className="sf-bottom-nav" aria-label="Sales Fantasy app navigation">/);
     assert.match(salesFantasySource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
     assert.match(salesFantasySource, /className="sf-bottom-center"/);
+    assert.match(salesFantasySource, /box-shadow: 0 4px 10px rgba\(0, 0, 0, \.2\)/);
+    assert.doesNotMatch(salesFantasySource, /0 9px 22px var\(--gb-brand-tint-strong\)|0 11px 26px var\(--gb-brand-tint-strong\)/);
     assert.match(salesFantasySource, /Week \{SALES_FANTASY_CURRENT_WEEK\}/);
     assert.match(salesFantasySource, /className="sf-bottom-center-rank">Rank #\{rank\}/);
     assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
