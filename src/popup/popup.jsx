@@ -791,9 +791,9 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Flat event launcher with one theme-primary wave inside the button. Its
-   translucent gradient lets the base surface show through while a separate
-   solid crest gives the wave crisp definition without a shadow or bevel. */
+/* Flat event launcher with one theme-primary wave inside the button. The wave
+   uses a translucent three-stop fill plus a stronger gradient band clipped
+   inside its crest; only the button itself receives a solid primary outline. */
 function SalesFantasyButton({ onClick }) {
   return (
     <Btn
@@ -803,7 +803,7 @@ function SalesFantasyButton({ onClick }) {
       aria-label="Open Sales Fantasy event"
       style={{
         height: 36, padding: '0 8px', justifyContent: 'flex-start', gap: 7,
-        border: '1px solid var(--gb-border-strong)',
+        border: '1px solid var(--gb-brand-label)',
         background: 'var(--gb-fill-subtle)', boxShadow: 'none', overflow: 'hidden',
       }}
     >
@@ -815,20 +815,27 @@ function SalesFantasyButton({ onClick }) {
       >
         <defs>
           <linearGradient id="sales-fantasy-wave" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="var(--gb-brand-dark)" stopOpacity="0.12" />
-            <stop offset="1" stopColor="var(--gb-brand)" stopOpacity="0.3" />
+            <stop offset="0" stopColor="var(--gb-brand-dark)" />
+            <stop offset="0.58" stopColor="var(--gb-brand)" />
+            <stop offset="1" stopColor="var(--gb-brand-label)" />
           </linearGradient>
+          <clipPath id="sales-fantasy-wave-clip">
+            <path d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0 L360 34 Z" />
+          </clipPath>
         </defs>
         <path
           d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0 L360 34 Z"
           fill="url(#sales-fantasy-wave)"
+          opacity="0.22"
         />
         <path
           d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0"
           fill="none"
-          stroke="var(--gb-brand-label)"
-          strokeWidth="1.25"
+          stroke="url(#sales-fantasy-wave)"
+          strokeWidth="8"
           strokeLinecap="round"
+          opacity="0.58"
+          clipPath="url(#sales-fantasy-wave-clip)"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
