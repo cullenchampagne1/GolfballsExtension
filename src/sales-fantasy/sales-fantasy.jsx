@@ -30,7 +30,6 @@ const FantasyIcon = {
   performance: (props) => <Icon {...props}><path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /><path d="M2 19h20" /></Icon>,
   matchup: (props) => <Icon {...props}><path d="M8 5l4 4 4-4" /><path d="M8 19l4-4 4 4" /><path d="M12 9v6" /><path d="M3 12h5M16 12h5" /></Icon>,
   standings: (props) => <Icon {...props}><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7" /></Icon>,
-  brackets: (props) => <Icon {...props}><path d="M3 3h6v5H3zM3 16h6v5H3zM15 9.5h6v5h-6z" /><path d="M9 5.5h2a4 4 0 014 4v2M9 18.5h2a4 4 0 004-4v-2" /></Icon>,
   rules: (props) => <Icon {...props}><path d="M6 3h12a2 2 0 012 2v16l-4-2-4 2-4-2-4 2V5a2 2 0 012-2z" /><path d="M8 8h8M8 12h8M8 16h5" /></Icon>,
   trophy: (props) => <Icon {...props}><path d="M8 4h8v5a4 4 0 01-8 0V4z" /><path d="M8 6H4v2a4 4 0 004 4M16 6h4v2a4 4 0 01-4 4M12 13v4M8 21h8M9 17h6" /></Icon>,
   arrowLeft: (props) => <Icon {...props}><path d="M15 18l-6-6 6-6" /></Icon>,
@@ -267,25 +266,23 @@ const CSS = `
   .sf-data-note { color: var(--gb-text-ghost); font-size: 9.5px; line-height: 1.4; text-align: right; }
   .sf-empty { padding: 32px var(--sf-4); color: var(--gb-text-muted); text-align: center; }
   .sf-bracket-shell { min-width: 0; overflow: hidden; }
-  .sf-bracket-head-actions { display: flex; align-items: center; gap: var(--sf-2); }
-  .sf-pan-hint { min-height: 27px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 5px; color: var(--gb-brand-label); border: 1px solid var(--gb-brand-tint-border); border-radius: var(--gb-r-pill); background: var(--gb-brand-tint-soft); font-size: 8.5px; font-weight: 800; letter-spacing: .35px; text-transform: uppercase; white-space: nowrap; }
-  .sf-bracket-viewport { min-width: 0; overflow-x: auto; overflow-y: hidden; background: linear-gradient(90deg, var(--gb-fill-faint), transparent 18%, transparent 82%, var(--gb-fill-faint)); scrollbar-width: thin; scrollbar-color: var(--gb-border-strong) transparent; overscroll-behavior-x: contain; }
-  .sf-bracket-canvas { width: 980px; padding: var(--sf-4); display: grid; gap: var(--sf-4); cursor: grab; touch-action: pan-y; }
+  .sf-bracket-viewport { min-width: 0; background: linear-gradient(180deg, var(--gb-fill-faint), transparent 12%, transparent 88%, var(--gb-fill-faint)); }
+  .sf-bracket-canvas { width: 100%; padding: var(--sf-4); display: grid; gap: var(--sf-4); }
   .sf-bracket-lane { position: relative; padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-surface-1); }
-  .sf-bracket-lane.winner { border-color: var(--gb-brand-tint-border); background: linear-gradient(90deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 34%); }
+  .sf-bracket-lane.winner { border-color: var(--gb-brand-tint-border); background: linear-gradient(180deg, var(--gb-brand-tint-soft), var(--gb-surface-1) 28%); }
   .sf-bracket-lane-label { margin-bottom: var(--sf-3); display: flex; align-items: center; justify-content: space-between; gap: var(--sf-3); }
   .sf-bracket-lane-title { color: var(--gb-text-primary); font-size: 12px; font-weight: 850; }
   .sf-bracket-lane-seeds { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
-  .sf-bracket-rounds { position: relative; height: 240px; display: grid; grid-template-columns: repeat(3, 258px); gap: 74px; }
-  .sf-bracket-connectors { position: absolute; z-index: 0; inset: 0; width: 922px; height: 240px; pointer-events: none; overflow: visible; }
+  .sf-bracket-rounds { display: flex; flex-direction: column; }
+  .sf-bracket-connectors { position: relative; z-index: 0; width: 100%; height: 52px; display: block; pointer-events: none; overflow: visible; }
   .sf-bracket-connector { fill: none; stroke: var(--gb-border-strong); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .sf-bracket-lane.winner .sf-bracket-connector { stroke: var(--gb-brand-label); opacity: .58; }
-  .sf-bracket-round { position: relative; z-index: 1; min-width: 0; height: 240px; }
-  .sf-bracket-round-label { position: absolute; top: 0; left: 0; color: var(--gb-text-muted); font-size: 8px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; }
-  .sf-bracket-game { position: absolute; left: 0; right: 0; min-width: 0; overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-surface-1); box-shadow: 0 2px 7px rgba(0, 0, 0, .09); }
-  .sf-bracket-round.opening .sf-bracket-game, .sf-bracket-round.final .sf-bracket-game { top: 96px; }
-  .sf-bracket-round.semifinals .sf-bracket-game-0 { top: 36px; }
-  .sf-bracket-round.semifinals .sf-bracket-game-1 { top: 158px; }
+  .sf-bracket-round { position: relative; z-index: 1; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-bracket-round.opening, .sf-bracket-round.final { grid-template-columns: minmax(0, 1fr); }
+  .sf-bracket-game { min-width: 0; overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-surface-1); box-shadow: 0 2px 7px rgba(0, 0, 0, .09); }
+  .sf-bracket-round.semifinals .sf-bracket-game { width: calc(100% - var(--sf-3)); justify-self: center; }
+  .sf-bracket-round.opening .sf-bracket-game, .sf-bracket-round.final .sf-bracket-game { width: min(72%, 360px); justify-self: center; }
+  .sf-bracket-game-label { min-height: 22px; padding: 4px 8px; display: grid; place-items: center; color: var(--gb-text-muted); border-bottom: 1px solid var(--gb-border-subtle); background: var(--gb-fill-faint); font-size: 8px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; text-align: center; }
   .sf-bracket-slot { min-height: 35px; padding: 6px 8px; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 7px; color: var(--gb-text-secondary); }
   .sf-bracket-slot + .sf-bracket-slot { border-top: 1px solid var(--gb-border-subtle); }
   .sf-bracket-slot.mine { color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
@@ -372,7 +369,10 @@ const CSS = `
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .sf-matchup-switcher-track { grid-auto-columns: minmax(118px, 1fr); }
     .sf-bracket-canvas { padding: var(--sf-3); }
-    .sf-pan-hint { padding-inline: 6px; font-size: 8px; }
+    .sf-bracket-lane { padding: var(--sf-2); }
+    .sf-bracket-round.opening .sf-bracket-game, .sf-bracket-round.final .sf-bracket-game { width: 82%; }
+    .sf-bracket-slot { min-height: 32px; padding-inline: 6px; grid-template-columns: 19px minmax(0, 1fr); gap: 5px; }
+    .sf-bracket-seed { width: 19px; height: 19px; }
     .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
     .sf-bottom-item::before, .sf-bottom-active { inset-inline: 5%; }
     .sf-bottom-center { top: -24px; width: 76px; min-height: 63px; border-radius: 20px; }
@@ -756,16 +756,23 @@ function BracketLane({ bracket }) {
     <section className={`sf-bracket-lane ${bracket.id}`} aria-label={bracket.label}>
       <div className="sf-bracket-lane-label"><span className="sf-bracket-lane-title">{bracket.label}</span><span className="sf-bracket-lane-seeds">Seeds {bracket.entrants[0].seed}–{bracket.entrants[bracket.entrants.length - 1].seed}</span></div>
       <div className="sf-bracket-rounds">
-        <svg className="sf-bracket-connectors" viewBox="0 0 922 240" preserveAspectRatio="none" aria-hidden="true">
-          <motion.path className="sf-bracket-connector" d="M258 132 H295 V89 H332" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.42, ease: EASE }} />
-          <motion.path className="sf-bracket-connector" d="M590 72 H627 V114 H664" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.46, delay: 0.08, ease: EASE }} />
-          <motion.path className="sf-bracket-connector" d="M590 194 H627 V149 H664" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.46, delay: 0.12, ease: EASE }} />
-        </svg>
-        {bracket.rounds.map((round) => (
-          <section className={`sf-bracket-round ${round.label.toLowerCase()}`} key={round.id} aria-label={`${bracket.label} ${round.label}`}>
-            <div className="sf-bracket-round-label">{round.label}</div>
-            {round.games.map((game, gameIndex) => <div className={`sf-bracket-game sf-bracket-game-${gameIndex}`} key={game.id}>{game.slots.map((slot, index) => <BracketSlot slot={slot} key={`${game.id}-${index}`} />)}</div>)}
-          </section>
+        {bracket.rounds.map((round, roundIndex) => (
+          <React.Fragment key={round.id}>
+            <section className={`sf-bracket-round ${round.label.toLowerCase()}`} aria-label={`${bracket.label} ${round.label}`}>
+              {round.games.map((game, gameIndex) => <div className={`sf-bracket-game sf-bracket-game-${gameIndex}`} key={game.id}><div className="sf-bracket-game-label">{round.games.length > 1 ? `${round.label.slice(0, -1)} ${gameIndex + 1}` : round.label}</div>{game.slots.map((slot, index) => <BracketSlot slot={slot} key={`${game.id}-${index}`} />)}</div>)}
+            </section>
+            {roundIndex === 0 && (
+              <svg className="sf-bracket-connectors" viewBox="0 0 1000 52" preserveAspectRatio="none" aria-hidden="true">
+                <motion.path className="sf-bracket-connector" d="M500 0 V24 H250 V52" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.42, ease: EASE }} />
+              </svg>
+            )}
+            {roundIndex === 1 && (
+              <svg className="sf-bracket-connectors" viewBox="0 0 1000 52" preserveAspectRatio="none" aria-hidden="true">
+                <motion.path className="sf-bracket-connector" d="M250 0 V24 H500 V52" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.46, delay: 0.08, ease: EASE }} />
+                <motion.path className="sf-bracket-connector" d="M750 0 V24 H500 V52" initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.46, delay: 0.12, ease: EASE }} />
+              </svg>
+            )}
+          </React.Fragment>
         ))}
       </div>
     </section>
@@ -778,13 +785,12 @@ function Brackets({ standings }) {
     <article className="sf-card sf-bracket-shell">
       <div className="sf-card-head">
         <div><div className="sf-card-title">Current playoff projection</div><div className="sf-card-caption">Based on completed standings through Week {SALES_FANTASY_CURRENT_WEEK - 1}</div></div>
-        <div className="sf-bracket-head-actions"><span className="sf-pan-hint"><FantasyIcon.brackets size={12} />Drag to pan</span></div>
       </div>
-      <div className="sf-bracket-viewport" aria-label="Pannable winner and loser bracket" tabIndex={0}>
-        <motion.div className="sf-bracket-canvas" drag="x" dragConstraints={{ left: -320, right: 0 }} dragElastic={0.06} dragMomentum dragTransition={{ bounceStiffness: 300, bounceDamping: 30 }}>
+      <div className="sf-bracket-viewport" aria-label="Vertically stacked winner and loser brackets">
+        <div className="sf-bracket-canvas">
           <BracketLane bracket={bracket.winnerBracket} />
           <BracketLane bracket={bracket.loserBracket} />
-        </motion.div>
+        </div>
       </div>
       <div className="sf-bracket-note">Seeds 1–5 currently qualify for the Winner Bracket. Seeds 6–10 enter the Loser Bracket. The projection updates as completed-week standings change.</div>
     </article>
