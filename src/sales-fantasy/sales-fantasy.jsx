@@ -117,21 +117,22 @@ const CSS = `
   .sf-match-status { display: flex; align-items: center; gap: 6px; color: var(--gb-text-muted); font-size: 9px; font-weight: 800; letter-spacing: .55px; text-transform: uppercase; white-space: nowrap; }
   .sf-match-status.live { color: var(--gb-success-fg); }
   .sf-match-status-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
-  .sf-matchup-board { display: grid; grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr); align-items: stretch; border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
-  .sf-matchup-entry { min-width: 0; padding: var(--sf-4); display: grid; align-content: center; gap: var(--sf-3); border-top: 3px solid transparent; }
+  .sf-matchup-card-head { padding-block: var(--sf-2); }
+  .sf-matchup-board { display: grid; grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); align-items: stretch; border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
+  .sf-matchup-entry { min-width: 0; min-height: 64px; padding: var(--sf-2) var(--sf-3); display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 2px solid transparent; }
   .sf-matchup-entry.leading { border-top-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
-  .sf-matchup-entry.away { text-align: right; }
-  .sf-matchup-team { min-width: 0; display: flex; align-items: center; gap: var(--sf-3); }
+  .sf-matchup-entry.away { flex-direction: row-reverse; text-align: right; }
+  .sf-matchup-team { min-width: 0; flex: 1; display: flex; align-items: center; gap: var(--sf-2); }
   .sf-matchup-entry.away .sf-matchup-team { flex-direction: row-reverse; }
-  .sf-matchup-side { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .65px; text-transform: uppercase; }
-  .sf-team-name { color: var(--gb-text-primary); font-size: 13px; font-weight: 750; overflow-wrap: anywhere; }
-  .sf-team-record { margin-top: 2px; color: var(--gb-text-muted); font-size: 10px; line-height: 1.4; }
-  .sf-board-score { color: var(--gb-text-primary); font-size: 31px; line-height: 1; font-weight: 850; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
-  .sf-board-score-unit { margin-left: 5px; color: var(--gb-text-muted); font-size: 8px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
-  .sf-matchup-centerline { padding: var(--sf-3) var(--sf-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--gb-text-muted); border-inline: 1px solid var(--gb-border-default); background: var(--gb-surface-1); text-align: center; }
-  .sf-matchup-centerline::before { content: ''; width: 24px; height: 2px; background: var(--gb-border-strong); }
-  .sf-matchup-week { font-size: 8.5px; font-weight: 800; letter-spacing: .65px; text-transform: uppercase; }
-  .sf-matchup-margin { color: var(--gb-text-primary); font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .sf-matchup-side { color: var(--gb-text-muted); font-size: 7.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+  .sf-team-name { margin-top: 1px; color: var(--gb-text-primary); font-size: 11.5px; font-weight: 750; overflow-wrap: anywhere; }
+  .sf-team-record { margin-top: 1px; color: var(--gb-text-muted); font-size: 9px; line-height: 1.3; }
+  .sf-board-score { flex: 0 0 auto; color: var(--gb-text-primary); font-size: 23px; line-height: 1; font-weight: 850; letter-spacing: -.7px; font-variant-numeric: tabular-nums; }
+  .sf-board-score-unit { display: block; margin-top: 2px; color: var(--gb-text-muted); font-size: 7px; font-weight: 800; letter-spacing: .45px; text-transform: uppercase; }
+  .sf-matchup-centerline { padding: 6px var(--sf-1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--gb-text-muted); border-inline: 1px solid var(--gb-border-default); background: var(--gb-surface-1); text-align: center; }
+  .sf-matchup-centerline::before { content: ''; width: 18px; height: 1px; background: var(--gb-border-strong); }
+  .sf-matchup-week { font-size: 7.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+  .sf-matchup-margin { color: var(--gb-text-primary); font-size: 8.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .sf-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--gb-border-subtle); }
   .sf-pod-split { min-width: 0; }
   .sf-pod-split + .sf-pod-split { border-left: 1px solid var(--gb-border-subtle); }
@@ -199,11 +200,15 @@ const CSS = `
   .sf-margin-chip { padding: 3px 5px; color: var(--gb-text-muted); border: 1px solid var(--gb-border-subtle); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); font-size: 8.5px; white-space: nowrap; }
   .sf-margin-chip.hit { color: var(--gb-brand-label); border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); }
   .sf-member-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sf-2); }
-  .sf-member-tab { min-width: 0; min-height: 54px; padding: var(--sf-2) var(--sf-3); display: flex; align-items: center; gap: var(--sf-2); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; }
-  .sf-member-tab.active { color: var(--gb-brand-label); border-color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
+  .sf-member-tab { position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+  .sf-member-tab:hover:not(.active) { border-color: var(--gb-border-strong); transform: translateY(-1px); }
+  .sf-member-tab.active { color: var(--gb-brand-label); border-color: var(--gb-brand-label); box-shadow: 0 3px 10px var(--gb-brand-tint-soft); }
+  .sf-member-active { position: absolute; z-index: 0; inset: 0; border-radius: inherit; background: var(--gb-brand-tint-soft); }
+  .sf-member-tab > :not(.sf-member-active) { position: relative; z-index: 1; }
   .sf-member-tab-copy { min-width: 0; }
   .sf-member-tab-name { display: block; color: var(--gb-text-primary); font-size: 11px; font-weight: 800; }
   .sf-member-tab-role { display: block; margin-top: 2px; overflow: hidden; color: var(--gb-text-muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-performance-detail { min-width: 0; display: grid; gap: var(--sf-4); }
   .sf-performance-hero { padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
   .sf-performance-copy { min-width: 0; flex: 1; }
   .sf-performance-name { color: var(--gb-text-primary); font-size: 16px; font-weight: 850; }
@@ -288,13 +293,13 @@ const CSS = `
     .sf-page-subtitle { max-width: 280px; font-size: 10px; }
     .sf-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sf-split-grid, .sf-scoreboard-grid, .sf-matchup-list { grid-template-columns: 1fr; }
-    .sf-matchup-board { grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); }
-    .sf-matchup-entry { padding: var(--sf-3); }
+    .sf-matchup-board { grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr); }
+    .sf-matchup-entry { padding: var(--sf-2); gap: 6px; }
     .sf-matchup-team { gap: var(--sf-2); }
     .sf-matchup-entry .sf-pod-mark { display: none; }
-    .sf-board-score { font-size: 25px; }
+    .sf-board-score { font-size: 20px; }
     .sf-member-tabs { gap: var(--sf-1); }
-    .sf-member-tab { padding-inline: var(--sf-2); }
+    .sf-member-tab { min-height: 58px; padding: var(--sf-2); gap: var(--sf-2); }
     .sf-member-tab-role { display: none; }
     .sf-example-grid { grid-template-columns: 1fr; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
@@ -425,20 +430,18 @@ function MatchupBreakdown({ game, week, standings, title = 'Current matchup' }) 
   const margin = Math.abs(homeScore - awayScore);
   return (
     <article className="sf-card">
-      <div className="sf-card-head">
+      <div className="sf-card-head sf-matchup-card-head">
         <div><div className="sf-card-title">{title}</div><div className="sf-card-caption">Week {week} · official role contribution ledger</div></div>
         <div className={`sf-match-status ${state}`}><span className="sf-match-status-dot" />{statusLabel(state)}</div>
       </div>
       <div className="sf-matchup-board" aria-label={`${home.name} ${homeScore.toFixed(1)}, ${away.name} ${awayScore.toFixed(1)}`}>
         <section className={`sf-matchup-entry ${homeScore > awayScore ? 'leading' : ''}`}>
-          <div className="sf-matchup-side">Home · rank #{homeRecord?.rank || '—'}</div>
-          <div className="sf-matchup-team"><PodMark pod={home} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{home.name}</div><div className="sf-team-record">{recordLabel(homeRecord)} season record</div></div></div>
+          <div className="sf-matchup-team"><PodMark pod={home} size="small" /><div className="sf-team-copy"><div className="sf-matchup-side">Home · rank #{homeRecord?.rank || '—'}</div><div className="sf-team-name">{home.name}</div><div className="sf-team-record">{recordLabel(homeRecord)} record</div></div></div>
           <div className="sf-board-score">{homeScore.toFixed(1)}<span className="sf-board-score-unit">points</span></div>
         </section>
         <div className="sf-matchup-centerline"><span className="sf-matchup-week">Week {week}</span><strong className="sf-matchup-margin">{margin ? `${margin.toFixed(1)} pt margin` : 'Scores level'}</strong></div>
         <section className={`sf-matchup-entry away ${awayScore > homeScore ? 'leading' : ''}`}>
-          <div className="sf-matchup-side">Away · rank #{awayRecord?.rank || '—'}</div>
-          <div className="sf-matchup-team"><PodMark pod={away} size="large" /><div className="sf-team-copy"><div className="sf-team-name">{away.name}</div><div className="sf-team-record">{recordLabel(awayRecord)} season record</div></div></div>
+          <div className="sf-matchup-team"><PodMark pod={away} size="small" /><div className="sf-team-copy"><div className="sf-matchup-side">Away · rank #{awayRecord?.rank || '—'}</div><div className="sf-team-name">{away.name}</div><div className="sf-team-record">{recordLabel(awayRecord)} record</div></div></div>
           <div className="sf-board-score">{awayScore.toFixed(1)}<span className="sf-board-score-unit">points</span></div>
         </section>
       </div>
@@ -480,28 +483,35 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
   return (
     <div className="sf-stack">
       <div className="sf-member-tabs" aria-label="Select individual performance">
-        {pod.members.map((candidate) => <button type="button" className={`sf-member-tab ${candidate.id === member.id ? 'active' : ''}`} aria-pressed={candidate.id === member.id} key={candidate.id} onClick={() => onSelectMember(candidate.id)}><span className="sf-avatar">{candidate.name}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>)}
+        {pod.members.map((candidate) => {
+          const active = candidate.id === member.id;
+          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <motion.span aria-hidden="true" className="sf-member-active" layoutId="sf-member-active" transition={PAGE_TRANSITION} />}<span className="sf-avatar">{candidate.name}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
+        })}
       </div>
-      <article className="sf-card">
-        <div className="sf-performance-hero"><span className="sf-avatar">{member.name}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
-        <div className="sf-stat-grid">
-          <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
-          <div className="sf-stat"><div className="sf-stat-label">{points.sales ? 'Sales' : 'Referred'}</div><div className="sf-stat-value">{comparison.total.toFixed(1)}</div><div className="sf-stat-detail">{points.sales ? 'Owned economic result' : 'BDR-originated closed value'}</div></div>
-          <div className="sf-stat"><div className="sf-stat-label">POD share</div><div className="sf-stat-value">{share.toFixed(1)}%</div><div className="sf-stat-detail">Of Week {week} total</div></div>
-          <div className="sf-stat"><div className="sf-stat-label">Week change</div><div className="sf-stat-value">{change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}`}</div><div className={`sf-stat-detail ${change > 0 ? 'sf-positive' : ''}`}>{previous === null ? 'First scored week' : `From ${previous.toFixed(1)} points`}</div></div>
-        </div>
-        <div className="sf-role-categories">
-          <MetricCategory name="Activity" score={points.activity} />
-          {points.sales && <MetricCategory name="Sales" score={points.sales} />}
-          {points.referred && <MetricCategory name="Referred" score={points.referred} />}
-        </div>
-      </article>
-      <article className="sf-card">
-        <div className="sf-card-head"><div><div className="sf-card-title">Weekly performance</div><div className="sf-card-caption">Select a week to audit this individual’s score</div></div></div>
-        <div className="sf-week-trend">
-          {weekScores.map((score, index) => <button type="button" className={`sf-week-bar-button ${week === index + 1 ? 'active' : ''}`} aria-label={`Week ${index + 1}: ${score.toFixed(1)} points`} aria-pressed={week === index + 1} key={index + 1} onClick={() => onSelectWeek(index + 1)}><span className="sf-week-bar-value">{score.toFixed(0)}</span><span className="sf-week-bar-track"><span className="sf-week-bar-fill" style={{ height: `${Math.max(5, score / maximum * 100)}%` }} /></span><span className="sf-week-bar-label">W{index + 1}</span></button>)}
-        </div>
-      </article>
+      <AnimatePresence initial={false} mode="wait">
+        <motion.div className="sf-performance-detail" key={member.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={PAGE_TRANSITION}>
+          <article className="sf-card">
+            <div className="sf-performance-hero"><span className="sf-avatar">{member.name}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
+            <div className="sf-stat-grid">
+              <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
+              <div className="sf-stat"><div className="sf-stat-label">{points.sales ? 'Sales' : 'Referred'}</div><div className="sf-stat-value">{comparison.total.toFixed(1)}</div><div className="sf-stat-detail">{points.sales ? 'Owned economic result' : 'BDR-originated closed value'}</div></div>
+              <div className="sf-stat"><div className="sf-stat-label">POD share</div><div className="sf-stat-value">{share.toFixed(1)}%</div><div className="sf-stat-detail">Of Week {week} total</div></div>
+              <div className="sf-stat"><div className="sf-stat-label">Week change</div><div className="sf-stat-value">{change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}`}</div><div className={`sf-stat-detail ${change > 0 ? 'sf-positive' : ''}`}>{previous === null ? 'First scored week' : `From ${previous.toFixed(1)} points`}</div></div>
+            </div>
+            <div className="sf-role-categories">
+              <MetricCategory name="Activity" score={points.activity} />
+              {points.sales && <MetricCategory name="Sales" score={points.sales} />}
+              {points.referred && <MetricCategory name="Referred" score={points.referred} />}
+            </div>
+          </article>
+          <article className="sf-card">
+            <div className="sf-card-head"><div><div className="sf-card-title">Weekly performance</div><div className="sf-card-caption">Select a week to audit this individual’s score</div></div></div>
+            <div className="sf-week-trend">
+              {weekScores.map((score, index) => <button type="button" className={`sf-week-bar-button ${week === index + 1 ? 'active' : ''}`} aria-label={`Week ${index + 1}: ${score.toFixed(1)} points`} aria-pressed={week === index + 1} key={index + 1} onClick={() => onSelectWeek(index + 1)}><span className="sf-week-bar-value">{score.toFixed(0)}</span><span className="sf-week-bar-track"><span className="sf-week-bar-fill" style={{ height: `${Math.max(5, score / maximum * 100)}%` }} /></span><span className="sf-week-bar-label">W{index + 1}</span></button>)}
+            </div>
+          </article>
+        </motion.div>
+      </AnimatePresence>
       <div className="sf-data-note">Every displayed point reconciles to the raw metric rows above.</div>
     </div>
   );

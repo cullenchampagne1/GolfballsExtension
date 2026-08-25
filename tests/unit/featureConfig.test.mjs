@@ -213,13 +213,29 @@ describe('developer settings · Sales Fantasy event', () => {
 
     assert.match(performanceSource, /memberWeekPointSplit/);
     assert.match(performanceSource, /Select individual performance/);
+    assert.match(performanceSource, /layoutId="sf-member-active"/);
+    assert.match(performanceSource, /className="sf-performance-detail" key=\{member\.id\}/);
+    assert.match(performanceSource, /initial=\{\{ opacity: 0, y: 8 \}\}/);
     assert.match(performanceSource, /Weekly performance/);
     assert.match(performanceSource, /sf-week-bar-button/);
+    assert.match(salesFantasySource, /\.sf-member-tab \{ position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var\(--sf-3\) var\(--sf-4\);/);
+    assert.match(salesFantasySource, /\.sf-member-active \{ position: absolute; z-index: 0; inset: 0;/);
     assert.match(rulesSource, /Scoring principles/);
     assert.match(rulesSource, /Order placement never changes credit/);
     assert.match(rulesSource, /BDR-owned orders at \$500 or below earn no Sales points/);
     assert.match(rulesSource, /High-output week/);
     assert.match(rulesSource, /Minimum week · no replies/);
+  });
+
+  it('keeps the official matchup ledger compact above detailed role rows', () => {
+    const matchupSource = salesFantasySource.match(/function MatchupBreakdown[\s\S]*?\n}\n\nfunction CompactMatchup/)?.[0] || '';
+
+    assert.match(salesFantasySource, /\.sf-matchup-card-head \{ padding-block: var\(--sf-2\); \}/);
+    assert.match(salesFantasySource, /\.sf-matchup-entry \{ min-width: 0; min-height: 64px; padding: var\(--sf-2\) var\(--sf-3\); display: flex;/);
+    assert.match(salesFantasySource, /\.sf-board-score \{ flex: 0 0 auto;[^}]*font-size: 23px;/);
+    assert.match(matchupSource, /className="sf-card-head sf-matchup-card-head"/);
+    assert.equal((matchupSource.match(/size="small"/g) || []).length, 2);
+    assert.doesNotMatch(matchupSource, /size="large"/);
   });
 });
 
