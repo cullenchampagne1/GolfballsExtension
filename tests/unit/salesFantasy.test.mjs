@@ -11,6 +11,7 @@ import {
   buildStandings,
   fantasyScore,
   marginTierForOrder,
+  memberInitials,
   memberWeekPointSplit,
   ownerRoleForDeal,
   orderMarginPercent,
@@ -21,6 +22,14 @@ import {
 } from '../../src/lib/salesFantasy.js';
 
 describe('salesFantasy · league model', () => {
+  it('formats member names as compact first-and-last initials for avatars', () => {
+    assert.equal(memberInitials('Lorie Ojeman'), 'LO');
+    assert.equal(memberInitials('JP Furman'), 'JF');
+    assert.equal(memberInitials('  Cullen   Champagne  '), 'CC');
+    assert.equal(memberInitials('SR'), 'SR');
+    assert.equal(memberInitials(''), '?');
+  });
+
   it('defines POD 1 through POD 10 with one SR, SA, and BDR each', () => {
     const expectedLineups = [
       { sr: 'Lorie Ojeman', sa: 'Alex Sylvester', bdr: 'JP Furman' },

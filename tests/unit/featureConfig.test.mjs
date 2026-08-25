@@ -175,6 +175,9 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /Open POD 1 current Week \$\{SALES_FANTASY_CURRENT_WEEK\} standing/);
     assert.match(salesFantasySource, /className="sf-bottom-center-week">POD 1/);
     assert.match(salesFantasySource, /className="sf-bottom-center-rank">W\{SALES_FANTASY_CURRENT_WEEK\} · Rank #\{rank\}/);
+    assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(candidate\.name\)\}/);
+    assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(member\.name\)\}/);
+    assert.doesNotMatch(salesFantasySource, /className="sf-avatar">\{(?:candidate|member)\.name\}/);
     assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
     assert.match(salesFantasySource, /setView\('pods'\)/);
     assert.match(salesFantasySource, /key=\{`head-\$\{page\.id\}-\$\{week\}`\}/);

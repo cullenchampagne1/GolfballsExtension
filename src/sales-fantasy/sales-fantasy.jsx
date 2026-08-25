@@ -11,6 +11,7 @@ import {
   buildFantasySchedule,
   buildStandings,
   fantasyScore,
+  memberInitials,
   memberWeekPointSplit,
   matchupForPod,
   podForId,
@@ -517,13 +518,13 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
       <div className="sf-member-tabs" aria-label="Select individual performance">
         {pod.members.map((candidate) => {
           const active = candidate.id === member.id;
-          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <motion.span aria-hidden="true" className="sf-member-active" layoutId="sf-member-active" transition={PAGE_TRANSITION} />}<span className="sf-avatar">{candidate.name}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
+          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <motion.span aria-hidden="true" className="sf-member-active" layoutId="sf-member-active" transition={PAGE_TRANSITION} />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidate.name)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
         })}
       </div>
       <AnimatePresence initial={false} mode="wait">
         <motion.div className="sf-performance-detail" key={member.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={PAGE_TRANSITION}>
           <article className="sf-card sf-performance-card">
-            <div className="sf-performance-hero"><span className="sf-avatar">{member.name}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
+            <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
               <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
               <div className="sf-stat"><div className="sf-stat-label">{member.roleId === 'bdr' ? 'Sales + referred' : 'Sales'}</div><div className="sf-stat-value">{resultPoints.toFixed(1)}</div><div className="sf-stat-detail">{member.roleId === 'bdr' ? 'Owned results plus account referrals' : 'Owned proposals and completed results'}</div></div>
@@ -706,7 +707,7 @@ function RoleBreakdowns({ pod, week }) {
         return (
           <section className="sf-role-card" key={member.id}>
             <div className="sf-role-head">
-              <span className="sf-avatar">{member.name}</span>
+              <span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span>
               <div className="sf-role-head-copy"><div className="sf-role-name">{member.name}</div><div className="sf-role-title">{member.role}</div></div>
               <div className="sf-role-total"><div className="sf-role-total-value">{points.total.toFixed(1)}</div><div className="sf-role-total-label">Role points</div></div>
             </div>

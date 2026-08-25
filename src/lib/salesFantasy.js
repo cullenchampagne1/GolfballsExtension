@@ -33,6 +33,13 @@ export const SALES_FANTASY_LINEUPS = Object.freeze([
   Object.freeze({ sr: 'Logan Bex', sa: 'Logan Bex', bdr: 'Logan Bex' }),
 ]);
 
+export function memberInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
 /** Shared weekly scoring contract for every role ledger and pod total. */
 export const SALES_FANTASY_SCORING = Object.freeze({
   scoringDaysPerWeek: 5,
