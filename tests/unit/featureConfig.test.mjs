@@ -209,6 +209,7 @@ describe('developer settings · Sales Fantasy event', () => {
 
   it('adds individual weekly Performance and detailed Rules pages', () => {
     const performanceSource = salesFantasySource.match(/function Performance[\s\S]*?\n}\n\nfunction ruleRate/)?.[0] || '';
+    const roleScoringSource = salesFantasySource.match(/function RoleScoringDetails[\s\S]*?\n}\n\nfunction Rules/)?.[0] || '';
     const rulesSource = salesFantasySource.match(/function Rules[\s\S]*?\n}\n\nfunction PodDashboard/)?.[0] || '';
 
     assert.match(performanceSource, /memberWeekPointSplit/);
@@ -222,11 +223,19 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /\.sf-member-active \{ position: absolute; z-index: 0; inset: 0;/);
     assert.match(rulesSource, /Scoring overview/);
     assert.match(rulesSource, /SR, SA, and BDR use the same point values/);
-    assert.match(rulesSource, /account is assigned to the BDR as the qualifying order is placed/);
-    assert.match(rulesSource, /Outbound calls earn more per completed action than email replies/);
+    assert.match(rulesSource, /Scoring details by position/);
+    assert.match(rulesSource, /Every position receives the same statistic-by-statistic breakdown/);
+    assert.match(rulesSource, /SALES_FANTASY_ROLES\.map\(\(role\) => <RoleScoringDetails role=\{role\}/);
+    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.activity/);
+    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.sales/);
+    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.marginTiers/);
+    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.referral/);
+    assert.match(roleScoringSource, /role\.id === 'bdr' \? ruleRate\(rule, role\.id\) : 'Not scored'/);
+    assert.match(salesFantasySource, /Orders placed while the account is assigned to the BDR/);
     assert.doesNotMatch(rulesSource, /Work routing and attribution|primary economic driver|natural advantage|scoring contract/);
+    assert.doesNotMatch(rulesSource, /BDR scoring details|highOutput|minimumOutput/);
     assert.match(salesFantasySource, /\.sf-performance-card \.sf-stat-grid \{ padding: var\(--sf-4\); \}/);
-    assert.match(salesFantasySource, /\.sf-example-grid \{ margin-top: var\(--sf-3\);/);
+    assert.match(salesFantasySource, /\.sf-role-rule-grid \{ padding: var\(--sf-4\); display: grid; grid-template-columns: repeat\(3,/);
   });
 
   it('keeps the official matchup ledger compact above detailed role rows', () => {

@@ -15,7 +15,6 @@ import {
   matchupForPod,
   podForId,
   podWeekPointSplit,
-  scoreRoleMetrics,
   weekState,
 } from '../lib/salesFantasy.js';
 
@@ -227,19 +226,25 @@ const CSS = `
   .sf-week-bar-label { font-size: 8px; font-weight: 800; text-transform: uppercase; }
   .sf-rule-intro { padding: var(--sf-4); color: var(--gb-text-secondary); font-size: 11px; line-height: 1.6; }
   .sf-rule-section { min-width: 0; }
-  .sf-rule-section-body { padding: var(--sf-3) var(--sf-4) var(--sf-4); }
-  .sf-rule-list { margin: 0; padding-left: 18px; color: var(--gb-text-secondary); font-size: 10.5px; line-height: 1.65; }
   .sf-rule-table-wrap { min-width: 0; overflow-x: auto; }
   .sf-rule-table { width: 100%; min-width: 500px; border-collapse: collapse; table-layout: fixed; }
   .sf-rule-table th, .sf-rule-table td { padding: 9px var(--sf-3); border-bottom: 1px solid var(--gb-border-subtle); font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
   .sf-rule-table th { color: var(--gb-text-muted); background: var(--gb-fill-faint); font-size: 8.5px; letter-spacing: .5px; text-transform: uppercase; }
   .sf-rule-table th:first-child, .sf-rule-table td:first-child { width: 40%; text-align: left; }
   .sf-rule-table tr:last-child td { border-bottom: 0; }
-  .sf-example-grid { margin-top: var(--sf-3); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
-  .sf-example { padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-fill-faint); }
-  .sf-example-label { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
-  .sf-example-value { margin-top: var(--sf-1); color: var(--gb-text-primary); font-size: 18px; font-weight: 850; font-variant-numeric: tabular-nums; }
-  .sf-example-detail { margin-top: var(--sf-1); color: var(--gb-text-muted); font-size: 9.5px; line-height: 1.5; }
+  .sf-role-rule-grid { padding: var(--sf-4); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: var(--sf-3); }
+  .sf-role-rule-card { min-width: 0; overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); background: var(--gb-surface-1); }
+  .sf-role-rule-head { min-height: 58px; padding: var(--sf-3); display: flex; align-items: center; gap: var(--sf-2); background: var(--gb-fill-faint); }
+  .sf-role-rule-head-copy { min-width: 0; }
+  .sf-role-rule-name { color: var(--gb-text-primary); font-size: 12px; font-weight: 850; }
+  .sf-role-rule-title { margin-top: 1px; color: var(--gb-text-muted); font-size: 8.5px; line-height: 1.3; }
+  .sf-role-rule-group { padding: var(--sf-3); border-top: 1px solid var(--gb-border-subtle); }
+  .sf-role-rule-group-title { margin-bottom: var(--sf-1); color: var(--gb-brand-label); font-size: 8.5px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; }
+  .sf-role-rule-row { min-height: 40px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sf-2); }
+  .sf-role-rule-row + .sf-role-rule-row { border-top: 1px solid var(--gb-border-subtle); }
+  .sf-role-rule-label { color: var(--gb-text-secondary); font-size: 9.5px; font-weight: 750; }
+  .sf-role-rule-detail { display: block; margin-top: 1px; color: var(--gb-text-muted); font-size: 8px; line-height: 1.3; font-weight: 500; }
+  .sf-role-rule-value { color: var(--gb-text-primary); font-size: 9px; font-weight: 800; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .sf-data-note { color: var(--gb-text-ghost); font-size: 9.5px; line-height: 1.4; text-align: right; }
   .sf-empty { padding: 32px var(--sf-4); color: var(--gb-text-muted); text-align: center; }
   .sf-bottom-nav {
@@ -300,7 +305,7 @@ const CSS = `
     .sf-member-tabs { gap: var(--sf-1); }
     .sf-member-tab { min-height: 58px; padding: var(--sf-2); gap: var(--sf-2); }
     .sf-member-tab-role { display: none; }
-    .sf-example-grid { grid-template-columns: 1fr; }
+    .sf-role-rule-grid { grid-template-columns: 1fr; }
     .sf-pod-split + .sf-pod-split { border-left: 0; border-top: 1px solid var(--gb-border-subtle); }
     .sf-bottom-nav { flex-basis: 70px; min-height: 70px; padding-inline: var(--sf-1); }
     .sf-bottom-item::before, .sf-bottom-active { inset-inline: 5%; }
@@ -525,10 +530,43 @@ function ruleRate(rule, roleId) {
   return `${rate} each`;
 }
 
+const SCORING_DETAIL_COPY = Object.freeze({
+  emailsSent: 'Verified outbound emails',
+  emailsReplied: 'Verified customer replies',
+  outboundCalls: 'Completed outbound calls',
+  inboundCalls: 'Completed inbound calls',
+  proposalsSent: 'Proposals credited to the position',
+  orders: 'Completed orders credited to the position',
+  totalSales: 'Revenue from credited completed orders',
+  totalProfit: 'Profit from credited completed orders',
+  referredOrders: 'Orders placed while the account is assigned to the BDR',
+  referredSales: 'Revenue from those qualifying referred orders',
+});
+
+function RuleDetailRows({ rules, roleId, valueForRule = (rule) => ruleRate(rule, roleId) }) {
+  return rules.map((rule) => (
+    <div className="sf-role-rule-row" key={rule.id}>
+      <span className="sf-role-rule-label">{rule.label}<span className="sf-role-rule-detail">{SCORING_DETAIL_COPY[rule.id]}</span></span>
+      <span className="sf-role-rule-value">{valueForRule(rule)}</span>
+    </div>
+  ));
+}
+
+function RoleScoringDetails({ role }) {
+  const referralRate = (rule) => role.id === 'bdr' ? ruleRate(rule, role.id) : 'Not scored';
+  return (
+    <section className="sf-role-rule-card" aria-label={`${role.label} scoring details`}>
+      <div className="sf-role-rule-head"><span className="sf-avatar">{role.label}</span><div className="sf-role-rule-head-copy"><div className="sf-role-rule-name">{role.label}</div><div className="sf-role-rule-title">{role.title}</div></div></div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Activity</div><RuleDetailRows rules={SALES_FANTASY_SCORING.activity} roleId={role.id} /></div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Sales</div><RuleDetailRows rules={SALES_FANTASY_SCORING.sales} roleId={role.id} /></div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Margin</div>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <div className="sf-role-rule-row" key={tier.id}><span className="sf-role-rule-label">{tier.label}<span className="sf-role-rule-detail">Proposal bonus / order bonus</span></span><span className="sf-role-rule-value">+{tier.proposalBonusPoints} / +{tier.orderBonusPoints}</span></div>)}</div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Referred</div><RuleDetailRows rules={SALES_FANTASY_SCORING.referral} roleId={role.id} valueForRule={referralRate} /></div>
+    </section>
+  );
+}
+
 function Rules() {
   const scoringDays = SALES_FANTASY_SCORING.scoringDaysPerWeek;
-  const highOutput = scoreRoleMetrics({ activity: { emailsSent: 400 * scoringDays, emailsReplied: 25, outboundCalls: 65 * scoringDays, inboundCalls: 0 } }, 'bdr');
-  const minimumOutput = scoreRoleMetrics({ activity: { emailsSent: 100 * scoringDays, emailsReplied: 0, outboundCalls: 20 * scoringDays, inboundCalls: 0 } }, 'bdr');
   return (
     <div className="sf-stack">
       <article className="sf-card">
@@ -552,14 +590,8 @@ function Rules() {
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">4 · BDR scoring details</div><div className="sf-card-caption">Activity and Sales, plus qualifying Referred points</div></div></div>
-        <div className="sf-rule-section-body">
-          <ul className="sf-rule-list"><li>BDR proposals, orders, sales, profit, and margin bonuses use the same rates shown in the Sales and Margin tables.</li><li>Referred order: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredOrders').pointsPerUnit} points when the account is assigned to the BDR as the qualifying order is placed.</li><li>Referred dollars: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredSales').pointsPerUnit * 1000} points per $1,000 on those qualifying orders.</li><li>Outbound calls earn more per completed action than email replies.</li></ul>
-          <div className="sf-example-grid">
-            <div className="sf-example"><div className="sf-example-label">Activity example</div><div className="sf-example-value">{highOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">400 emails/day + 65 outbound calls/day for {scoringDays} days + 25 replies. Sales and Referred points are added separately.</div></div>
-            <div className="sf-example"><div className="sf-example-label">Activity example</div><div className="sf-example-value">{minimumOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">100 emails/day + 20 outbound calls/day for {scoringDays} days and zero replies. Sales and Referred points are added separately.</div></div>
-          </div>
-        </div>
+        <div className="sf-card-head"><div><div className="sf-card-title">4 · Scoring details by position</div><div className="sf-card-caption">Every position receives the same statistic-by-statistic breakdown</div></div></div>
+        <div className="sf-role-rule-grid">{SALES_FANTASY_ROLES.map((role) => <RoleScoringDetails role={role} key={role.id} />)}</div>
       </article>
 
       <div className="sf-data-note">All displayed totals use the rates shown on this page.</div>
