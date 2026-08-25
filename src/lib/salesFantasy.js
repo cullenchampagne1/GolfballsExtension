@@ -19,31 +19,26 @@ export const SALES_FANTASY_ROLES = Object.freeze([
   Object.freeze({ id: 'bdr', label: 'BDR', title: 'Business Development Representative' }),
 ]);
 
-/**
- * Role-balanced preview scoring contract. Work routing follows the sales
- * team's hard dollar bands, but only SA/SR receive economic points and both use
- * the same rates. BDR referral credit is additive: an SA/SR keeps every point
- * while the BDR who originated the opportunity earns a separate Referred score.
- */
+/** Shared weekly scoring contract for every role ledger and pod total. */
 export const SALES_FANTASY_SCORING = Object.freeze({
   scoringDaysPerWeek: 5,
-  salesEligibleRoles: Object.freeze(['sr', 'sa']),
+  salesEligibleRoles: Object.freeze(['sr', 'sa', 'bdr']),
   ownershipBands: Object.freeze([
     Object.freeze({ roleId: 'bdr', label: '$500 and under', minSale: 0, maxSale: 500, minInclusive: true, maxInclusive: true }),
     Object.freeze({ roleId: 'sa', label: '$500.01–$1,499.99', minSale: 500, maxSale: 1500, minInclusive: false, maxInclusive: false }),
     Object.freeze({ roleId: 'sr', label: '$1,500 and above', minSale: 1500, maxSale: null, minInclusive: true, maxInclusive: true }),
   ]),
   activity: Object.freeze([
-    Object.freeze({ id: 'emailsSent', label: 'Emails sent', pointsByRole: roleRates(0.01, 0.01, 0.005) }),
-    Object.freeze({ id: 'emailsReplied', label: 'Emails replied', pointsByRole: roleRates(0.5, 0.75, 1.25) }),
-    Object.freeze({ id: 'outboundCalls', label: 'Outbound calls', pointsByRole: roleRates(0.1, 0.15, 0.2) }),
+    Object.freeze({ id: 'emailsSent', label: 'Emails sent', pointsByRole: roleRates(0.01, 0.01, 0.001) }),
+    Object.freeze({ id: 'emailsReplied', label: 'Emails replied', pointsByRole: roleRates(0.1, 0.15, 0.1) }),
+    Object.freeze({ id: 'outboundCalls', label: 'Outbound calls', pointsByRole: roleRates(0.15, 0.2, 0.2) }),
     Object.freeze({ id: 'inboundCalls', label: 'Inbound calls', pointsByRole: roleRates(0.1, 0.1, 0.1) }),
   ]),
   sales: Object.freeze([
-    Object.freeze({ id: 'proposalsSent', label: 'Proposals sent', pointsByRole: roleRates(2.5, 2.5, 0) }),
-    Object.freeze({ id: 'orders', label: 'Owned orders', pointsByRole: roleRates(6, 6, 0) }),
-    Object.freeze({ id: 'totalSales', label: 'Owned sales', pointsByRole: roleRates(0.001, 0.001, 0), format: 'money' }),
-    Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(0.008, 0.008, 0), format: 'money' }),
+    Object.freeze({ id: 'proposalsSent', label: 'Proposals sent', pointsByRole: roleRates(2.5, 2.5, 2.5) }),
+    Object.freeze({ id: 'orders', label: 'Owned orders', pointsByRole: roleRates(6, 6, 6) }),
+    Object.freeze({ id: 'totalSales', label: 'Owned sales', pointsByRole: roleRates(0.001, 0.001, 0.001), format: 'money' }),
+    Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(0.008, 0.008, 0.008), format: 'money' }),
   ]),
   marginTiers: Object.freeze([
     Object.freeze({ id: 'base', label: 'Under 30%', minMargin: 0, proposalBonusPoints: 0, orderBonusPoints: 0 }),
@@ -160,12 +155,12 @@ function roleDeals(podNumber, roleIndex, weekNumber, kind) {
   return Array.from({ length: count }, (_, dealIndex) => {
     const sale = dealSale(seed, dealIndex, roleId, kind);
     const marginPercent = 26 + ((seed + dealIndex * 11 + roleIndex * 7 + (kind === 'proposal' ? 5 : 0)) % 31);
-    const opportunityCreatedByRoleId = roleId !== 'bdr' && (seed + dealIndex * 7) % 3 === 0 ? 'bdr' : roleId;
+    const accountOwnerRoleId = roleId !== 'bdr' && (seed + dealIndex * 7) % 3 === 0 ? 'bdr' : roleId;
     return {
       id: `preview-${kind}-${podNumber}-${roleIndex + 1}-${weekNumber}-${dealIndex + 1}`,
       sale: money(sale),
       profit: money(sale * marginPercent / 100),
-      opportunityCreatedByRoleId,
+      accountOwnerRoleId,
     };
   });
 }
@@ -189,7 +184,7 @@ function roleWeekMetrics(podNumber, roleIndex, weekNumber) {
   const referrals = roleId === 'bdr'
     ? SALES_FANTASY_ROLES.slice(0, 2)
       .flatMap((_, ownerIndex) => roleDeals(podNumber, ownerIndex, weekNumber, 'order'))
-      .filter((order) => order.opportunityCreatedByRoleId === 'bdr')
+      .filter((order) => order.accountOwnerRoleId === 'bdr')
     : [];
   return {
     activity,
@@ -234,9 +229,8 @@ export function ownerRoleForDeal(deal, rules = SALES_FANTASY_SCORING) {
 }
 
 /**
- * Allocate a pod's shared closed-order feed by operational work band. A BDR
- * bucket does not imply fantasy Sales points. BDR referrals are the above-$500
- * orders they originated; the SA/SR order remains in its full owner bucket.
+ * Allocate a pod's shared closed-order feed by deal band. Referral credit is
+ * additive when the completed SA/SR order belongs to a BDR-owned account.
  */
 export function allocatePodOrders(orders, rules = SALES_FANTASY_SCORING) {
   const owned = Object.fromEntries(SALES_FANTASY_ROLES.map((role) => [role.id, []]));
@@ -245,7 +239,7 @@ export function allocatePodOrders(orders, rules = SALES_FANTASY_SCORING) {
     const ownerRoleId = ownerRoleForDeal(order, rules);
     if (!ownerRoleId) continue;
     owned[ownerRoleId].push(order);
-    if (ownerRoleId !== 'bdr' && order?.opportunityCreatedByRoleId === 'bdr') referred.push(order);
+    if (ownerRoleId !== 'bdr' && order?.accountOwnerRoleId === 'bdr') referred.push(order);
   }
   return { owned, referred };
 }
@@ -338,7 +332,7 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
   const referredOrders = roleId === 'bdr' && Array.isArray(metrics?.referred?.orders)
     ? metrics.referred.orders.filter((order) => {
       const ownerRoleId = ownerRoleForDeal(order, rules);
-      return order?.opportunityCreatedByRoleId === 'bdr' && (ownerRoleId === 'sa' || ownerRoleId === 'sr');
+      return order?.accountOwnerRoleId === 'bdr' && (ownerRoleId === 'sa' || ownerRoleId === 'sr');
     })
     : [];
   const referredValues = {

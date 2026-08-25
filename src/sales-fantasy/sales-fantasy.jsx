@@ -209,6 +209,7 @@ const CSS = `
   .sf-member-tab-name { display: block; color: var(--gb-text-primary); font-size: 11px; font-weight: 800; }
   .sf-member-tab-role { display: block; margin-top: 2px; overflow: hidden; color: var(--gb-text-muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
   .sf-performance-detail { min-width: 0; display: grid; gap: var(--sf-4); }
+  .sf-performance-card .sf-stat-grid { padding: var(--sf-4); }
   .sf-performance-hero { padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
   .sf-performance-copy { min-width: 0; flex: 1; }
   .sf-performance-name { color: var(--gb-text-primary); font-size: 16px; font-weight: 850; }
@@ -225,7 +226,6 @@ const CSS = `
   .sf-week-bar-button.active .sf-week-bar-fill { background: var(--gb-brand-label); }
   .sf-week-bar-label { font-size: 8px; font-weight: 800; text-transform: uppercase; }
   .sf-rule-intro { padding: var(--sf-4); color: var(--gb-text-secondary); font-size: 11px; line-height: 1.6; }
-  .sf-rule-callout { margin: 0 var(--sf-4) var(--sf-4); padding: var(--sf-3); border-left: 3px solid var(--gb-brand-label); background: var(--gb-brand-tint-soft); color: var(--gb-text-secondary); font-size: 10.5px; line-height: 1.55; }
   .sf-rule-section { min-width: 0; }
   .sf-rule-section-body { padding: var(--sf-3) var(--sf-4) var(--sf-4); }
   .sf-rule-list { margin: 0; padding-left: 18px; color: var(--gb-text-secondary); font-size: 10.5px; line-height: 1.65; }
@@ -235,8 +235,7 @@ const CSS = `
   .sf-rule-table th { color: var(--gb-text-muted); background: var(--gb-fill-faint); font-size: 8.5px; letter-spacing: .5px; text-transform: uppercase; }
   .sf-rule-table th:first-child, .sf-rule-table td:first-child { width: 40%; text-align: left; }
   .sf-rule-table tr:last-child td { border-bottom: 0; }
-  .sf-rule-zero { color: var(--gb-text-ghost); }
-  .sf-example-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
+  .sf-example-grid { margin-top: var(--sf-3); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sf-2); }
   .sf-example { padding: var(--sf-3); border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-fill-faint); }
   .sf-example-label { color: var(--gb-text-muted); font-size: 8.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
   .sf-example-value { margin-top: var(--sf-1); color: var(--gb-text-primary); font-size: 18px; font-weight: 850; font-variant-numeric: tabular-nums; }
@@ -446,7 +445,7 @@ function MatchupBreakdown({ game, week, standings, title = 'Current matchup' }) 
         </section>
       </div>
       <div className="sf-split-grid"><SplitPanel pod={home} week={week} /><SplitPanel pod={away} week={week} /></div>
-      <div className="sf-score-note"><strong>How it adds up:</strong> SR and SA earn Activity plus identical Sales rates. BDR earns Activity and Referred points only. The three role totals reconcile to the official POD score.</div>
+      <div className="sf-score-note"><strong>How it adds up:</strong> SR, SA, and BDR earn Activity and Sales at the rates shown in Rules. BDR can also earn Referred points from qualifying orders on BDR-owned accounts. The three role totals reconcile to the official POD score.</div>
     </article>
   );
 }
@@ -474,7 +473,9 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
   const memberIndex = Math.max(0, pod.members.findIndex((member) => member.id === selectedMemberId));
   const member = pod.members[memberIndex];
   const points = split.members[memberIndex];
-  const comparison = points.sales || points.referred;
+  const resultPoints = member.roleId === 'bdr'
+    ? (points.sales?.total || 0) + (points.referred?.total || 0)
+    : points.sales?.total || 0;
   const share = split.total ? points.total / split.total * 100 : 0;
   const weekScores = Array.from({ length: SCHEDULE.length }, (_, index) => memberWeekPointSplit(pod.id, member.id, index + 1).total);
   const maximum = Math.max(...weekScores, 1);
@@ -490,11 +491,11 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
       </div>
       <AnimatePresence initial={false} mode="wait">
         <motion.div className="sf-performance-detail" key={member.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={PAGE_TRANSITION}>
-          <article className="sf-card">
+          <article className="sf-card sf-performance-card">
             <div className="sf-performance-hero"><span className="sf-avatar">{member.name}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
               <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
-              <div className="sf-stat"><div className="sf-stat-label">{points.sales ? 'Sales' : 'Referred'}</div><div className="sf-stat-value">{comparison.total.toFixed(1)}</div><div className="sf-stat-detail">{points.sales ? 'Owned economic result' : 'BDR-originated closed value'}</div></div>
+              <div className="sf-stat"><div className="sf-stat-label">{member.roleId === 'bdr' ? 'Sales + referred' : 'Sales'}</div><div className="sf-stat-value">{resultPoints.toFixed(1)}</div><div className="sf-stat-detail">{member.roleId === 'bdr' ? 'Owned results plus account referrals' : 'Owned proposals and completed results'}</div></div>
               <div className="sf-stat"><div className="sf-stat-label">POD share</div><div className="sf-stat-value">{share.toFixed(1)}%</div><div className="sf-stat-detail">Of Week {week} total</div></div>
               <div className="sf-stat"><div className="sf-stat-label">Week change</div><div className="sf-stat-value">{change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}`}</div><div className={`sf-stat-detail ${change > 0 ? 'sf-positive' : ''}`}>{previous === null ? 'First scored week' : `From ${previous.toFixed(1)} points`}</div></div>
             </div>
@@ -531,43 +532,37 @@ function Rules() {
   return (
     <div className="sf-stack">
       <article className="sf-card">
-        <div className="sf-card-head"><div><div className="sf-card-title">Scoring principles</div><div className="sf-card-caption">Weekly points reward contribution, not order-entry ownership</div></div></div>
-        <div className="sf-rule-intro">Each POD total is the SR, SA, and BDR individual score combined. SR remains the primary economic driver through larger owned deals. SA uses the exact same economic point rates. BDR competes through verified activity and opportunities they originate that close above $500.</div>
-        <div className="sf-rule-callout"><strong>Order placement never changes credit.</strong> If a BDR enters an order for a busy SA or SR, the appropriate SA/SR tier keeps the order, profit, sales, proposal, and margin points. Processing the order alone does not create BDR referral credit.</div>
+        <div className="sf-card-head"><div><div className="sf-card-title">Scoring overview</div><div className="sf-card-caption">Your verified weekly results determine your score</div></div></div>
+        <div className="sf-rule-intro">Your individual score is the total of the Activity, Sales, and Referred rows that apply to you. A POD score is the combined total of its SR, SA, and BDR. Every detail row shows both the verified result and the points earned.</div>
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">1 · Work routing and attribution</div><div className="sf-card-caption">Dollar bands say who should work the opportunity</div></div></div>
-        <div className="sf-rule-section-body"><ul className="sf-rule-list">{SALES_FANTASY_SCORING.ownershipBands.map((band) => <li key={band.roleId}><strong>{band.roleId.toUpperCase()}</strong> work band: {band.label}.</li>)}<li>BDR-owned orders at $500 or below earn no Sales points.</li><li>A referral requires the BDR to originate the opportunity and the completed order to exceed $500.</li><li>The closing SA/SR keeps 100% of their normal points when a qualifying BDR referral is also awarded.</li></ul></div>
-      </article>
-
-      <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">2 · Activity rates</div><div className="sf-card-caption">Raw verified actions × role rate; scored over {scoringDays} business days</div></div></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">1 · Activity rates</div><div className="sf-card-caption">Verified actions × the listed rate over {scoringDays} business days</div></div></div>
         <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Activity</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{SALES_FANTASY_SCORING.activity.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">3 · SA and SR economic rates</div><div className="sf-card-caption">Identical rates; SR’s larger deal band creates the natural advantage</div></div></div>
-        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Sales metric</th><th>SR</th><th>SA</th><th>BDR</th></tr></thead><tbody>{SALES_FANTASY_SCORING.sales.map((rule) => <tr key={rule.id}><td>{rule.label}</td><td>{ruleRate(rule, 'sr')}</td><td>{ruleRate(rule, 'sa')}</td><td className="sf-rule-zero">No points</td></tr>)}</tbody></table></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">2 · Sales rates</div><div className="sf-card-caption">SR, SA, and BDR use the same point values</div></div></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Sales metric</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{SALES_FANTASY_SCORING.sales.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">4 · Margin quality bonuses</div><div className="sf-card-caption">One highest qualifying tier per SA/SR proposal and completed order</div></div></div>
-        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Margin</th><th>Proposal</th><th>Order</th><th>BDR</th></tr></thead><tbody>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.proposalBonusPoints}</td><td>+{tier.orderBonusPoints}</td><td className="sf-rule-zero">No points</td></tr>)}</tbody></table></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">3 · Margin bonuses</div><div className="sf-card-caption">The highest qualifying tier applies to each proposal and completed order</div></div></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Margin</th><th>Proposal bonus</th><th>Order bonus</th></tr></thead><tbody>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.proposalBonusPoints}</td><td>+{tier.orderBonusPoints}</td></tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">5 · BDR referral and activity path</div><div className="sf-card-caption">Quality outreach plus originated closed value</div></div></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">4 · BDR scoring details</div><div className="sf-card-caption">Activity and Sales, plus qualifying Referred points</div></div></div>
         <div className="sf-rule-section-body">
-          <ul className="sf-rule-list"><li>Referred order: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredOrders').pointsPerUnit} points per qualifying close.</li><li>Referred dollars: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredSales').pointsPerUnit * 1000} points per $1,000 closed.</li><li>Emails and calls create a competitive path, while replies carry enough weight to distinguish productive contact work from minimum-volume activity.</li></ul>
+          <ul className="sf-rule-list"><li>BDR proposals, orders, sales, profit, and margin bonuses use the same rates shown in the Sales and Margin tables.</li><li>Referred order: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredOrders').pointsPerUnit} points when the account is assigned to the BDR as the qualifying order is placed.</li><li>Referred dollars: +{SALES_FANTASY_SCORING.referral.find((rule) => rule.id === 'referredSales').pointsPerUnit * 1000} points per $1,000 on those qualifying orders.</li><li>Outbound calls earn more per completed action than email replies.</li></ul>
           <div className="sf-example-grid">
-            <div className="sf-example"><div className="sf-example-label">High-output week</div><div className="sf-example-value">{highOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">400 emails/day + 65 outbound calls/day for {scoringDays} days + 25 replies, before referral points.</div></div>
-            <div className="sf-example"><div className="sf-example-label">Minimum week · no replies</div><div className="sf-example-value">{minimumOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">100 emails/day + 20 outbound calls/day for {scoringDays} days and zero replies.</div></div>
+            <div className="sf-example"><div className="sf-example-label">Activity example</div><div className="sf-example-value">{highOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">400 emails/day + 65 outbound calls/day for {scoringDays} days + 25 replies. Sales and Referred points are added separately.</div></div>
+            <div className="sf-example"><div className="sf-example-label">Activity example</div><div className="sf-example-value">{minimumOutput.total.toFixed(1)} pts</div><div className="sf-example-detail">100 emails/day + 20 outbound calls/day for {scoringDays} days and zero replies. Sales and Referred points are added separately.</div></div>
           </div>
         </div>
       </article>
 
-      <div className="sf-data-note">Point rates are defined once in the scoring contract used by this page, individual ledgers, POD totals, matchups, and standings.</div>
+      <div className="sf-data-note">All displayed totals use the rates shown on this page.</div>
     </div>
   );
 }

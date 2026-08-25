@@ -220,11 +220,13 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(performanceSource, /sf-week-bar-button/);
     assert.match(salesFantasySource, /\.sf-member-tab \{ position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var\(--sf-3\) var\(--sf-4\);/);
     assert.match(salesFantasySource, /\.sf-member-active \{ position: absolute; z-index: 0; inset: 0;/);
-    assert.match(rulesSource, /Scoring principles/);
-    assert.match(rulesSource, /Order placement never changes credit/);
-    assert.match(rulesSource, /BDR-owned orders at \$500 or below earn no Sales points/);
-    assert.match(rulesSource, /High-output week/);
-    assert.match(rulesSource, /Minimum week · no replies/);
+    assert.match(rulesSource, /Scoring overview/);
+    assert.match(rulesSource, /SR, SA, and BDR use the same point values/);
+    assert.match(rulesSource, /account is assigned to the BDR as the qualifying order is placed/);
+    assert.match(rulesSource, /Outbound calls earn more per completed action than email replies/);
+    assert.doesNotMatch(rulesSource, /Work routing and attribution|primary economic driver|natural advantage|scoring contract/);
+    assert.match(salesFantasySource, /\.sf-performance-card \.sf-stat-grid \{ padding: var\(--sf-4\); \}/);
+    assert.match(salesFantasySource, /\.sf-example-grid \{ margin-top: var\(--sf-3\);/);
   });
 
   it('keeps the official matchup ledger compact above detailed role rows', () => {
