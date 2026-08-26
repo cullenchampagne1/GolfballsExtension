@@ -210,6 +210,43 @@ describe('notification outbox cache', () => {
     assert.ok(stored.gbNotifications[0].dismissedAt > 0);
   });
 
+  it('serializes rapid archive writes so every notification stays archived', async () => {
+    const { store, stored } = harness();
+    await store.mergeRemote([
+      remote({ id: 12 }),
+      remote({ id: 13, title: 'A second notification' }),
+      remote({ id: 14, title: 'A third notification' }),
+    ]);
+
+    await Promise.all([
+      store.patch([12], { status: 'dismissed' }),
+      store.patch([13], { status: 'dismissed' }),
+      store.patch([14], { status: 'dismissed' }),
+    ]);
+
+    assert.deepEqual(
+      stored.gbNotifications.map((item) => item.status),
+      ['dismissed', 'dismissed', 'dismissed'],
+    );
+  });
+
+  it('does not resurrect a locally archived row from an older poll response', async () => {
+    const { store, stored } = harness();
+    await store.mergeRemote([remote()]);
+    await store.patch([12], { status: 'dismissed' });
+
+    await store.mergeRemote([remote({
+      body: 'The same row arrived again before its receipt was visible.',
+    })]);
+
+    assert.equal(stored.gbNotifications[0].status, 'dismissed');
+    assert.ok(stored.gbNotifications[0].dismissedAt > 0);
+    assert.equal(
+      stored.gbNotifications[0].body,
+      'The same row arrived again before its receipt was visible.',
+    );
+  });
+
   it('accepts only locally resolved CRM URLs for contact actions', async () => {
     const { store, stored } = harness();
     await store.mergeRemote([remote({

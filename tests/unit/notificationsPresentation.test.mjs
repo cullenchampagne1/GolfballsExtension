@@ -51,4 +51,12 @@ describe('notification center presentation', () => {
     assert.match(source, /<IconBtn/);
     assert.doesNotMatch(source, /function IconButton/);
   });
+
+  it('archives every active row through one bulk worker message', () => {
+    assert.match(source, /function sendReceipts\(items, state\)/);
+    assert.match(source, /const archiveAll = useCallback\(\(\) => \{/);
+    assert.match(source, /items\.filter\(\(item\) => item\.status !== 'dismissed'\)/);
+    assert.match(source, /sendReceipts\(targets, 'dismissed'\)/);
+    assert.match(source, />\s*Archive all\s*</);
+  });
 });

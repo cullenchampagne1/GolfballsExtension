@@ -139,4 +139,34 @@ describe('notification cursor as live-update transport', () => {
     assert.equal(url.searchParams.get('limit'), '50');
     assert.equal(url.searchParams.get('wait_seconds'), '25');
   });
+
+  it('coalesces a rapid archive run into one receipt request', async () => {
+    const h = harness();
+    const ids = Array.from({ length: 35 }, (_, index) => index + 1);
+
+    const sent = await Promise.all(
+      ids.map((id) => h.poll.sendReceipt([id], 'dismissed')),
+    );
+
+    assert.deepEqual(sent, Array(35).fill(true));
+    assert.equal(h.receipts.length, 1);
+    assert.deepEqual(h.receipts[0], {
+      notification_ids: ids,
+      state: 'dismissed',
+    });
+  });
+
+  it('splits a full local cache into backend-sized receipt batches', async () => {
+    const h = harness();
+    const ids = Array.from({ length: 200 }, (_, index) => index + 1);
+
+    assert.equal(await h.poll.sendReceipt(ids, 'dismissed'), true);
+    assert.deepEqual(
+      h.receipts.map((receipt) => receipt.notification_ids.length),
+      [100, 100],
+    );
+    assert.deepEqual(h.receipts.map((receipt) => receipt.state), [
+      'dismissed', 'dismissed',
+    ]);
+  });
 });

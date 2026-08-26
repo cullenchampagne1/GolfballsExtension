@@ -68,18 +68,22 @@ function subscribeItems(onChange) {
   return () => window.removeEventListener('storage', listener);
 }
 
-function sendReceipt(item, state) {
-  const remoteId = Number(item?.remoteId);
-  if (!Number.isSafeInteger(remoteId) || remoteId < 1 || !hasChromeStorage) {
-    return;
-  }
+function sendReceipts(items, state) {
+  const remoteIds = [...new Set((Array.isArray(items) ? items : [items])
+    .map((item) => Number(item?.remoteId))
+    .filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!remoteIds.length || !hasChromeStorage) return;
   try {
     chrome.runtime.sendMessage({
       action: 'notificationReceipt',
-      notificationIds: [remoteId],
+      notificationIds: remoteIds,
       state,
     });
   } catch { /* worker may be waking; local cache still reflects the action */ }
+}
+
+function sendReceipt(item, state) {
+  sendReceipts([item], state);
 }
 
 function nextState(item, state) {
@@ -472,6 +476,19 @@ export function Notifications({ onClosed, bindClose }) {
     sendReceipt(item, state);
   }, []);
 
+  const archiveAll = useCallback(() => {
+    const targets = items.filter((item) => item.status !== 'dismissed');
+    if (!targets.length) return;
+    setItems((current) => {
+      const next = current.map((item) => (
+        item.status === 'dismissed' ? item : nextState(item, 'dismissed')
+      ));
+      saveFallback(next);
+      return next;
+    });
+    sendReceipts(targets, 'dismissed');
+  }, [items]);
+
   const runAction = useCallback((item, actionIndex = 0) => {
     if (!rowActions(item).length) {
       update(item, 'read');
@@ -660,6 +677,14 @@ export function Notifications({ onClosed, bindClose }) {
           {counts.active} active · {counts.dismissed} archived
         </span>
         <span style={{ flex: 1 }} />
+        <Btn
+          size="sm"
+          variant="secondary"
+          disabled={!counts.active}
+          onClick={archiveAll}
+        >
+          Archive all
+        </Btn>
         <Btn
           size="sm"
           variant="secondary"
