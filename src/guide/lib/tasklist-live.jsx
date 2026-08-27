@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useImperativeHandle, forwardRef } from 'react';
 import { Btn, Input, Dropdown, Tag, Checkbox, I } from '../../ui/index.js';
+import { STATUS_OPTS as TASK_STATUS_OPTS, filterTasks } from '../../lib/taskListModel.js';
 
 /* ───────────────────────────────────────────────────────────────
    tasklist-live.jsx — a faithful port of TaskList.jsx for the guide.
@@ -14,7 +15,7 @@ import { Btn, Input, Dropdown, Tag, Checkbox, I } from '../../ui/index.js';
 const DAY = 86400000;
 export const COLS = '30px 1.3fr 1fr 104px 64px 1.55fr 116px';
 const PRIORITY_TONE = { 1: 'error', 2: 'warning', 3: 'info' };
-export const STATUS_OPTS = [{ id: '1', label: 'New tasks' }, { id: '3', label: 'Completed' }, { id: '0', label: 'All statuses' }];
+export const STATUS_OPTS = TASK_STATUS_OPTS;
 export const PRIORITY_OPTS = [{ id: '', label: 'All priorities' }, { id: '1', label: 'High' }, { id: '2', label: 'Medium' }, { id: '3', label: 'Low' }];
 const SORT_COLS = {
   account: { key: 'account', label: 'Account' }, contact: { key: 'contact', label: 'Contact' },
@@ -37,6 +38,8 @@ export function sampleTasks() {
     make({ id: 'task_3406', account: 'Acme Industries', contact: 'Marcus Chen', dueDate: day(-7), category: 'Follow Up', priority: 2, subject: 'Sample shipment confirmation', status: 'Complete' }),
     make({ id: 'task_3407', account: 'Sunset Greens', contact: 'Avery Wu', dueDate: day(1), category: 'Email', priority: 3, subject: 'Send pricing matrix', status: 'New' }),
     make({ id: 'task_3408', account: 'Pinehurst Country', contact: 'Riley Stone', dueDate: day(4), category: 'Outbound Call', priority: 1, subject: 'Tournament merch decision deadline', status: 'New' }),
+    make({ id: 'task_3409', account: 'Cypress Country Club', contact: 'Talia Landry', dueDate: day(2), category: 'Lead Follow Up', priority: 1, subject: 'Dormant - Hot · re-engage this lead', status: 'New' }),
+    make({ id: 'task_3410', account: 'Delta Boosters', contact: 'Noah Guidry', dueDate: day(3), category: 'Replacement Contact', priority: 2, subject: 'Replacement contact needed - old@delta.example', status: 'New' }),
   ];
 }
 
@@ -114,7 +117,7 @@ export function Toolbar({ query, setQuery, statusFilter, setStatusFilter, priori
   return (
     <div style={{ padding: 12, borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-1)', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
       <Input value={query} onChange={setQuery} placeholder="Search account, contact, subject…" leading={<I.search size={12} />} style={{ flex: 1 }} />
-      <Dropdown value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTS} style={{ width: 150 }} />
+      <Dropdown value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTS} style={{ width: 170 }} />
       <Dropdown value={priorityFilter} onChange={setPriorityFilter} options={PRIORITY_OPTS} style={{ width: 150 }} />
       <Btn size="sm" variant="secondary" icon={<I.refresh size={12} />}>Refresh</Btn>
     </div>
@@ -174,9 +177,7 @@ export const TaskListLive = forwardRef(function TaskListLive(_props, ref) {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let rows = all.filter((t) => {
-      if (statusFilter === '1' && t.status === 'Complete') return false;
-      if (statusFilter === '3' && t.status !== 'Complete') return false;
+    let rows = filterTasks(all, { status: statusFilter }).filter((t) => {
       if (priorityFilter && String(t.priority) !== priorityFilter) return false;
       if (!q) return true;
       return [t.account, t.contact, t.subject].join(' ').toLowerCase().includes(q);

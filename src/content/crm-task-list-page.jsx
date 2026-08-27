@@ -21,7 +21,7 @@ import {
   parseTasksFromHtml, parseTasksFromDoc, distinctCategories, filterTasks, sortTasks, dueBucket, looksLikeLoginShell,
 } from '../lib/taskListModel.js';
 import { completeTaskById, getTaskContactId, updateTaskById } from '../lib/crmTasks.js';
-import { contactIdFromUrl, excludeReplacementTasks } from '../lib/replacementContacts.js';
+import { contactIdFromUrl } from '../lib/replacementContacts.js';
 import { EmailRunner } from '../modals/EmailRunner.jsx';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { CapabilitySlot } from '../ui/components/CapabilitySlot.jsx';
@@ -69,13 +69,17 @@ function FacetChecks({ label, options, selected, onToggle, count }) {
 }
 
 function TaskFacetSidebar({ tasks, statusFilter, setStatusFilter, prioritySel, categorySel, dueSel, toggle, clearAll, counts }) {
-  const catOpts = useMemo(() => distinctCategories(tasks).map((c) => ({ id: c, label: c })), [tasks]);
+  const catOpts = useMemo(
+    () => distinctCategories(filterTasks(tasks, { status: statusFilter }))
+      .map((c) => ({ id: c, label: c })),
+    [tasks, statusFilter],
+  );
   const anySel = prioritySel.size || categorySel.size || dueSel.size || statusFilter !== '1';
   return (
     <div className="gbcp-fill-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Status is single-select (mirrors the native New/Completed/All toggle). */}
+      {/* One task view at a time: native statuses plus named work queues. */}
       <Card>
-        <div style={{ padding: '10px 12px 4px', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Status</div>
+        <div style={{ padding: '10px 12px 4px', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>View</div>
         <div style={{ padding: '0 8px 8px' }}>
           {STATUS_OPTS.map((o) => {
             const on = statusFilter === o.id;
@@ -203,10 +207,9 @@ function TaskListApp({ store }) {
     // Fast path: the takeover IS on Page=349, so #TableTasks is already in the
     // host DOM (expanded by the engine). Parse it directly — instant, no multi-MB
     // re-fetch — so the shell + sidebar render immediately.
-    /* The automated bounce tasks belong to the Replacement Contacts queue
-       (Page 294), which is where they can actually be worked. They are
-       excluded from every load path here so this page stays rep work. */
-    const live = excludeReplacementTasks(parseTasksFromDoc(document));
+    // Retain every task. The shared status-view model keeps replacement queue
+    // rows out of ordinary views and restores them only for Replacements.
+    const live = parseTasksFromDoc(document);
     if (live.length) { setTasks(live); setLoadState('ready'); return; }
     // Fallback (host table not present/ready): re-fetch and parse.
     setLoadState('loading');
@@ -215,7 +218,7 @@ function TaskListApp({ store }) {
       const html = await res.text();
       if (g !== gen.current) return;
       if (looksLikeLoginShell(html)) { setLoadState('error'); return; }
-      const parsed = excludeReplacementTasks(parseTasksFromHtml(html));
+      const parsed = parseTasksFromHtml(html);
       setTasks(parsed);
       setLoadState(parsed.length ? 'ready' : 'ready');
     } catch (e) {

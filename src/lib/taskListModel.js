@@ -1,6 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
    taskListModel.js — pure data model for the CRM Task List, shared by
-   the Task List custom PAGE (Page 349 takeover) and testable in node.
+   the Task List custom PAGE (Page 349 takeover), floating modal, guide,
+   and Replacement Contacts queue.
 
    The native Task List (Page=349) has no JSON endpoint — it returns a
    full HTML page with <tr id="taskrow_<id>"> rows. parseTasksFromHtml
@@ -15,7 +16,55 @@ export const STATUS_OPTS = [
   { id: '1', label: 'New' },
   { id: '3', label: 'Completed' },
   { id: '0', label: 'All' },
+  { id: 'hot-leads', label: 'Hot Leads' },
+  { id: 'replacements', label: 'Replacements' },
 ];
+
+/* Named task views use the same normalized subject rules on the full-page
+   Task List, floating modal, and Replacement Contacts queue. Keeping these
+   classifiers in the task model lets ordinary status views hide queue work
+   without throwing those rows away during loading. */
+export const REPLACEMENT_SUBJECTS = Object.freeze([
+  { kind: 'investigate', prefix: 'investigate bounced contact', label: 'Bounce investigation' },
+  { kind: 'replacement', prefix: 'replacement contact needed', label: 'Replacement needed' },
+]);
+
+const normalizeTaskText = (value) => String(value ?? '')
+  .toLowerCase()
+  .replace(/[–—]/g, '-')
+  .replace(/[\s ]+/g, ' ')
+  .replace(/\s*-\s*/g, ' - ')
+  .replace(/^[\s\-:]+/, '')
+  .trim();
+
+/** Which replacement kind a task is, or '' for ordinary rep work. */
+export function replacementKind(task) {
+  const subject = normalizeTaskText(task?.subject);
+  if (!subject) return '';
+  const hit = REPLACEMENT_SUBJECTS.find((row) => subject.startsWith(row.prefix));
+  return hit ? hit.kind : '';
+}
+
+export function isReplacementTask(task) {
+  return replacementKind(task) !== '';
+}
+
+export function selectReplacementTasks(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).filter(isReplacementTask);
+}
+
+export function excludeReplacementTasks(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).filter((task) => !isReplacementTask(task));
+}
+
+const HOT_LEAD_MARKERS = Object.freeze(['dormant - hot', 'active - hot']);
+
+/** Hot-lead markers are normally in the subject, but include category because
+ *  Page=349 exposes both as task text and older CRM templates used either. */
+export function isHotLeadTask(task) {
+  const haystack = normalizeTaskText(`${task?.subject || ''} ${task?.category || ''}`);
+  return HOT_LEAD_MARKERS.some((marker) => haystack.includes(marker));
+}
 
 export const PRIORITY_OPTS = [
   { id: '1', label: 'High' },
@@ -104,8 +153,9 @@ const statusKey = (t) => (t.status === 'Complete' ? '3' : '1');
 
 /**
  * Filter tasks by the Refine selections + free-text query. Selections are
- * Sets (empty = no constraint) except `status` which is a single id
- * ('1' new | '3' completed | '0' all). Pure.
+ * Sets (empty = no constraint) except `status` which is a single id:
+ * '1' new | '3' completed | '0' all ordinary work | 'hot-leads' all
+ * marked hot leads | 'replacements' all replacement-queue tasks. Pure.
  */
 export function filterTasks(tasks, { query = '', status = '1', priority, category, due } = {}, today = new Date()) {
   const q = String(query).trim().toLowerCase();
@@ -113,7 +163,19 @@ export function filterTasks(tasks, { query = '', status = '1', priority, categor
   const cat = category instanceof Set ? category : new Set(category || []);
   const dueSel = due instanceof Set ? due : new Set(due || []);
   return (tasks || []).filter((t) => {
-    if (status && status !== '0' && statusKey(t) !== status) return false;
+    const replacement = isReplacementTask(t);
+    if (status === 'replacements') {
+      if (!replacement) return false;
+    } else {
+      // Replacement tasks remain absent from New / Completed / All and Hot
+      // Leads; only their explicit view restores the queue rows.
+      if (replacement) return false;
+      if (status === 'hot-leads') {
+        if (!isHotLeadTask(t)) return false;
+      } else if (status && status !== '0' && statusKey(t) !== status) {
+        return false;
+      }
+    }
     if (pri.size && !pri.has(priKey(t))) return false;
     if (cat.size && !cat.has((t.category || '').trim())) return false;
     if (dueSel.size && !dueSel.has(dueBucket(t.dueDate, today))) return false;

@@ -98,3 +98,12 @@ describe('bulk email presentation · managed capability', () => {
     assert.match(emailRunnerSource, /onClick=\{cancelRun\}>Cancel run<\/Btn>/);
   });
 });
+
+describe('Task List presentation · named views', () => {
+  it('retains replacement rows at load time on both task surfaces', () => {
+    for (const source of [taskListSource, taskPageSource]) {
+      assert.doesNotMatch(source, /excludeReplacementTasks\(parseTasksFrom/);
+      assert.match(source, /filterTasks\(tasks, \{ status: statusFilter \}/);
+    }
+  });
+});

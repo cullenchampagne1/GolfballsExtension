@@ -8,8 +8,8 @@
  * surfaces here and given their own page.
  *
  * This module owns three things, all pure so they are testable in node:
- *   1. what counts as a replacement task (one definition, used to both select
- *      them here and exclude them from the Task List modal + page),
+ *   1. what counts as a replacement task (one definition, used to select
+ *      them here and hide them from ordinary Task List views),
  *   2. what a bounced address IS — the domain classification that decides
  *      whether a replacement can be found at all,
  *   3. the record/filter/KPI shape the page renders.
@@ -18,45 +18,19 @@
  * carries what the task row and the contact record actually contain.
  */
 
-import { dueBucket } from './taskListModel.js';
+import {
+  REPLACEMENT_SUBJECTS, dueBucket, excludeReplacementTasks,
+  isReplacementTask, replacementKind, selectReplacementTasks,
+} from './taskListModel.js';
+
+export {
+  REPLACEMENT_SUBJECTS, excludeReplacementTasks, isReplacementTask,
+  replacementKind, selectReplacementTasks,
+};
 
 /* ── which tasks are ours ──────────────────────────────────────────
-   Matched on the normalized subject PREFIX: the CRM appends the address or a
-   run id to some of these ("Replacement contact needed - jdoe@acme.com"), and
-   a rep editing a subject usually adds to the end rather than the front. */
-export const REPLACEMENT_SUBJECTS = Object.freeze([
-  { kind: 'investigate', prefix: 'investigate bounced contact', label: 'Bounce investigation' },
-  { kind: 'replacement', prefix: 'replacement contact needed', label: 'Replacement needed' },
-]);
-
-const normalizeSubject = (value) => String(value ?? '')
-  .toLowerCase()
-  .replace(/[\s ]+/g, ' ')
-  .replace(/^[\s\-–—:]+/, '')
-  .trim();
-
-/** Which replacement kind a task is, or '' when it is ordinary rep work. */
-export function replacementKind(task) {
-  const subject = normalizeSubject(task?.subject);
-  if (!subject) return '';
-  const hit = REPLACEMENT_SUBJECTS.find((row) => subject.startsWith(row.prefix));
-  return hit ? hit.kind : '';
-}
-
-export function isReplacementTask(task) {
-  return replacementKind(task) !== '';
-}
-
-/** The automated bounce tasks — the input to this page. */
-export function selectReplacementTasks(tasks) {
-  return (Array.isArray(tasks) ? tasks : []).filter(isReplacementTask);
-}
-
-/** Everything else — what the Task List modal and page should show. */
-export function excludeReplacementTasks(tasks) {
-  return (Array.isArray(tasks) ? tasks : []).filter((task) => !isReplacementTask(task));
-}
-
+   The shared classifier lives in taskListModel so the Task List's dedicated
+   Replacements view and this queue always select the same rows. */
 /** Numeric CRM contact id out of a native contact link. */
 export function contactIdFromUrl(url) {
   const match = String(url || '').match(/[?&](?:customerID|customerId|contactID|contactId)=(\d+)/i);

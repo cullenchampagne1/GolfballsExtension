@@ -18,7 +18,7 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
 import { liveDateOnPush } from '../lib/crmTasks.js';
-import { excludeReplacementTasks } from '../lib/replacementContacts.js';
+import { STATUS_OPTS, filterTasks } from '../lib/taskListModel.js';
 import {
   TASK_LIST_ROW_HEIGHT,
   taskListVirtualWindow,
@@ -57,11 +57,6 @@ import {
 const TASKS_ENDPOINT = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=349';
 const BASE_PATH      = 'https://api.golfballs.com/golfballs/adminnew/';
 
-const STATUS_OPTS = [
-  { id: '1', label: 'New tasks' },
-  { id: '3', label: 'Completed' },
-  { id: '0', label: 'All statuses' },
-];
 const PRIORITY_OPTS = [
   { id: '',  label: 'All priorities' },
   { id: '1', label: 'High'   },
@@ -103,6 +98,8 @@ function buildMockTasks() {
     make({ id: 'task_3406', account: 'Acme Industries',     contact: 'Marcus Chen',     dueDate: day(-7), category: 'Follow Up',    priority: 2, subject: 'Sample shipment confirmation',    status: 'Complete' }),
     make({ id: 'task_3407', account: 'Sunset Greens',       contact: 'Avery Wu',        dueDate: day(1),  category: 'Email',         priority: 3, subject: 'Send pricing matrix',             status: 'New' }),
     make({ id: 'task_3408', account: 'Pinehurst Country',   contact: 'Riley Stone',     dueDate: day(4),  category: 'Outbound Call', priority: 1, subject: 'Tournament merch decision deadline', status: 'New' }),
+    make({ id: 'task_3409', account: 'Cypress Country Club', contact: 'Talia Landry',    dueDate: day(2),  category: 'Lead Follow Up', priority: 1, subject: 'Dormant - Hot · re-engage this lead', status: 'New' }),
+    make({ id: 'task_3410', account: 'Delta Boosters',      contact: 'Noah Guidry',      dueDate: day(3),  category: 'Replacement Contact', priority: 2, subject: 'Replacement contact needed - old@delta.example', status: 'New' }),
   ];
 }
 
@@ -181,12 +178,9 @@ const tasksSource = defineSource({
     if (looksLikeLoginShell(html)) {
       throw new Error('Session expired — the tasks page redirected to login.');
     }
-    /* The automated bounce tasks are not rep work — they are the Replacement
-       Contacts queue, which owns them on its own page (Page 294). Dropping
-       them here keeps them out of every count, filter and bulk action in this
-       modal; without it they crowd out real work with rows a rep can't act on
-       from here. */
-    return excludeReplacementTasks(parseTasksFromHtml(html));
+    // Keep the full Page=349 result. The shared task view model hides queue
+    // rows from ordinary status views and restores them for Replacements.
+    return parseTasksFromHtml(html);
   },
   mock: () => buildMockTasks(),
   errorToast: (err) => ({
@@ -393,7 +387,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   useEffect(() => {
     if (appliedInitialRef.current || !initial) return;
     appliedInitialRef.current = true;
-    const statusCode = { new: '1', completed: '3', all: '0' }[initial.status];
+    const statusCode = {
+      new: '1', completed: '3', all: '0', hot: 'hot-leads',
+      'hot-leads': 'hot-leads', replacements: 'replacements',
+    }[initial.status];
     const priorityCode = { high: '1', med: '2', low: '3', '': '' }[initial.priority];
     if (statusCode) setStatusFilter(statusCode);
     if (priorityCode !== undefined) setPriorityFilter(priorityCode);
@@ -519,9 +516,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       return false;
     };
 
-    let rows = tasks.filter((t) => {
-      if (statusFilter === '1' && t.status !== 'New')      return false;
-      if (statusFilter === '3' && t.status !== 'Complete') return false;
+    let rows = filterTasks(tasks, { status: statusFilter }).filter((t) => {
       if (priorityFilter && String(t.priority) !== priorityFilter) return false;
       if (dueFilter === 'urgent' && !isUrgent(t)) return false;
       if (q && scoreRow(t) === 0) return false;
@@ -951,7 +946,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           value={statusFilter}
           onChange={setStatusFilter}
           options={STATUS_OPTS}
-          style={{ width: 150 }}
+          style={{ width: 170 }}
         />
         <Dropdown
           value={priorityFilter}

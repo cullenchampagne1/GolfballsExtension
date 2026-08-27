@@ -11,7 +11,8 @@ const dom = new JSDOM('<!doctype html><body></body>');
 globalThis.DOMParser = dom.window.DOMParser;
 
 const {
-  parseTasksFromHtml, filterTasks, sortTasks, dueBucket, distinctCategories, looksLikeLoginShell,
+  STATUS_OPTS, parseTasksFromHtml, filterTasks, sortTasks, dueBucket,
+  distinctCategories, isHotLeadTask, looksLikeLoginShell,
 } = await import('../../src/lib/taskListModel.js');
 const {
   excludeReplacementTasks, selectReplacementTasks,
@@ -83,6 +84,45 @@ describe('filterTasks', () => {
   });
 });
 
+describe('task list named views', () => {
+  const tasks = parseTasksFromHtml(PAGE([
+    ROW('1', { subject: 'Quarterly check-in', status: 'New' }),
+    ROW('2', { subject: 'Dormant - Hot · call this week', status: 'New' }),
+    ROW('3', { subject: 'Follow-up: ACTIVE — HOT account', status: 'Complete task' }),
+    ROW('4', { subject: 'Investigate bounced contact', status: 'New' }),
+    ROW('5', { subject: 'Replacement contact needed - jane@acme.com', status: 'Complete task' }),
+  ]));
+
+  it('publishes Hot Leads and Replacements beside the native status views', () => {
+    assert.deepEqual(STATUS_OPTS.map((option) => option.label), [
+      'New', 'Completed', 'All', 'Hot Leads', 'Replacements',
+    ]);
+  });
+
+  it('matches both hot-lead markers case-insensitively across dash styles', () => {
+    assert.equal(isHotLeadTask(tasks[1]), true);
+    assert.equal(isHotLeadTask(tasks[2]), true);
+    assert.equal(isHotLeadTask(tasks[0]), false);
+  });
+
+  it('keeps replacement rows out of every ordinary status view', () => {
+    assert.deepEqual(filterTasks(tasks, { status: '1' }).map((task) => task.id), ['1', '2']);
+    assert.deepEqual(filterTasks(tasks, { status: '3' }).map((task) => task.id), ['3']);
+    assert.deepEqual(filterTasks(tasks, { status: '0' }).map((task) => task.id), ['1', '2', '3']);
+  });
+
+  it('shows all matching rows in Hot Leads and all hidden rows in Replacements', () => {
+    assert.deepEqual(filterTasks(tasks, { status: 'hot-leads' }).map((task) => task.id), ['2', '3']);
+    assert.deepEqual(filterTasks(tasks, { status: 'replacements' }).map((task) => task.id), ['4', '5']);
+  });
+
+  it('applies the existing query and facet constraints inside named views', () => {
+    assert.deepEqual(filterTasks(tasks, {
+      status: 'replacements', query: 'acme.com', priority: new Set(['2']),
+    }).map((task) => task.id), ['5']);
+  });
+});
+
 describe('sortTasks', () => {
   const tasks = parseTasksFromHtml(PAGE([
     ROW('a', { due: '7/10/2026', pri: '2Med' }),
@@ -98,10 +138,9 @@ describe('sortTasks', () => {
 });
 
 /* The CRM's automated bounce tasks are worked on the Replacement Contacts page
-   (Page 294), so every Task List surface parses them and then drops them. This
-   pins the two modules together against real native markup — the predicate's
-   own edge cases live in replacementContacts.test.mjs. */
-describe('replacement tasks are lifted out of the task list', () => {
+   (Page 294). Ordinary Task List views hide them, while the explicit
+   Replacements view exposes exactly that same queue definition. */
+describe('replacement tasks have a dedicated task-list view', () => {
   const html = PAGE([
     ROW('1', { subject: 'Quarterly check-in' }),
     ROW('2', { subject: 'Investigate bounced contact' }),
@@ -120,10 +159,11 @@ describe('replacement tasks are lifted out of the task list', () => {
     assert.equal(selectReplacementTasks(parsed).length + excludeReplacementTasks(parsed).length, parsed.length);
   });
 
-  it('still filters and counts normally once they are gone', () => {
-    const tasks = excludeReplacementTasks(parseTasksFromHtml(html));
+  it('ordinary views hide them and the dedicated view restores them', () => {
+    const tasks = parseTasksFromHtml(html);
     assert.equal(filterTasks(tasks, { status: '1' }).length, 2);
-    assert.equal(filterTasks(tasks, { query: 'bounced' }).length, 0);
+    assert.equal(filterTasks(tasks, { status: '1', query: 'bounced' }).length, 0);
+    assert.deepEqual(filterTasks(tasks, { status: 'replacements' }).map((task) => task.id), ['2', '3']);
   });
 });
 

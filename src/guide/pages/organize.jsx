@@ -268,10 +268,10 @@ export function TasksPage() {
       <TourBox n={1} eyebrow="Find" title="Search & filters" live={<ToolbarSnippet />} flip>
         <p>Search matches <strong>account, contact, and subject</strong> at once. Two dropdowns narrow the list:</p>
         <ul>
-          <li><strong>Status</strong> — New tasks (the default), Completed, or All statuses.</li>
+          <li><strong>View</strong> — New tasks (the default), Completed, All ordinary tasks, Hot Leads, or Replacements.</li>
           <li><strong>Priority</strong> — All, High, Medium, or Low.</li>
         </ul>
-        <p><strong>Refresh</strong> re-pulls your tasks from the CRM. The dropdowns in the snippet are live.</p>
+        <p><strong>Hot Leads</strong> finds tasks containing <code>Dormant - Hot</code> or <code>Active - Hot</code>. <strong>Replacements</strong> restores the bounced-contact tasks hidden from the ordinary views. Refresh re-pulls every task from the CRM. The dropdowns in the snippet are live.</p>
       </TourBox>
 
       <TourBox stack eyebrow="The table" title="Rows, columns & sorting" live={<TableSnippet />}>
