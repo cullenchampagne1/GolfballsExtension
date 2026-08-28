@@ -347,9 +347,12 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed }) {
 
 /* ── row ──────────────────────────────────────────────────────── */
 function ContactRow({ rec, index, selected, active, onToggle, onOpen, onStatus, status, busy }) {
-  const stop = (e) => e.stopPropagation();
   const meta = DOMAIN_META[rec.dtype] || DOMAIN_META.unknown;
   const overdue = rec.dueBucket === 'overdue';
+  const openFromRow = (e) => {
+    if (e.target?.closest?.('a, button, [role="button"]')) return;
+    onOpen(rec.id);
+  };
   const rowStyle = {
     ...trStyle,
     cursor: 'pointer',
@@ -363,22 +366,22 @@ function ContactRow({ rec, index, selected, active, onToggle, onOpen, onStatus, 
     transition: 'background-color var(--gb-anim), box-shadow var(--gb-anim), opacity var(--gb-anim)',
   };
   return (
-    <tr className="gb-actrow" style={rowStyle} aria-current={active ? 'true' : undefined} onClick={() => onOpen(rec.id)}>
+    <tr className="gb-actrow" style={rowStyle} aria-current={active ? 'true' : undefined} onClick={openFromRow}>
       <Td align="center" style={{ width: 38, padding: '8px 8px' }}>
-        <span onClick={stop} style={{ display: 'inline-flex' }}>
-          <TaskCheckbox done={selected} onClick={(e) => { e?.stopPropagation?.(); onToggle(index, !!e?.shiftKey); }}
+        <span style={{ display: 'inline-flex' }}>
+          <TaskCheckbox done={selected} onClick={(e) => onToggle(index, !!e?.shiftKey)}
             title={selected ? 'Deselect' : 'Select (shift-click for a range)'} />
         </span>
       </Td>
       <Td>
         <div style={{ fontWeight: 600, color: 'var(--gb-text-primary)' }}>
           {rec.contactUrl
-            ? <a href={rec.contactUrl} onClick={stop} style={LINK_STYLE}>{txt(rec.contact) || DASH}</a>
+            ? <a href={rec.contactUrl} style={LINK_STYLE}>{txt(rec.contact) || DASH}</a>
             : (txt(rec.contact) || DASH)}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {rec.accountUrl
-            ? <a href={rec.accountUrl} onClick={stop} style={{ ...LINK_STYLE, fontWeight: 500, color: 'var(--gb-text-muted)' }}>{txt(rec.account) || DASH}</a>
+            ? <a href={rec.accountUrl} style={{ ...LINK_STYLE, fontWeight: 500, color: 'var(--gb-text-muted)' }}>{txt(rec.account) || DASH}</a>
             : (txt(rec.account) || DASH)}
         </div>
       </Td>
@@ -393,7 +396,7 @@ function ContactRow({ rec, index, selected, active, onToggle, onOpen, onStatus, 
       <Td><StatusTag status={rec.status} /></Td>
       <Td align="center" style={{ width: 96, whiteSpace: 'nowrap' }}>
         {status ? <RowStatus st={status} /> : (
-          <span onClick={stop} style={{ display: 'inline-flex', gap: 4, justifyContent: 'center' }}>
+          <span style={{ display: 'inline-flex', gap: 4, justifyContent: 'center' }}>
             <IconBtn size="xs" ghost icon={<I.search />} title={active ? 'Currently open' : 'Review this bounce'} active={active} onClick={() => onOpen(rec.id)} />
             <IconBtn size="xs" ghost icon={<I.check />} title="Mark replaced (completes the task)" disabled={busy} onClick={() => onStatus([rec.id], 'complete')} />
             <IconBtn size="xs" ghost icon={<I.arch />} title="Archive (completes the task)" disabled={busy} onClick={() => onStatus([rec.id], 'archived')} />

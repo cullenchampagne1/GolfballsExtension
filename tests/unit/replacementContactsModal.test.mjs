@@ -74,7 +74,9 @@ describe('Replacement Contacts modal handoff', () => {
     assert.match(replacementSource, /aria-current=\{active \? 'true' : undefined\}/);
     assert.doesNotMatch(replacementSource, />Viewing<\/Tag>/);
     assert.match(replacementSource, /<IconBtn[^\n]*active=\{active\}[^\n]*onClick=\{\(\) => onOpen\(rec\.id\)\}/);
-    assert.match(replacementSource, /<tr[^>]*onClick=\{\(\) => onOpen\(rec\.id\)\}/);
+    assert.match(replacementSource, /const openFromRow = \(e\) => \{/);
+    assert.match(replacementSource, /e\.target\?\.closest\?\.\('a, button, \[role="button"\]'\)/);
+    assert.match(replacementSource, /<tr[^>]*onClick=\{openFromRow\}/);
   });
 
   it('reuses Task List data instead of fetching and parsing Page 349 again', () => {
