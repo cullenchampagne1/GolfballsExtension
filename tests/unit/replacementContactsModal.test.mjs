@@ -62,6 +62,16 @@ describe('Replacement Contacts modal handoff', () => {
     assert.match(replacementSource, /\{kindLabel\(rec\.kind\)\}<\/Tag>\s*<div[^>]*>\s*<Mono[^>]*>task #\{rec\.taskId\}<\/Mono>/);
   });
 
+  it('contains long bottom-row values and animates candidate-domain changes', () => {
+    assert.match(replacementSource, /import \{ AnimatePresence, motion \} from 'motion\/react'/);
+    assert.match(replacementSource, /<AnimatePresence initial=\{false\} mode="popLayout">/);
+    assert.match(replacementSource, /key="company-domain"/);
+    assert.match(replacementSource, /key="non-company-domain"/);
+    assert.match(replacementSource, /gridTemplateColumns: 'repeat\(3, minmax\(0, 1fr\)\)'/);
+    assert.match(replacementSource, /WebkitMaskImage: 'linear-gradient\(to right, #000 calc\(100% - 18px\), transparent\)'/);
+    assert.match(replacementSource, /maskImage: 'linear-gradient\(to right, #000 calc\(100% - 18px\), transparent\)'/);
+  });
+
   it('keeps one draggable review window in place while another row replaces its content', () => {
     assert.match(replacementSource, /function AnalyzeModal[\s\S]*?<FloatingPanel[\s\S]*?\n\s+draggable\n/);
     assert.match(replacementSource, /<AnalyzeModal\s+rec=\{reviewRecord\}/);

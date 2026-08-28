@@ -22,6 +22,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { selectReplacementTasks } from '../lib/taskListModel.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import {
@@ -202,57 +203,80 @@ function AutoLinkPanel({ rec, onUse }) {
     ? `https://www.google.com/search?q=${encodeURIComponent(`"${rec.domain}" ${rec.account} contact email`)}`
     : '';
 
+  useEffect(() => {
+    setName('');
+    setEmail('');
+  }, [rec.id]);
+
   return (
-    <div>
+    <motion.div layout>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
         <span style={label}>Replacement candidates</span>
         <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
         <Tag size="sm" tone="neutral">Not connected</Tag>
       </div>
 
-      {rec.searchable ? (
-        <div style={{
-          background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-md)', padding: 10, display: 'grid', gap: 8,
-        }}>
-          <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', lineHeight: 1.55 }}>
-            Automatic lookup against <Mono size={11} color="var(--gb-text-secondary)">{rec.domain}</Mono> isn’t wired up yet —
-            no candidates are being fetched. Run the search yourself and record who you found.
-          </div>
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-            <Btn size="sm" variant="secondary" icon={<I.ext />} disabled={!searchUrl}
-              onClick={() => { try { window.open(searchUrl, '_blank', 'noopener'); } catch {} }}>
-              Search {rec.domain || 'the domain'}
-            </Btn>
-            {rec.accountUrl && (
-              <Btn size="sm" variant="ghost" icon={<I.briefcase />}
-                onClick={() => { try { window.open(rec.accountUrl, '_blank', 'noopener'); } catch {} }}>
-                Open account
+      <AnimatePresence initial={false} mode="popLayout">
+        {rec.searchable ? (
+          <motion.div
+            key="company-domain"
+            layout
+            initial={{ opacity: 0, y: 6, filter: 'blur(2px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -4, filter: 'blur(2px)' }}
+            transition={{ duration: .18, ease: 'easeOut' }}
+            style={{
+              background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-md)', padding: 10, display: 'grid', gap: 8,
+            }}
+          >
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', lineHeight: 1.55 }}>
+              Automatic lookup against <Mono size={11} color="var(--gb-text-secondary)">{rec.domain}</Mono> isn’t wired up yet —
+              no candidates are being fetched. Run the search yourself and record who you found.
+            </div>
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              <Btn size="sm" variant="secondary" icon={<I.ext />} disabled={!searchUrl}
+                onClick={() => { try { window.open(searchUrl, '_blank', 'noopener'); } catch {} }}>
+                Search {rec.domain || 'the domain'}
               </Btn>
-            )}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 7, alignItems: 'center', width: '100%' }}>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Replacement name"
-              style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 0, minWidth: 0, boxSizing: 'border-box', width: '100%' }} />
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com"
-              style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, outline: 0, minWidth: 0, boxSizing: 'border-box', width: '100%' }} />
-            <Btn size="sm" variant="primary" icon={<I.check />} disabled={!canUse}
-              onClick={() => onUse({ name: name.trim(), email: email.trim(), source: 'Manual' })}>
-              Use
-            </Btn>
-          </div>
-        </div>
-      ) : (
-        <div style={{
-          background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-md)', padding: '14px 12px', fontSize: 11.5,
-          color: 'var(--gb-text-muted)', lineHeight: 1.55,
-        }}>
-          {DOMAIN_META[rec.dtype]?.hint || 'No company domain to search.'}
-          {' '}Check the account for another contact, or close this row as no replacement.
-        </div>
-      )}
-    </div>
+              {rec.accountUrl && (
+                <Btn size="sm" variant="ghost" icon={<I.briefcase />}
+                  onClick={() => { try { window.open(rec.accountUrl, '_blank', 'noopener'); } catch {} }}>
+                  Open account
+                </Btn>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 7, alignItems: 'center', width: '100%' }}>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Replacement name"
+                style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 0, minWidth: 0, boxSizing: 'border-box', width: '100%' }} />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com"
+                style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, outline: 0, minWidth: 0, boxSizing: 'border-box', width: '100%' }} />
+              <Btn size="sm" variant="primary" icon={<I.check />} disabled={!canUse}
+                onClick={() => onUse({ name: name.trim(), email: email.trim(), source: 'Manual' })}>
+                Use
+              </Btn>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="non-company-domain"
+            layout
+            initial={{ opacity: 0, y: 6, filter: 'blur(2px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -4, filter: 'blur(2px)' }}
+            transition={{ duration: .18, ease: 'easeOut' }}
+            style={{
+              background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-md)', padding: '14px 12px', fontSize: 11.5,
+              color: 'var(--gb-text-muted)', lineHeight: 1.55,
+            }}
+          >
+            {DOMAIN_META[rec.dtype]?.hint || 'No company domain to search.'}
+            {' '}Check the account for another contact, or close this row as no replacement.
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -315,14 +339,19 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed }) {
 
         <AutoLinkPanel rec={rec} onUse={(replacement) => { onUseReplacement(rec.id, replacement); close(); }} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <motion.div layout style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
           {facts.map(([l, v]) => (
-            <div key={l} style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '8px 10px' }}>
+            <div key={l} style={{ minWidth: 0, overflow: 'hidden', background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '8px 10px' }}>
               <div style={{ ...label, fontSize: 9 }}>{l}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={v}>{v}</div>
+              <div style={{
+                fontSize: 11.5, color: 'var(--gb-text-secondary)', marginTop: 3,
+                overflow: 'hidden', whiteSpace: 'nowrap',
+                WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 18px), transparent)',
+                maskImage: 'linear-gradient(to right, #000 calc(100% - 18px), transparent)',
+              }} title={v}>{v}</div>
             </div>
           ))}
-        </div>
+        </motion.div>
       </div>
       <ModalFooter style={{ padding: '12px 16px' }}>
         <Dropdown
