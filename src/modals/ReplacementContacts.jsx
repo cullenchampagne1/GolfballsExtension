@@ -342,7 +342,7 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed }) {
 }
 
 /* ── row ──────────────────────────────────────────────────────── */
-function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, busy }) {
+function ContactRow({ rec, index, selected, active, onToggle, onOpen, onStatus, status, busy }) {
   const stop = (e) => e.stopPropagation();
   const meta = DOMAIN_META[rec.dtype] || DOMAIN_META.unknown;
   const overdue = rec.dueBucket === 'overdue';
@@ -351,11 +351,15 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
     cursor: 'pointer',
     ...(overdue ? { boxShadow: 'inset 3px 0 0 var(--gb-error)' } : null),
     ...(selected ? { background: 'var(--gb-brand-tint-soft)', boxShadow: 'inset 3px 0 0 var(--gb-brand-label)' } : null),
+    ...(active ? {
+      background: 'var(--gb-brand-tint-medium)',
+      boxShadow: 'inset 3px 0 0 var(--gb-brand-label), inset 0 0 0 1px var(--gb-brand-tint-border)',
+    } : null),
     ...(isClosingStatus(rec.status) ? { opacity: .55 } : null),
     transition: 'background-color var(--gb-anim), box-shadow var(--gb-anim), opacity var(--gb-anim)',
   };
   return (
-    <tr className="gb-actrow" style={rowStyle} onClick={() => onOpen(rec.id)}>
+    <tr className="gb-actrow" style={rowStyle} aria-current={active ? 'true' : undefined} onClick={() => onOpen(rec.id)}>
       <Td align="center" style={{ width: 38, padding: '8px 8px' }}>
         <span onClick={stop} style={{ display: 'inline-flex' }}>
           <TaskCheckbox done={selected} onClick={(e) => { e?.stopPropagation?.(); onToggle(index, !!e?.shiftKey); }}
@@ -363,10 +367,13 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
         </span>
       </Td>
       <Td>
-        <div style={{ fontWeight: 600, color: 'var(--gb-text-primary)' }}>
-          {rec.contactUrl
-            ? <a href={rec.contactUrl} onClick={stop} style={LINK_STYLE}>{txt(rec.contact) || DASH}</a>
-            : (txt(rec.contact) || DASH)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--gb-text-primary)' }}>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {rec.contactUrl
+              ? <a href={rec.contactUrl} onClick={stop} style={LINK_STYLE}>{txt(rec.contact) || DASH}</a>
+              : (txt(rec.contact) || DASH)}
+          </span>
+          {active && <Tag tone="brand" size="sm">Viewing</Tag>}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {rec.accountUrl
@@ -386,7 +393,7 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
       <Td align="center" style={{ width: 96, whiteSpace: 'nowrap' }}>
         {status ? <RowStatus st={status} /> : (
           <span onClick={stop} style={{ display: 'inline-flex', gap: 4, justifyContent: 'center' }}>
-            <IconBtn size="xs" ghost icon={<I.search />} title="Review this bounce" onClick={() => onOpen(rec.id)} />
+            <IconBtn size="xs" ghost icon={<I.search />} title={active ? 'Currently open' : 'Review this bounce'} active={active} onClick={() => onOpen(rec.id)} />
             <IconBtn size="xs" ghost icon={<I.check />} title="Mark replaced (completes the task)" disabled={busy} onClick={() => onStatus([rec.id], 'complete')} />
             <IconBtn size="xs" ghost icon={<I.arch />} title="Archive (completes the task)" disabled={busy} onClick={() => onStatus([rec.id], 'archived')} />
           </span>
@@ -681,7 +688,7 @@ export function ReplacementContacts({
                   </tr></thead>
                   <tbody>
                     {visible.map((rec, i) => (
-                      <ContactRow key={rec.id} rec={rec} index={i} selected={selected.has(rec.id)}
+                      <ContactRow key={rec.id} rec={rec} index={i} selected={selected.has(rec.id)} active={reviewId === rec.id}
                         onToggle={toggleRow} onOpen={openRecord} onStatus={applyStatus}
                         status={rowStatus[rec.id]} busy={busy} />
                     ))}

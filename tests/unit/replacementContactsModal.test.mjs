@@ -60,6 +60,14 @@ describe('Replacement Contacts modal handoff', () => {
     assert.doesNotMatch(replacementSource, /<AnalyzeModal[\s\S]*?draggable=\{draggable\}/);
   });
 
+  it('identifies the row shown in the review window from either open control', () => {
+    assert.match(replacementSource, /active=\{reviewId === rec\.id\}/);
+    assert.match(replacementSource, /aria-current=\{active \? 'true' : undefined\}/);
+    assert.match(replacementSource, /active && <Tag tone="brand" size="sm">Viewing<\/Tag>/);
+    assert.match(replacementSource, /<IconBtn[^\n]*active=\{active\}[^\n]*onClick=\{\(\) => onOpen\(rec\.id\)\}/);
+    assert.match(replacementSource, /<tr[^>]*onClick=\{\(\) => onOpen\(rec\.id\)\}/);
+  });
+
   it('reuses Task List data instead of fetching and parsing Page 349 again', () => {
     assert.match(taskListSource, /<ReplacementContacts[\s\S]*?taskSnapshot=\{tasks\}/);
     assert.match(taskListSource, /<ReplacementContacts[\s\S]*?taskStatus=\{status\}/);
