@@ -78,8 +78,7 @@ export function useSurfaceUsage(name, { kind = 'modal', active = true } = {}) {
  * Report a whole extension document — the toolbar popup, the editor, the guide
  * — for as long as it is open.
  *
- * These have no unmount: the close rides on `pagehide`, exactly as the CRM
- * takeover pages do in src/vanilla/custom-pages.js. Calling it twice for one
+ * These have no unmount: the close rides on `pagehide`. Calling it twice for one
  * document is a no-op, so a re-entrant mount cannot double-count.
  */
 export function trackDocumentSurface(name, kind = 'page') {

@@ -12,23 +12,13 @@ export const EMPTY_REMOTE_POLICY = Object.freeze({
   adminBypass: false,
   hiddenFeatures: {},
   hiddenDeveloperSettings: {},
-  hiddenCustomPages: false,
-  hiddenCustomPageScopes: {},
   developerSectionHidden: false,
   managedFeatures: {},
   managedDeveloperSettings: {},
-  managedCustomPages: null,
-  managedCustomPageScopes: {},
 });
 
 function record(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-}
-
-function pageScopeValues(value) {
-  return Object.fromEntries(Object.entries(record(value)).flatMap(([key, pages]) => (
-    Array.isArray(pages) ? [[key, [...pages]]] : []
-  )));
 }
 
 /** Normalize the fully validated policy metadata read from extension storage. */
@@ -41,13 +31,8 @@ export function normalizeRemotePolicy(value) {
     ...value,
     hiddenFeatures: record(value.hiddenFeatures),
     hiddenDeveloperSettings: record(value.hiddenDeveloperSettings),
-    hiddenCustomPageScopes: record(value.hiddenCustomPageScopes),
     managedFeatures: record(value.managedFeatures),
     managedDeveloperSettings: record(value.managedDeveloperSettings),
-    managedCustomPages: typeof value.managedCustomPages === 'boolean'
-      ? value.managedCustomPages
-      : null,
-    managedCustomPageScopes: pageScopeValues(value.managedCustomPageScopes),
   };
 }
 
@@ -59,11 +44,6 @@ export function featureIsManaged(policy, key) {
 export function developerSettingIsManaged(policy, key) {
   return policy?.adminBypass !== true
     && Object.hasOwn(record(policy?.managedDeveloperSettings), key);
-}
-
-export function customPageScopeIsManaged(policy, scope) {
-  return policy?.adminBypass !== true
-    && Object.hasOwn(record(policy?.managedCustomPageScopes), scope);
 }
 
 /**
@@ -81,27 +61,13 @@ export function enforceManagedStorageValue(storageKey, value, rawPolicy) {
   if (storageKey === 'devSettings') {
     return { ...current, ...policy.managedDeveloperSettings };
   }
-  if (storageKey === 'customPages') {
-    const next = Object.fromEntries(Object.entries(current).map(([key, pages]) => [
-      key, Array.isArray(pages) ? [...pages] : pages,
-    ]));
-    for (const [scope, pages] of Object.entries(policy.managedCustomPageScopes)) {
-      next[scope] = [...pages];
-    }
-    // A managed global Off is authoritative over every scope, including an
-    // unregistered legacy scope carried by an old backup file.
-    if (policy.managedCustomPages === false) {
-      for (const scope of Object.keys(next)) next[scope] = [];
-    }
-    return next;
-  }
   return { ...current };
 }
 
 /** Apply the same guard to a batch write such as a settings-template import. */
 export function enforceManagedStorageWrites(writes, policy) {
   const next = { ...(writes || {}) };
-  for (const key of ['featureFlags', 'devSettings', 'customPages']) {
+  for (const key of ['featureFlags', 'devSettings']) {
     if (Object.hasOwn(next, key)) next[key] = enforceManagedStorageValue(key, next[key], policy);
   }
   return next;

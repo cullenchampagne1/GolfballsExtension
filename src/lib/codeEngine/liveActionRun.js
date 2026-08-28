@@ -150,7 +150,7 @@ export async function makeLiveExecutor(page, options = {}) {
     import('../submitQuickTask.js'),
     import('../submitCallLog.js'),
     import('../crmTasks.js'),
-    import('../crm-detail-shared.jsx'),
+    import('../crmContactApi.js'),
     import('../crmOpportunities.js'),
     import('../priorOrderEngine.js'),
     import('../catalogProposalEngine.js'),

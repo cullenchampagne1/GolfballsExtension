@@ -113,7 +113,6 @@
         <h2 className="sec">Also in Settings</h2>
         <ul>
           <li><strong>Shared Settings Templates</strong> — name a scoped snapshot, copy its revocable URL, and let a teammate preview and choose what to import. Template imports <em>merge by id</em>, preserving local-only templates.</li>
-          <li><strong>Custom Pages</strong> — enable the custom interface per registered page scope. Disabled scopes use the original site.</li>
           <li><strong>Theme Colors &amp; UI Scale</strong> — override the brand/accent colors and zoom each extension surface independently of the host site.</li>
         </ul>
       </div>

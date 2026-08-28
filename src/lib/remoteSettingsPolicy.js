@@ -7,7 +7,7 @@ import {
 
 /* ───────────────────────────────────────────────────────────────
    remoteSettingsPolicy — React view of the server-pushed settings
-   policy that hides or locks features / developer settings / custom pages.
+   policy that hides or locks features and developer settings.
 
    useRemoteSettingsPolicy() reads the last policy written to
    chrome.storage.local[gbRemoteSettingsPolicy] and re-renders on

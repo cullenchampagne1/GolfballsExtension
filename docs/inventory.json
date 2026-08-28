@@ -39,7 +39,7 @@
         "Template sidebar (tabs per template type)",
         "Rich-text editor with variable chips",
         "Rules/conditions editor",
-        "Settings panel (theme, scales, features, shortcuts, custom pages, dev settings, presets)"
+        "Settings panel (theme, scales, features, shortcuts, dev settings, presets)"
       ],
       "relatedFeatures": [
         "email-templates",
@@ -996,7 +996,6 @@
       "UI Scales",
       "Features",
       "Keyboard Shortcuts",
-      "Custom Pages (policy-managed globally and per scope)",
       "Developer Settings (hideable)",
       "Shared Settings Templates"
     ],
@@ -1046,18 +1045,6 @@
         "crmNewContact (Q)"
       ],
       "storage": "keyboardShortcuts"
-    },
-    "customPages": {
-      "what": "Per-scope switches that enable supported extension page takeovers",
-      "scopes": [
-        "crm"
-      ],
-      "implementedPages": [
-        "contact_details",
-        "account_details",
-        "opportunity_details"
-      ],
-      "storage": "customPages page-id arrays retained as the engine contract"
     },
     "developerSettings": [
       {
@@ -1447,11 +1434,6 @@
       "contains": "configurable shortcut letters"
     },
     {
-      "key": "customPages",
-      "area": "local",
-      "contains": "CRM page override list"
-    },
-    {
       "key": "emailSignature",
       "area": "local",
       "contains": "HTML signature appended to outbound email"
@@ -1635,8 +1617,7 @@
       "keys": [
         "featureFlags",
         "devSettings",
-        "keyboardShortcuts",
-        "customPages"
+        "keyboardShortcuts"
       ],
       "excludedDevSettings": [
         "email.localPart",
@@ -2253,7 +2234,7 @@
       "name": "Settings, Theme, Scales & Sharing",
       "surface": "editor Settings panel",
       "flag": null,
-      "summary": "Theme variants, scaling, toggles, shortcuts, policy-managed custom pages, and scoped server settings links."
+      "summary": "Theme variants, scaling, toggles, shortcuts, and scoped server settings links."
     },
     {
       "id": "code-variables",

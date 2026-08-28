@@ -464,7 +464,7 @@ export const CONTRACTS = Object.freeze({
 /**
  * Approved editable contact fields → the crmUpdateContact payload key.
  * This is the write allowlist for `page.contact.<field> = …`. Mirrors the
- * de-facto allowlist in crm-detail-shared.jsx crmUpdateContact (the only
+ * de-facto allowlist in crmContactApi.js crmUpdateContact (the only
  * persisted-edit path). Fields NOT here (and ALL account fields) have no write
  * path and are rejected. Keep in sync with that writer.
  */

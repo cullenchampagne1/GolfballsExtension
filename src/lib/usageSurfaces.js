@@ -1,10 +1,9 @@
 /**
  * usageSurfaces.js — the names the Toolkit Console's Adoption block reports.
  *
- * A surface is one thing a user OPENS: a floating modal or a CRM page the
- * extension takes over. The mount points (`mountFloating`, the custom-page
- * engine) only know an implementation id — `__gb-csm`, `contact_details` — so
- * the human name lives here, next to the code that owns those ids, rather than
+ * A surface is one thing a user OPENS. The floating-modal mount point only
+ * knows an implementation id such as `__gb-csm`, so the human name lives
+ * here, next to the code that owns those ids, rather than
  * in the backend where a renamed host id would silently start reporting a
  * surface nobody recognizes.
  *
@@ -37,10 +36,6 @@ export const MODAL_SURFACES = {
 
 /**
  * Resolve one modal host id to its display name, falling back to the id.
- *
- * Takeover PAGES are named in src/vanilla/custom-pages.js instead — that file
- * defines the page ids and their detectors, and it is a non-ESM content script
- * that cannot import this one. Each map lives with the code that owns its ids.
  */
 export function surfaceName(id) {
   const key = String(id || '').trim();

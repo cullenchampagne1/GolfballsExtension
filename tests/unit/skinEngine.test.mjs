@@ -2,7 +2,7 @@
  * Skin override engine: normalization (namespace/type clamping), the stale-var
  * diff that keeps re-applies clean, and that applySkin sets inheritable vars on
  * documentElement + injects the raw-css layer into the document and any
- * registered shadow root (so custom pages get it too).
+ * registered shadow root.
  */
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';

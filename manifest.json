@@ -3,7 +3,7 @@
   "name": "Golfballs.com Sales Toolkit",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApsGgTwjRq6hQeSoGlDpyMasggI2oqOt4ud6fFS4t2/msWZlic5axhibtC4Cos2lF7EO46ulwI3Zv3NXVdlIz3CJrP4p0OneHpU/BqBuZyiecFktTOyGPwjtYmRjpw/PoS+gNXLdQG56qXvEQVz24qudXuSZWia7TF5BiI2RszMx91IbqugrxNgKEiY7Xcf72gsasjhBPdXhmUndK5suIBc7hynVThvjvO+4JP5OLmtH0dBC2rfh9z6PrZbhYiP4fewQgRZIAdNvnqhQGTqaDHOZqA62qC+9o+/v77xqNEr9420wsBc+aIWF8t/z8k2a4nJ86lkXUwSbextrgO+FAuQIDAQAB",
   "update_url": "https://api.cullenchampagne.com/projects/golfballs-extension/updates.xml",
-  "version": "3.4.44",
+  "version": "3.4.45",
   "description": "Email, proposal, CRM-workflow, and order tools for the golfballs.com admin CRM.",
   "permissions": [
     "scripting",
@@ -76,29 +76,6 @@
         "https://api.golfballs.com/*"
       ],
       "js": [
-        "src/vanilla/custom-page-boot.js"
-      ],
-      "run_at": "document_start",
-      "all_frames": false
-    },
-    {
-      "matches": [
-        "https://www.golfballs.com/*",
-        "https://api.golfballs.com/*"
-      ],
-      "js": [
-        "src/vanilla/custom-page-host-bridge.js"
-      ],
-      "run_at": "document_start",
-      "world": "MAIN",
-      "all_frames": false
-    },
-    {
-      "matches": [
-        "https://www.golfballs.com/*",
-        "https://api.golfballs.com/*"
-      ],
-      "js": [
         "theme.js",
         "lib/action-language.js",
         "lib/action-runtime.js",
@@ -131,14 +108,6 @@
         "react-dist/content/actions-shelf.js",
         "react-dist/content/calendar.js",
         "react-dist/content/proposal-debug.js",
-        "react-dist/content/contact-details.js",
-        "react-dist/content/account-details.js",
-        "react-dist/content/opportunity-details.js",
-        "react-dist/content/crm-search-page.js",
-        "react-dist/content/crm-task-list-page.js",
-        "react-dist/content/crm-recent-history-page.js",
-        "react-dist/content/crm-action-review-page.js",
-        "src/vanilla/custom-pages.js",
         "src/vanilla/main.js"
       ],
       "all_frames": false

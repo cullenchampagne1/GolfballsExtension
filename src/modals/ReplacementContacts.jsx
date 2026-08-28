@@ -20,33 +20,87 @@
  * own working note and lives in chrome.storage.
  */
 
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   TASKS_ENDPOINT, looksLikeLoginShell, parseTasksFromHtml,
 } from '../lib/taskListModel.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import {
-  DOMAIN_META, RC_SETTABLE, RC_STATE_KEY, RC_STATUSES, REPLACEMENT_SUBJECTS,
+  DOMAIN_META, RC_SETTABLE, RC_STATE_KEY, RC_STATUSES,
   buildReplacementRecords, closeReplacementTasks, closingSummary, contactIdFromUrl,
   filterReplacementRecords, isClosingStatus, kindLabel, normalizeReplacementStates,
   pruneReplacementStates, replacementKpis, selectReplacementTasks, sortReplacementRecords,
 } from '../lib/replacementContacts.js';
-import { FloatingPanel, ModalHeader } from '../ui/index.js';
 import {
-  Btn, Card, DASH, I, IconBtn, SectionTitle, Spinner,
-  StatCardGrid, Tag, TaskCheckbox, Td, Th, tableStyle, trStyle, txt,
-} from '../lib/detail-shared.jsx';
-import {
-  MiniSelect, ModalCtx, ModalShell,
-  crmGetContact, gbToast, useModal, useModalHost,
-} from '../lib/crm-detail-shared.jsx';
+  Btn, Card, Dropdown, FloatingPanel, I, IconBtn, ModalFooter, ModalHeader, Tag,
+} from '../ui/index.js';
+import { crmGetContact, gbToast } from '../lib/crmContactApi.js';
 
-const BLACKLIST_URL = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=262';
 const LINK_STYLE = { color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none' };
 
 /* How many contact lookups are in flight at once. The CRM is a shared admin
    box; four keeps a 300-row queue resolving in seconds without hammering it. */
 const HYDRATE_CONCURRENCY = 4;
+
+const DASH = '—';
+const txt = (value) => (value === null || value === undefined || value === '' ? null : String(value));
+const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 11.5 };
+const trStyle = { borderBottom: '1px solid var(--gb-border-subtle)' };
+
+function SectionTitle({ icon, title, count, right, sub }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--gb-surface-2)', borderBottom: '1px solid var(--gb-border-default)' }}>
+      {icon && <span style={{ width: 16, height: 20, color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(icon, { size: 12 })}</span>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{title}</span>
+          {count != null && <span style={{ fontSize: 10.5, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{count}</span>}
+        </div>
+        {sub && <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{sub}</div>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function StatCardGrid({ cells }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 8 }}>
+      {cells.map((cell) => (
+        <Card key={cell.label} padding="10px 12px">
+          <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: .75, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{cell.label}</div>
+          <div style={{ fontSize: 18, fontWeight: 600, marginTop: 3, color: cell.tone === 'success' ? 'var(--gb-success-fg)' : cell.tone === 'error' ? 'var(--gb-error-fg)' : cell.tone === 'warning' ? 'var(--gb-warning-fg)' : 'var(--gb-text-primary)', fontFamily: cell.mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)', letterSpacing: -.5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell.value}</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>{cell.sub}</div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function QueueSpinner({ label }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '90px 0', color: 'var(--gb-text-muted)' }}>
+      <span style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid var(--gb-border-strong)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+      <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
+    </div>
+  );
+}
+
+function TaskCheckbox({ done, onClick, disabled, title }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled || !onClick} title={title} style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, padding: 0, border: `1.5px solid ${done ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'}`, background: done ? 'var(--gb-brand-tint-medium)' : 'transparent', color: 'var(--gb-brand-label)', cursor: onClick && !disabled ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {done && <I.check size={9} sw={3} />}
+    </button>
+  );
+}
+
+function Th({ children, align = 'left', style }) {
+  return <th style={{ padding: '6px 12px', textAlign: align, fontSize: 9, fontWeight: 600, letterSpacing: .65, textTransform: 'uppercase', color: 'var(--gb-text-muted)', borderBottom: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-2)', position: 'sticky', top: 0, zIndex: 3, whiteSpace: 'nowrap', ...style }}>{children}</th>;
+}
+
+function Td({ children, align = 'left', style }) {
+  return <td style={{ padding: '8px 12px', textAlign: align, verticalAlign: 'middle', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 400, ...style }}>{children}</td>;
+}
 
 /* ── local annotations ────────────────────────────────────────────
    Only the closing statuses exist in the CRM (as a completed task). Everything
@@ -178,8 +232,10 @@ function AutoLinkPanel({ rec, onUse }) {
 }
 
 /* ── analyze modal ────────────────────────────────────────────── */
-function AnalyzeModal({ rec, onStatus, onUseReplacement }) {
-  const { closeModal } = useModal();
+function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed, draggable }) {
+  const closeRef = useRef(null);
+  const close = useCallback(() => closeRef.current?.(), []);
+  const bindClose = useCallback((requestClose) => { closeRef.current = requestClose; }, []);
   const meta = DOMAIN_META[rec.dtype] || DOMAIN_META.unknown;
   const label = { fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' };
   const facts = [
@@ -188,28 +244,23 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement }) {
     ['Title', rec.title || DASH],
   ];
   return (
-    <ModalShell
-      title="Bounced contact" icon={<I.mail />} width={560}
-      subtitle={`${rec.contact || 'Unknown contact'} · ${rec.account || 'no account'}`}
-      footer={<>
-        <MiniSelect
-          value={rec.status}
-          options={RC_SETTABLE.map((key) => ({ value: key, label: RC_STATUSES[key].label }))}
-          onChange={(next) => { onStatus([rec.id], next); if (isClosingStatus(next)) closeModal(); }}
-        />
-        <div style={{ flex: 1 }} />
-        <Btn size="md" variant="ghost" onClick={closeModal}>Close</Btn>
-        {rec.contactUrl && (
-          <Btn size="md" variant="secondary" icon={<I.ext />}
-            onClick={() => { try { window.open(rec.contactUrl, '_blank', 'noopener'); } catch {} }}>
-            Open contact
-          </Btn>
-        )}
-      </>}
+    <FloatingPanel
+      width={620}
+      maxHeight={680}
+      backdrop
+      draggable={draggable}
+      onClose={onClosed}
+      bindClose={bindClose}
+      cardClassName="gb-replacement-contact-review-modal"
     >
-      <div style={{ display: 'grid', gap: 14 }}>
+      <ModalHeader
+        title="Bounced contact"
+        icon={<I.mail />}
+        subtitle={`${rec.contact || 'Unknown contact'} · ${rec.account || 'no account'}`}
+      />
+      <div className="gb-scroll" style={{ padding: 18, overflowY: 'auto', display: 'grid', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '10px 12px' }}>
+          <div style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '12px 14px' }}>
             <div style={label}>Bounced address</div>
             <div style={{ marginTop: 5 }}><BouncedEmail rec={rec} /></div>
             <div style={{ marginTop: 8, display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -217,7 +268,7 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement }) {
               <Mono size={9.5} color="var(--gb-text-ghost)">task #{rec.taskId}</Mono>
             </div>
           </div>
-          <div style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '10px 12px' }}>
+          <div style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '12px 14px' }}>
             <div style={label}>Domain</div>
             <div style={{ marginTop: 5 }}>
               <Mono size={12} color="var(--gb-text-primary)">{rec.domain || DASH}</Mono>
@@ -235,7 +286,7 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement }) {
           </div>
         )}
 
-        <AutoLinkPanel rec={rec} onUse={(replacement) => { onUseReplacement(rec.id, replacement); closeModal(); }} />
+        <AutoLinkPanel rec={rec} onUse={(replacement) => { onUseReplacement(rec.id, replacement); close(); }} />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
           {facts.map(([l, v]) => (
@@ -246,7 +297,24 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement }) {
           ))}
         </div>
       </div>
-    </ModalShell>
+      <ModalFooter style={{ padding: '12px 16px' }}>
+        <Dropdown
+          size="sm"
+          value={rec.status}
+          style={{ width: 162 }}
+          options={RC_SETTABLE.map((key) => ({ id: key, label: RC_STATUSES[key].label }))}
+          onChange={(next) => { onStatus([rec.id], next); if (isClosingStatus(next)) close(); }}
+        />
+        <div style={{ flex: 1 }} />
+        <Btn size="sm" variant="ghost" onClick={close}>Close</Btn>
+        {rec.contactUrl && (
+          <Btn size="sm" variant="secondary" icon={<I.ext />}
+            onClick={() => { try { window.open(rec.contactUrl, '_blank', 'noopener'); } catch {} }}>
+            Open contact
+          </Btn>
+        )}
+      </ModalFooter>
+    </FloatingPanel>
   );
 }
 
@@ -288,11 +356,8 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
         {rec.title ? <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)' }}>{rec.title}</div> : null}
       </Td>
       <Td><Tag tone={meta.tone} size="sm">{meta.label}</Tag></Td>
-      <Td>
+      <Td title={overdue ? `Overdue · due ${rec.due || DASH}` : `Due ${rec.due || DASH}`}>
         <Tag tone={rec.kind === 'replacement' ? 'warning' : 'neutral'} size="sm">{kindLabel(rec.kind)}</Tag>
-        <div style={{ fontSize: 9.5, marginTop: 3, fontFamily: 'var(--gb-font-mono)', color: overdue ? 'var(--gb-error-fg)' : 'var(--gb-text-ghost)' }}>
-          {overdue ? `overdue · ${rec.due || DASH}` : `due ${rec.due || DASH}`}
-        </div>
       </Td>
       <Td><StatusTag status={rec.status} /></Td>
       <Td align="center" style={{ width: 96, whiteSpace: 'nowrap' }}>
@@ -310,8 +375,6 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
 
 /* ── app ──────────────────────────────────────────────────────── */
 export function ReplacementContacts({ onClosed, draggable = false }) {
-  const modalHost = useModalHost();
-
   const [tasks, setTasks] = useState([]);
   const [loadState, setLoadState] = useState('loading');
   const [hydrated, setHydrated] = useState({});      // contactId → { email, jobTitle } | { error }
@@ -321,17 +384,12 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
   const [rowStatus, setRowStatus] = useState({});    // taskId → { phase, label, detail }
   const [busy, setBusy] = useState(false);
 
-  const [query, setQuery] = useState('');
-  const [dtype, setDtype] = useState('all');
-  const [status, setStatus] = useState('open');
-  const [kind, setKind] = useState('all');
   const [sort, setSort] = useState('queue');
   const [selected, setSelected] = useState(new Set());
-  const [focused, setFocused] = useState(false);
+  const [reviewId, setReviewId] = useState(null);
 
   const gen = useRef(0);
   const anchorRef = useRef(null);
-  const inputRef = useRef(null);
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
 
   /* ── load ──────────────────────────────────────────────────────
@@ -411,11 +469,12 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
     [tasks, hydrated, states, today],
   );
   const visible = useMemo(
-    () => sortReplacementRecords(filterReplacementRecords(records, { query, dtype, status, kind }), sort),
-    [records, query, dtype, status, kind, sort],
+    () => sortReplacementRecords(filterReplacementRecords(records, { status: 'open' }), sort),
+    [records, sort],
   );
   const k = useMemo(() => replacementKpis(records), [records]);
   const selectedRecs = useMemo(() => visible.filter((rec) => selected.has(rec.id)), [visible, selected]);
+  const reviewRecord = useMemo(() => records.find((rec) => rec.id === reviewId) || null, [records, reviewId]);
 
   /* ── selection ───────────────────────────────────────────────── */
   const toggleRow = (index, shiftKey) => setSelected((cur) => {
@@ -490,49 +549,18 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
     applyStatus([id], 'complete', { replacement });
   }, [applyStatus]);
 
-  /* The open modal has to stay live: its row is usually still resolving its
-     address when it opens. It can't just take `rec` as a prop — modalHost
-     stores the ELEMENT, and React bails out of re-rendering a subtree whose
-     element is referentially identical, so a prop captured at open time would
-     freeze. Hand it a tiny store it can subscribe to instead. */
-  const live = useRef({ records, listeners: new Set() }).current;
-  live.records = records;
-  useEffect(() => { live.listeners.forEach((notify) => { try { notify(); } catch {} }); }, [records, live]);
-
-  const openRecord = useCallback((id) => {
-    modalHost.openModal(
-      <AnalyzeRecord id={id} live={live} onStatus={applyStatus} onUseReplacement={useReplacement} />,
-    );
-  }, [modalHost, live, applyStatus, useReplacement]);
-
-  const exportCsv = () => {
-    const rows = selectedRecs.length ? selectedRecs : visible;
-    if (!rows.length) { gbToast('Nothing to export', 'info'); return; }
-    const esc = (s) => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
-    const head = ['Contact', 'Account', 'Bounced email', 'Domain type', 'Task', 'Due', 'Status', 'Replacement'];
-    const lines = [head.join(',')].concat(rows.map((r) => [
-      r.contact, r.account, r.email, DOMAIN_META[r.dtype]?.label, kindLabel(r.kind), r.due,
-      RC_STATUSES[r.status]?.label, r.replacement ? `${r.replacement.name} <${r.replacement.email}>` : '',
-    ].map(esc).join(',')));
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `replacement-contacts-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-  };
+  const openRecord = useCallback((id) => setReviewId(id), []);
 
   const selCount = selectedRecs.length;
-  const cycle = (cur, setter, value) => setter(cur === value ? 'all' : value);
 
   return (
-    <ModalCtx.Provider value={modalHost}>
-      <>
+    <>
       <FloatingPanel
         width={1160}
         height={720}
         backdrop
         draggable={draggable}
+        visible={!reviewId}
         onClose={onClosed}
         cardClassName="gb-replacement-contacts-modal"
         cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
@@ -541,17 +569,12 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
           icon={<I.mail />}
           title="Replacement Contacts"
           subtitle="Bounced-email queue · closing a row completes its CRM task"
-          right={<div style={{ display: 'flex', gap: 7 }}>
-            <Btn size="sm" variant="ghost" icon={<I.ban />}
-              onClick={() => { try { window.open(BLACKLIST_URL, '_blank', 'noopener'); } catch {} }}>Blacklist</Btn>
-            <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportCsv}>Export CSV</Btn>
-            <Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={load}>Refresh</Btn>
-          </div>}
+          right={<Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={load}>Refresh</Btn>}
         />
-        <div style={{ flex: 1, minHeight: 0, padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flex: 1, minHeight: 0, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* Header + stat rail */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '0 2px' }}>
               <Tag size="sm" tone="error" icon={<I.mail />}>{k.open} open</Tag>
               <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -566,53 +589,17 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
             </div>
 
             <StatCardGrid cells={[
-              { label: 'Open queue', value: k.open, sub: `${k.working} in progress`, tone: k.open ? 'error' : undefined, mono: true, active: status === 'open', onClick: () => setStatus('open') },
-              { label: 'Company domains', value: k.searchable, sub: 'replacement findable', tone: 'success', mono: true, active: dtype === 'business', onClick: () => cycle(dtype, setDtype, 'business') },
-              { label: 'Dead ends', value: k.deadEnd, sub: 'personal / marketplace', mono: true, active: dtype === 'personal', onClick: () => cycle(dtype, setDtype, 'personal') },
+              { label: 'Open queue', value: k.open, sub: `${k.working} in progress`, tone: k.open ? 'error' : undefined, mono: true },
+              { label: 'Company domains', value: k.searchable, sub: 'replacement findable', tone: 'success', mono: true },
+              { label: 'Dead ends', value: k.deadEnd, sub: 'personal / marketplace', mono: true },
               { label: 'Overdue', value: k.overdue, sub: 'past task due date', tone: k.overdue ? 'warning' : undefined, mono: true },
-              { label: 'Replaced', value: k.replaced, sub: 'tasks completed', tone: 'success', mono: true, active: status === 'complete', onClick: () => setStatus(status === 'complete' ? 'open' : 'complete') },
-              { label: 'Archived', value: k.archived + k.norep, sub: 'closed without a swap', mono: true, active: status === 'archived', onClick: () => setStatus(status === 'archived' ? 'open' : 'archived') },
+              { label: 'Replaced', value: k.replaced, sub: 'tasks completed', tone: 'success', mono: true },
+              { label: 'Archived', value: k.archived + k.norep, sub: 'closed without a swap', mono: true },
             ]} />
 
-            {/* Filters + the selection rail (same treatment as the Task List page) */}
-            <Card style={{ border: '1px solid color-mix(in srgb, var(--gb-border-strong) 72%, transparent)', background: 'var(--gb-surface-1)' }}>
-              <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                <div style={{
-                  flex: 1, minWidth: 230, display: 'flex', alignItems: 'center', gap: 9, height: 34, padding: '0 11px',
-                  background: 'var(--gb-fill-inverse-medium)',
-                  border: '1px solid ' + (focused ? 'var(--gb-border-focus)' : 'var(--gb-border-default)'),
-                  borderRadius: 12,
-                  boxShadow: focused ? '0 0 0 3px color-mix(in srgb, var(--gb-brand-label) 18%, transparent)' : 'none',
-                  transition: 'box-shadow var(--gb-anim), border-color var(--gb-anim)',
-                }}>
-                  <I.search size={14} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
-                  <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)}
-                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                    placeholder="Email, contact, account, domain…"
-                    style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5 }} />
-                  {query && <IconBtn size="xs" ghost icon={<I.close />} title="Clear"
-                    onClick={() => { setQuery(''); try { inputRef.current.focus(); } catch {} }} />}
-                </div>
-                <MiniSelect value={dtype} onChange={setDtype}
-                  options={[{ value: 'all', label: 'Any domain type' }, ...Object.entries(DOMAIN_META).map(([v, m]) => ({ value: v, label: m.label }))]} />
-                <MiniSelect value={kind} onChange={setKind}
-                  options={[{ value: 'all', label: 'Both task types' }, ...REPLACEMENT_SUBJECTS.map((r) => ({ value: r.kind, label: r.label }))]} />
-                <MiniSelect value={status} onChange={setStatus}
-                  options={[{ value: 'open', label: 'Open queue' }, ...RC_SETTABLE.map((v) => ({ value: v, label: RC_STATUSES[v].label })), { value: 'all', label: 'Everything' }]} />
-              </div>
-
-              <div style={{
-                display: 'grid',
-                gridTemplateRows: selCount > 0 ? '1fr' : '0fr',
-                opacity: selCount > 0 ? 1 : 0,
-                transition: 'grid-template-rows .24s cubic-bezier(.4,0,.2,1), opacity .16s ease',
-              }}>
-                <div style={{ minHeight: 0, overflow: 'hidden' }}>
-                  <div style={{
-                    minHeight: 42, padding: '7px 14px', borderTop: '1px solid var(--gb-border-subtle)',
-                    background: 'color-mix(in srgb, var(--gb-brand-tint-soft) 72%, transparent)',
-                    display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                  }}>
+            {selCount > 0 && (
+              <Card padding={0} style={{ border: '1px solid var(--gb-brand-tint-border)', background: 'var(--gb-brand-tint-soft)' }}>
+                <div style={{ minHeight: 44, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
                       <strong style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</strong>
                       {' '}of {visible.length} row{visible.length === 1 ? '' : 's'}
@@ -634,14 +621,13 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
                     <Btn size="sm" variant="ghost" icon={<I.arch />} disabled={busy}
                       title={closingSummary('archived', selCount)}
                       onClick={() => applyStatus(selectedRecs.map((r) => r.id), 'archived')}>Archive</Btn>
-                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
           </div>
 
           {/* Queue */}
-          <Card style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Card padding={0} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <SectionTitle
               icon={<I.mail />} title="Bounced contacts"
               count={loadState === 'ready' ? `${visible.length}${visible.length !== records.length ? ' of ' + records.length : ''}` : ''}
@@ -649,7 +635,7 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
               right={<SortPicker sort={sort} setSort={setSort} />}
             />
             {loadState === 'loading' ? (
-              <Spinner label="Loading the bounce queue…" />
+              <QueueSpinner label="Loading the bounce queue…" />
             ) : loadState === 'error' ? (
               <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>
                 The CRM task list is unavailable — the queue is built from it.{' '}
@@ -664,7 +650,7 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
               </div>
             ) : !visible.length ? (
               <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>
-                No bounced contacts match these filters.
+                The open replacement queue is clear.
               </div>
             ) : (
               <div className="gb-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -693,47 +679,29 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
           </Card>
         </div>
       </FloatingPanel>
-      {modalHost.modal && (
-        <div onMouseDown={(e) => { if (e.target === e.currentTarget) modalHost.closeModal(); }}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000010,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,.55)', padding: 20,
-            animation: modalHost.closing ? 'gb-backdrop-out .19s ease both' : 'gb-fade-slide var(--gb-anim) both',
-          }}>
-          {modalHost.modal}
-        </div>
+      {reviewRecord && (
+        <AnalyzeModal
+          rec={reviewRecord}
+          draggable={draggable}
+          onStatus={applyStatus}
+          onUseReplacement={useReplacement}
+          onClosed={() => setReviewId(null)}
+        />
       )}
-      </>
-    </ModalCtx.Provider>
+    </>
   );
-}
-
-/* Keeps the open modal live as its row hydrates or its status changes. */
-function AnalyzeRecord({ id, live, onStatus, onUseReplacement }) {
-  const { closeModal } = useModal();
-  const [, bump] = useReducer((n) => n + 1, 0);
-  useEffect(() => {
-    live.listeners.add(bump);
-    return () => { live.listeners.delete(bump); };
-  }, [live]);
-  const rec = (live.records || []).find((r) => r.id === id);
-  // The row left the queue underneath us (task completed elsewhere, reload).
-  useEffect(() => { if (!rec) closeModal(); }, [rec, closeModal]);
-  if (!rec) return null;
-  return <AnalyzeModal rec={rec} onStatus={onStatus} onUseReplacement={onUseReplacement} />;
 }
 
 function SortPicker({ sort, setSort }) {
   return (
-    <MiniSelect value={sort} onChange={setSort} options={[
-      { value: 'queue', label: 'Queue order' },
-      { value: 'due', label: 'Due date' },
-      { value: 'contact', label: 'Contact' },
-      { value: 'account', label: 'Account' },
-      { value: 'email', label: 'Email' },
-      { value: 'domain', label: 'Domain type' },
-      { value: 'status', label: 'Status' },
+    <Dropdown size="sm" value={sort} onChange={setSort} style={{ width: 152 }} options={[
+      { id: 'queue', label: 'Queue order' },
+      { id: 'due', label: 'Due date' },
+      { id: 'contact', label: 'Contact' },
+      { id: 'account', label: 'Account' },
+      { id: 'email', label: 'Email' },
+      { id: 'domain', label: 'Domain type' },
+      { id: 'status', label: 'Status' },
     ]} />
   );
 }

@@ -61,8 +61,8 @@ if (!window.__gbCrmSearchModalLoaded) {
     });
   } catch { /* not in extension context */ }
   /* Returns true if the keystroke is happening inside an editable field.
-     Uses composedPath so it also sees inputs INSIDE a shadow root (our
-     custom-page takeover) — document.activeElement only reports the shadow
+     Uses composedPath so it also sees inputs inside a shadow root —
+     document.activeElement only reports the shadow
      host there, so the plain tagName check would miss them. */
   function inEditable(e) {
     const path = (e.composedPath && e.composedPath()) || [];
@@ -84,7 +84,6 @@ if (!window.__gbCrmSearchModalLoaded) {
     e.stopPropagation();
     window.__gbShowCrmSearchModal();
   }, { capture: true });
-  /* NOTE: "/" no longer opens this modal. On custom pages it focuses the
-     in-page inline search (index-backed dropdown); the full modal is only
-     opened explicitly (Ctrl+<key> or the header's full-search button). */
+  /* NOTE: "/" no longer opens this modal. The full modal opens only through
+     its configured Ctrl/Cmd shortcut or an explicit UI action. */
 }

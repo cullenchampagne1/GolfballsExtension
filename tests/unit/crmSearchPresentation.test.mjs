@@ -3,16 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const [
-  searchSource, pageSource, emailRunnerSource, iconSource, queryBuilderSource,
-  taskListSource, taskPageSource, capabilitySlotSource,
+  searchSource, emailRunnerSource, iconSource, queryBuilderSource,
+  taskListSource, capabilitySlotSource,
 ] = await Promise.all([
   readFile(new URL('../../src/modals/CRMSearch.jsx', import.meta.url), 'utf8'),
-  readFile(new URL('../../src/content/crm-search-page.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/EmailRunner.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/ui/icons.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/QueryBuilder.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/TaskList.jsx', import.meta.url), 'utf8'),
-  readFile(new URL('../../src/content/crm-task-list-page.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/ui/components/CapabilitySlot.jsx', import.meta.url), 'utf8'),
 ]);
 
@@ -31,8 +29,8 @@ describe('CRM Search presentation · shared icon contract', () => {
 });
 
 describe('CRM Search presentation · Page Engine cache control', () => {
-  it('gates the cache tag behind enabled indexing plus a configured territory on both surfaces', () => {
-    for (const source of [searchSource, pageSource]) {
+  it('gates the cache tag behind enabled indexing plus a configured territory', () => {
+    for (const source of [searchSource]) {
       assert.match(source, /pageEngine\.indexingEnabled/);
       assert.match(source, /pageEngine\.territory/);
       assert.match(source, /cacheOptionVisible/);
@@ -59,7 +57,7 @@ describe('CRM Search presentation · Page Engine cache control', () => {
     assert.match(queryBuilderSource, /<CacheQueryNotice/);
     assert.doesNotMatch(queryBuilderSource, /conditionIndex === 0 \? \{ \.\.\.condition, val: 'Account' \}/);
 
-    for (const source of [searchSource, pageSource]) {
+    for (const source of [searchSource]) {
       assert.match(source, /hasCacheQuery/);
       assert.match(source, /<CacheQueryNotice/);
       assert.match(source, /qb\?\.solrFqs \|\| qb\?\.solrFq/);
@@ -70,8 +68,8 @@ describe('CRM Search presentation · Page Engine cache control', () => {
 });
 
 describe('bulk email presentation · managed capability', () => {
-  it('slides Email selected out of both modal and Custom Page action rails', () => {
-    for (const source of [searchSource, pageSource, taskListSource, taskPageSource]) {
+  it('slides Email selected out of modal action rails', () => {
+    for (const source of [searchSource, taskListSource]) {
       assert.match(source, /emailTemplates\.allowBulkSending/);
       assert.match(source, /<CapabilitySlot[^>]+visible=\{allow(?:BulkSending|Email)\}/);
       assert.match(source, /open=\{allowBulkSending && emailRunnerOpen\}/);
@@ -100,8 +98,8 @@ describe('bulk email presentation · managed capability', () => {
 });
 
 describe('Task List presentation · named views', () => {
-  it('retains replacement rows at load time on both task surfaces', () => {
-    for (const source of [taskListSource, taskPageSource]) {
+  it('retains replacement rows at modal load time', () => {
+    for (const source of [taskListSource]) {
       assert.doesNotMatch(source, /excludeReplacementTasks\(parseTasksFrom/);
       assert.match(source, /filterTasks\(tasks, \{ status: statusFilter \}/);
     }

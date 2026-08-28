@@ -212,9 +212,6 @@
           "article": "shortcuts-settings"
         },
         {
-          "article": "custom-crm-pages"
-        },
-        {
           "article": "email-integrations"
         },
         {
@@ -269,9 +266,6 @@
             },
             {
               "tutorial": "share-config"
-            },
-            {
-              "tutorial": "use-custom-crm-workspace"
             },
             {
               "tutorial": "scan-recent-orders"

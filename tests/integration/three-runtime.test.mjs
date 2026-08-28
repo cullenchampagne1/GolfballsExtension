@@ -36,7 +36,6 @@ describe('shared Three.js production runtime', () => {
     for (const consumer of [
       'react-dist/content/image-preview.js',
       'react-dist/content/gift-catalog.js',
-      'react-dist/content/opportunity-details.js',
     ]) {
       assert.ok(
         scripts.indexOf(runtimeBundle) < scripts.indexOf(consumer),

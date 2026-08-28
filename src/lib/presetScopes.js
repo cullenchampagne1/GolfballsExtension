@@ -42,8 +42,8 @@ export const PRESET_SCOPES = [
   {
     id: 'settings-preferences', category: 'Configuration',
     label: 'Preferences',
-    desc: 'Feature flags + popup/shelf placement · developer settings · keyboard shortcuts · custom pages',
-    keys: ['featureFlags', 'featureConfig', 'devSettings', 'keyboardShortcuts', 'customPages'],
+    desc: 'Feature flags + popup/shelf placement · developer settings · keyboard shortcuts',
+    keys: ['featureFlags', 'featureConfig', 'devSettings', 'keyboardShortcuts'],
     merge: 'overwrite',
   },
   {

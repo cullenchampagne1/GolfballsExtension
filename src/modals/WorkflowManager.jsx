@@ -28,7 +28,7 @@ import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { resolveEmployeeId } from '../lib/employeeIdentity.js';
 import { completeTaskById, updateTaskById } from '../lib/crmTasks.js';
-import { crmUpdateContact } from '../lib/crm-detail-shared.jsx';
+import { crmUpdateContact } from '../lib/crmContactApi.js';
 import {
   createOpportunity,
   ensureOpenOpportunity,

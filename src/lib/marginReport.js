@@ -1,6 +1,6 @@
 /* Per-line + blended margin model for resolved proposal entries.
    Extracted verbatim from GiftCatalog.jsx so the breakdown can be reused
-   outside the modal (e.g. on the opportunity-details page).
+   outside the modal in other proposal surfaces.
 
    Real cost when we have it, else a flat-40% placeholder:
      • custom items carry their own per-unit `cost`,

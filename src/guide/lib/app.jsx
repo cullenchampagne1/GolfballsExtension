@@ -116,7 +116,7 @@ export const NAV = [
     { id: 'proof', title: 'Submit Proof', icon: 'send', slugs: ['submit-proof'] },
   ]},
   { group: 'Configuration', items: [
-    { id: 'settings', title: 'Settings & Manager', icon: 'cog', slugs: ['feature-toggles', 'email-integrations', 'presets', 'custom-crm-pages', 'developer-settings'] },
+    { id: 'settings', title: 'Settings & Manager', icon: 'cog', slugs: ['feature-toggles', 'email-integrations', 'presets', 'developer-settings'] },
     { id: 'themes', title: 'Themes & UI Scale', icon: 'sun', slugs: ['theme-appearance'] },
     { id: 'shortcuts', title: 'Keyboard Shortcuts', icon: 'code', slugs: ['keyboard-shortcuts', 'shortcuts-settings'] },
   ]},
@@ -131,7 +131,6 @@ export const NAV = [
     { id: 'crm-search', title: 'CRM Search', icon: 'search', slugs: ['crm-search', 'phone-finder'] },
     { id: 'crm-query', title: 'Query Builder', icon: 'filter', slugs: ['query-builder'] },
     { id: 'crm-new', title: 'New Contact', icon: 'user', slugs: ['new-contact'] },
-    { id: 'crm-workspaces', title: 'CRM Workspaces', icon: 'grid', slugs: ['custom-crm-pages', 'recent-orders-scan'] },
   ]},
   { group: 'On-page Helpers', items: [
     { id: 'viewer-email', title: 'Email / Chat Viewer', icon: 'mail', slugs: ['email-thread-preview', 'text-note-preview'] },

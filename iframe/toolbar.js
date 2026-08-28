@@ -291,8 +291,8 @@ function __gbRenderLegacyQuickNotes() {
 
   // A credential may appear long after the toolbar mounts. The MAIN-world
   // broker emits this detail-free signal whenever it captures a new identity,
-  // eliminating the old 7.5-second cutoff that could leave Custom Pages on a
-  // profile-name fallback for the rest of the tab's lifetime.
+  // eliminating the old 7.5-second cutoff that could leave extension surfaces
+  // on a profile-name fallback for the rest of the tab's lifetime.
   document.addEventListener('GB_AUTH_IDENTITY_AVAILABLE', () => {
     __gbBroadcastAuthenticatedIdentity(true);
   });

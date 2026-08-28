@@ -1,6 +1,6 @@
 /**
  * Task date rule (crmTasks.js): a task's Live Date sits 2 weeks before its Due
- * Date. These helpers back both the custom-page "push out a year" button and
+ * Date. These helpers back both the task-list "push out a year" button and
  * the Task List Push / Set-Date quick actions, so the two surfaces reschedule
  * identically. Dates are the CRM's zero-padded m/d/yyyy.
  */

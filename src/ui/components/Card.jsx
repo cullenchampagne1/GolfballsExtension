@@ -16,7 +16,7 @@ export function Card({ children, padding = 12, hover, active, onClick, style, cl
       whileHover={hover ? { backgroundColor: 'var(--gb-surface-2)' } : undefined}
       transition={T.fast}
       style={{
-        // Skin seam (see detail-shared Card): --gb-card-* reskin every block;
+        // Skin seam: --gb-card-* reskin every block;
         // the active state still wins its brand-tinted border.
         background: active ? 'var(--gb-surface-2)' : 'var(--gb-card-bg, var(--gb-surface-1))',
         backdropFilter: active ? 'none' : 'var(--gb-card-blur, none)',

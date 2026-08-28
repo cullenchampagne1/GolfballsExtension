@@ -3,7 +3,7 @@
  *
  * The CRM does not expose a separate deleted flag. Instead, it marks the
  * proposal name cell (`<cartId>row`) with an inline line-through. Preserve that
- * marker so custom pages can present deleted proposals the same way.
+ * marker so proposal surfaces can present deleted proposals the same way.
  */
 
 function hasLineThrough(node) {

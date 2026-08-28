@@ -2,12 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [taskListSource, replacementSource, panelSource, manifestSource, pagesSource] = await Promise.all([
+const [taskListSource, replacementSource, panelSource, manifestSource] = await Promise.all([
   readFile(new URL('../../src/modals/TaskList.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/ReplacementContacts.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/ui/components/FloatingPanel.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../manifest.json', import.meta.url), 'utf8'),
-  readFile(new URL('../../src/vanilla/custom-pages.js', import.meta.url), 'utf8'),
 ]);
 
 describe('Replacement Contacts modal handoff', () => {
@@ -34,9 +33,19 @@ describe('Replacement Contacts modal handoff', () => {
     assert.match(replacementSource, /complete: completeTaskById/);
   });
 
-  it('no longer ships or registers the Page 294 custom-page takeover', () => {
-    assert.doesNotMatch(manifestSource, /crm-replacement-contacts-page/);
-    assert.doesNotMatch(pagesSource, /replacement_contacts/);
-    assert.doesNotMatch(pagesSource, /Page=294/);
+  it('ships no custom-page engine or takeover bundles', () => {
+    assert.doesNotMatch(manifestSource, /custom-page/);
+    assert.doesNotMatch(manifestSource, /(?:contact|account|opportunity)-details\.js/);
+    assert.doesNotMatch(manifestSource, /crm-(?:search|task-list|recent-history|action-review)-page\.js/);
+  });
+
+  it('uses the standard animated modal scale and leaves the queue unclipped by filters', () => {
+    assert.match(replacementSource, /function AnalyzeModal[\s\S]*?<FloatingPanel/);
+    assert.match(replacementSource, /bindClose=\{bindClose\}/);
+    assert.match(replacementSource, /className="gb-scroll"/);
+    assert.match(replacementSource, /style=\{\{ width: 152 \}\}/);
+    assert.doesNotMatch(replacementSource, /placeholder="Search/);
+    assert.doesNotMatch(replacementSource, />Blacklist</);
+    assert.doesNotMatch(replacementSource, />Export</);
   });
 });

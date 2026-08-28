@@ -4,7 +4,7 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.44",
+  "version": "3.4.45",
   "generatedAt": "2026-08-28",
   "tree": [
     {
@@ -219,9 +219,6 @@ export const HELP_CONTENT = {
           "article": "shortcuts-settings"
         },
         {
-          "article": "custom-crm-pages"
-        },
-        {
           "article": "email-integrations"
         },
         {
@@ -276,9 +273,6 @@ export const HELP_CONTENT = {
             },
             {
               "tutorial": "share-config"
-            },
-            {
-              "tutorial": "use-custom-crm-workspace"
             },
             {
               "tutorial": "scan-recent-orders"
@@ -4903,88 +4897,6 @@ export const HELP_CONTENT = {
       "sectionLabel": "Settings Reference"
     },
     {
-      "slug": "custom-crm-pages",
-      "title": "Custom CRM Pages",
-      "icon": "flag",
-      "tiers": [
-        "advanced"
-      ],
-      "keywords": [
-        "custom page",
-        "override",
-        "contact details",
-        "account details",
-        "opportunity details",
-        "replace page",
-        "workspace"
-      ],
-      "summary": "Replace CRM pages — Contact, Account and Opportunity Details, Search, and Task List — with focused extension workspaces backed by live CRM data.",
-      "covers": [],
-      "body": {
-        "advanced": [
-          {
-            "type": "p",
-            "text": "Settings → Custom Pages → CRM exposes the registered takeovers. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy."
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Workspace",
-              "Information and actions"
-            ],
-            "rows": [
-              [
-                "Contact Details",
-                "Contact/account facts, revenue and order history, proof art, tasks, opportunities, activities, email history, account contacts, a standalone email composer, account templates, and email/chat transcript reading."
-              ],
-              [
-                "Account Details",
-                "Account profile, linked contacts, activity, and account-level rollups in a focused dashboard."
-              ],
-              [
-                "Opportunity Details",
-                "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."
-              ],
-              [
-                "CRM Search",
-                "The native search rebuilt with refine facets, a selectable result table, and bulk actions."
-              ],
-              [
-                "Task List",
-                "The native task list with refine facets, bulk complete/push/email, and live per-row action status."
-              ]
-            ]
-          },
-          {
-            "type": "heading",
-            "text": "What writes where"
-          },
-          {
-            "type": "p",
-            "text": "CRM records and actions use the live page schema and CRM endpoints. Extension-local context notes and caches remain local unless a control explicitly says it writes to CRM. Turning a takeover off deletes neither source."
-          },
-          {
-            "type": "callout",
-            "kind": "warning",
-            "text": "The Contact composer currently exposes an 'insert saved proposal' slash command that is visibly marked Not implemented yet. Use the Gift Catalog / Proposal Email flow for a real proposal insert or send."
-          },
-          {
-            "type": "callout",
-            "kind": "warning",
-            "text": "Page overrides change what teammates see if you share a preset that includes them. Keep overrides out of shared presets unless the whole team wants them."
-          }
-        ]
-      },
-      "tutorial": "use-custom-crm-workspace",
-      "related": [
-        "presets",
-        "feature-toggles",
-        "crm-search",
-        "recent-orders-scan"
-      ],
-      "sectionLabel": "Settings Reference"
-    },
-    {
       "slug": "email-integrations",
       "title": "Email & Integrations",
       "icon": "flow",
@@ -6689,7 +6601,7 @@ export const HELP_CONTENT = {
             "rows": [
               [
                 "Preferences",
-                "featureFlags, devSettings, keyboardShortcuts, customPages",
+                "featureFlags, devSettings, keyboardShortcuts",
                 "overwrites"
               ],
               [
@@ -8009,42 +7921,6 @@ export const HELP_CONTENT = {
       ]
     },
     {
-      "id": "use-custom-crm-workspace",
-      "title": "Use a custom CRM workspace",
-      "tier": "intermediate",
-      "estMinutes": 4,
-      "prerequisites": [
-        "The relevant Contact, Account, or Opportunity takeover is enabled under Settings → Custom Pages → CRM"
-      ],
-      "steps": [
-        {
-          "action": "Open a Contact Details, Account Details, or Opportunity Details record.",
-          "expected": "The registered extension workspace replaces the stock detail page for that page only.",
-          "visualCue": "Metric cards and focused data sections replace the legacy CRM layout."
-        },
-        {
-          "action": "Review the record sections and open the related task, activity, email, order, proof, contact, or proposal you need.",
-          "expected": "Links and actions retain the current record context.",
-          "visualCue": "Each workspace exposes a different set of sections appropriate to its record type."
-        },
-        {
-          "action": "On Contact Details, use the standalone composer for a normal template email; on Opportunity Details, use proposal selection/breakdown for quote work.",
-          "expected": "The operational email or proposal flow opens with the record context supplied.",
-          "visualCue": "Do not use the Contact composer's saved-proposal slash command; it is marked Not implemented yet."
-        },
-        {
-          "action": "If you need the stock page, turn off only that takeover in Settings.",
-          "expected": "The stock CRM page returns without deleting CRM records or extension-local data.",
-          "visualCue": "Custom Pages → CRM list."
-        }
-      ],
-      "related": [
-        "custom-crm-pages",
-        "crm-search",
-        "build-email-proposal"
-      ]
-    },
-    {
       "id": "scan-recent-orders",
       "title": "Scan your contacts for recent orders",
       "tier": "intermediate",
@@ -9166,24 +9042,6 @@ export const HELP_CONTENT = {
       "flag": null
     },
     {
-      "id": "article:custom-crm-pages",
-      "category": "Articles",
-      "title": "Custom CRM Pages",
-      "keywords": [
-        "custom page",
-        "override",
-        "contact details",
-        "account details",
-        "opportunity details",
-        "replace page",
-        "workspace"
-      ],
-      "description": "Replace CRM pages — Contact, Account and Opportunity Details, Search, and Task List — with focused extension workspaces backed by live CRM data.",
-      "article": "custom-crm-pages",
-      "shortcut": null,
-      "flag": null
-    },
-    {
       "id": "article:email-integrations",
       "category": "Articles",
       "title": "Email & Integrations",
@@ -9578,16 +9436,6 @@ export const HELP_CONTENT = {
       ],
       "description": "4 steps · ~2 min",
       "tutorial": "apply-order-note"
-    },
-    {
-      "id": "tutorial:use-custom-crm-workspace",
-      "category": "Tutorials",
-      "title": "Use a custom CRM workspace",
-      "keywords": [
-        "intermediate"
-      ],
-      "description": "4 steps · ~4 min",
-      "tutorial": "use-custom-crm-workspace"
     },
     {
       "id": "tutorial:scan-recent-orders",

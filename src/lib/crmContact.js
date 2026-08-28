@@ -1,7 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
    crmContact.js — pure contact-edit helpers + native CRM enums.
 
-   Kept out of crm-detail-shared.jsx (which is JSX) so the load-bearing,
+   Kept separate from the contact transport so the load-bearing,
    data-critical CustomData merge can be unit-tested with node --test.
 ─────────────────────────────────────────────────────────────── */
 

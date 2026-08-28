@@ -11,7 +11,7 @@ import {
    design exemplar (page-settings.jsx); every list and table is
    generated from the live registries, and the prose is rewritten
    from the verified articles (feature-toggles, theme-appearance,
-   email-integrations, presets, custom-crm-pages, developer-settings,
+   email-integrations, presets, developer-settings,
    hidden-settings).
 ─────────────────────────────────────────────────────────────── */
 
@@ -134,7 +134,6 @@ export function SettingsPage() {
       <h2 className="sec">Also in Settings</h2>
       <ul>
         <li><strong>Shared Settings Templates</strong> — choose scopes, name the template, and receive a revocable URL. A teammate pastes the URL, previews its contents, and chooses scopes to import. <em>Settings overwrite on import; template scopes merge by id</em> (same id replaces, new id appends — local-only templates are never deleted).</li>
-        <li><strong>Custom Pages</strong> — enable the extension's custom interface per page scope. The CRM scope covers every supported CRM takeover; disabled scopes use the original site.</li>
         <li><strong>Email signature</strong> — edited from the Manager sidebar; auto-appended to Power Automate sends (not to Outlook-fallback emails).</li>
       </ul>
 

@@ -1,7 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
    crmSolrSearch.js — the CRM Solr search transport, extracted so both
    the CRM Search modal (CRMSearch.jsx) and the full-page CRM Search
-   takeover (content/crm-search-page.jsx) hit the same backend with an
+   modal hit the same backend with an
    identical query-string contract.
 
    The endpoint is the private SolrIndexCrm web service; it takes a single

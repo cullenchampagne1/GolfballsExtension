@@ -11,7 +11,6 @@ import {
   defaultDevSettings,
   isValueSetting,
 } from '../../src/lib/devSettings.js';
-import { CUSTOM_PAGE_SECTIONS } from '../../src/lib/customPages.js';
 import { ADMIN_ONLY } from '../../scripts/strip-admin.mjs';
 
 const root = new URL('../../', import.meta.url);
@@ -110,23 +109,4 @@ describe('settings registry · extension/backend parity', () => {
     }
   });
 
-  it('exposes one generic Custom Pages scope with every registered page', () => {
-    assert.deepEqual(Object.keys(registry.customPageScopes), ['all']);
-    const section = CUSTOM_PAGE_SECTIONS[0];
-    assert.equal(section.id, 'all');
-    assert.equal(section.label, 'Custom Pages');
-    assert.deepEqual(registry.customPageScopes.all, {
-      type: 'bool',
-      default: false,
-      label: 'Custom Pages',
-      managedDefault: true,
-      pageIds: section.items.map((item) => item.id),
-    });
-    assert.deepEqual(registry.customPages, {
-      type: 'bool',
-      default: true,
-      label: 'Custom pages',
-      managedDefault: true,
-    });
-  });
 });

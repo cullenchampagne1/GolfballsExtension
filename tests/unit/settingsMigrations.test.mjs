@@ -8,10 +8,6 @@ import {
   SALES_FANTASY_SETTING_KEY,
 } from '../../src/lib/devSettings.js';
 import {
-  CUSTOM_PAGE_SECTIONS,
-  normalizeStoredCustomPages,
-} from '../../src/lib/customPages.js';
-import {
   LEGACY_STORAGE_KEY,
   STORAGE_KEY,
   loadWorkflows,
@@ -56,7 +52,7 @@ function installStorage(initial) {
   return stored;
 }
 
-describe('settings migration · workflow and Custom Pages namespaces', () => {
+describe('settings migration · workflow namespace', () => {
   it('moves legacy workflow flag and scale values without overriding canonical values', () => {
     const migratedFlags = normalizeStoredFlags({
       campaignManagerEnabled: false,
@@ -85,17 +81,6 @@ describe('settings migration · workflow and Custom Pages namespaces', () => {
     assert.equal(Object.hasOwn(migratedDev.settings, 'pageEngine.accountId'), false);
     assert.equal(Object.hasOwn(migratedDev.settings, 'pageEngine.territory'), false,
       'an owner ID cannot be guessed into the unrelated Territory namespace');
-  });
-
-  it('turns the old CRM page scope into one all-pages setting', () => {
-    const { pages, changed } = normalizeStoredCustomPages({
-      crm: ['contact_details'],
-    });
-    assert.equal(changed, true);
-    assert.deepEqual(
-      pages,
-      { all: CUSTOM_PAGE_SECTIONS[0].items.map((item) => item.id) },
-    );
   });
 
   it('moves the Sales Fantasy feature value into developer settings', async () => {

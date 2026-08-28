@@ -247,11 +247,10 @@ describe('settings menus', () => {
     );
   });
 
-  it('renders managed feature, input, dropdown, and custom-page controls as locked', () => {
+  it('renders managed feature, input, and dropdown controls as locked', () => {
     assert.match(settingsPanelSource, /managed=\{managedFeature\(f\.key\)\}/);
     assert.match(settingsPanelSource, /managed=\{managedDevSetting\(def\.key\)\}/);
     assert.match(settingsPanelSource, /disabled=\{managed\}/);
-    assert.match(settingsPanelSource, /managed=\{managedCustomPageScope\(section\.id\)\}/);
   });
 
   it('keeps read-only statistics passive instead of showing a refresh button', () => {

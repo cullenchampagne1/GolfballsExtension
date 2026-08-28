@@ -68,11 +68,6 @@ class SettingsPolicyTests(unittest.TestCase):
                 "density": {"type": "select", "default": "compact", "options": ["compact", "roomy"], "label": "Density", "managedDefault": True},
                 "workflowManager.scale": {"type": "number", "default": 1.2, "min": 0.5, "max": 2, "label": "Workflow Manager: zoom scale", "managedDefault": True},
             },
-            "customPageScopes": {
-                "orders": {"type": "bool", "default": False, "pageIds": ["orders"]},
-                "all": {"type": "bool", "default": False, "label": "Custom Pages", "pageIds": ["contact_details"]},
-            },
-            "customPages": {"type": "bool", "default": True, "label": "Custom pages"},
         }
         source = (
             "(function (root) {\n  root.GB_SETTINGS_REGISTRY = Object.freeze("
@@ -91,13 +86,6 @@ class SettingsPolicyTests(unittest.TestCase):
             "developer_settings": {
                 "density": {"value": "compact", "hidden": False, "managed": True, "label": "Density"},
                 "workflowManager.scale": {"value": 1.2, "hidden": False, "managed": True, "label": "Workflow Manager: zoom scale"},
-            },
-            "custom_pages": {
-                "value": True, "hidden": False, "managed": True, "label": "Custom pages",
-                "scopes": {
-                    "orders": {"value": False, "hidden": False, "managed": True, "label": "Orders"},
-                    "all": {"value": False, "hidden": False, "managed": True, "label": "Custom Pages"},
-                },
             },
         }
         self.legacy = FakeLegacyConfig(self.document)
@@ -263,13 +251,6 @@ class SettingsPolicyTests(unittest.TestCase):
                 key: entry(spec)
                 for key, spec in registry["developerSettings"].items()
             },
-            "custom_pages": {
-                **entry(registry["customPages"]),
-                "scopes": {
-                    key: entry(spec)
-                    for key, spec in registry["customPageScopes"].items()
-                },
-            },
         }
         document["features"]["powerAutomateEnabled"]["hidden"] = False
         document["features"]["workflowManagerEnabled"]["hidden"] = True
@@ -277,7 +258,6 @@ class SettingsPolicyTests(unittest.TestCase):
         document["developer_settings"][
             "golfballViewer.printAreaScale"
         ]["value"] = 0.1
-        document["custom_pages"]["scopes"]["all"]["hidden"] = True
 
         projected, selected = self.store.project_client_document(document, None)
 
@@ -290,7 +270,7 @@ class SettingsPolicyTests(unittest.TestCase):
             settings_policy._LEGACY_342_DEVELOPER_KEYS
         ))
         self.assertEqual(len(projected["developer_settings"]), 121)
-        self.assertEqual(set(projected["custom_pages"]["scopes"]), {"crm"})
+        self.assertNotIn("custom_pages", projected)
 
         legacy_feature_specs = {
             key: (
@@ -354,7 +334,6 @@ class SettingsPolicyTests(unittest.TestCase):
             projected["developer_settings"]["campaignManager.scale"]["value"],
             1,
         )
-        self.assertTrue(projected["custom_pages"]["scopes"]["crm"]["hidden"])
 
         current, current_selected = self.store.project_client_document(
             document, "3.4.6",
@@ -380,11 +359,6 @@ class SettingsPolicyTests(unittest.TestCase):
             "label": "Campaign Manager: zoom scale",
         }
         del legacy_document["developer_settings"]["workflowManager.scale"]
-        legacy_document["custom_pages"]["scopes"]["crm"] = {
-            "value": True, "hidden": True, "managed": False,
-            "label": "CRM",
-        }
-        del legacy_document["custom_pages"]["scopes"]["all"]
 
         now = datetime.utcnow()
         with Session(self.engine) as session:
@@ -421,11 +395,7 @@ class SettingsPolicyTests(unittest.TestCase):
             "value": 0.75, "hidden": True, "managed": False,
             "label": "Workflow Manager: zoom scale",
         })
-        self.assertNotIn("crm", migrated["custom_pages"]["scopes"])
-        self.assertEqual(migrated["custom_pages"]["scopes"]["all"], {
-            "value": True, "hidden": True, "managed": False,
-            "label": "Custom Pages",
-        })
+        self.assertNotIn("custom_pages", migrated)
 
         resolved, _ = self.store.resolve("install-legacy")
         self.assertTrue(resolved["features"]["workflowManagerEnabled"]["value"])

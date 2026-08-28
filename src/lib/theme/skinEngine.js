@@ -5,8 +5,8 @@
    that every component reads through inline `var(--gb-*)` styles. CSS
    custom properties INHERIT through shadow-DOM boundaries from
    documentElement, so overriding those variables at the document root
-   re-skins every surface at once — custom pages (shadow DOM), modals,
-   the popup, and the settings panel — with no per-root work.
+   re-skins every surface at once — modals, the popup, and the settings panel —
+   with no per-root work.
 
    That covers colors and, once the shared primitives read skin tokens
    (`--gb-app-bg`, `--gb-card-bg`, `--gb-card-blur`, `--gb-card-shadow`,
@@ -20,11 +20,11 @@
    BetterDiscord-style escape hatch — arbitrary rules targeting the
    `gb-*` class names on primitives; because raw rules do NOT cross a
    shadow boundary, the engine injects the css into document.head AND
-   every registered shadow root (custom pages/modals register on mount).
+   every registered shadow root.
 
    A skin persists to chrome.storage.local.gbSkin; storage.onChanged
    propagates a change to every context (popup + all content scripts +
-   shadow pages) so one call re-skins the entire product live.
+   extension pages) so one call re-skins the entire product live.
 ─────────────────────────────────────────────────────────────── */
 
 export const SKIN_STORAGE_KEY = 'gbSkin';
@@ -177,9 +177,8 @@ function installGlobals() {
   window.__gbClearSkin = () => clearSkin();
   window.__gbCurrentSkin = () => currentSkin();
   window.__gbListSkins = () => [..._named.keys()];
-  // Exposed for the vanilla custom-page loader (no ES imports there) to register
-  // its shadow root for the raw-css layer. Vars reach the shadow via inheritance
-  // regardless; this is only for class-level override CSS.
+  // Exposed for any isolated UI root that needs the raw-css layer. Variables
+  // reach shadow roots via inheritance regardless.
   window.__gbRegisterSkinRoot = (root) => registerSkinRoot(root);
   window.__gbLoadSkin = (name) => {
     const s = _named.get(String(name));

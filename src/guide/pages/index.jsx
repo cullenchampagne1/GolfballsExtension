@@ -12,7 +12,6 @@ import { QuickSendPage, WorkflowManagerPage } from './workflows.jsx';
 import { TroubleshootingPage, FaqPage, PowerUserPage, WhatsNewPage } from './reference.jsx';
 import { ManualPage, WorkflowsPage } from './reference-content.jsx';
 import { NotificationsPage } from './notifications.jsx';
-import { CRMWorkspacesPage } from './workspaces.jsx';
 
 /* Route → page component. Every route has a bespoke, hand-built page that
    visually reproduces the real modal/surface (live snippets + TourBox deep
@@ -32,7 +31,6 @@ export const PAGES = {
   'crm-search': SearchPage,
   'crm-query': QBPage,
   'crm-new': NewPage,
-  'crm-workspaces': CRMWorkspacesPage,
   themes: ThemesPage,
   shortcuts: ShortcutsPage,
   charge: ChargePage,

@@ -1,6 +1,6 @@
 /* MarginBreakdown — a standalone, read-only "proposal breakdown" surface.
    Reuses GiftCatalog's blended-margin model (src/lib/marginReport.js) so any
-   page (e.g. opportunity-details) can show revenue / cost / gross profit /
+   surface can show revenue / cost / gross profit /
    blended margin + the per-line margin table for a set of resolved proposal
    entries, without opening the GiftCatalog modal.
 

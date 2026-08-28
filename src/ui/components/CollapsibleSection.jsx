@@ -20,7 +20,7 @@ function ensureNobarStyle() {
 
 /**
  * CollapsibleSection — neutral collapsible card. Same chrome as
- * ExpandableFeature/CollapsibleChecklist but without a Switch or
+ * ExpandableFeature without a Switch or
  * select-all in the header. For sections that are just "show / hide
  * this body": developer settings, advanced options, etc.
  *

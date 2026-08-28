@@ -5,9 +5,9 @@
  * the failure mode is silence: a new surface that skips the report doesn't
  * break, it just never appears in the console's Adoption block. So this reads
  * the shipped source and asserts the three choke points still hold —
- * mountFloating for the React overlays, `__gbReportSurface` for the vanilla
- * ones, the takeover reporter for the custom pages — and that every id they
- * report is a NAME rather than a raw `__gb-` host id.
+ * mountFloating for the React overlays and `__gbReportSurface` for the vanilla
+ * ones — and that every id they report is a NAME rather than a raw `__gb-`
+ * host id.
  *
  * Conventions per findPhone.test.mjs.
  */
@@ -20,7 +20,6 @@ const list = (dir) => readdir(new URL(`../../${dir}`, import.meta.url));
 
 const mountFloating = await read('src/lib/mountFloating.js');
 const usageSurfaces = await read('src/lib/usageSurfaces.js');
-const customPages = await read('src/vanilla/custom-pages.js');
 
 /** The `'__gb-x': 'Name'` rows of MODAL_SURFACES. */
 function namedModalSurfaces(source) {
@@ -76,20 +75,6 @@ describe('guard · usage surface coverage', () => {
         `${file} hangs a usage reporter on its overlay`,
       );
     }
-  });
-
-  it('names every CRM takeover page the custom-page engine can render', () => {
-    const detectors = new Set([...customPages
-      .slice(customPages.indexOf('var DETECTORS'), customPages.indexOf('var PAGE_NAMES'))
-      .matchAll(/^\s{4}([a-z_]+):\s*function/gm)].map((m) => m[1]));
-    const names = new Set([...customPages
-      .slice(customPages.indexOf('var PAGE_NAMES'), customPages.indexOf('function reportUsage'))
-      .matchAll(/^\s{4}([a-z_]+):\s*'/gm)].map((m) => m[1]));
-    assert.ok(detectors.size >= 7, `expected the takeover set, saw ${detectors.size}`);
-    assert.deepEqual(
-      [...detectors].filter((id) => !names.has(id)), [],
-      'add these page ids to PAGE_NAMES in src/vanilla/custom-pages.js',
-    );
   });
 
   it('silences the Operator\'s Guide, which mounts the real modals as demos', async () => {

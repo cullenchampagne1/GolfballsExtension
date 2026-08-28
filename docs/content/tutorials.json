@@ -206,20 +206,6 @@
       "related": ["quick-order-note", "note-templates", "order-date-manager"]
     },
     {
-      "id": "use-custom-crm-workspace",
-      "title": "Use a custom CRM workspace",
-      "tier": "intermediate",
-      "estMinutes": 4,
-      "prerequisites": ["The relevant Contact, Account, or Opportunity takeover is enabled under Settings → Custom Pages → CRM"],
-      "steps": [
-        { "action": "Open a Contact Details, Account Details, or Opportunity Details record.", "expected": "The registered extension workspace replaces the stock detail page for that page only.", "visualCue": "Metric cards and focused data sections replace the legacy CRM layout." },
-        { "action": "Review the record sections and open the related task, activity, email, order, proof, contact, or proposal you need.", "expected": "Links and actions retain the current record context.", "visualCue": "Each workspace exposes a different set of sections appropriate to its record type." },
-        { "action": "On Contact Details, use the standalone composer for a normal template email; on Opportunity Details, use proposal selection/breakdown for quote work.", "expected": "The operational email or proposal flow opens with the record context supplied.", "visualCue": "Do not use the Contact composer's saved-proposal slash command; it is marked Not implemented yet." },
-        { "action": "If you need the stock page, turn off only that takeover in Settings.", "expected": "The stock CRM page returns without deleting CRM records or extension-local data.", "visualCue": "Custom Pages → CRM list." }
-      ],
-      "related": ["custom-crm-pages", "crm-search", "build-email-proposal"]
-    },
-    {
       "id": "scan-recent-orders",
       "title": "Scan your contacts for recent orders",
       "tier": "intermediate",

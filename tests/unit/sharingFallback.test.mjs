@@ -27,7 +27,7 @@ const settingsFile = () => buildSettingsTemplateFile('Sales setup', {
 });
 
 const EXPECTED_CONFIGURATION_KEYS = [
-  'featureFlags', 'featureConfig', 'devSettings', 'keyboardShortcuts', 'customPages',
+  'featureFlags', 'featureConfig', 'devSettings', 'keyboardShortcuts',
   'themeColors', 'gbTheme', 'uiScales', 'emailSignature',
 ];
 
@@ -320,12 +320,9 @@ describe('sharing fallback · preset scopes', () => {
         adminBypass: false,
         managedFeatures: { taskListEnabled: false },
         managedDeveloperSettings: { 'numberDisplay.durationMs': 400 },
-        managedCustomPages: true,
-        managedCustomPageScopes: { all: ['dashboard', 'search'] },
       },
       featureFlags: { taskListEnabled: false },
       devSettings: { 'numberDisplay.durationMs': 400 },
-      customPages: { all: ['dashboard', 'search'] },
     };
     globalThis.chrome = {
       storage: {
@@ -345,7 +342,6 @@ describe('sharing fallback · preset scopes', () => {
       'settings-preferences': {
         featureFlags: { taskListEnabled: true, marginCalcEnabled: false },
         devSettings: { 'numberDisplay.durationMs': 2_000 },
-        customPages: { all: [] },
       },
     });
 
@@ -354,7 +350,6 @@ describe('sharing fallback · preset scopes', () => {
       marginCalcEnabled: false,
     });
     assert.equal(storageState.devSettings['numberDisplay.durationMs'], 400);
-    assert.deepEqual(storageState.customPages.all, ['dashboard', 'search']);
   });
 });
 

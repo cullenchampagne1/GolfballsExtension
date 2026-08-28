@@ -1140,38 +1140,6 @@
       "min": -180,
       "max": 180
     }
-  },
-  "customPageScopes": {
-    "all": {
-      "type": "bool",
-      "default": false,
-      "label": "Custom Pages",
-      "managedDefault": true,
-      "pageIds": [
-        "dashboard",
-        "search",
-        "custom_rep_activity",
-        "my_recent_history",
-        "task_list",
-        "action_review",
-        "blacklisted_emails",
-        "recent_calls",
-        "case_index",
-        "create_contact",
-        "open_lead",
-        "opportunity",
-        "opportunity_linking",
-        "contact_details",
-        "account_details",
-        "opportunity_details"
-      ]
-    }
-  },
-  "customPages": {
-    "type": "bool",
-    "default": true,
-    "label": "Custom pages",
-    "managedDefault": true
   }
 });
 })(globalThis);

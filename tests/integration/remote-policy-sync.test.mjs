@@ -37,10 +37,6 @@ function buildConfiguration(reg) {
     developer_section: { hidden: false },
     features: section(reg.features),
     developer_settings: section(reg.developerSettings, (key) => key !== 'email.localPart'),
-    custom_pages: {
-      value: true, hidden: false, managed: true,
-      scopes: section(reg.customPageScopes),
-    },
   };
 }
 
@@ -58,7 +54,6 @@ before(async () => {
       'email.localPart': 'local.user',
       'campaignManager.scale': 0.75,
     },
-    customPages: { crm: ['contact_details'] },
     secret_settings: { legacy: true },
   };
   const chromeParts = createChrome({ stored });
@@ -79,7 +74,6 @@ before(async () => {
   configuration.features.workflowManagerEnabled = { value: true, hidden: false, managed: false };
   configuration.developer_settings['numberDisplay.durationMs'] = { value: 400, hidden: true, managed: true };
   configuration.developer_settings['workflowManager.scale'] = { value: 1.2, hidden: false, managed: false };
-  configuration.custom_pages.scopes.all = { value: true, hidden: true, managed: true };
   payloadHolder = {
     schema_version: 1, admin_bypass: false, revision: 'a'.repeat(64), configuration,
   };
@@ -122,22 +116,10 @@ describe('remote policy sync', () => {
     assert.equal(policy.revision, 'a'.repeat(64));
     assert.equal(policy.hiddenFeatures.copyIdsEnabled, true);
     assert.equal(policy.hiddenDeveloperSettings['numberDisplay.durationMs'], true);
-    assert.equal(policy.hiddenCustomPageScopes.all, true);
     assert.equal(policy.managedFeatures.copyIdsEnabled, false);
     assert.equal(Object.hasOwn(policy.managedFeatures, 'workflowManagerEnabled'), false);
     assert.equal(policy.managedDeveloperSettings['numberDisplay.durationMs'], 400);
     assert.equal(Object.hasOwn(policy.managedDeveloperSettings, 'workflowManager.scale'), false);
-    assert.equal(policy.managedCustomPages, true);
-    assert.deepEqual(
-      Array.from(policy.managedCustomPageScopes.all),
-      registry.customPageScopes.all.pageIds,
-    );
-    assert.deepEqual(
-      Array.from(stored.customPages.all),
-      registry.customPageScopes.all.pageIds,
-      'a managed-on scope enables the full page list',
-    );
-    assert.equal(Object.hasOwn(stored.customPages, 'crm'), false);
     assert.equal(Object.hasOwn(stored, 'secret_settings'), false, 'the legacy key is purged');
     assert.ok(alarms.some(({ name, options }) => name === 'gbRemoteSettingsSync' && options.periodInMinutes === 1));
   });
@@ -151,7 +133,6 @@ describe('remote policy sync', () => {
     assert.equal(Object.hasOwn(backup.featureFlags, 'campaignManagerEnabled'), false);
     assert.equal(backup.devSettings['numberDisplay.durationMs'], 777);
     assert.equal(backup.devSettings['workflowManager.scale'], 0.75);
-    assert.deepEqual(Array.from(backup.customPages.all), registry.customPageScopes.all.pageIds);
   });
 
   it('refreshes the effective installation policy when Settings requests it', async () => {
@@ -170,13 +151,9 @@ describe('remote policy sync', () => {
         appliedAt: 1,
         hiddenFeatures: { powerAutomateEnabled: true },
         hiddenDeveloperSettings: {},
-        hiddenCustomPages: false,
-        hiddenCustomPageScopes: {},
         developerSectionHidden: false,
         managedFeatures: { powerAutomateEnabled: false },
         managedDeveloperSettings: {},
-        managedCustomPages: true,
-        managedCustomPageScopes: {},
       },
     };
     const background = await loadBackground({
@@ -223,11 +200,9 @@ describe('remote policy sync', () => {
     assert.equal(stored.featureFlags.copyIdsEnabled, true);
     assert.equal(stored.featureFlags.workflowManagerEnabled, false);
     assert.equal(stored.devSettings['workflowManager.scale'], 0.75);
-    assert.deepEqual(Array.from(stored.customPages.all), registry.customPageScopes.all.pageIds);
     assert.equal(stored.gbRemoteSettingsPolicy.adminBypass, true);
     assert.equal(stored.gbRemoteSettingsPolicy.revision, 'b'.repeat(64));
     assert.deepEqual(Object.keys(stored.gbRemoteSettingsPolicy.managedFeatures), []);
-    assert.equal(stored.gbRemoteSettingsPolicy.managedCustomPages, null);
     assert.equal(Object.hasOwn(stored, 'gbRemoteSettingsBackup'), false, 'the backup is consumed');
   });
 });

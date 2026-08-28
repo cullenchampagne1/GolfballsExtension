@@ -156,7 +156,6 @@ Every article, its audience tiers, and search keywords. **Bold** articles ship w
 | 39 | Theme & Appearance | Settings Reference | B | theme, dark, light, color, scale, zoom |
 | 40 | Feature Toggles | Settings Reference | B | enable, disable, toggle, flag |
 | 41 | Keyboard Shortcuts (settings) | Settings Reference | B | rebind, change shortcut |
-| 42 | Custom CRM Pages | Settings Reference | A | custom page, override, dashboard |
 | 43 | Email & Integrations | Settings Reference | I/A | signature, power automate url, microsoft, sign in |
 | 44 | Developer Settings | Settings Reference | A | dev settings, draggable, cache hours, debug |
 | 45 | Shared Settings Templates | Settings Reference | I/A | settings link, URL, import, team, share config |

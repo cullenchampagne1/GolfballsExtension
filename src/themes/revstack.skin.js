@@ -1,8 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
    revstack.skin.js — the RevStack dashboard look as an extension skin.
 
-   A skin is { vars, css }: `vars` override --gb-* tokens on <html> (they
-   inherit into every surface, including the custom-page shadow DOM);
+   A skin is { vars, css }: `vars` override --gb-* tokens on <html>;
    `css` is the raw class-level layer injected into document.head + each
    registered shadow root.
 
@@ -13,7 +12,7 @@
    stylesheet you can keep/edit as "the dashboard design".
 
    Almost everything is token-driven, because the shared primitives
-   (Card, ModalShell, the page frame) now read --gb-card-* / --gb-modal-*
+   (Card and ModalShell) now read --gb-card-* / --gb-modal-*
    / --gb-app-bg. Inline styles beat plain class rules, so the raw `css`
    layer only adds things tokens can't express (pseudo-element sheen).
 ─────────────────────────────────────────────────────────────── */
@@ -29,17 +28,6 @@ export const REVSTACK_VARS = {
     + 'radial-gradient(1050px 780px at 108% -8%, color-mix(in srgb, var(--gb-brand-label) 13%, transparent), transparent 56%),'
     + 'radial-gradient(1150px 1000px at 62% 120%, color-mix(in srgb, var(--gb-brand-label) 9%, transparent), transparent 60%),'
     + 'linear-gradient(168deg, #0c0f16 0%, #0a0d13 46%, #090a0f 100%)',
-
-  /* ── Frosted page CHROME (header bar + sidebar) — darker + blurred
-        so it separates from the gradient and text stays readable. ─── */
-  '--gb-chrome-bg':     'rgba(13,16,23,0.58)',
-  '--gb-chrome-blur':   'blur(22px) saturate(150%)',
-  '--gb-chrome-border': '1px solid rgba(255,255,255,0.08)',
-
-  /* ── Sticky TABLE header rows — frosted + substantial so scrolling
-        rows don't bleed through the glass. ────────────────────────── */
-  '--gb-thead-bg':   'rgba(17,21,28,0.74)',
-  '--gb-thead-blur': 'blur(14px) saturate(150%)',
 
   /* ── Surfaces → translucent so the gradient reads through ─────── */
   '--gb-surface-deep':   'transparent',

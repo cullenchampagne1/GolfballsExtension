@@ -117,7 +117,7 @@
     popup: 'templates charge refund watch list tasks crm search submit proof send outlook',
     templates: 'variables variations subject body rules conditions mailto power automate',
     charge: 'card refund capture payment signifyd total',
-    settings: 'features flags toggle theme variant developer presets custom pages',
+    settings: 'features flags toggle theme variant developer presets',
     crm: 'search create contact query builder phone finder lookup',
     watchlist: 'follow up flag order contact account badge',
     tasks: 'todo quick task call log categories due',

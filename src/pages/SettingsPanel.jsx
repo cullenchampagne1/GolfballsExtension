@@ -17,9 +17,6 @@ import {
   KEYBOARD_SHORTCUTS_DEFAULTS, loadKeyboardShortcuts, saveKeyboardShortcuts,
 } from '../lib/flags.js';
 import {
-  CUSTOM_PAGE_SECTIONS, loadCustomPages, saveCustomPages, emptyCustomPages,
-} from '../lib/customPages.js';
-import {
   PRESET_SCOPES, gatherScopes, applyScopes, normalizePreset, presetScopeIds,
   buildSettingsTemplateFile, parseSettingsTemplateFile,
 } from '../lib/presetScopes.js';
@@ -50,7 +47,6 @@ import {
 } from '../lib/installationIdentityNotice.js';
 import {
   EMPTY_REMOTE_POLICY,
-  customPageScopeIsManaged,
   developerSettingIsManaged,
   featureIsManaged,
 } from '../lib/managedSettingsPolicy.js';
@@ -1572,7 +1568,6 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
   const [customActions, setCustomActions] = useState([]);
   const [credentials, setCredentials] = useState(EMPTY_CREDENTIALS);
   const [shortcuts, setShortcuts] = useState(KEYBOARD_SHORTCUTS_DEFAULTS);
-  const [customPages, setCustomPages] = useState(emptyCustomPages);
   const [devSettings, setDevSettings] = useState(defaultDevSettings);
   const [devSearch, setDevSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1584,7 +1579,6 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
     || (!remotePolicy.hiddenFeatures[key] && !remotePolicy.hiddenDeveloperSettings[key]);
   const managedFeature = (key) => featureIsManaged(remotePolicy, key);
   const managedDevSetting = (key) => developerSettingIsManaged(remotePolicy, key);
-  const managedCustomPageScope = (scope) => customPageScopeIsManaged(remotePolicy, scope);
   const devSectionHidden = !remotePolicy.adminBypass && remotePolicy.developerSectionHidden;
 
   /* Sort registry alphabetically once; filter on the user's query
@@ -1610,7 +1604,6 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
     loadCustomActions().then(setCustomActions);
     loadCredentials().then(setCredentials);
     loadKeyboardShortcuts().then(setShortcuts);
-    loadCustomPages().then(setCustomPages);
     loadDevSettings().then(setDevSettings);
     loadScales().then(setScales);
   }, [refreshKey, remotePolicy.revision, remotePolicy.adminBypass]);
@@ -1657,19 +1650,6 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
     setDevSettings(next);
     saveDevSettings(next);
     window.__gbToast?.success('Developer settings reset to defaults');
-  }
-
-  /* The UI manages the one all-pages control. Storage remains an array of
-     page ids so the classic page engine keeps its stable runtime shape. */
-  function toggleCustomPageScope(section) {
-    if (managedCustomPageScope(section.id)) return;
-    const enabled = (customPages[section.id] || []).length > 0;
-    const next = {
-      ...customPages,
-      [section.id]: enabled ? [] : section.items.map((item) => item.id),
-    };
-    setCustomPages(next);
-    saveCustomPages(next);
   }
 
   const commitTheme = (next) => { setTheme(next); applyTheme(next); saveTheme(next); };
@@ -1934,35 +1914,6 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
       <EmailLinksSection />
 
       <ProductStoresSection />
-
-      {/* Custom Pages — one switch for every registered page. The page engine still
-          consumes page-id arrays internally, preserving its stable contract. */}
-      {(!remotePolicy.hiddenCustomPages || remotePolicy.adminBypass) && CUSTOM_PAGE_SECTIONS.some((section) => (
-        remotePolicy.adminBypass || !remotePolicy.hiddenCustomPageScopes[section.id]
-      )) && (
-      <section>
-        <SectionLabel>Custom Pages</SectionLabel>
-        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: -4, marginBottom: 10, lineHeight: 1.5 }}>
-          Use the extension interface on every supported custom page. Turn it off to use the original site pages.
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {CUSTOM_PAGE_SECTIONS
-            .filter((section) => remotePolicy.adminBypass || !remotePolicy.hiddenCustomPageScopes[section.id])
-            .map((section) => (
-            <FeatureSpotlight
-              key={section.id}
-              icon={<I.cog />}
-              name={section.label}
-              desc="Control every registered custom page from one setting."
-              on={(customPages[section.id] || []).length > 0}
-              managed={managedCustomPageScope(section.id)}
-              disabled={managedCustomPageScope(section.id)}
-              onChange={() => toggleCustomPageScope(section)}
-            />
-          ))}
-        </div>
-      </section>
-      )}
 
       {/* Theme Colors */}
       <section>

@@ -55,33 +55,6 @@
       "related": ["keyboard-shortcuts", "feature-toggles"]
     },
     {
-      "slug": "custom-crm-pages",
-      "title": "Custom CRM Pages",
-      "icon": "flag",
-      "tiers": ["advanced"],
-      "keywords": ["custom page", "override", "contact details", "account details", "opportunity details", "replace page", "workspace"],
-      "summary": "Replace CRM pages — Contact, Account and Opportunity Details, Search, and Task List — with focused extension workspaces backed by live CRM data.",
-      "covers": [],
-      "body": {
-        "advanced": [
-          { "type": "p", "text": "Settings → Custom Pages → CRM exposes the registered takeovers. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy." },
-          { "type": "table", "headers": ["Workspace", "Information and actions"], "rows": [
-            ["Contact Details", "Contact/account facts, revenue and order history, proof art, tasks, opportunities, activities, email history, account contacts, a standalone email composer, account templates, and email/chat transcript reading."],
-            ["Account Details", "Account profile, linked contacts, activity, and account-level rollups in a focused dashboard."],
-            ["Opportunity Details", "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."],
-            ["CRM Search", "The native search rebuilt with refine facets, a selectable result table, and bulk actions."],
-            ["Task List", "The native task list with refine facets, bulk complete/push/email, and live per-row action status."]
-          ] },
-          { "type": "heading", "text": "What writes where" },
-          { "type": "p", "text": "CRM records and actions use the live page schema and CRM endpoints. Extension-local context notes and caches remain local unless a control explicitly says it writes to CRM. Turning a takeover off deletes neither source." },
-          { "type": "callout", "kind": "warning", "text": "The Contact composer currently exposes an 'insert saved proposal' slash command that is visibly marked Not implemented yet. Use the Gift Catalog / Proposal Email flow for a real proposal insert or send." },
-          { "type": "callout", "kind": "warning", "text": "Page overrides change what teammates see if you share a preset that includes them. Keep overrides out of shared presets unless the whole team wants them." }
-        ]
-      },
-      "tutorial": "use-custom-crm-workspace",
-      "related": ["presets", "feature-toggles", "crm-search", "recent-orders-scan"]
-    },
-    {
       "slug": "email-integrations",
       "title": "Email & Integrations",
       "icon": "flow",

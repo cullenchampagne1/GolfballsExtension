@@ -23,7 +23,7 @@ const TASKS_ENDPOINT = `${BASE}/golfballs/adminnew/Default.aspx?Page=349`;
    Due Date — the reach-out goes "live" two weeks before it's due, which
    is how it gets indexed onto the Task List pull. These pure helpers
    centralize the math so every surface (the Task List quick actions and
-   the custom-page task rows) pushes dates identically. */
+   every task surface) pushes dates identically. */
 export const LIVE_LEAD_DAYS = 14;
 const MS_DAY = 86_400_000;
 

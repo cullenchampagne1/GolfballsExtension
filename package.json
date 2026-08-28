@@ -1,16 +1,13 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.44",
+  "version": "3.4.45",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
     "prebuild": "npm run help-content",
     "build": "node --max-old-space-size=8192 build.js",
     "watch": "node --max-old-space-size=8192 build.js --watch",
-    "custom-pages:lab": "vite --config dev/custom-pages-lab/vite.config.js",
-    "custom-pages:lab:build": "vite build --config dev/custom-pages-lab/vite.config.js",
-    "custom-pages:lab:preview": "vite preview --config dev/custom-pages-lab/vite.config.js",
     "audit": "node scripts/audit-source.mjs",
     "help-content": "node scripts/build-help-content.mjs",
     "remote-config": "node scripts/build-remote-settings-config.mjs",
@@ -189,36 +186,12 @@
       "file": "tests/unit/bounceQueue.test.mjs"
     },
     {
-      "name": "crm \u00b7 Action Review tables & WebForms postback",
-      "file": "tests/unit/actionReviewModel.test.mjs"
-    },
-    {
-      "name": "crm \u00b7 Action Review contact-page presentation",
-      "file": "tests/unit/actionReviewPresentation.test.mjs"
-    },
-    {
-      "name": "crm \u00b7 host DataTables bridge",
-      "file": "tests/unit/customPageHostBridge.test.mjs"
-    },
-    {
-      "name": "crm \u00b7 custom-page store extract diffing",
-      "file": "tests/unit/customPagesStore.test.mjs"
-    },
-    {
       "name": "crm \u00b7 opportunity deleted-proposal presentation",
       "file": "tests/unit/opportunityProposals.test.mjs"
     },
     {
       "name": "crm \u00b7 opportunity action hydration and read-merge-write",
       "file": "tests/unit/crmOpportunities.test.mjs"
-    },
-    {
-      "name": "ui \u00b7 custom pages lab fixtures and store",
-      "file": "tests/unit/customPagesLab.test.mjs"
-    },
-    {
-      "name": "ui \u00b7 custom page responsive layout",
-      "file": "tests/unit/customPageLayout.test.mjs"
     },
     {
       "name": "crm \u00b7 search selection action handoff",
@@ -291,10 +264,6 @@
     {
       "name": "modal \u00b7 mockup print-box spec (52.08% + aspect fit)",
       "file": "tests/unit/mockupPrintBox.test.mjs"
-    },
-    {
-      "name": "crm \u00b7 recent history table parsing + filter",
-      "file": "tests/unit/recentHistoryModel.test.mjs"
     },
     {
       "name": "crm \u00b7 Solr search query-string contract",
@@ -729,7 +698,7 @@
       "file": "tests/unit/settingsRegistryParity.test.mjs"
     },
     {
-      "name": "guard \u00b7 workflow and Custom Pages settings migration",
+      "name": "guard \u00b7 workflow settings migration",
       "file": "tests/unit/settingsMigrations.test.mjs"
     },
     {
@@ -747,10 +716,6 @@
     {
       "name": "ui \u00b7 settings menus reachability & sections",
       "file": "tests/unit/settingsMenus.test.mjs"
-    },
-    {
-      "name": "crm \u00b7 custom page create reloads for real ids",
-      "file": "tests/unit/crmDetailReload.test.mjs"
     },
     {
       "name": "catalog \u00b7 brand promo tag recognition",

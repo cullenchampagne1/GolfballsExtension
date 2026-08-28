@@ -164,7 +164,7 @@ export function ensureTheme() {
   loadTheme().then(applyTheme);
   // Boot the CSS override / skin engine on the same chokepoint every surface
   // already calls, so a saved skin (or the temp __gbLoadSkin path) applies to
-  // custom pages, modals, popup, and settings alike.
+  // modals, popup, and settings alike.
   registerNamedSkin('revstack', REVSTACK_SKIN);
   ensureSkin();
   try {
