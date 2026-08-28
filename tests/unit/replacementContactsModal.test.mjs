@@ -63,7 +63,7 @@ describe('Replacement Contacts modal handoff', () => {
   it('identifies the row shown in the review window from either open control', () => {
     assert.match(replacementSource, /active=\{reviewId === rec\.id\}/);
     assert.match(replacementSource, /aria-current=\{active \? 'true' : undefined\}/);
-    assert.match(replacementSource, /active && <Tag tone="brand" size="sm">Viewing<\/Tag>/);
+    assert.doesNotMatch(replacementSource, />Viewing<\/Tag>/);
     assert.match(replacementSource, /<IconBtn[^\n]*active=\{active\}[^\n]*onClick=\{\(\) => onOpen\(rec\.id\)\}/);
     assert.match(replacementSource, /<tr[^>]*onClick=\{\(\) => onOpen\(rec\.id\)\}/);
   });

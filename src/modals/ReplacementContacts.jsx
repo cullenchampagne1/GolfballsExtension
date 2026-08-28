@@ -367,13 +367,10 @@ function ContactRow({ rec, index, selected, active, onToggle, onOpen, onStatus, 
         </span>
       </Td>
       <Td>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--gb-text-primary)' }}>
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {rec.contactUrl
-              ? <a href={rec.contactUrl} onClick={stop} style={LINK_STYLE}>{txt(rec.contact) || DASH}</a>
-              : (txt(rec.contact) || DASH)}
-          </span>
-          {active && <Tag tone="brand" size="sm">Viewing</Tag>}
+        <div style={{ fontWeight: 600, color: 'var(--gb-text-primary)' }}>
+          {rec.contactUrl
+            ? <a href={rec.contactUrl} onClick={stop} style={LINK_STYLE}>{txt(rec.contact) || DASH}</a>
+            : (txt(rec.contact) || DASH)}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {rec.accountUrl
