@@ -53,6 +53,15 @@ describe('Replacement Contacts modal handoff', () => {
     assert.doesNotMatch(replacementSource, />Export</);
   });
 
+  it('keeps the narrower review layout compact without wrapping its bounced address', () => {
+    assert.match(replacementSource, /function BouncedEmail\(\{ rec, truncate = false \}\)/);
+    assert.match(replacementSource, /<BouncedEmail rec=\{rec\} truncate \/>/);
+    assert.match(replacementSource, /width=\{540\}/);
+    assert.match(replacementSource, /gridTemplateColumns: 'minmax\(0, 1fr\) minmax\(0, 1fr\) auto'/);
+    assert.equal((replacementSource.match(/boxSizing: 'border-box', width: '100%'/g) || []).length, 2);
+    assert.match(replacementSource, /\{kindLabel\(rec\.kind\)\}<\/Tag>\s*<div[^>]*>\s*<Mono[^>]*>task #\{rec\.taskId\}<\/Mono>/);
+  });
+
   it('keeps one draggable review window in place while another row replaces its content', () => {
     assert.match(replacementSource, /function AnalyzeModal[\s\S]*?<FloatingPanel[\s\S]*?\n\s+draggable\n/);
     assert.match(replacementSource, /<AnalyzeModal\s+rec=\{reviewRecord\}/);

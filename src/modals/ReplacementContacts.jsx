@@ -146,7 +146,7 @@ const Mono = ({ children, size = 11, color = 'var(--gb-text-muted)', style }) =>
 
 /* The bounced address, struck through — a rep reads this column to decide
    whether the row is workable, so its state has to be legible at a glance. */
-function BouncedEmail({ rec }) {
+function BouncedEmail({ rec, truncate = false }) {
   if (rec.emailState === 'pending') {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--gb-text-ghost)', fontSize: 11 }}>
@@ -163,7 +163,9 @@ function BouncedEmail({ rec }) {
   return (
     <Mono color="var(--gb-text-secondary)" style={{
       textDecoration: 'line-through', textDecorationColor: 'var(--gb-error)',
-      wordBreak: 'break-all',
+      ...(truncate
+        ? { display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+        : { wordBreak: 'break-all' }),
     }}>{rec.email}</Mono>
   );
 }
@@ -211,7 +213,7 @@ function AutoLinkPanel({ rec, onUse }) {
       {rec.searchable ? (
         <div style={{
           background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-md)', padding: '12px 12px', display: 'grid', gap: 10,
+          borderRadius: 'var(--gb-r-md)', padding: 10, display: 'grid', gap: 8,
         }}>
           <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', lineHeight: 1.55 }}>
             Automatic lookup against <Mono size={11} color="var(--gb-text-secondary)">{rec.domain}</Mono> isn’t wired up yet —
@@ -229,11 +231,11 @@ function AutoLinkPanel({ rec, onUse }) {
               </Btn>
             )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 7, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 7, alignItems: 'center', width: '100%' }}>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Replacement name"
-              style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 0, minWidth: 0 }} />
+              style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 0, minWidth: 0, boxSizing: 'border-box', width: '100%' }} />
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com"
-              style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, outline: 0, minWidth: 0 }} />
+              style={{ height: 30, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-inverse-medium)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, outline: 0, minWidth: 0, boxSizing: 'border-box', width: '100%' }} />
             <Btn size="sm" variant="primary" icon={<I.check />} disabled={!canUse}
               onClick={() => onUse({ name: name.trim(), email: email.trim(), source: 'Manual' })}>
               Use
@@ -268,7 +270,7 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed }) {
   ];
   return (
     <FloatingPanel
-      width={620}
+      width={540}
       maxHeight={680}
       backdrop={false}
       draggable
@@ -285,10 +287,12 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '12px 14px' }}>
             <div style={label}>Bounced address</div>
-            <div style={{ marginTop: 5 }}><BouncedEmail rec={rec} /></div>
-            <div style={{ marginTop: 8, display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div title={rec.email || undefined} style={{ marginTop: 5, minWidth: 0 }}><BouncedEmail rec={rec} truncate /></div>
+            <div style={{ marginTop: 8, display: 'grid', justifyItems: 'start', gap: 4 }}>
               <Tag size="sm" tone="error" icon={<I.mail />}>{kindLabel(rec.kind)}</Tag>
-              <Mono size={9.5} color="var(--gb-text-ghost)">task #{rec.taskId}</Mono>
+              <div style={{ paddingLeft: 1 }}>
+                <Mono size={9.5} color="var(--gb-text-ghost)">task #{rec.taskId}</Mono>
+              </div>
             </div>
           </div>
           <div style={{ background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', padding: '12px 14px' }}>
