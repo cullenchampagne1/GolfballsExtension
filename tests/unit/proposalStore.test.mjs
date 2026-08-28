@@ -7,16 +7,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { JSDOM } from 'jsdom';
 
 import {
   normalizeProposalEntry, buildProposalStoreFile, parseProposalStoreFile,
   saveProposalDraft, removeSavedProposal, savedProposalsForSelection,
   linesFromSaved, saveCurrentProposal, loadCurrentProposal,
   saveProposalToOpportunity,
+  fetchOpportunitiesForAccount, selectActiveOpportunitiesForProposal,
   buildProposalEmailCreatePayload, buildProposedOpportunityUpdate,
   submitProposalEmail,
   PROPOSAL_STORE_FILE_KIND, PROPOSAL_STORE_FILE_VERSION,
 } from '../../src/lib/saveProposal.js';
+
+const giftCatalogSource = readFileSync(new URL('../../src/modals/GiftCatalog.jsx', import.meta.url), 'utf8');
 
 const entry = () => ({
   id: 'prop-abc123',
@@ -266,6 +270,138 @@ describe('proposal email · Proposed opportunity lifecycle', () => {
       if (priorChrome === undefined) delete globalThis.chrome;
       else globalThis.chrome = priorChrome;
     }
+  });
+});
+
+describe('proposal account save · complete active opportunity picker', () => {
+  it('deduplicates the full account list and removes closed opportunities', () => {
+    assert.deepEqual(selectActiveOpportunitiesForProposal([
+      { id: '11', subject: 'Open order', stage: 'Open' },
+      { id: '12', subject: 'Won order', stage: 'Closed - Won' },
+      { id: '13', subject: 'Prospect order', stage: 'Prospect' },
+      { id: '14', subject: 'Lost order', stageId: '5' },
+      { id: '11', subject: 'duplicate paging row', stage: 'Open' },
+    ]).map((opportunity) => opportunity.id), ['11', '13']);
+  });
+
+  it('reads every opportunity from fresh account HTML instead of the visible paginated table', async () => {
+    const previousChrome = globalThis.chrome;
+    const previousDOMParser = globalThis.DOMParser;
+    const rows = Array.from({ length: 14 }, (_, index) => {
+      const id = index + 1;
+      const stage = id === 4 ? 'Closed - Won' : id === 9 ? 'Closed - Lost' : (id % 2 ? 'Open' : 'Prospect');
+      return `<tr><td>${id}</td><td>Opportunity ${id}</td><td>$${id * 100}</td><td>9/30/2026</td><td>${stage}</td><td>Rep</td></tr>`;
+    }).join('');
+    const html = `<!doctype html><body><input id="AccountID" value="900"><table id="TableOpportunities"><tbody>${rows}</tbody></table></body>`;
+    const jsdom = new JSDOM('', { url: 'https://api.golfballs.com/' });
+    const calls = [];
+    globalThis.DOMParser = jsdom.window.DOMParser;
+    globalThis.chrome = { runtime: {
+      lastError: null,
+      sendMessage(message, callback) {
+        calls.push(structuredClone(message));
+        callback({ ok: true, text: html });
+      },
+    } };
+    try {
+      const opportunities = await fetchOpportunitiesForAccount('900');
+      assert.equal(opportunities.length, 12);
+      assert.deepEqual(opportunities.map((opportunity) => opportunity.id), [
+        '1', '2', '3', '5', '6', '7', '8', '10', '11', '12', '13', '14',
+      ]);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].action, 'fetchRaw');
+      assert.match(calls[0].url, /Page=271&AccountID=900$/);
+    } finally {
+      if (previousChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = previousChrome;
+      if (previousDOMParser === undefined) delete globalThis.DOMParser;
+      else globalThis.DOMParser = previousDOMParser;
+      jsdom.window.close();
+    }
+  });
+
+  it('refreshes the account source whenever Save to account opens', () => {
+    assert.doesNotMatch(giftCatalogSource, /if \(pageContext\.opportunities && pageContext\.opportunities\.length\) setOpps/);
+    assert.match(giftCatalogSource, /if \(pcAcct\) loadOpps\(pcAcct\)/);
+  });
+});
+
+describe('proposal account save · Proposed stage lifecycle', () => {
+  it('moves an Open opportunity to Proposed after the cart save while preserving other fields', async () => {
+    const previousChrome = globalThis.chrome;
+    const calls = [];
+    globalThis.chrome = { runtime: {
+      lastError: null,
+      sendMessage(message, callback) {
+        calls.push(structuredClone(message));
+        if (message.action === 'giftSaveProposal') {
+          callback({ ok: true, cartID: 'cart-1', raw: {} });
+        } else if (message.url.includes('/Opportunity/Get.ajax?')) {
+          callback({ ok: true, text: JSON.stringify({
+            opportunityId: 456789, Subject: 'Corporate gifting', Description: 'Keep this',
+            EstimatedClosedDate: '10-01-2026', EstimatedValue: '2200',
+            OpportunityStageId: 1, empAssignedId: 42, contactId: 9633545, LeadID: 88,
+          }) });
+        } else callback({ ok: true, text: '{}' });
+      },
+    } };
+    try {
+      const result = await saveProposalToOpportunity([{ id: 'line' }], {
+        opportunityID: '456789', name: 'Fall gifts',
+      }, {
+        buildLines: async () => ({ items: [{ ItemGuid: 'line' }], skipped: [] }),
+      });
+      assert.equal(result.opportunityStageChanged, true);
+      const update = calls.find((call) => call.url?.includes('/Opportunity/Update.ajax?'));
+      assert.deepEqual(JSON.parse(decodeURIComponent(update.url.split('?')[1])), {
+        opportunityId: '456789', Subject: 'Corporate gifting', Description: 'Keep this',
+        EstimatedClosedDate: '10-01-2026', EstimatedValue: 2200,
+        OpportunityStageId: '2', empAssignedId: '42', contactId: 9633545, LeadID: 88,
+      });
+      assert.deepEqual(calls.map((call) => call.action), ['giftSaveProposal', 'crmAjax', 'crmAjax']);
+    } finally {
+      if (previousChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = previousChrome;
+    }
+  });
+
+  it('also moves Prospect, but leaves later active stages unchanged', async () => {
+    const run = async (stageId) => {
+      const calls = [];
+      const previousChrome = globalThis.chrome;
+      globalThis.chrome = { runtime: {
+        lastError: null,
+        sendMessage(message, callback) {
+          calls.push(structuredClone(message));
+          if (message.action === 'giftSaveProposal') callback({ ok: true, cartID: `cart-${stageId}`, raw: {} });
+          else if (message.url.includes('/Opportunity/Get.ajax?')) callback({ ok: true, text: JSON.stringify({
+            opportunityId: 80 + Number(stageId), Subject: 'Gift order', EstimatedValue: 500,
+            OpportunityStageId: stageId, contactId: 44,
+          }) });
+          else callback({ ok: true, text: '{}' });
+        },
+      } };
+      try {
+        const result = await saveProposalToOpportunity([{ id: 'line' }], {
+          opportunityID: String(80 + Number(stageId)), name: 'Gift order',
+        }, {
+          buildLines: async () => ({ items: [{ ItemGuid: 'line' }], skipped: [] }),
+        });
+        return { result, calls };
+      } finally {
+        if (previousChrome === undefined) delete globalThis.chrome;
+        else globalThis.chrome = previousChrome;
+      }
+    };
+
+    const prospect = await run('7');
+    assert.equal(prospect.result.opportunityStageChanged, true);
+    assert.equal(prospect.calls.filter((call) => call.url?.includes('/Opportunity/Update.ajax?')).length, 1);
+
+    const proposed = await run('2');
+    assert.equal(proposed.result.opportunityStageChanged, false);
+    assert.equal(proposed.calls.some((call) => call.url?.includes('/Opportunity/Update.ajax?')), false);
   });
 });
 

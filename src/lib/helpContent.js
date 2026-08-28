@@ -4,8 +4,8 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.42",
-  "generatedAt": "2026-08-27",
+  "version": "3.4.43",
+  "generatedAt": "2026-08-28",
   "tree": [
     {
       "title": "Getting Started",
@@ -3041,7 +3041,7 @@ export const HELP_CONTENT = {
             "items": [
               "Promo block — type a code or open the chevron to browse known codes (only ones applicable to this cart are offered, each showing its real value). Applied promos render as a pill with the discount in green plus any free-quantity line; the total shows old-price strikethrough + new total.",
               "Estimated total — units + the big number.",
-              "Buttons — Save draft (expands a name field, e.g. 'Q3 Client Gift Run'), Load (pull a saved draft back in), Generate email, Clear."
+              "Buttons — Save draft (expands a name field, e.g. 'Q3 Client Gift Run'), Save to account, Load (pull a saved draft back in), Generate email, Clear. Save to account reads the account's complete unfiltered opportunity table, omits closed opportunities, and moves an Open or Prospect opportunity to Proposed after the proposal saves."
             ]
           }
         ],

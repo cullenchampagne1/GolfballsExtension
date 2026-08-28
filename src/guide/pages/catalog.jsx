@@ -944,6 +944,8 @@ export function ProposalsPage() {
         selected count updates live and only those checked drafts are exported. <strong>Current Proposals</strong> pulls the
         linked account's real proposals live from the CRM — open any into the Breakdown view, load it into the builder, or re-email
         it. Saved drafts also expose <strong>Copy command</strong> and <strong>Save to account</strong> from the breakdown.
+        The account picker reads the complete unfiltered opportunity table and omits closed opportunities. After a successful save,
+        an <strong>Open</strong> or <strong>Prospect</strong> opportunity advances to <strong>Proposed</strong> automatically.
       </p>
 
       <div className="docnote warn" style={{ marginTop: 24 }}>

@@ -2048,6 +2048,8 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
   const [loadingOpps, setLoadingOpps] = useState(false);
   const loadOpps = useCallback((id) => {
     if (!id) { setOpps([]); return; }
+    setOpps([]);
+    setOppId('');
     setLoadingOpps(true);
     fetchOpportunitiesForAccount(id)
       .then((list) => setOpps(list || []))
@@ -2059,11 +2061,13 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
     const pcAcct = pageContext.accountId || '';
     setAccountId(pcAcct);
     setOppId('');
-    if (pageContext.opportunities && pageContext.opportunities.length) setOpps(pageContext.opportunities);
-    else if (pcAcct) loadOpps(pcAcct);
+    // Always re-read the raw account page. Its source contains every row before
+    // the host DataTable applies the current search and visible-page pagination;
+    // pageContext only reflects the rows currently mounted in the live DOM.
+    if (pcAcct) loadOpps(pcAcct);
     else setOpps([]);
     setAcctMode(true);
-  }, [pageContext.accountId, pageContext.opportunities, loadOpps]);
+  }, [pageContext.accountId, loadOpps]);
   const nameRef2 = useRef(null);
   const seqRef = useRef(accountSaveSeq);
   useEffect(() => () => clearTimeout(savedTimer.current), []);
@@ -3517,7 +3521,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (!proposal.length) return Promise.reject(new Error('Proposal is empty'));
     return saveProposalToOpportunity(proposal, { ...opts, promotion: proposalPromo && proposalPromo.promotion })
       .then((r) => {
-        toast?.success?.(`Saved “${opts.name}” to opportunity ${opts.opportunityID}`);
+        if (r.warning) toast?.warning?.(r.warning, { duration: 7000 });
+        else toast?.success?.(`Saved “${opts.name}” to opportunity ${opts.opportunityID}`);
         return r;
       })
       .catch((e) => { toast?.error?.('Couldn’t save to account — ' + ((e && e.message) || 'unknown error')); throw e; });

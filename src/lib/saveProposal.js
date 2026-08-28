@@ -19,6 +19,8 @@ import { runEngine } from './page-engine/index.js';
 import { needsIngest, ingestImageUrl, saveCustomItem } from './customItems.js';
 import { API } from './constants.js';
 import { sendBackgroundMessage } from './backgroundMessage.js';
+import { buildOpportunityPayload } from './crmOpportunities.js';
+import { isClosedOpportunityStage, normalizeOpportunityStageId } from './opportunityFields.js';
 
 // golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
 // the custom-logo ladder for a dual-pole imprint. Mirrors the modal's pricing.
@@ -260,9 +262,24 @@ export function defaultProposalExpiration(days = 45) {
   return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 }
 
-/* Fetch + parse the opportunities for an account id. Returns
-   [{ id, subject, estimatedValue, estimatedCloseDate, stage }] (the account
-   schema's opportunities shape) or [] on failure. */
+/** Keep every usable non-closed opportunity exactly once, in account-table order. */
+export function selectActiveOpportunitiesForProposal(opportunities = []) {
+  const seen = new Set();
+  return (Array.isArray(opportunities) ? opportunities : []).filter((opportunity) => {
+    const id = String(opportunity?.id ?? opportunity?.opportunityId ?? '').trim();
+    if (!id || seen.has(id) || opportunity?.isClosed === true) return false;
+    const stage = opportunity?.stageId ?? opportunity?.stage;
+    if (isClosedOpportunityStage(stage) || /\bclosed\b/i.test(String(stage || ''))) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+/* Fetch + parse the opportunities for an account id. The fresh account HTML
+   contains the complete source table before DataTables applies its visible-page
+   pagination and search filter, so this is authoritative even when the account
+   tab currently shows only one filtered page. Closed rows are removed here so
+   every proposal consumer receives the same safe picker list. */
 export async function fetchOpportunitiesForAccount(accountId) {
   if (accountId == null || accountId === '') return [];
   const url = accountPageUrl(accountId);
@@ -277,7 +294,10 @@ export async function fetchOpportunitiesForAccount(accountId) {
   // the rep is currently on — getDocUrl reads body.dataset.gbSourceUrl first).
   try { if (doc.body) doc.body.dataset.gbSourceUrl = url; } catch { /* */ }
   const ctx = runEngine(doc);
-  return (ctx && ctx.data && Array.isArray(ctx.data.opportunities)) ? ctx.data.opportunities : [];
+  const opportunities = (ctx && ctx.data && Array.isArray(ctx.data.opportunities))
+    ? ctx.data.opportunities
+    : [];
+  return selectActiveOpportunitiesForProposal(opportunities);
 }
 
 /* ── Current proposals (live, from the CRM) ─────────────────────────────────
@@ -350,7 +370,7 @@ export async function fetchActiveProposals({ accountId, opportunities } = {}) {
   let opps = (Array.isArray(opportunities) && opportunities.length)
     ? opportunities
     : (accountId ? await fetchOpportunitiesForAccount(accountId) : []);
-  const active = opps.filter((o) => o && o.id && !/closed/i.test(o.stage || ''));
+  const active = selectActiveOpportunitiesForProposal(opps);
   const lists = await Promise.all(active.map(async (o) => {
     const props = await fetchProposalsForOpportunity(o.id);
     return props.map((p) => ({
@@ -555,6 +575,29 @@ export function buildProposedOpportunityUpdate(p = {}, current = {}) {
   };
 }
 
+/** A newly-saved proposal advances only early pipeline stages. Later active
+ * stages (already Proposed, Ordered, Automation, Qualified) retain their stage. */
+export function shouldAdvanceOpportunityToProposed(current = {}) {
+  const stageId = normalizeOpportunityStageId(
+    current.OpportunityStageId ?? current.opportunityStageId ?? current.stageId ?? current.stage,
+  );
+  return stageId === '1' || stageId === '7';
+}
+
+async function advanceSavedProposalOpportunity(opportunityID) {
+  const id = String(opportunityID ?? '').trim();
+  const response = await _crmAjax(_crmBase + 'Opportunity/Get.ajax?' + encodeURIComponent(id));
+  const current = JSON.parse(response.text || '{}') || {};
+  if (!shouldAdvanceOpportunityToProposed(current)) return false;
+  const payload = buildOpportunityPayload(
+    { ...current, opportunityId: id },
+    { stageId: PROPOSED_OPPORTUNITY_STAGE_ID },
+    { opportunityId: id },
+  );
+  await _crmAjax(_crmBase + 'Opportunity/Update.ajax?' + encodeURIComponent(JSON.stringify(payload)));
+  return true;
+}
+
 /* Run `fn` over `items` with at most `limit` in flight at once — preserves
    input order in the result. Used to throttle the getCart fan-out below. */
 async function mapLimit(items, limit, fn) {
@@ -617,7 +660,7 @@ export async function addKnownPromo(code) {
    savedLines, skipped }. Throws with a user-facing message on bad input. */
 export async function saveProposalToOpportunity(proposal, {
   opportunityID, customerID = 0, name, expiration, proposalID = null, promotion = null,
-} = {}) {
+} = {}, dependencies = {}) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
   const needsReview = proposal.filter((line) => line && (
     line.unavailable || (line.refresh && line.refresh.status === 'review')
@@ -627,7 +670,8 @@ export async function saveProposalToOpportunity(proposal, {
   }
   if (opportunityID == null || opportunityID === '') throw new Error('Pick an opportunity to save to');
   if (!name || !name.trim()) throw new Error('Name the proposal');
-  const { items, skipped } = await buildProposalLines(proposal);
+  const buildLines = dependencies.buildLines || buildProposalLines;
+  const { items, skipped } = await buildLines(proposal);
   if (!items.length) throw new Error('Could not load product data for any line — try again');
   const body = buildSaveProposalBody(items, {
     opportunityID,
@@ -638,7 +682,22 @@ export async function saveProposalToOpportunity(proposal, {
     promotion,
   });
   const resp = await sendBackgroundMessage('giftSaveProposal', { body });
-  return { cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped };
+  // Saving the cart has already succeeded at this point. Treat a stage-write
+  // failure as an explicit partial success so retrying cannot create a duplicate
+  // proposal, while still telling the modal that the CRM needs attention.
+  try {
+    const opportunityStageChanged = await advanceSavedProposalOpportunity(opportunityID);
+    return {
+      cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped,
+      opportunityStageChanged,
+    };
+  } catch (error) {
+    return {
+      cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped,
+      opportunityStageChanged: false,
+      warning: `Proposal saved, but the opportunity could not be moved to Proposed: ${error?.message || 'unknown error'}`,
+    };
+  }
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
