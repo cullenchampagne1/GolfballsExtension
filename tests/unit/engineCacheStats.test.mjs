@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  clearEngineCache,
   engineCacheStatError,
   engineCacheStatView,
 } from '../../src/lib/engineCacheStats.js';
@@ -101,6 +102,28 @@ describe('engine cache stat · registry wiring', () => {
     assert.equal(row.type, 'stat');
     assert.equal(typeof row.reader, 'function');
     assert.deepEqual(row.watch, ['pageEngine.indexingEnabled', 'pageEngine.territory']);
+    assert.equal(row.showDetail, false);
+    assert.equal(typeof row.clearer, 'function');
+    assert.ok(row.clearTitle);
+  });
+
+  it('deletes the worker-owned cache through the registered background action', async () => {
+    let sent;
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) {
+          sent = message;
+          callback({ ok: true, cleared: 14 });
+        },
+      },
+    };
+    try {
+      assert.deepEqual(await clearEngineCache(), { ok: true, cleared: 14 });
+      assert.deepEqual(sent, { action: 'pageEngineIndexClear' });
+    } finally {
+      delete globalThis.chrome;
+    }
   });
 
   it('keeps read-only rows out of the persisted settings bag', () => {

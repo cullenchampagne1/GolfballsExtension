@@ -95,3 +95,8 @@ export async function readEngineCacheStat(settings) {
     return engineCacheStatError(error);
   }
 }
+
+/** Remove every encrypted Page Engine snapshot through its worker-owned store. */
+export async function clearEngineCache() {
+  return sendBackgroundMessage('pageEngineIndexClear');
+}

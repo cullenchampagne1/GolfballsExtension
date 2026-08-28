@@ -2,10 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [taskListSource, replacementSource, panelSource, manifestSource] = await Promise.all([
+const [taskListSource, replacementSource, panelSource, iconSource, manifestSource] = await Promise.all([
   readFile(new URL('../../src/modals/TaskList.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/modals/ReplacementContacts.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../src/ui/components/FloatingPanel.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('../../src/ui/icons.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../../manifest.json', import.meta.url), 'utf8'),
 ]);
 
@@ -47,5 +48,12 @@ describe('Replacement Contacts modal handoff', () => {
     assert.doesNotMatch(replacementSource, /placeholder="Search/);
     assert.doesNotMatch(replacementSource, />Blacklist</);
     assert.doesNotMatch(replacementSource, />Export</);
+  });
+
+  it('only renders icons that exist in the shared registry', () => {
+    const names = [...replacementSource.matchAll(/<I\.([A-Za-z0-9_]+)/g)].map((match) => match[1]);
+    for (const name of new Set(names)) {
+      assert.match(iconSource, new RegExp(`\\b${name}:\\s*\\(`), `${name} must be a registered icon component`);
+    }
   });
 });

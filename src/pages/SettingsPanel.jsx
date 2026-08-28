@@ -922,6 +922,7 @@ function SelectCell({ def, value, onChange, disabled = false }) {
 function StatCell({ def, settings }) {
   const [view, setView] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const watched = (def.watch || []).map((key) => String(settings?.[key] ?? '')).join('|');
 
   const read = useCallback(() => {
@@ -960,8 +961,23 @@ function StatCell({ def, settings }) {
     }
   }, [def, settings, exporting]);
 
+  const runClear = useCallback(async () => {
+    if (typeof def.clearer !== 'function' || clearing) return;
+    setClearing(true);
+    try {
+      await def.clearer(settings);
+      const next = typeof def.reader === 'function' ? await def.reader(settings) : null;
+      if (next) setView(next);
+      window.__gbToast?.success?.('Cached contacts deleted');
+    } catch (error) {
+      window.__gbToast?.error?.(error?.message || 'Unable to delete this cache');
+    } finally {
+      setClearing(false);
+    }
+  }, [def, settings, clearing]);
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
       <div style={{ textAlign: 'right', minWidth: 0, maxWidth: 240 }}>
         <div style={{
           fontFamily: 'var(--gb-font-mono)', fontSize: 13.5, fontWeight: 650,
@@ -970,7 +986,7 @@ function StatCell({ def, settings }) {
         }}>
           {view ? view.value : '…'}
         </div>
-        {view?.detail && (
+        {def.showDetail !== false && view?.detail && (
           <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.35 }}>
             {view.detail}
           </div>
@@ -983,6 +999,15 @@ function StatCell({ def, settings }) {
           disabled={exporting}
           onClick={runExport}
           title={def.exportTitle || 'Export as JSON'}
+        />
+      )}
+      {typeof def.clearer === 'function' && (
+        <IconBtn
+          size="sm"
+          icon={<I.trash />}
+          disabled={clearing || exporting}
+          onClick={runClear}
+          title={def.clearTitle || 'Delete cached data'}
         />
       )}
     </div>
@@ -1018,7 +1043,7 @@ function DevSettingRow({ def, value, onChange, settings, managed = false }) {
           {def.key}
         </div>
       </div>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ alignSelf: 'stretch', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
         {isBool && (
           <Switch on={!!value} size="sm" disabled={managed} onChange={(on) => onChange(on)} />
         )}
