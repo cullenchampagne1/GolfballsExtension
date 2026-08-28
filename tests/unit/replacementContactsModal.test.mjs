@@ -63,10 +63,13 @@ describe('Replacement Contacts modal handoff', () => {
   });
 
   it('contains long bottom-row values and animates candidate-domain changes', () => {
-    assert.match(replacementSource, /import \{ AnimatePresence, motion \} from 'motion\/react'/);
-    assert.match(replacementSource, /<AnimatePresence initial=\{false\} mode="popLayout">/);
-    assert.match(replacementSource, /key="company-domain"/);
-    assert.match(replacementSource, /key="non-company-domain"/);
+    assert.match(replacementSource, /import \{ motion \} from 'motion\/react'/);
+    assert.doesNotMatch(replacementSource, /AnimatePresence|filter: 'blur|\blayout\b/);
+    assert.match(replacementSource, /display: 'grid'[\s\S]*?gridArea: '1 \/ 1'/);
+    assert.match(replacementSource, /opacity: rec\.searchable \? 1 : 0/);
+    assert.match(replacementSource, /opacity: rec\.searchable \? 0 : 1/);
+    assert.match(replacementSource, /inert=\{!rec\.searchable\}/);
+    assert.match(replacementSource, /inert=\{rec\.searchable\}/);
     assert.match(replacementSource, /gridTemplateColumns: 'repeat\(3, minmax\(0, 1fr\)\)'/);
     assert.match(replacementSource, /WebkitMaskImage: 'linear-gradient\(to right, #000 calc\(100% - 18px\), transparent\)'/);
     assert.match(replacementSource, /maskImage: 'linear-gradient\(to right, #000 calc\(100% - 18px\), transparent\)'/);
