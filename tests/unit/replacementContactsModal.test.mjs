@@ -20,16 +20,17 @@ describe('Replacement Contacts modal handoff', () => {
   });
 
   it('keeps the parent mounted without letting its Escape handler close underneath the child', () => {
-    const visibilityGuard = panelSource.indexOf('if (!visible) return undefined;');
+    const visibilityGuard = panelSource.indexOf('if (!visible || !closeOnEscape) return undefined;');
     const keyListener = panelSource.indexOf("document.addEventListener('keydown', onKey)", visibilityGuard);
     assert.ok(visibilityGuard > 0);
     assert.ok(keyListener > visibilityGuard);
+    assert.match(replacementSource, /closeOnEscape=\{!reviewId\}/);
   });
 
   it('uses the original queue model and CRM task-completion path inside a FloatingPanel', () => {
     assert.match(replacementSource, /export function ReplacementContacts/);
     assert.match(replacementSource, /<FloatingPanel/);
-    assert.match(replacementSource, /selectReplacementTasks\(parseTasksFromHtml\(html\)\)/);
+    assert.match(replacementSource, /selectReplacementTasks\(taskSnapshot\)/);
     assert.match(replacementSource, /closeReplacementTasks\(ids, \{/);
     assert.match(replacementSource, /complete: completeTaskById/);
   });
@@ -43,11 +44,23 @@ describe('Replacement Contacts modal handoff', () => {
   it('uses the standard animated modal scale and leaves the queue unclipped by filters', () => {
     assert.match(replacementSource, /function AnalyzeModal[\s\S]*?<FloatingPanel/);
     assert.match(replacementSource, /bindClose=\{bindClose\}/);
+    assert.match(replacementSource, /function AnalyzeModal[\s\S]*?backdrop=\{false\}/);
+    assert.doesNotMatch(replacementSource, /visible=\{!reviewId\}/);
     assert.match(replacementSource, /className="gb-scroll"/);
     assert.match(replacementSource, /style=\{\{ width: 152 \}\}/);
     assert.doesNotMatch(replacementSource, /placeholder="Search/);
     assert.doesNotMatch(replacementSource, />Blacklist</);
     assert.doesNotMatch(replacementSource, />Export</);
+  });
+
+  it('reuses Task List data instead of fetching and parsing Page 349 again', () => {
+    assert.match(taskListSource, /<ReplacementContacts[\s\S]*?taskSnapshot=\{tasks\}/);
+    assert.match(taskListSource, /<ReplacementContacts[\s\S]*?taskStatus=\{status\}/);
+    assert.match(taskListSource, /<ReplacementContacts[\s\S]*?onRefresh=\{loadTasks\}/);
+    assert.match(replacementSource, /selectReplacementTasks\(taskSnapshot\)/);
+    assert.doesNotMatch(replacementSource, /fetch\(TASKS_ENDPOINT/);
+    assert.match(replacementSource, /contactSummaryCache\.has\(contactId\)/);
+    assert.match(replacementSource, /result = await loadContactSummary\(contactId\)/);
   });
 
   it('only renders icons that exist in the shared registry', () => {

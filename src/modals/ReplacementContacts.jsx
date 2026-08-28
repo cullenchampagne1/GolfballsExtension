@@ -10,7 +10,8 @@
  * queue says lives in src/lib/replacementContacts.js, where it is testable.
  *
  * Two things are worth knowing about the data:
- *   • Tasks come from Page=349 (this page is not on it, so it is fetched).
+ *   • Tasks come from the Task List's already-loaded Page=349 snapshot, so this
+ *     modal never downloads and parses that large CRM page a second time.
  *   • The bounced ADDRESS is not on the task row — it is on the contact. Rows
  *     hydrate progressively through Contact/Get, and a row says whether its
  *     address is still loading rather than pretending the contact has none.
@@ -21,15 +22,13 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  TASKS_ENDPOINT, looksLikeLoginShell, parseTasksFromHtml,
-} from '../lib/taskListModel.js';
+import { selectReplacementTasks } from '../lib/taskListModel.js';
 import { completeTaskById } from '../lib/crmTasks.js';
 import {
   DOMAIN_META, RC_SETTABLE, RC_STATE_KEY, RC_STATUSES,
   buildReplacementRecords, closeReplacementTasks, closingSummary, contactIdFromUrl,
   filterReplacementRecords, isClosingStatus, kindLabel, normalizeReplacementStates,
-  pruneReplacementStates, replacementKpis, selectReplacementTasks, sortReplacementRecords,
+  pruneReplacementStates, replacementKpis, sortReplacementRecords,
 } from '../lib/replacementContacts.js';
 import {
   Btn, Card, Dropdown, FloatingPanel, I, IconBtn, ModalFooter, ModalHeader, Tag,
@@ -41,6 +40,30 @@ const LINK_STYLE = { color: 'var(--gb-brand-label)', fontWeight: 600, textDecora
 /* How many contact lookups are in flight at once. The CRM is a shared admin
    box; four keeps a 300-row queue resolving in seconds without hammering it. */
 const HYDRATE_CONCURRENCY = 4;
+
+/* Contact/Get is the only place the bounced address exists. Keep successful
+   summaries for the lifetime of the CRM tab so closing/reopening this modal
+   does not issue the same contact requests again. Concurrent opens also share
+   one in-flight promise per contact. */
+const contactSummaryCache = new Map();
+const contactSummaryRequests = new Map();
+
+function loadContactSummary(contactId) {
+  if (contactSummaryCache.has(contactId)) return Promise.resolve(contactSummaryCache.get(contactId));
+  if (contactSummaryRequests.has(contactId)) return contactSummaryRequests.get(contactId);
+  const request = crmGetContact(contactId)
+    .then((contact) => ({
+      email: String(contact?.email || '').trim(),
+      jobTitle: String(contact?.jobTitle || '').trim(),
+    }))
+    .then((summary) => {
+      contactSummaryCache.set(contactId, summary);
+      return summary;
+    })
+    .finally(() => contactSummaryRequests.delete(contactId));
+  contactSummaryRequests.set(contactId, request);
+  return request;
+}
 
 const DASH = '—';
 const txt = (value) => (value === null || value === undefined || value === '' ? null : String(value));
@@ -247,7 +270,7 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed, draggable }) 
     <FloatingPanel
       width={620}
       maxHeight={680}
-      backdrop
+      backdrop={false}
       draggable={draggable}
       onClose={onClosed}
       bindClose={bindClose}
@@ -374,9 +397,13 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
 }
 
 /* ── app ──────────────────────────────────────────────────────── */
-export function ReplacementContacts({ onClosed, draggable = false }) {
-  const [tasks, setTasks] = useState([]);
-  const [loadState, setLoadState] = useState('loading');
+export function ReplacementContacts({
+  onClosed,
+  draggable = false,
+  taskSnapshot = [],
+  taskStatus = 'ready',
+  onRefresh,
+}) {
   const [hydrated, setHydrated] = useState({});      // contactId → { email, jobTitle } | { error }
   const [hydrating, setHydrating] = useState(0);     // contacts still to resolve
   const [states, setStates] = useState({});          // taskId → { status, replacement… }
@@ -388,30 +415,18 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
   const [selected, setSelected] = useState(new Set());
   const [reviewId, setReviewId] = useState(null);
 
-  const gen = useRef(0);
   const anchorRef = useRef(null);
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
 
-  /* ── load ──────────────────────────────────────────────────────
-     The queue is fetched from the native task list and filtered down to the
-     automated bounce subjects. */
-  const load = useCallback(async () => {
-    const g = ++gen.current;
-    setLoadState('loading');
-    try {
-      const res = await fetch(TASKS_ENDPOINT, { credentials: 'include' });
-      const html = await res.text();
-      if (g !== gen.current) return;
-      if (!res.ok || looksLikeLoginShell(html)) { setLoadState('error'); return; }
-      setTasks(selectReplacementTasks(parseTasksFromHtml(html)));
-      setLoadState('ready');
-    } catch {
-      if (g === gen.current) setLoadState('error');
-    }
-  }, []);
+  /* Task List already paid for the large Page=349 request. Reuse that complete
+     snapshot and only select the bounce rows here; Refresh delegates to the
+     parent so both workspaces stay on one source of truth. */
+  const tasks = useMemo(() => selectReplacementTasks(taskSnapshot), [taskSnapshot]);
+  const loadState = taskStatus === 'error'
+    ? 'error'
+    : (taskStatus === 'loading' && !taskSnapshot.length ? 'loading' : 'ready');
 
   useEffect(() => { loadStates().then((s) => { setStates(s); setStatesLoaded(true); }); }, []);
-  useEffect(() => { load(); }, [load]);
 
   /* Annotations for tasks that have left the CRM are pruned once both halves
      have landed — pruning against a not-yet-loaded bag would be a no-op, and
@@ -435,7 +450,6 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
       tasks.map((t) => contactIdFromUrl(t.contactUrl)).filter((id) => id && !hydrated[id]),
     )];
     if (!pending.length) { setHydrating(0); return undefined; }
-    const g = gen.current;
     let cancelled = false;
     let cursor = 0;
     setHydrating(pending.length);
@@ -446,12 +460,11 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
         if (!contactId) return;
         let result;
         try {
-          const contact = await crmGetContact(contactId);
-          result = { email: String(contact?.email || '').trim(), jobTitle: String(contact?.jobTitle || '').trim() };
+          result = await loadContactSummary(contactId);
         } catch (e) {
           result = { error: e?.message || 'lookup failed' };
         }
-        if (cancelled || g !== gen.current) return;
+        if (cancelled) return;
         setHydrated((cur) => ({ ...cur, [contactId]: result }));
         setHydrating((n) => Math.max(0, n - 1));
       }
@@ -560,7 +573,7 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
         height={720}
         backdrop
         draggable={draggable}
-        visible={!reviewId}
+        closeOnEscape={!reviewId}
         onClose={onClosed}
         cardClassName="gb-replacement-contacts-modal"
         cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
@@ -569,7 +582,7 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
           icon={<I.mail />}
           title="Replacement Contacts"
           subtitle="Bounced-email queue · closing a row completes its CRM task"
-          right={<Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={load}>Refresh</Btn>}
+          right={<Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={onRefresh} disabled={!onRefresh || loadState === 'loading'}>Refresh</Btn>}
         />
         <div style={{ flex: 1, minHeight: 0, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
@@ -639,7 +652,7 @@ export function ReplacementContacts({ onClosed, draggable = false }) {
             ) : loadState === 'error' ? (
               <div style={{ padding: '44px 0', textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12.5 }}>
                 The CRM task list is unavailable — the queue is built from it.{' '}
-                <button onClick={load} style={{ background: 'none', border: 0, color: 'var(--gb-brand-label)', cursor: 'pointer', fontWeight: 600 }}>Retry</button>
+                <button onClick={onRefresh} disabled={!onRefresh} style={{ background: 'none', border: 0, color: 'var(--gb-brand-label)', cursor: onRefresh ? 'pointer' : 'default', fontWeight: 600 }}>Retry</button>
               </div>
             ) : !records.length ? (
               <div style={{ padding: '52px 20px', textAlign: 'center' }}>

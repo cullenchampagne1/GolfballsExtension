@@ -1161,6 +1161,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     {replacementContactsOpen && (
       <ReplacementContacts
         draggable={draggable}
+        taskSnapshot={tasks}
+        taskStatus={status}
+        onRefresh={loadTasks}
         onClosed={() => setReplacementContactsOpen(false)}
       />
     )}

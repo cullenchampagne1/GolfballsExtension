@@ -32,6 +32,7 @@ export const FloatingPanelEmbedContext = React.createContext(null);
  *   onClose    called once the close animation finishes (unmount here)
  *   bindClose  optional — receives the animated-close fn so callers can
  *              trigger a graceful close from outside (keyboard shortcuts etc.)
+ *   closeOnEscape  disable while a visible parent has a stacked child modal
  *   physics    optional Throwable-knob overrides (ignored when !draggable)
  */
 const DEFAULT_PHYSICS = {
@@ -134,6 +135,7 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, cardClassName
 
 export function FloatingPanel({
   children, width = 480, backdrop = true, draggable = true, onClose, bindClose,
+  closeOnEscape = true,
   // Per-modal physics override. Merged over DEFAULT_PHYSICS so the
   // caller only has to set what they want to change.
   physics,
@@ -194,14 +196,14 @@ export function FloatingPanel({
 
   // Escape closes — gracefully
   useEffect(() => {
-    // A hidden parent stays mounted while a sibling submodal is active. It
-    // must not also consume that submodal's Escape key or both workspaces
-    // would close at once.
-    if (!visible) return undefined;
+    // A parent can stay mounted (and may remain visible) while a sibling
+    // submodal is active. It must not also consume that submodal's Escape key
+    // or both workspaces would close at once.
+    if (!visible || !closeOnEscape) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') requestClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [requestClose, visible]);
+  }, [requestClose, visible, closeOnEscape]);
 
   // Expose `draggable` through context so inner components (chiefly
   // ModalHeader) know whether they should wire themselves as a drag
