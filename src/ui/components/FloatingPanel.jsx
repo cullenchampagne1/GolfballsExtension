@@ -194,10 +194,14 @@ export function FloatingPanel({
 
   // Escape closes — gracefully
   useEffect(() => {
+    // A hidden parent stays mounted while a sibling submodal is active. It
+    // must not also consume that submodal's Escape key or both workspaces
+    // would close at once.
+    if (!visible) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') requestClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [requestClose]);
+  }, [requestClose, visible]);
 
   // Expose `draggable` through context so inner components (chiefly
   // ModalHeader) know whether they should wire themselves as a drag

@@ -137,9 +137,9 @@ describe('sortTasks', () => {
   });
 });
 
-/* The CRM's automated bounce tasks are worked on the Replacement Contacts page
-   (Page 294). Ordinary Task List views hide them, while the explicit
-   Replacements view exposes exactly that same queue definition. */
+/* The CRM's automated bounce tasks are worked in the Replacement Contacts
+   modal. Ordinary Task List views hide them, while that dedicated workspace
+   exposes exactly the same queue definition. */
 describe('replacement tasks have a dedicated task-list view', () => {
   const html = PAGE([
     ROW('1', { subject: 'Quarterly check-in' }),

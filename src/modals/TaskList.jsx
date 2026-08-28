@@ -14,6 +14,7 @@ import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
 import { EmailRunner } from './EmailRunner.jsx';
 import { QuickTaskPopover } from './QuickTaskPopover.jsx';
 import { QuickTask } from './QuickTask.jsx';
+import { ReplacementContacts } from './ReplacementContacts.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
@@ -316,6 +317,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   const [statusFilter, setStatusFilter] = useState('1');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [selected, setSelected]   = useState(() => new Set());
+  const [replacementContactsOpen, setReplacementContactsOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   useEffect(() => {
@@ -918,6 +920,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
          range-selecting rows was interfering with clicks. */
       cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       draggable={draggable}
+      visible={!replacementContactsOpen}
       onClose={onClosed}
       bindClose={handleBindClose}
     >
@@ -1088,11 +1091,23 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 8,
       }}>
-        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>
-          {hasSelection
-            ? <>Bulk actions for <strong style={{ color: 'var(--gb-text-secondary)' }}>{selCount}</strong> selected</>
-            : 'Select rows above to enable bulk actions'}
-        </div>
+        {hasSelection ? (
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>
+            Bulk actions for <strong style={{ color: 'var(--gb-text-secondary)' }}>{selCount}</strong> selected
+          </div>
+        ) : (
+          <Btn
+            size="sm"
+            variant="secondary"
+            icon={<I.mail size={11} />}
+            onClick={() => {
+              setQt(null);
+              setBulkCompose(false);
+              setEmailRunnerOpen(false);
+              setReplacementContactsOpen(true);
+            }}
+          >Replacement Contacts</Btn>
+        )}
         <div style={{ flex: 1 }} />
         <Btn
           size="sm"
@@ -1139,6 +1154,16 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         />
       )}
     </FloatingPanel>
+
+    {/* Replacements is a sibling workspace. Task List remains mounted but
+        invisible underneath it, preserving filters, selection and scroll;
+        closing this panel reveals that exact Task List instance again. */}
+    {replacementContactsOpen && (
+      <ReplacementContacts
+        draggable={draggable}
+        onClosed={() => setReplacementContactsOpen(false)}
+      />
+    )}
 
     {/* Email Runner side panel — sits to the right with air between,
         no hide pattern (both modals stay visible at the same time). */}

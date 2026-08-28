@@ -95,12 +95,6 @@
     action_review: function () {
       return /[?&]Page=286\b/i.test(location.href);
     },
-    /* Page 294 is the host's unused "Adjust Leader Board". The Replacement
-       Contacts queue takes the route over wholesale — there is no host data
-       to extract, so URL is the whole detection. */
-    replacement_contacts: function () {
-      return /[?&]Page=294\b/i.test(location.href);
-    },
   };
 
   /* id → the name the console's Adoption block shows. Kept beside DETECTORS
@@ -115,7 +109,6 @@
     task_list: 'Task List Page',
     my_recent_history: 'Recent History',
     action_review: 'Action Review',
-    replacement_contacts: 'Replacement Contacts',
   };
 
   /* A takeover is a whole-page surface: it opens when we render over the CRM
@@ -316,11 +309,9 @@
   }
 
   // Test hook — the unit suite imports this file with stubbed globals and
-  // exercises the pure store + nav helpers through here.
+  // exercises the pure store helper through here.
   window.__gbCustomPagesInternals = {
     deepEqual: deepEqual,
-    applyNavRename: function (rule) { return applyNavRename(rule); },
-    HOST_NAV_RENAMES: function () { return HOST_NAV_RENAMES; },
   };
 
   function createStore() {
@@ -438,68 +429,6 @@
     if (window.__gbCustomPageBoot) { try { window.__gbCustomPageBoot.clear(); } catch (e) {} }
   }
 
-  /* ── host sidebar renames ─────────────────────────────────────
-     The CRM's own nav still calls Page 294 "Adjust Leader Board". With Custom
-     Pages on, that link now lands on the Replacement Contacts takeover, so the
-     label is wrong everywhere the host nav is visible (i.e. every page we do
-     NOT take over). Rename it in place.
-
-     Matched by ROUTE, not by markup: the nav is Metronic boilerplate whose
-     classes we don't want to depend on, but ?Page=<n> is stable. Only the text
-     node carrying the old label changes, so icons and badges inside the anchor
-     survive untouched. */
-  var HOST_NAV_RENAMES = [
-    {
-      id: 'replacement_contacts',
-      page: 294,
-      from: /adjust\s*leader\s*board/i,
-      to: 'Replacement Contacts',
-    },
-  ];
-
-  function renameAnchorText(anchor, from, to) {
-    var renamed = false;
-    try {
-      var walker = document.createTreeWalker(anchor, NodeFilter.SHOW_TEXT, null);
-      var node;
-      while ((node = walker.nextNode())) {
-        var value = node.nodeValue || '';
-        if (!from.test(value)) continue;
-        node.nodeValue = value.replace(from, to);
-        renamed = true;
-      }
-    } catch (e) { /* exotic DOM — leave the label alone */ }
-    return renamed;
-  }
-
-  function applyNavRename(rule) {
-    var hit = false;
-    var exact = new RegExp('[?&]Page=' + rule.page + '(?![0-9])', 'i');
-    var links = document.querySelectorAll('a[href*="Page=' + rule.page + '"]');
-    for (var i = 0; i < links.length; i++) {
-      // The substring selector also matches Page=2940 — confirm the real route.
-      if (!exact.test(links[i].getAttribute('href') || '')) continue;
-      if (renameAnchorText(links[i], rule.from, rule.to)) hit = true;
-    }
-    return hit;
-  }
-
-  /* The nav is server-rendered, but a slow shell can still paint it after this
-     script runs. Retry a few times, briefly, rather than leaving a long-lived
-     observer on every CRM page for a one-word label. */
-  function renameHostNav(enabled) {
-    var pending = HOST_NAV_RENAMES.filter(function (rule) {
-      return enabled.indexOf(rule.id) !== -1;
-    });
-    if (!pending.length) return;
-    var attempts = 0;
-    (function pass() {
-      attempts += 1;
-      pending = pending.filter(function (rule) { return !applyNavRename(rule); });
-      if (pending.length && attempts < 5) setTimeout(pass, 400);
-    })();
-  }
-
   function revealHost() {
     // No takeover (page disabled / not detected) — remove any
     // document_start pre-hide so the original page shows through.
@@ -511,9 +440,6 @@
     readEnabled().then(function (enabled) {
       writeMirror(enabled);
       writeThemeBg();
-      // Runs on EVERY CRM page, takeover or not — the stale label is only
-      // visible on the pages we leave alone.
-      renameHostNav(enabled);
 
       // Find the first enabled page id whose detector matches AND has a
       // registered UI. First match wins.

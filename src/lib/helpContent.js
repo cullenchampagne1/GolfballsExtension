@@ -4,7 +4,7 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.43",
+  "version": "3.4.44",
   "generatedAt": "2026-08-28",
   "tree": [
     {
@@ -1067,20 +1067,27 @@ export const HELP_CONTENT = {
         "task list",
         "push due",
         "complete",
-        "export csv"
+        "export csv",
+        "replacement contacts",
+        "bounced email"
       ],
-      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, and the per-task popover with its mini calendar.",
+      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, a dedicated Replacement Contacts queue, and the per-task popover with its mini calendar.",
       "feature": "task-list",
       "flag": "taskListEnabled",
       "shortcut": "Ctrl+X",
       "covers": [
-        "task-list"
+        "task-list",
+        "replacement-contacts"
       ],
       "body": {
         "beginner": [
           {
             "type": "p",
             "text": "Press Ctrl+X. The toolbar: a search box ('Search account, contact, subject…'), a Status dropdown (New tasks / Completed / All statuses), a Priority dropdown (All / High / Medium / Low), and Refresh. The table sorts by clicking headers — click again for descending, and Shift+click a second column to chain sorts (sort by Due Date, then Priority)."
+          },
+          {
+            "type": "p",
+            "text": "With no rows selected, choose Replacement Contacts in the footer to switch into the bounced-email queue. Closing that modal returns to the same Task List filters, selection, and scroll position. The queue groups bounced contacts by domain type; Replaced, No replacement, and Archive complete the underlying CRM task."
           }
         ],
         "intermediate": [
@@ -4908,12 +4915,10 @@ export const HELP_CONTENT = {
         "contact details",
         "account details",
         "opportunity details",
-        "replacement contacts",
-        "bounced email",
         "replace page",
         "workspace"
       ],
-      "summary": "Replace CRM pages — Contact, Account and Opportunity Details, Search, Task List, and the Replacement Contacts bounce queue — with focused extension workspaces backed by live CRM data.",
+      "summary": "Replace CRM pages — Contact, Account and Opportunity Details, Search, and Task List — with focused extension workspaces backed by live CRM data.",
       "covers": [],
       "body": {
         "advanced": [
@@ -4947,10 +4952,6 @@ export const HELP_CONTENT = {
               [
                 "Task List",
                 "The native task list with refine facets, bulk complete/push/email, and live per-row action status."
-              ],
-              [
-                "Replacement Contacts",
-                "The bounced-email queue. Takes over the unused Adjust Leader Board route (Page 294) and renames that sidebar entry. Collects the CRM's automated \"Investigate bounced contact\" and \"Replacement contact needed\" tasks — which are hidden from the Task List surfaces — classifies each bounced address by domain, and closes a row by completing its CRM task."
               ]
             ]
           },
@@ -8260,9 +8261,11 @@ export const HELP_CONTENT = {
         "task list",
         "push due",
         "complete",
-        "export csv"
+        "export csv",
+        "replacement contacts",
+        "bounced email"
       ],
-      "description": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, and the per-task popover with its mini calendar.",
+      "description": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, a dedicated Replacement Contacts queue, and the per-task popover with its mini calendar.",
       "article": "task-list",
       "shortcut": "Ctrl+X",
       "flag": "taskListEnabled"
@@ -9172,12 +9175,10 @@ export const HELP_CONTENT = {
         "contact details",
         "account details",
         "opportunity details",
-        "replacement contacts",
-        "bounced email",
         "replace page",
         "workspace"
       ],
-      "description": "Replace CRM pages — Contact, Account and Opportunity Details, Search, Task List, and the Replacement Contacts bounce queue — with focused extension workspaces backed by live CRM data.",
+      "description": "Replace CRM pages — Contact, Account and Opportunity Details, Search, and Task List — with focused extension workspaces backed by live CRM data.",
       "article": "custom-crm-pages",
       "shortcut": null,
       "flag": null

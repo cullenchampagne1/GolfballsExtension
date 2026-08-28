@@ -650,10 +650,6 @@ export const CRM_CHILD_PAGE = {
   'Open Lead': 245,
   'Opportunity': 280,
   'Opportunity Linking': 356,
-  /* 294 is the host's "Adjust Leader Board", which nobody uses. Custom Pages
-     claims the route for the Replacement Contacts queue, so the replica nav
-     shows the new name in that slot — the link is unchanged. */
-  'Replacement Contacts': 294,
 };
 
 export const TOP_PAGE = { dashboard: 18 };
@@ -679,7 +675,6 @@ export const NAV = [
     { label: 'Open Lead' },
     { label: 'Opportunity' },
     { label: 'Opportunity Linking' },
-    { label: 'Replacement Contacts' },
     { label: '__CURRENT__', current: true },
   ]},
   { id: 'orders',   label: 'Orders',   icon: <I.cart />, children: [

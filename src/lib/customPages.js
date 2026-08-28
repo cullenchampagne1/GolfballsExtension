@@ -34,10 +34,6 @@ export const CUSTOM_PAGE_SECTIONS = [
       { id: 'open_lead',           label: 'Open Lead' },
       { id: 'opportunity',         label: 'Opportunity' },
       { id: 'opportunity_linking', label: 'Opportunity Linking' },
-      /* Page 294 in the host CRM is "Adjust Leader Board", which nobody uses.
-         The takeover claims that route (and its sidebar slot) for the
-         Replacement Contacts queue — see src/lib/replacementContacts.js. */
-      { id: 'replacement_contacts', label: 'Replacement Contacts' },
       { id: 'contact_details',     label: 'Contact Details' },
       { id: 'account_details',     label: 'Account Details' },
       { id: 'opportunity_details', label: 'Opportunity Details' },

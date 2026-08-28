@@ -99,9 +99,25 @@
       ],
       "flag": "taskListEnabled",
       "subModals": [
-        "EmailRunner"
+        "EmailRunner",
+        "ReplacementContacts"
       ],
       "dataSource": "scrapes CRM Page=349 task table"
+    },
+    {
+      "id": "replacement-contacts",
+      "component": "ReplacementContacts",
+      "file": "src/modals/ReplacementContacts.jsx",
+      "displayName": "Replacement Contacts",
+      "purpose": "Dedicated bounced-email queue with domain triage, replacement notes, and CRM task completion.",
+      "openedBy": [
+        "Replacement Contacts button in the Task List footer"
+      ],
+      "pageContext": [
+        "inside TaskList"
+      ],
+      "flag": "taskListEnabled",
+      "dataSource": "scrapes CRM Page=349 task table and hydrates contacts through Contact/Get"
     },
     {
       "id": "crm-search",

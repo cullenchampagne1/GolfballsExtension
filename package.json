@@ -1,7 +1,7 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.43",
+  "version": "3.4.44",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
@@ -239,6 +239,10 @@
     {
       "name": "crm \u00b7 replacement-contacts bounce queue",
       "file": "tests/unit/replacementContacts.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 replacement contacts task-list handoff",
+      "file": "tests/unit/replacementContactsModal.test.mjs"
     },
     {
       "name": "flow \u00b7 replacement contacts close the CRM task",

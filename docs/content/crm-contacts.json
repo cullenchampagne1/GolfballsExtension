@@ -151,15 +151,16 @@
       "title": "Task List",
       "icon": "check",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list", "push due", "complete", "export csv"],
-      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, and the per-task popover with its mini calendar.",
+      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list", "push due", "complete", "export csv", "replacement contacts", "bounced email"],
+      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, a dedicated Replacement Contacts queue, and the per-task popover with its mini calendar.",
       "feature": "task-list",
       "flag": "taskListEnabled",
       "shortcut": "Ctrl+X",
-      "covers": ["task-list"],
+      "covers": ["task-list", "replacement-contacts"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Press Ctrl+X. The toolbar: a search box ('Search account, contact, subject…'), a Status dropdown (New tasks / Completed / All statuses), a Priority dropdown (All / High / Medium / Low), and Refresh. The table sorts by clicking headers — click again for descending, and Shift+click a second column to chain sorts (sort by Due Date, then Priority)." }
+          { "type": "p", "text": "Press Ctrl+X. The toolbar: a search box ('Search account, contact, subject…'), a Status dropdown (New tasks / Completed / All statuses), a Priority dropdown (All / High / Medium / Low), and Refresh. The table sorts by clicking headers — click again for descending, and Shift+click a second column to chain sorts (sort by Due Date, then Priority)." },
+          { "type": "p", "text": "With no rows selected, choose Replacement Contacts in the footer to switch into the bounced-email queue. Closing that modal returns to the same Task List filters, selection, and scroll position. The queue groups bounced contacts by domain type; Replaced, No replacement, and Archive complete the underlying CRM task." }
         ],
         "intermediate": [
           { "type": "heading", "text": "Bulk actions" },

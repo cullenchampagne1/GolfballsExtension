@@ -1,10 +1,6 @@
 /* eslint-disable */
 /**
- * Replacement Contacts custom page (CRM Page 294).
- *
- * Page 294 is the host CRM's "Adjust Leader Board", which nobody uses — the
- * takeover claims the route and its sidebar slot (see custom-pages.js and the
- * replica NAV in detail-shared.jsx).
+ * Replacement Contacts modal.
  *
  * The queue is the CRM's own automated bounce tasks ("Investigate bounced
  * contact" / "Replacement contact needed"), lifted out of the Task List modal
@@ -20,13 +16,11 @@
  *     address is still loading rather than pretending the contact has none.
  *
  * Closing a row (Replaced / No replacement / Archive) COMPLETES the underlying
- * CRM task — that is the point of the page. Every other status is the rep's
+ * CRM task — that is the point of this workspace. Every other status is the rep's
  * own working note and lives in chrome.storage.
  */
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { ensureTheme } from '../lib/theme.js';
 import {
   TASKS_ENDPOINT, looksLikeLoginShell, parseTasksFromHtml,
 } from '../lib/taskListModel.js';
@@ -37,15 +31,14 @@ import {
   filterReplacementRecords, isClosingStatus, kindLabel, normalizeReplacementStates,
   pruneReplacementStates, replacementKpis, selectReplacementTasks, sortReplacementRecords,
 } from '../lib/replacementContacts.js';
-import { ToastHost } from '../ui/components/ToastHost.jsx';
-import { FULL_HEIGHT_LIST_PAGE_CSS } from '../lib/customPageLayout.js';
+import { FloatingPanel, ModalHeader } from '../ui/index.js';
 import {
-  Btn, Card, DASH, DataCtx, DetailErrorBoundary, I, IconBtn, SectionTitle, Spinner,
+  Btn, Card, DASH, I, IconBtn, SectionTitle, Spinner,
   StatCardGrid, Tag, TaskCheckbox, Td, Th, tableStyle, trStyle, txt,
 } from '../lib/detail-shared.jsx';
 import {
-  Breadcrumb, DetailPageFrame, MiniSelect, ModalCtx, ModalShell, TopBar,
-  crmGetContact, gbToast, useDetailData, useModal, useModalHost,
+  MiniSelect, ModalCtx, ModalShell,
+  crmGetContact, gbToast, useModal, useModalHost,
 } from '../lib/crm-detail-shared.jsx';
 
 const BLACKLIST_URL = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=262';
@@ -316,8 +309,7 @@ function ContactRow({ rec, index, selected, onToggle, onOpen, onStatus, status, 
 }
 
 /* ── app ──────────────────────────────────────────────────────── */
-function ReplacementContactsApp({ store }) {
-  const [D] = useDetailData(store);
+export function ReplacementContacts({ onClosed, draggable = false }) {
   const modalHost = useModalHost();
 
   const [tasks, setTasks] = useState([]);
@@ -343,8 +335,8 @@ function ReplacementContactsApp({ store }) {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
 
   /* ── load ──────────────────────────────────────────────────────
-     Page 294 has no task table of its own, so the queue is fetched from the
-     native task list and filtered down to the automated bounce subjects. */
+     The queue is fetched from the native task list and filtered down to the
+     automated bounce subjects. */
   const load = useCallback(async () => {
     const g = ++gen.current;
     setLoadState('loading');
@@ -534,45 +526,44 @@ function ReplacementContactsApp({ store }) {
   const cycle = (cur, setter, value) => setter(cur === value ? 'all' : value);
 
   return (
-    <DataCtx.Provider value={D}>
     <ModalCtx.Provider value={modalHost}>
-      <DetailPageFrame
-        currentPage="Replacement Contacts" ready modalHost={modalHost} hideScrollbar
-        topBar={<TopBar><Breadcrumb items={[{ label: 'CRM', page: 261 }]} current="Replacement Contacts" /></TopBar>}
+      <>
+      <FloatingPanel
+        width={1160}
+        height={720}
+        backdrop
+        draggable={draggable}
+        onClose={onClosed}
+        cardClassName="gb-replacement-contacts-modal"
+        cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       >
-        <style>{FULL_HEIGHT_LIST_PAGE_CSS}</style>
-        <div className="gbcp-stack gbcp-fill-grid" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+        <ModalHeader
+          icon={<I.mail />}
+          title="Replacement Contacts"
+          subtitle="Bounced-email queue · closing a row completes its CRM task"
+          right={<div style={{ display: 'flex', gap: 7 }}>
+            <Btn size="sm" variant="ghost" icon={<I.ban />}
+              onClick={() => { try { window.open(BLACKLIST_URL, '_blank', 'noopener'); } catch {} }}>Blacklist</Btn>
+            <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportCsv}>Export CSV</Btn>
+            <Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={load}>Refresh</Btn>
+          </div>}
+        />
+        <div style={{ flex: 1, minHeight: 0, padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
 
           {/* Header + stat rail */}
-          <div className="gbcp-fill-toolbar" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Card>
-              <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, letterSpacing: -.3, color: 'var(--gb-text-primary)' }}>
-                      Replacement Contacts
-                    </h1>
-                    <Tag size="sm" tone="error" icon={<I.mail />}>{k.open} open</Tag>
-                    {hydrating > 0 && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
-                        resolving {hydrating} address{hydrating === 1 ? '' : 'es'}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 4, lineHeight: 1.5 }}>
-                    Contacts whose email bounced, taken off the task list and queued here. Work the company
-                    domains first — those are the ones a replacement can be found for. Closing a row completes its CRM task.
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                  <Btn size="sm" variant="ghost" icon={<I.ban />}
-                    onClick={() => { try { window.open(BLACKLIST_URL, '_blank', 'noopener'); } catch {} }}>Blacklist</Btn>
-                  <Btn size="sm" variant="ghost" icon={<I.download />} onClick={exportCsv}>Export CSV</Btn>
-                  <Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={load}>Refresh</Btn>
-                </div>
-              </div>
-            </Card>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '0 2px' }}>
+              <Tag size="sm" tone="error" icon={<I.mail />}>{k.open} open</Tag>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Work company domains first — those are the contacts most likely to have a replacement.
+              </span>
+              {hydrating > 0 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .7s linear infinite' }} />
+                  resolving {hydrating} address{hydrating === 1 ? '' : 'es'}
+                </span>
+              )}
+            </div>
 
             <StatCardGrid cells={[
               { label: 'Open queue', value: k.open, sub: `${k.working} in progress`, tone: k.open ? 'error' : undefined, mono: true, active: status === 'open', onClick: () => setStatus('open') },
@@ -650,7 +641,7 @@ function ReplacementContactsApp({ store }) {
           </div>
 
           {/* Queue */}
-          <Card className="gbcp-fill-results">
+          <Card style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <SectionTitle
               icon={<I.mail />} title="Bounced contacts"
               count={loadState === 'ready' ? `${visible.length}${visible.length !== records.length ? ' of ' + records.length : ''}` : ''}
@@ -676,7 +667,7 @@ function ReplacementContactsApp({ store }) {
                 No bounced contacts match these filters.
               </div>
             ) : (
-              <div className="gb-scroll gbcp-fill-table">
+              <div className="gb-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <table style={tableStyle}>
                   <thead><tr>
                     <Th align="center" style={{ width: 38, padding: '6px 8px' }}>
@@ -701,9 +692,20 @@ function ReplacementContactsApp({ store }) {
             )}
           </Card>
         </div>
-      </DetailPageFrame>
+      </FloatingPanel>
+      {modalHost.modal && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) modalHost.closeModal(); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000010,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,.55)', padding: 20,
+            animation: modalHost.closing ? 'gb-backdrop-out .19s ease both' : 'gb-fade-slide var(--gb-anim) both',
+          }}>
+          {modalHost.modal}
+        </div>
+      )}
+      </>
     </ModalCtx.Provider>
-    </DataCtx.Provider>
   );
 }
 
@@ -734,24 +736,4 @@ function SortPicker({ sort, setSort }) {
       { value: 'status', label: 'Status' },
     ]} />
   );
-}
-
-/* ── Register with the custom-pages engine (Page 294 → replacement_contacts) ── */
-if (!window.__gbReplacementContactsPageRegistered) {
-  window.__gbReplacementContactsPageRegistered = true;
-  ensureTheme();
-  window.__gbCustomPages = window.__gbCustomPages || {};
-  window.__gbCustomPages.replacement_contacts = {
-    render(rootEl, ctx) {
-      const root = createRoot(rootEl);
-      root.render(
-        <ToastHost installGlobal={false}>
-          <DetailErrorBoundary label="Replacement Contacts page">
-            <ReplacementContactsApp store={ctx.store} />
-          </DetailErrorBoundary>
-        </ToastHost>,
-      );
-      return () => { try { root.unmount(); } catch (e) {} };
-    },
-  };
 }
