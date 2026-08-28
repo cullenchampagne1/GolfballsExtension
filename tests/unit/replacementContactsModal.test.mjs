@@ -53,6 +53,13 @@ describe('Replacement Contacts modal handoff', () => {
     assert.doesNotMatch(replacementSource, />Export</);
   });
 
+  it('keeps one draggable review window in place while another row replaces its content', () => {
+    assert.match(replacementSource, /function AnalyzeModal[\s\S]*?<FloatingPanel[\s\S]*?\n\s+draggable\n/);
+    assert.match(replacementSource, /<AnalyzeModal\s+rec=\{reviewRecord\}/);
+    assert.doesNotMatch(replacementSource, /<AnalyzeModal\s+key=/);
+    assert.doesNotMatch(replacementSource, /<AnalyzeModal[\s\S]*?draggable=\{draggable\}/);
+  });
+
   it('reuses Task List data instead of fetching and parsing Page 349 again', () => {
     assert.match(taskListSource, /<ReplacementContacts[\s\S]*?taskSnapshot=\{tasks\}/);
     assert.match(taskListSource, /<ReplacementContacts[\s\S]*?taskStatus=\{status\}/);

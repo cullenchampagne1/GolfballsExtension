@@ -255,7 +255,7 @@ function AutoLinkPanel({ rec, onUse }) {
 }
 
 /* ── analyze modal ────────────────────────────────────────────── */
-function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed, draggable }) {
+function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed }) {
   const closeRef = useRef(null);
   const close = useCallback(() => closeRef.current?.(), []);
   const bindClose = useCallback((requestClose) => { closeRef.current = requestClose; }, []);
@@ -271,7 +271,7 @@ function AnalyzeModal({ rec, onStatus, onUseReplacement, onClosed, draggable }) 
       width={620}
       maxHeight={680}
       backdrop={false}
-      draggable={draggable}
+      draggable
       onClose={onClosed}
       bindClose={bindClose}
       cardClassName="gb-replacement-contact-review-modal"
@@ -695,7 +695,6 @@ export function ReplacementContacts({
       {reviewRecord && (
         <AnalyzeModal
           rec={reviewRecord}
-          draggable={draggable}
           onStatus={applyStatus}
           onUseReplacement={useReplacement}
           onClosed={() => setReviewId(null)}
