@@ -796,6 +796,10 @@
     {
       "name": "flow \u00b7 recent-orders sweep \u2192 storage",
       "file": "tests/integration/recent-orders-sweep.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 support ticket request builder & idempotency key",
+      "file": "tests/unit/supportTicketRequest.test.mjs"
     }
   ],
   "devDependencies": {

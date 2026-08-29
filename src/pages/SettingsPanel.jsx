@@ -31,6 +31,11 @@ import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } fr
 import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
+import {
+  buildSupportTicketRequest,
+  SUPPORT_TICKET_TITLE_MAX,
+  SUPPORT_TICKET_DESCRIPTION_MAX,
+} from '../lib/supportTicketRequest.js';
 import { listProductStores, revokeProductStore } from '../lib/customItems.js';
 import { trackerSummaries, setTrackerEnabled } from '../lib/trackers.js';
 import { trackerTableRows } from '../lib/trackerSettings.js';
@@ -1324,6 +1329,134 @@ function SupportTicketsSection() {
   );
 }
 
+/* ── Submit a ticket: the manage-window path to file a bug report or feature
+      request WITHOUT going through Help Companion. Reuses the exact
+      `supportTicketCreate` background action the chatbot uses (idempotent by
+      request_id), so the server contract stays in one place. On success the
+      list above refreshes itself off the gbSupportTicketRevision storage cursor
+      that the worker bumps — no manual reload wiring here. */
+const TICKET_KINDS = [
+  { id: 'bug', label: 'Bug report', icon: 'alert', hint: 'Something is broken or behaving wrong' },
+  { id: 'feature', label: 'Feature request', icon: 'sparkle', hint: 'An idea or improvement you’d like' },
+];
+
+function SubmitTicketSection() {
+  const [kind, setKind] = useState('bug');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [done, setDone] = useState(null);
+  const [error, setError] = useState('');
+
+  const active = TICKET_KINDS.find((entry) => entry.id === kind) || TICKET_KINDS[0];
+  const canSubmit = title.trim().length > 0 && description.trim().length > 0;
+
+  const submit = async () => {
+    setError('');
+    setDone(null);
+    let extensionVersion = '';
+    try { extensionVersion = chrome.runtime.getManifest()?.version || ''; } catch { /* */ }
+    const { payload, valid } = buildSupportTicketRequest({
+      kind, title, description, extensionVersion, surface: 'settings-manage',
+    });
+    if (!valid) return;
+    try {
+      const response = await sendBackgroundMessage('supportTicketCreate', payload);
+      const ticket = response?.ticket || {};
+      setDone({ id: String(ticket.id || '').slice(0, 20), kind });
+      setTitle('');
+      setDescription('');
+    } catch (err) {
+      setError(err?.message || 'Unable to submit your ticket. Please try again.');
+      throw err; // let the Btn surface its error state
+    }
+  };
+
+  return (
+    <section>
+      <SectionLabel>Submit a Ticket</SectionLabel>
+      <Card style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.45 }}>
+          Report a bug or request a feature. Your ticket appears above and RevStack replies in place.
+        </div>
+
+        {/* Kind toggle — the same iconography the ticket list uses. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+          {TICKET_KINDS.map((entry) => {
+            const on = entry.id === kind;
+            const Icon = I[entry.icon];
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => { setKind(entry.id); setDone(null); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7, padding: '9px 11px',
+                  borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+                  background: on ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                  color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                  transition: 'background .15s ease, border-color .15s ease, color .15s ease',
+                }}
+              >
+                {Icon && <Icon size={13} style={{ flex: 'none' }} />}
+                <span style={{ fontSize: 11.5, fontWeight: 650 }}>{entry.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: -4 }}>{active.hint}</div>
+
+        <Input
+          value={title}
+          onChange={setTitle}
+          placeholder={active.id === 'bug' ? 'Short summary of the problem' : 'Short summary of the request'}
+          maxLength={SUPPORT_TICKET_TITLE_MAX}
+        />
+
+        <div style={{ position: 'relative' }}>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={active.id === 'bug'
+              ? 'What happened, what did you expect, and how can we reproduce it?'
+              : 'What would you like, and how would it help?'}
+            rows={4}
+            maxLength={SUPPORT_TICKET_DESCRIPTION_MAX}
+            style={{
+              width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 82,
+              background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)',
+              borderRadius: 10, padding: '9px 11px', color: 'var(--gb-text-primary)',
+              font: 'inherit', fontFamily: 'var(--gb-font-sans)', fontSize: 12, lineHeight: 1.5, outline: 'none',
+            }}
+          />
+          <span style={{ position: 'absolute', right: 9, bottom: 7, fontSize: 8.75, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', pointerEvents: 'none' }}>
+            {description.length}/{SUPPORT_TICKET_DESCRIPTION_MAX}
+          </span>
+        </div>
+
+        <AnimatePresence initial={false} mode="wait">
+          {done && (
+            <motion.div key="done" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={T.base}>
+              <Callout tone="success" title={`${done.kind === 'bug' ? 'Bug report' : 'Feature request'} submitted`}>
+                {done.id ? <>Ticket <code style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>{done.id}</code> is now in your list above.</> : 'It’s now in your list above.'}
+              </Callout>
+            </motion.div>
+          )}
+          {error && (
+            <motion.div key="error" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={T.base}>
+              <Callout tone="error" title="Couldn’t submit">{error}</Callout>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <Btn variant="primary" size="md" full disabled={!canSubmit} onClick={submit}>
+          {active.id === 'bug' ? 'Submit bug report' : 'Submit feature request'}
+        </Btn>
+      </Card>
+    </section>
+  );
+}
+
 /* ── Trackers ────────────────────────────────────────────────────
    One row per tracker: what it collects, how much it has, when it last
    learned something, and its own switch. Everything here is read from the
@@ -2024,9 +2157,11 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
       </section>
       )}
 
-      {/* Intentionally last and absent when empty. New tickets appear after
-          Help Companion submits them; revstack replies update in place. */}
+      {/* The user's own tickets (absent when empty), then the always-present
+          form to file a new one. New tickets appear in the list above the
+          moment the worker confirms them; revstack replies update in place. */}
       <SupportTicketsSection />
+      <SubmitTicketSection />
     </div>
   );
 }
