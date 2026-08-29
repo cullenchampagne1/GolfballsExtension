@@ -54,7 +54,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
   });
 
-  it('keeps email links and bucket sources inside compact fixed column budgets', () => {
+  it('balances bucket-source columns and collapses secondary fields at one-column width', () => {
     const emailColumns = emailLinksRoute.match(/columns = \[([\s\S]*?)\]\n    return/)?.[1] || '';
     const sourceColumns = sourceRoute.match(/"columns": \[([\s\S]*?)\],\n        "rows"/)?.[1] || '';
     const keys = (source) => [...source.matchAll(/"key": "([^"]+)"/g)].map((match) => match[1]);
@@ -66,8 +66,11 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
     assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
     assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
-    assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "112px"/);
+    assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "minmax\(96px, 1fr\)"/);
     assert.doesNotMatch(sourceColumns, /"key": "source"[^\n]*"grow": True/);
+    assert.match(sourceColumns, /"key": "templates"[^\n]*"width": "minmax\(66px, 0\.65fr\)"[^\n]*"min_w": 2/);
+    assert.match(sourceColumns, /"key": "updated"[^\n]*"width": "minmax\(98px, 0\.9fr\)"[^\n]*"min_w": 2/);
+    assert.match(sourceColumns, /"key": "act"[^\n]*"width": "52px"/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
   });
@@ -102,7 +105,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     );
     assert.match(
       blocks,
-      /_v2_list\("managed-email-template-sources", "Template bucket sources"[\s\S]*?"managed-email-template-sources", 4, 3,[\s\S]*?shell_title=True\)/,
+      /_v2_list\("managed-email-template-sources", "Template bucket sources"[\s\S]*?"managed-email-template-sources", 4, 3,[\s\S]*?shell_title=True, min_w=1\)/,
     );
     assert.match(routes, /@router\.get\("\/managed-email-templates"\)/);
     assert.match(routes, /"editor": _owner_cell\(editor\)/);
