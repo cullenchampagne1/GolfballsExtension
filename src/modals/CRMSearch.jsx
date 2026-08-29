@@ -17,6 +17,7 @@ import {
 } from '../lib/crmIndex.js';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { parseContactFile, contactIdsFromRow } from '../lib/contactImport.js';
+import { reportFeatureUsage } from '../lib/usageEvents.js';
 import {
   attachCachedPageEngineSnapshots, pageEngineIdentity,
 } from '../lib/page-engine/cache-actions.js';
@@ -524,6 +525,12 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       setActiveIdx(-1);
       setLastIdx(null);
       setSelected(new Set(records.map((row) => row.id)));
+      if (records.length) {
+        reportFeatureUsage('contact_import', {
+          source: 'crm_search',
+          count: records.length,
+        }, { flush: 'soon' });
+      }
       const skipped = parsed.errors.length + parsed.warnings.length;
       toast?.success?.(
         `Imported ${records.length} CRM record${records.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`,
@@ -1472,6 +1479,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
         replacement. Visible alongside the parent (no hide pattern). */}
     <EmailRunner
       open={allowBulkSending && emailRunnerOpen}
+      usageSource="crm_search"
       anchorHostId="__gb-csm"
       cursor={emailRunnerCursor}
       useMock={useMock}

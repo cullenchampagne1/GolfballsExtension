@@ -33,7 +33,7 @@ export function mountFloating(id, render, { scaleCategory = 'modals', surface } 
   // call is what the console's Adoption and Presence blocks are built from.
   // The close is reported from onClosed rather than the panel's animation
   // start, so the recorded duration is how long it was actually on screen.
-  const reportClose = reportSurfaceOpen(surface || id, 'modal');
+  const reportClose = reportSurfaceOpen(surface || id, 'modal') || (() => {});
 
   const root = createRoot(host);
   const onClosed = () => { reportClose(); root.unmount(); host.remove(); };

@@ -17,6 +17,7 @@ describe('contact email orchestration', () => {
       from: 'rep@golfballs.com', to: 'customer@example.com', subject: 'Follow up',
       htmlBody: '<p>Hello</p>', replyMode: 'standalone', signature: '<p>Regards</p>',
       config: { localPart: 'rep', signature: '<p>Regards</p>', paReady: true },
+      usageSource: 'contact',
     });
   });
 

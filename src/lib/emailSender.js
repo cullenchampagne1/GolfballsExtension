@@ -6,6 +6,7 @@ import {
   filterLocalEmailTemplates,
   resolveEmailTemplateCapabilities,
 } from './emailTemplateCapabilities.js';
+import { emailUsageDimensions, reportFeatureUsage } from './usageEvents.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -127,7 +128,7 @@ function trackingFields(message = {}) {
   };
 }
 
-export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMode, templateId, templateName, variationId, templateVariationId, trackingContext }) {
+export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMode, attachments, templateId, templateName, variationId, templateVariationId, trackingContext }) {
   return {
     emails: [{
       from,
@@ -135,9 +136,20 @@ export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMo
       subject,
       htmlBody: normalizeEmailHtml(signature != null ? withSignature(htmlBody, signature) : htmlBody),
       replyMode,
+      ...(Array.isArray(attachments) && attachments.length ? { attachments } : {}),
       ...trackingFields({ templateId, templateName, variationId, templateVariationId, trackingContext }),
     }],
   };
+}
+
+function reportSuccessfulDelivery(result, message) {
+  if (message.trackUsage === false || (result?.state !== 'sent' && result?.state !== 'opened')) return;
+  reportFeatureUsage('email_send', {
+    source: message.usageSource || 'other',
+    transport: result.transport || 'none',
+    count: 1,
+    ...emailUsageDimensions(message.htmlBody, message.attachments),
+  });
 }
 
 /* Default dispatcher — a Promise-wrapped chrome.runtime.sendMessage. Callers
@@ -180,7 +192,7 @@ function classifyPaResult(r) {
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
  * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
  */
-export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'standalone', signature = '', config, templateId, templateName, variationId, templateVariationId, trackingContext }, opts = {}) {
+export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, trackingContext, usageSource = 'other', trackUsage = true }, opts = {}) {
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
   const cfg = config || await readEmailConfig();
@@ -198,11 +210,13 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
       return { state: 'failed', transport: 'pa', error: 'Configure Email account host in Settings before sending' };
     }
     const payload = buildPaPayload({
-      from, to, subject, htmlBody, signature, replyMode,
+      from, to, subject, htmlBody, signature, replyMode, attachments,
       templateId, templateName, variationId, templateVariationId, trackingContext,
     });
     const r = await dispatch({ action: 'paAutomate', payload });
-    return classifyPaResult(r);
+    const result = classifyPaResult(r);
+    reportSuccessfulDelivery(result, { htmlBody, attachments, usageSource, trackUsage });
+    return result;
   }
 
   // PA OFF → open the mail client, stripped to plain text + no signature.
@@ -217,5 +231,7 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
     },
   });
   if (r && r.ok === false) return { state: 'failed', transport: 'mailto', error: r.error || 'Could not open mail window' };
-  return { state: 'opened', transport: 'mailto', error: null };
+  const result = { state: 'opened', transport: 'mailto', error: null };
+  reportSuccessfulDelivery(result, { htmlBody, attachments, usageSource, trackUsage });
+  return result;
 }

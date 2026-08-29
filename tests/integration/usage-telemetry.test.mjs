@@ -100,6 +100,65 @@ describe('usage telemetry', () => {
     assert.equal(reporter.record({ kind: 'latency', ms: 9_999_999 }), true);
   });
 
+  it('coalesces email dimensions by source and transport before the backend', async () => {
+    const sent = [];
+    const { reporter } = loadTelemetry({ fetchImpl: recordingFetch(sent) });
+
+    reporter.record({
+      kind: 'feature', feature: 'email_send', source: 'popup', transport: 'pa',
+      count: 1, word_count: 84, attachment_count: 1, inline_image_count: 0,
+      subject: 'this field must never survive normalization',
+    });
+    reporter.record({
+      kind: 'feature', feature: 'email_send', source: 'popup', transport: 'pa',
+      count: 2, word_count: 190, attachment_count: 0, inline_image_count: 2,
+    });
+    reporter.record({
+      kind: 'feature', feature: 'email_send', source: 'task_list', transport: 'pa',
+      count: 1, word_count: 45,
+    });
+
+    assert.equal(reporter.pending(), 2, 'three sends become two dimension buckets');
+    await reporter.flush();
+    await settle();
+
+    const featureRows = sent[0].events.filter((event) => event.kind === 'feature');
+    assert.equal(featureRows.length, 2);
+    const popup = featureRows.find((event) => event.source === 'popup');
+    assert.deepEqual(
+      {
+        count: popup.count,
+        words: popup.word_count,
+        files: popup.attachment_count,
+        inline: popup.inline_image_count,
+      },
+      { count: 3, words: 274, files: 1, inline: 2 },
+    );
+    assert.equal('subject' in popup, false, 'free-text fields are stripped before the wire');
+  });
+
+  it('retains a pending aggregate across service-worker eviction', async () => {
+    const sent = [];
+    const first = loadTelemetry({ fetchImpl: recordingFetch(sent) });
+    await first.reporter.ready();
+    first.reporter.record({
+      kind: 'feature', feature: 'email_preview', source: 'email_preview', count: 1,
+    });
+    await settle();
+
+    // A fresh reporter over the same chrome.storage.session is the next MV3
+    // worker lifetime. It must hydrate the coalesced bucket before flushing.
+    const restarted = first.context.GBUsageTelemetry.createReporter();
+    await restarted.ready();
+    assert.equal(restarted.pending(), 1);
+    await restarted.flush();
+    await settle();
+
+    const preview = sent[0].events.find((event) => event.feature === 'email_preview');
+    assert.equal(preview?.count, 1);
+    assert.equal(restarted.pending(), 0);
+  });
+
   it('keeps the newest events when a very busy minute overruns the buffer', async () => {
     const sent = [];
     const { reporter, context } = loadTelemetry({ fetchImpl: recordingFetch(sent) });

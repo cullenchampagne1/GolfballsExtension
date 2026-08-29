@@ -14,22 +14,7 @@
 import { useEffect } from 'react';
 
 import { surfaceName } from './usageSurfaces.js';
-
-const MESSAGE = 'gbUsageEvent';
-
-function send(event) {
-  // The Operator's Guide mounts the REAL modal components as live demos. A
-  // page of documentation is not adoption, so it silences the reporter for its
-  // whole document rather than each demo remembering to opt out.
-  if (globalThis.__gbUsageSilent) return;
-  try {
-    // A closed/updating worker rejects; usage is never worth surfacing an
-    // error to the user or retrying, so the failure ends here.
-    chrome.runtime?.sendMessage?.({ action: MESSAGE, event }, () => {
-      void chrome.runtime?.lastError;
-    });
-  } catch { /* worker gone — drop the sample */ }
-}
+import { sendUsageEvent } from './usageEvents.js';
 
 /**
  * Report that a surface opened. Returns a `close(...)` fn that reports the
@@ -37,14 +22,15 @@ function send(event) {
  * a mount point may wire it to both an explicit close and an unmount.
  */
 export function reportSurfaceOpen(id, kind = 'modal') {
+  if (globalThis.__gbUsageSilent) return;
   const name = surfaceName(id);
   const at = Date.now();
-  send({ kind: 'surface_open', surface: name, surface_kind: kind });
+  sendUsageEvent({ kind: 'surface_open', surface: name, surface_kind: kind });
   let closed = false;
   return function reportClose() {
     if (closed) return;
     closed = true;
-    send({
+    sendUsageEvent({
       kind: 'surface_close',
       surface: name,
       surface_kind: kind,
@@ -84,6 +70,6 @@ export function useSurfaceUsage(name, { kind = 'modal', active = true } = {}) {
 export function trackDocumentSurface(name, kind = 'page') {
   if (typeof window === 'undefined' || window.__gbSurfaceTracked) return;
   window.__gbSurfaceTracked = true;
-  const reportClose = reportSurfaceOpen(name, kind);
+  const reportClose = reportSurfaceOpen(name, kind) || (() => {});
   window.addEventListener('pagehide', reportClose, { once: true });
 }

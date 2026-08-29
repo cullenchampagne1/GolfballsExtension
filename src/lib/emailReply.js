@@ -32,7 +32,7 @@ export function replySubject(value) {
   return `RE: ${base || '(no subject)'}`;
 }
 
-export async function sendThreadReply({ email, meta, to, subject, htmlBody, config }, options = {}) {
+export async function sendThreadReply({ email, meta, to, subject, htmlBody, config, usageSource = 'email_preview' }, options = {}) {
   if (!config?.paReady) return { state: 'failed', transport: 'none', error: 'Power Automate is not enabled' };
   const recipient = bareEmail(to) || replyRecipient(email, meta);
   if (!recipient) return { state: 'failed', transport: 'none', error: 'No customer email to reply to' };
@@ -45,5 +45,6 @@ export async function sendThreadReply({ email, meta, to, subject, htmlBody, conf
     replyMode: 'reply',
     signature: config.signature,
     config,
+    usageSource,
   }, options);
 }

@@ -1172,6 +1172,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         no hide pattern (both modals stay visible at the same time). */}
     <EmailRunner
       open={allowBulkSending && emailRunnerOpen}
+      usageSource="task_list"
       anchorHostId="__gb-tl"
       cursor={emailRunnerCursor}
       useMock={useMock}

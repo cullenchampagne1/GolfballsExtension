@@ -723,6 +723,7 @@ function __gbAccessAllowed(st, now) {
             replyMode: msg.replyMode || template.replyMode || 'standalone',
             variationId: msg.variationId || '__original',
             context: msg.context || {},
+            usageSource: msg.usageSource || 'popup',
           });
           const toast = window.__gbToast;
           if (result?.state === 'sent') {

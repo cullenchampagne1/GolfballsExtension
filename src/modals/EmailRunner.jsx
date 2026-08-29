@@ -230,6 +230,7 @@ const mockSendBg = (msg) => new Promise((resolve) => {
 
 export function EmailRunner({
   open, contacts, onClose, anchorHostId,
+  usageSource = 'other',
   /* Optional cursor { x, y } from the click that opened the
      panel — when set, DraggablePopup spawns the panel near the
      cursor instead of relative to the parent modal. */
@@ -731,6 +732,8 @@ export function EmailRunner({
                 contactId: c.crmContactId || c.contactId || '',
                 accountId: c.accountId || '',
               },
+              usageSource,
+              trackUsage: !useMock,
             },
             template: selectedTpl,
             followUpContext: {

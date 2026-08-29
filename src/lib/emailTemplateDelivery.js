@@ -68,6 +68,7 @@ export async function sendEmailTemplateFromPage(input = {}, deps = {}) {
       templateName: template.name || '',
       variationId: input.variationId || '__original',
       trackingContext: input.context || {},
+      usageSource: input.usageSource || 'other',
     },
     template,
     followUpContext: {

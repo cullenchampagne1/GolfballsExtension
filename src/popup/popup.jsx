@@ -1111,6 +1111,7 @@ function MainView({
        for every non-case template type. */
     sendMessage(tab.id, {
       action: 'sendEmailTemplate',
+      usageSource: 'popup',
       to: resolvedTo,
       subject,
       htmlBody: rawBody,

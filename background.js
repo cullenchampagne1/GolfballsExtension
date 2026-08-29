@@ -1224,6 +1224,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // reply — a content script must never wait on analytics to render.
   if (msg.action === 'gbUsageEvent') {
     GB_USAGE.record(msg.event);
+    if (msg.flush === 'soon') GB_USAGE.flushSoon();
     return false;
   }
 

@@ -15,6 +15,7 @@ globalThis.document = dom.window.document;
 
 /* In-memory chrome.storage.local — reset per test via setStore(). */
 const store = {};
+const usageMessages = [];
 const setStore = (obj) => {
   for (const k of Object.keys(store)) delete store[k];
   Object.assign(store, obj);
@@ -30,7 +31,13 @@ globalThis.chrome = {
       set: (obj, cb) => { Object.assign(store, obj); if (cb) cb(); },
     },
   },
-  runtime: { lastError: null },
+  runtime: {
+    lastError: null,
+    sendMessage: (message, callback) => {
+      usageMessages.push(message);
+      callback?.();
+    },
+  },
 };
 
 const { withSignature, htmlToPlainText, buildMailtoUrl, buildPaPayload, readEmailConfig, sendEmail } =
@@ -321,5 +328,36 @@ describe('sendEmail', () => {
       templateVariationId: '__original',
       trackingContext: { contactId: 'c42' },
     });
+  });
+
+  it('reports a successful delivery with source, transport, words, files, and inline images', async () => {
+    usageMessages.length = 0;
+    const result = await sendEmail({
+      from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Update',
+      htmlBody: '<p>Four body words here</p><img src="cid:logo"><span data-gb-attach="quote.pdf">hidden file name</span>',
+      signature: '<p>signature words are excluded</p>', usageSource: 'task_list',
+      config: { paReady: true },
+    }, { dispatch: async () => ({ ok: true }) });
+
+    assert.equal(result.state, 'sent');
+    assert.deepEqual(usageMessages.at(-1), {
+      action: 'gbUsageEvent',
+      flush: 'periodic',
+      event: {
+        kind: 'feature', feature: 'email_send', source: 'task_list', transport: 'pa',
+        count: 1, word_count: 4, attachment_count: 1, inline_image_count: 1, ok: true,
+      },
+    });
+  });
+
+  it('does not count a failed send as utilization', async () => {
+    usageMessages.length = 0;
+    const result = await sendEmail({
+      from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Update', htmlBody: 'hello',
+      usageSource: 'contact', config: { paReady: true },
+    }, { dispatch: async () => ({ ok: false, error: 'flow failed' }) });
+
+    assert.equal(result.state, 'failed');
+    assert.equal(usageMessages.length, 0);
   });
 });

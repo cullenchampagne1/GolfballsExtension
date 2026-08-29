@@ -10,6 +10,7 @@ import { sendEmail, readEmailConfig } from '../lib/emailSender.js';
 import { bareEmail, replyRecipient, replySenderAccount, replySubject, sendThreadReply } from '../lib/emailReply.js';
 import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
 import { filterLocalEmailTemplates } from '../lib/emailTemplateCapabilities.js';
+import { reportFeatureUsage } from '../lib/usageEvents.js';
 
 /* ───────────────────────────────────────────────────────────────
    email-preview.jsx — content-script entry for the React Email
@@ -257,6 +258,7 @@ if (!window.__gbEmailPreviewLoaded) {
         replyMode: 'reply',
         signature: cfg.signature,
         config: cfg,
+        usageSource: 'email_preview',
       });
       setSendingTemplate(false);
       if (res.state === 'sent') {
@@ -356,6 +358,7 @@ if (!window.__gbEmailPreviewLoaded) {
   }
 
   window.__gbOpenEmailPreview = function (target = {}) {
+    reportFeatureUsage('email_preview', { source: 'email_preview' });
     mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
         <EmailPreviewHost target={target} mountOnClosed={onClosed} mountBindClose={bindClose} />

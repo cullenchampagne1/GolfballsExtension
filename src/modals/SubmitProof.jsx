@@ -9,6 +9,7 @@ import { useClickOutside } from '../ui/hooks.js';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { CRM_PAGES } from '../lib/constants.js';
+import { reportFeatureUsage } from '../lib/usageEvents.js';
 
 /* ───────────────────────────────────────────────────────────────
    SubmitProof — React port of the proof-submission flow that used
@@ -570,6 +571,12 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
       toast?.error?.(`Submission failed (${failed.length}/${out.length})`, { duration: 5000 });
     } else {
       setStage('results');
+      if (!useMock) {
+        reportFeatureUsage('proof_submit', {
+          source: 'submit_proof',
+          count: out.length - failed.length,
+        }, { flush: 'soon' });
+      }
       // Notify parent: at least one proof generated. The wrapper uses
       // this to decide whether to close ImagePreview alongside us when
       // the user finally dismisses the modal.

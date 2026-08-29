@@ -20,5 +20,6 @@ export async function sendContactEmail(draft, deps = {}) {
     replyMode: 'standalone',
     signature: config.signature,
     config,
+    usageSource: draft?.usageSource || 'contact',
   });
 }

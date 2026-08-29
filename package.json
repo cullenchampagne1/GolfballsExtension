@@ -566,6 +566,22 @@
       "file": "tests/integration/usage-telemetry.test.mjs"
     },
     {
+      "name": "usage \u00b7 feature dimensions and email content boundary",
+      "file": "tests/unit/usageEvents.test.mjs"
+    },
+    {
+      "name": "usage \u00b7 backend aggregate-only ingestion contract",
+      "command": [
+        "../.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_usage_telemetry_contract.py"
+      ]
+    },
+    {
       "name": "flow \u00b7 install enrollment lifecycle",
       "file": "tests/integration/enrollment-lifecycle.test.mjs"
     },

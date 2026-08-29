@@ -33,6 +33,8 @@ const editorSidebar = localRuntimeAvailable
   ? readFileSync(resolve(root, 'src/content/editor-sidebar.jsx'), 'utf8') : '';
 const helpCompanion = localRuntimeAvailable
   ? readFileSync(resolve(root, 'src/ui/components/HelpCompanion.jsx'), 'utf8') : '';
+const project = localRuntimeAvailable
+  ? JSON.parse(readFileSync(resolve(root, 'revstack.project.json'), 'utf8')) : {};
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
@@ -145,5 +147,20 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(keyOverridesRoute, /"key": "act", "label": "Edit"[\s\S]*?"width": "58px"/);
     assert.match(keyOverridesRoute, /"key": "clear", "label": "Reset"[\s\S]*?"width": "62px"/);
     assert.doesNotMatch(keyOverridesRoute, /"key": "clear", "label": ""/);
+  });
+
+  it('publishes one switchable multi-line utilization chart and its aggregate table', () => {
+    assert.match(blocks, /"usage-utilization", "Tool utilization", "chart-line"/);
+    assert.match(blocks, /"component": "MultiSeriesChart"/);
+    assert.match(blocks, /"switcherStyle": "dropdown"/);
+    assert.match(blocks, /"usage-utilization-table", "Utilization details", "table"/);
+    assert.match(routes, /def _console_usage_utilization\(days: int\)/);
+    assert.match(routes, /"email_sends"[\s\S]*"email_transport"[\s\S]*"email_words"/);
+    assert.match(routes, /"email_attachments"[\s\S]*"email_inline"[\s\S]*"core_tools"[\s\S]*"catalog"/);
+    assert.match(routes, /if endpoint == "usage\.utilization"/);
+    assert.match(routes, /if endpoint == "usage\.utilization-table"/);
+    const defaults = project.dashboard.default_layout.map((item) => item.block_id);
+    assert.ok(defaults.includes('golfballs-extension.usage-utilization'));
+    assert.ok(defaults.includes('golfballs-extension.usage-utilization-table'));
   });
 });

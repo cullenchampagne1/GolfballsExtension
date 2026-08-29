@@ -24,6 +24,7 @@ import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, supportsLogo, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
+import { reportFeatureUsage } from '../lib/usageEvents.js';
 import {
   CATALOG_ACCOUNT_CONTEXT_NOTICE,
   CATALOG_CARD_HEIGHT,
@@ -1541,13 +1542,19 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   // the in-flight 3D preview generation (the "Imprint previews" toggle hung).
   const [emailSource, setEmailSource] = useState(null);
   const emailMode = !!emailSource;
-  const setEmailMode = (on) => setEmailSource(on && buildEmailSource ? buildEmailSource() : null);
+  const setEmailMode = (on) => {
+    if (on && buildEmailSource) reportFeatureUsage('gift_catalog_email', { source: 'gift_catalog' });
+    setEmailSource(on && buildEmailSource ? buildEmailSource() : null);
+  };
   const canEmail = !!buildEmailSource && M.count > 0;
   // Checkout sub-panel — single-proposal only (buildCheckoutSource is omitted for
   // the multi-proposal overview).
   const [checkoutSrc, setCheckoutSrc] = useState(null);
   const checkoutMode = !!checkoutSrc;
-  const setCheckoutMode = (on) => setCheckoutSrc(on && buildCheckoutSource ? buildCheckoutSource() : null);
+  const setCheckoutMode = (on) => {
+    if (on && buildCheckoutSource) reportFeatureUsage('gift_catalog_checkout', { source: 'gift_catalog' });
+    setCheckoutSrc(on && buildCheckoutSource ? buildCheckoutSource() : null);
+  };
   const canCheckout = canOfferProposalCheckout(buildCheckoutSource, M.count);
   const inSub = emailMode || checkoutMode;
   const exitSub = () => { setEmailMode(false); setCheckoutMode(false); };
@@ -3086,6 +3093,20 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
   const [query, setQuery] = useState('');
+  const openUsageTracked = useRef(false);
+  useEffect(() => {
+    if (openUsageTracked.current) return;
+    openUsageTracked.current = true;
+    reportFeatureUsage('gift_catalog_open', { source: 'gift_catalog' });
+  }, []);
+  useEffect(() => {
+    const value = query.trim();
+    if (value.length < 2 || value.startsWith('/')) return undefined;
+    const timer = setTimeout(() => {
+      reportFeatureUsage('gift_catalog_search', { source: 'gift_catalog' });
+    }, 1_200);
+    return () => clearTimeout(timer);
+  }, [query]);
   const [selBrands, setSelBrands] = useState(() => new Set()); // empty = all brands
   const toggleBrand = (b) => setSelBrands((s) => { const n = new Set(s); n.has(b) ? n.delete(b) : n.add(b); return n; });
   // Sidebar selection: 'all' | 'favorites' | 'dept:<department>'.
@@ -3345,7 +3366,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // product can now appear on multiple lines (e.g. different customizations).
   const inProposal = (id) => proposal.some((l) => l.productId === id);
   const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
-  const addToProposal = (p, decoration = null, variant = null) => setProposal((prev) => {
+  const addToProposal = (p, decoration = null, variant = null) => {
+    reportFeatureUsage('gift_catalog_add', { source: 'gift_catalog' });
+    setProposal((prev) => {
     // Always add a NEW line (unique id) — the same product can be added more
     // than once so the rep can quote different customizations/quantities. The
     // decoration descriptor (from the detail panel's CustomizeBlock) and the
@@ -3356,7 +3379,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // stock — the rep's common case. Drop a logo onto the sidebar later to fill
     // the art for every blank custom-logo line at once.
     return [...prev, proposalLineFromProduct(p, { decoration, variant }, { idFactory: rid })];
-  });
+    });
+  };
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { ...last, id: rid() }] }; }));
   const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
@@ -3428,7 +3452,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // `free`). The cart-load path filters them back out and lets the site
     // re-grant them from the promotion (see copySaved).
     return saveProposalDraft(name, [...proposal, ...proposalFreeLines], proposalPromo && proposalPromo.promotion)
-      .then((r) => { setSavedProposals(r.list); toast?.success?.(`Saved “${r.entry.name}” to Saved Proposals`); })
+      .then((r) => {
+        reportFeatureUsage('gift_catalog_proposal_save', { source: 'gift_catalog' }, { flush: 'soon' });
+        setSavedProposals(r.list);
+        toast?.success?.(`Saved “${r.entry.name}” to Saved Proposals`);
+      })
       .catch((e) => { toast?.error?.('Couldn’t save — ' + ((e && e.message) || 'unknown error')); throw e; });
   };
 
@@ -3521,6 +3549,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (!proposal.length) return Promise.reject(new Error('Proposal is empty'));
     return saveProposalToOpportunity(proposal, { ...opts, promotion: proposalPromo && proposalPromo.promotion })
       .then((r) => {
+        reportFeatureUsage('gift_catalog_publish', { source: 'gift_catalog' }, { flush: 'soon' });
         if (r.warning) toast?.warning?.(r.warning, { duration: 7000 });
         else toast?.success?.(`Saved “${opts.name}” to opportunity ${opts.opportunityID}`);
         return r;

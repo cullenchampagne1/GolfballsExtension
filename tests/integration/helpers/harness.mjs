@@ -86,6 +86,20 @@ export function createChrome({ stored = {}, extensionId = EXTENSION_ID, version 
         set(values, callback) { Object.assign(stored, values); callback?.(); },
         remove(keys, callback) { for (const key of toList(keys)) delete stored[key]; callback?.(); },
       },
+      // MV3 telemetry retains its coalesced minute across worker eviction in
+      // session storage. The fake shares the same backing object so a test can
+      // create a second worker/reporter and observe the pending aggregate.
+      session: {
+        get(keys, callback) {
+          if (keys == null) { callback(structuredClone(stored)); return; }
+          callback(Object.fromEntries(
+            toList(keys).filter((key) => Object.hasOwn(stored, key))
+              .map((key) => [key, structuredClone(stored[key])]),
+          ));
+        },
+        set(values, callback) { Object.assign(stored, structuredClone(values)); callback?.(); },
+        remove(keys, callback) { for (const key of toList(keys)) delete stored[key]; callback?.(); },
+      },
       onChanged: { addListener: (fn) => listeners.storageChanged.push(fn) },
     },
     tabs: {
