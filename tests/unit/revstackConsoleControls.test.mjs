@@ -66,11 +66,11 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
     assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
     assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
-    assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "minmax\(96px, 1fr\)"/);
+    assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "1fr"/);
     assert.doesNotMatch(sourceColumns, /"key": "source"[^\n]*"grow": True/);
-    assert.match(sourceColumns, /"key": "templates"[^\n]*"width": "minmax\(66px, 0\.65fr\)"[^\n]*"min_w": 2/);
-    assert.match(sourceColumns, /"key": "updated"[^\n]*"width": "minmax\(98px, 0\.9fr\)"[^\n]*"min_w": 2/);
-    assert.match(sourceColumns, /"key": "act"[^\n]*"width": "52px"/);
+    assert.match(sourceColumns, /"key": "templates"[^\n]*"width": "0\.65fr"[^\n]*"min_w": 2/);
+    assert.match(sourceColumns, /"key": "updated"[^\n]*"width": "0\.9fr"[^\n]*"min_w": 2/);
+    assert.match(sourceColumns, /"key": "act"[^\n]*"width": "40px"/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
   });
