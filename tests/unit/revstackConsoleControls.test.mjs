@@ -7,9 +7,11 @@ import { describe, it } from 'node:test';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const blocksPath = resolve(root, '.revstack/blocks.py');
 const routesPath = resolve(root, '.revstack/routes.py');
-const localRuntimeAvailable = existsSync(blocksPath) && existsSync(routesPath);
+const clientApiPath = resolve(root, '.revstack/logic/client_api.py');
+const localRuntimeAvailable = existsSync(blocksPath) && existsSync(routesPath) && existsSync(clientApiPath);
 const blocks = localRuntimeAvailable ? readFileSync(blocksPath, 'utf8') : '';
 const routes = localRuntimeAvailable ? readFileSync(routesPath, 'utf8') : '';
+const clientApi = localRuntimeAvailable ? readFileSync(clientApiPath, 'utf8') : '';
 const keyOverridesStart = routes.indexOf('@router.get("/keys/{key_id}/configuration-overrides")');
 const keyOverridesEnd = routes.indexOf('@router.post("/keys/{key_id}/configuration-overrides")', keyOverridesStart);
 const keyOverridesRoute = keyOverridesStart >= 0 && keyOverridesEnd > keyOverridesStart
@@ -169,8 +171,8 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(blocks, /"rangeOptions": \[/);
     assert.match(blocks, /"usage-utilization-table", "Utilization details", "table"/);
     assert.match(routes, /def _console_usage_utilization\(days: int\)/);
-    assert.match(routes, /_TEMPORARY_USAGE_PREVIEW = True/);
-    assert.match(routes, /Sample data/);
+    assert.doesNotMatch(routes, /_TEMPORARY_USAGE_PREVIEW|_temporary_usage_preview_rows|Sample data ·/);
+    assert.match(clientApi, /USAGE_RETENTION_DAYS = 365/);
     assert.match(routes, /"email_sends"[\s\S]*"email_transport"[\s\S]*"email_words"/);
     assert.match(routes, /"email_attachments"[\s\S]*"email_inline"[\s\S]*"core_tools"[\s\S]*"catalog"/);
     assert.match(routes, /if endpoint == "usage\.utilization"/);

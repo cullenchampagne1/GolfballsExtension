@@ -27,8 +27,8 @@ class UsageTelemetryContractTests(unittest.TestCase):
         routes_tree = ast.parse((ROOT / ".revstack" / "routes.py").read_text())
         names = {
             "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
-            "_USAGE_TRANSPORT_LABELS", "_USAGE_COLORS", "_TEMPORARY_USAGE_PREVIEW",
-            "_usage_days", "_temporary_usage_preview_rows", "_utilization_series",
+            "_USAGE_TRANSPORT_LABELS", "_USAGE_COLORS",
+            "_usage_days", "_utilization_series",
             "_console_usage_utilization",
             "_console_usage_utilization_table",
         }
@@ -107,21 +107,20 @@ class UsageTelemetryContractTests(unittest.TestCase):
         self.assertEqual(table["summary"], "10 actions · 30d")
         self.assertTrue(any(row["feature"]["text"] == "Proofs submitted" for row in table["rows"]))
 
-    def test_empty_manager_query_uses_labeled_multi_series_sample_data(self):
+    def test_empty_manager_query_stays_empty_until_real_events_arrive(self):
         self.routes["_usage_feature_rows"] = lambda _days: []
         payload = self.routes["_console_usage_utilization"](30)
         views = {view["id"]: view for view in payload["views"]}
 
-        self.assertTrue(payload["sample"])
-        self.assertTrue(payload["summary"].startswith("Sample data · "))
-        self.assertGreaterEqual(len(views["email_sends"]["series"]), 4)
-        self.assertGreaterEqual(len(views["email_transport"]["series"]), 2)
-        self.assertGreater(views["email_words"]["total"], 0)
-        self.assertGreater(views["catalog"]["total"], 0)
+        self.assertNotIn("sample", payload)
+        self.assertEqual(payload["summary"], "0 tracked actions · 30d")
+        self.assertTrue(all(view["series"] == [] for view in views.values()))
+        self.assertTrue(all(view["total"] == 0 for view in views.values()))
 
         table = self.routes["_console_usage_utilization_table"](30)
-        self.assertTrue(table["sample"])
-        self.assertTrue(table["summary"].startswith("Sample data · "))
+        self.assertNotIn("sample", table)
+        self.assertEqual(table["summary"], "0 actions · 30d")
+        self.assertEqual(table["rows"], [])
         self.assertEqual(
             len({column["key"] for column in table["columns"]}),
             len(table["columns"]),
