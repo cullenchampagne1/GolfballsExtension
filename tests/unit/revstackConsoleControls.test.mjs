@@ -25,6 +25,11 @@ const sourceEnd = routes.indexOf('@router.post("/managed-email-templates/clear")
 const sourceRoute = sourceStart >= 0 && sourceEnd > sourceStart
   ? routes.slice(sourceStart, sourceEnd)
   : '';
+const overridesStart = routes.indexOf('@router.get("/configuration-overrides")');
+const overridesEnd = routes.indexOf('# ---------------- AI help companion', overridesStart);
+const overridesRoute = overridesStart >= 0 && overridesEnd > overridesStart
+  ? routes.slice(overridesStart, overridesEnd)
+  : '';
 const editorSettings = localRuntimeAvailable
   ? readFileSync(resolve(root, 'src/content/editor-settings.jsx'), 'utf8') : '';
 const editorBridge = localRuntimeAvailable
@@ -46,13 +51,12 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
   });
 
   it('uses the editable block-shell title as the only email-share heading', () => {
-    const listHelper = blocks.match(/def _v2_list[\s\S]*?# --- secondary surfaces/)?.[0] || '';
-    const emailLinks = listHelper.match(/_v2_list\("email-links"[\s\S]*?shell_title=True\)/)?.[0] || '';
+    const listHelper = blocks.match(/def _list_block[\s\S]*?# --- secondary surfaces/)?.[0] || '';
+    const emailLinks = listHelper.match(/_list_block\("email-links"[\s\S]*?until revoked"\)/)?.[0] || '';
 
-    assert.match(listHelper, /if not shell_title:[\s\S]*props\["title"\] = title/);
-    assert.match(listHelper, /hide_title=not shell_title/);
+    assert.match(listHelper, /ConsoleList is never handed a `title`/);
+    assert.match(listHelper, /hide_title=False/);
     assert.match(emailLinks, /"Shared email templates"/);
-    assert.match(emailLinks, /shell_title=True/);
     assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
   });
 
@@ -63,18 +67,24 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
 
     assert.deepEqual(keys(emailColumns), ['name', 'owner', 'type', 'updated', 'act']);
     assert.match(emailColumns, /"key": "act", "label": "Revoke"/);
-    assert.match(emailColumns, /"key": "name", "label": "Name", "width": "112px"/);
-    assert.doesNotMatch(emailColumns, /"key": "name"[^\n]*"grow": True/);
+    assert.match(emailColumns, /"key": "name", "label": "Name", "grow": True/);
     assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
     assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
     assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
     assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "1fr"/);
     assert.doesNotMatch(sourceColumns, /"key": "source"[^\n]*"grow": True/);
-    assert.match(sourceColumns, /"key": "templates"[^\n]*"width": "0\.65fr"[^\n]*"min_w": 2/);
+    assert.match(sourceColumns, /"key": "templates", "label": "Count"[^\n]*"width": "44px"[^\n]*"min_w": 2/);
     assert.match(sourceColumns, /"key": "updated"[^\n]*"width": "0\.9fr"[^\n]*"min_w": 2/);
-    assert.match(sourceColumns, /"key": "act"[^\n]*"width": "40px"/);
+    assert.match(sourceColumns, /"key": "act"[^\n]*"width": "58px"/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
+  });
+
+  it('keeps override status and named actions proportionate', () => {
+    assert.match(overridesRoute, /"key": "managed", "label": "Managed", "width": "88px", "min_w": 2/);
+    assert.match(overridesRoute, /"key": "settings", "label": "Edit"[^\n]*"width": "50px"/);
+    assert.match(overridesRoute, /"key": "clear", "label": "Clear"[^\n]*"width": "50px"/);
+    assert.doesNotMatch(overridesRoute, /"key": "(?:settings|clear)", "label": ""/);
   });
 
   it('long-polls the outbox so live updates stay below the installation quota', () => {
@@ -103,11 +113,11 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
   it('exposes managed-template inventory and former-parent cleanup blocks', () => {
     assert.match(
       blocks,
-      /_v2_list\("managed-email-templates", "Managed email templates"[\s\S]*?"managed-email-templates", 4, 4,[\s\S]*?shell_title=True\)/,
+      /_list_block\("managed-email-templates", "Managed email templates"[\s\S]*?"managed-email-templates", 4, 4,[\s\S]*?universal bucket"\)/,
     );
     assert.match(
       blocks,
-      /_v2_list\("managed-email-template-sources", "Template bucket sources"[\s\S]*?"managed-email-template-sources", 4, 3,[\s\S]*?shell_title=True, min_w=1\)/,
+      /_list_block\("managed-email-template-sources", "Template bucket sources"[\s\S]*?"managed-email-template-sources", 4, 3,[\s\S]*?min_w=1\)/,
     );
     assert.match(routes, /@router\.get\("\/managed-email-templates"\)/);
     assert.match(routes, /"editor": _owner_cell\(editor\)/);
@@ -151,8 +161,12 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
 
   it('publishes one switchable multi-line utilization chart and its aggregate table', () => {
     assert.match(blocks, /"usage-utilization", "Tool utilization", "chart-line"/);
-    assert.match(blocks, /"component": "MultiSeriesChart"/);
+    assert.match(blocks, /"component": "LineChart"/);
+    assert.match(blocks, /"switcherSetting": "statistic"/);
     assert.match(blocks, /"switcherStyle": "dropdown"/);
+    assert.match(blocks, /"switcherPlacement": "bottom"/);
+    assert.match(blocks, /"rangeSetting": "days"/);
+    assert.match(blocks, /"rangeOptions": \[/);
     assert.match(blocks, /"usage-utilization-table", "Utilization details", "table"/);
     assert.match(routes, /def _console_usage_utilization\(days: int\)/);
     assert.match(routes, /"email_sends"[\s\S]*"email_transport"[\s\S]*"email_words"/);
