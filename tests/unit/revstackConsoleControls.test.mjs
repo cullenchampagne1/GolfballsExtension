@@ -164,11 +164,13 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(blocks, /"component": "LineChart"/);
     assert.match(blocks, /"switcherSetting": "statistic"/);
     assert.match(blocks, /"switcherStyle": "dropdown"/);
-    assert.match(blocks, /"switcherPlacement": "bottom"/);
+    assert.match(blocks, /"switcherPlacement": "top"/);
     assert.match(blocks, /"rangeSetting": "days"/);
     assert.match(blocks, /"rangeOptions": \[/);
     assert.match(blocks, /"usage-utilization-table", "Utilization details", "table"/);
     assert.match(routes, /def _console_usage_utilization\(days: int\)/);
+    assert.match(routes, /_TEMPORARY_USAGE_PREVIEW = True/);
+    assert.match(routes, /Sample data/);
     assert.match(routes, /"email_sends"[\s\S]*"email_transport"[\s\S]*"email_words"/);
     assert.match(routes, /"email_attachments"[\s\S]*"email_inline"[\s\S]*"core_tools"[\s\S]*"catalog"/);
     assert.match(routes, /if endpoint == "usage\.utilization"/);
