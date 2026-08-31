@@ -177,6 +177,8 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"email_attachments"[\s\S]*"email_inline"[\s\S]*"core_tools"[\s\S]*"catalog"/);
     assert.match(routes, /if endpoint == "usage\.utilization"/);
     assert.match(routes, /if endpoint == "usage\.utilization-table"/);
+    assert.match(routes, /populated_view = next\(\(view for view in views if view\["series"\]\), None\)/);
+    assert.doesNotMatch(blocks, /switcherValue.*email_sends/);
     const defaults = project.dashboard.default_layout.map((item) => item.block_id);
     assert.ok(defaults.includes('golfballs-extension.usage-utilization'));
     assert.ok(defaults.includes('golfballs-extension.usage-utilization-table'));

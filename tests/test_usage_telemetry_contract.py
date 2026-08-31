@@ -126,6 +126,26 @@ class UsageTelemetryContractTests(unittest.TestCase):
             len(table["columns"]),
         )
 
+    def test_catalog_usage_is_the_default_when_email_data_is_missing(self):
+        day = datetime.utcnow().date().isoformat()
+        self.routes["_usage_feature_rows"] = lambda _days: [{
+            "day": day,
+            "feature": "gift_catalog_search",
+            "source": "gift_catalog",
+            "transport": "none",
+            "uses": 6,
+            "words": 0,
+            "attachments": 0,
+            "inline_images": 0,
+        }]
+
+        payload = self.routes["_console_usage_utilization"](30)
+        views = {view["id"]: view for view in payload["views"]}
+
+        self.assertEqual(payload["default"], "catalog")
+        self.assertEqual(views["email_sends"]["series"], [])
+        self.assertEqual(views["catalog"]["total"], 6)
+
 
 if __name__ == "__main__":
     unittest.main()
