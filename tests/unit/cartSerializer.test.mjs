@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import {
   SAVE_CART_URL, getCartUrl,
   ballPreviewUrl, giftSetPreviewUrl, monogramPreviewUrl, teePreviewUrl,
-  buildBallDynamicImage, priceAtQ, lineTotal,
+  buildBallDynamicImage, buildExpressLogoDynamicImage, priceAtQ, lineTotal,
   buildDecoration, decorationFromCartItem,
   promoDiscount, freeLinesFromPromo,
   buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine,
@@ -21,14 +21,17 @@ import {
 } from '../../src/lib/cartSerializer.js';
 
 const CUSTOM_LOGO_PRODUCT = {
+  Brand: { Name: 'Titleist' },
   ProductModification: [{
     Modification: {
       modificationID: 1008,
       FriendlyName: 'Custom Logo',
-      ModificationOption: [{
-        Name: 'Express Logo',
-        ModificationOptionValue: [{ Name: 'Yes', selected: false }, { Name: 'No', selected: false }],
-      }],
+      ModificationOption: [
+        { Name: 'Service Level', ModificationOptionValue: [{ Name: '6 Business Day Rush', selected: false }, { Name: 'None', selected: false }] },
+        { Name: 'Second Pole', ModificationOptionValue: [{ Name: 'No Print', selected: false }, { Name: 'Logo', selected: false }, { Name: 'Text', selected: false }] },
+        { Name: 'PriceTier', ModificationOptionValue: [{ Name: 'Default', selected: false }] },
+        { Name: 'Express Logo', ModificationOptionValue: [{ Name: 'Yes', selected: false }, { Name: 'No', selected: false }] },
+      ],
     },
   }],
 };
@@ -190,22 +193,27 @@ describe('custom-logo ball Express serialization', () => {
     fileName: 'logo.png',
     cropFilePath: 'UserUploads/abc/crop.jpg',
   };
+  const optionValues = (block, name) => block.ProductModification.Modification.ModificationOption
+    .find((option) => option.Name === name).ModificationOptionValue;
 
   it('writes an internally consistent standard-logo state by default', () => {
     const { block } = buildDecoration(CUSTOM_LOGO_PRODUCT, { engine: 'ballLogo', logo });
     const state = block.interfaceState.GolfBallCustomLogo;
-    const options = block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue;
+    const options = optionValues(block, 'Express Logo');
     assert.equal(state.customLogo.useCustomLogo, true);
     assert.deepEqual(state.expressLogo, { isUsed: false });
     assert.equal(options.find((option) => option.Name === 'Yes').selected, false);
     assert.equal(options.find((option) => option.Name === 'No').selected, true);
+    assert.equal(optionValues(block, 'Service Level').find((option) => option.Name === 'None').selected, true);
+    assert.equal(optionValues(block, 'Service Level').find((option) => option.Name === '6 Business Day Rush').selected, false);
+    assert.equal(optionValues(block, 'PriceTier').some((option) => option.selected), false);
   });
 
-  it('matches the website Express option and effective interface shape', () => {
-    const { block } = buildDecoration(CUSTOM_LOGO_PRODUCT, { engine: 'ballLogo', logo, expressLogo: true });
+  it('matches the website active Express renderer and history snapshot shapes', () => {
+    const { block, historyBlock } = buildDecoration(CUSTOM_LOGO_PRODUCT, { engine: 'ballLogo', logo, expressLogo: true });
     const state = block.interfaceState;
     const logoState = state.GolfBallCustomLogo;
-    const options = block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue;
+    const options = optionValues(block, 'Express Logo');
     assert.deepEqual(logoState.customLogo, { useCustomLogo: false, ...logo });
     assert.deepEqual(logoState.expressLogo, {
       useCustomLogo: false,
@@ -219,8 +227,50 @@ describe('custom-logo ball Express serialization', () => {
       fileName: state.fileName,
       cropFilePath: state.cropFilePath,
     }, { useCustomLogo: false, ...logo });
+    assert.deepEqual(block.dynamicImage, [{
+      imageType: 'ExpressLogo',
+      legacyICustomizeParams: {
+        useLegacyFormat: true,
+        template: 'TitleistExpress',
+        image: logo.cropFilePath,
+      },
+      isUsed: true,
+    }]);
+    assert.equal('isTemporary' in block, false);
+    assert.equal(historyBlock.dynamicImage[0].sku, 'GolfBall');
+    assert.deepEqual(historyBlock.interfaceState.GolfBallCustomLogo.expressLogo, { isUsed: true });
+    assert.equal('cropFilePath' in historyBlock.interfaceState.GolfBallCustomLogo.customLogo, false);
+    assert.equal('filePath' in historyBlock.interfaceState, false);
+    assert.equal('isTemporary' in historyBlock, false);
     assert.equal(options.find((option) => option.Name === 'Yes').selected, true);
     assert.equal(options.find((option) => option.Name === 'No').selected, false);
+    assert.equal(optionValues(block, 'Service Level').find((option) => option.Name === 'None').selected, true);
+  });
+
+  it('uses the generic Express template for non-Titleist brands', () => {
+    assert.deepEqual(buildExpressLogoDynamicImage({ Brand: { Name: 'Callaway Golf' } }, 'UserUploads/xyz/crop.jpg'), {
+      imageType: 'ExpressLogo',
+      legacyICustomizeParams: {
+        useLegacyFormat: true,
+        template: 'LogoExpress',
+        image: 'UserUploads/xyz/crop.jpg',
+      },
+      isUsed: true,
+    });
+  });
+
+  it('assembles the reduced history snapshot separately from the active Express renderer', () => {
+    const line = assembleLine({
+      product: { ...CUSTOM_LOGO_PRODUCT, Name: 'Pro V1', ProductChild: [], PropertyProduct: [] },
+      pricing: { price: 49.99 },
+      decoration: { engine: 'ballLogo', logo, expressLogo: true },
+      qty: 12,
+      itemGuid: 'express-line',
+    });
+    assert.equal(line.modification.dynamicImage[0].imageType, 'ExpressLogo');
+    assert.equal(line.modification.dynamicImage[0].legacyICustomizeParams.image, logo.cropFilePath);
+    assert.equal(line.modificationHistory[0].dynamicImage[0].sku, 'GolfBall');
+    assert.notDeepEqual(line.modificationHistory[0], line.modification);
   });
 
   it('restores the Express choice when a saved cart becomes a proposal line', () => {

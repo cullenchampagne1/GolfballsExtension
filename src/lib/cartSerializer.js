@@ -208,6 +208,23 @@ export function buildBallLogoDynamicImage({ baseColor = '#FFFFFF' }) {
   };
 }
 
+/* Express logos use the storefront's legacy renderer, not the modern GolfBall
+   dynamic-image shape used by ordinary uploaded logos. Without this descriptor
+   the cart retains the upload but never requests customizationapplications.com's
+   rendered image, leaving the opened personalization preview blank. */
+export function buildExpressLogoDynamicImage(product, cropFilePath = '') {
+  const brand = String((product && product.Brand && product.Brand.Name) || product?.brand || '').trim().toLowerCase();
+  return {
+    imageType: 'ExpressLogo',
+    legacyICustomizeParams: {
+      useLegacyFormat: true,
+      template: brand === 'titleist' ? 'TitleistExpress' : 'LogoExpress',
+      image: String(cropFilePath || ''),
+    },
+    isUsed: true,
+  };
+}
+
 /* ── Engine B/C — logo overlay (modID 84 inhouse / 25 outsource) ──────────────
    Towels, polos, poker chips, etc. The uploaded company logo (filePath under
    Source/CustomerUploads/CustomLogo) is referenced, not rendered into a preview
@@ -371,20 +388,20 @@ function findMod(product, { modID, friendly } = {}) {
    PriceTier = the SKU's tier), not just the cached ItemPrice — without them a
    real order re-prices as an undecorated ball. Clones so the shared product
    object is never mutated. Returns the original when there's nothing to mark. */
-function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = 'Default', expressLogo = false } = {}) {
+function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = null, expressLogo = false } = {}) {
   if (!pm) return pm;
   const clone = JSON.parse(JSON.stringify(pm));
   const groups = (clone.Modification && clone.Modification.ModificationOption) || [];
-  const choose = (groupName, match) => {
+  const choose = (groupName, match, fallbackFirst = true) => {
     const g = groups.find((o) => o.Name === groupName);
     if (!g || !Array.isArray(g.ModificationOptionValue)) return;
     let hit = false;
     g.ModificationOptionValue.forEach((v) => { v.selected = match(v); if (v.selected) hit = true; });
-    if (!hit && g.ModificationOptionValue[0]) g.ModificationOptionValue[0].selected = true; // default = first
+    if (!hit && fallbackFirst && g.ModificationOptionValue[0]) g.ModificationOptionValue[0].selected = true;
   };
-  choose('Service Level', () => false);                  // → first (default standard production)
+  choose('Service Level', (v) => v.Name === 'None', false); // normal production, never an accidental rush
   choose('Second Pole', (v) => v.Name === secondPole);   // No Print / Logo / Text
-  choose('PriceTier', (v) => v.Name === priceTier);      // Econ / Rec / High / Tour / Mid
+  if (priceTier) choose('PriceTier', (v) => v.Name === priceTier); // Econ / Rec / High / Tour / Mid
   choose('Express Logo', (v) => v.Name === (expressLogo ? 'Yes' : 'No'));
   return clone;
 }
@@ -397,7 +414,7 @@ function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = 'Def
      ballLogo    → modID 1008 custom logo on the ball (uploaded logo)
      monogram    → modID 6  Monogram
      logoOverlay → modID 84 inhouse / 25 outsource (uploaded logo overlay)
-   Returns { block, customUserImage }. block === null means no decoration. */
+   Returns { block, historyBlock, customUserImage }. block === null means no decoration. */
 /* The opposite-pole imprint slot for a ball, from a {kind,…} pole2 descriptor.
    Text → a Personalized userText slot; Monogram → a MonogramPadded overlay.
    (Logo on the 2nd pole needs its own upload — captured but not slotted yet.) */
@@ -458,7 +475,7 @@ export function buildDecoration(product, decoration = {}) {
     const expressLogo = decoration.expressLogo === true;
     // Mark the SKU's price tier + the chosen second-pole option as selected so
     // the order bills the right custom-logo charge (and stays commissionable).
-    const tier = (product.CustomData && String(product.CustomData.customPriceTier || '').trim()) || 'Default';
+    const tier = (product.CustomData && String(product.CustomData.customPriceTier || '').trim()) || null;
     const secondPole = decoration.pole2 ? (decoration.pole2.kind === 'logo' ? 'Logo' : 'Text') : 'No Print';
     const customLogoMod = selectCustomLogoOptions(findMod(product, { modID: 1008, friendly: 'Custom Logo' }), { secondPole, priceTier: tier, expressLogo });
     const logoFields = {
@@ -546,6 +563,31 @@ export function buildDecoration(product, decoration = {}) {
       out.block.interfaceState.maxTextArea = 2;
       out.block.interfaceState.secondPoleUserText = {};
     }
+
+    if (expressLogo) {
+      // The website deliberately saves two different shapes. History retains
+      // the ordinary blank GolfBall image and a reduced interface snapshot;
+      // the active modification carries the legacy ExpressLogo render request.
+      const activeInterfaceState = out.block.interfaceState;
+      const historyInterfaceState = JSON.parse(JSON.stringify(activeInterfaceState));
+      const historyLogo = historyInterfaceState.GolfBallCustomLogo;
+      delete historyLogo.customLogo.cropFilePath;
+      historyLogo.expressLogo = { isUsed: true };
+      delete historyInterfaceState.useCustomLogo;
+      delete historyInterfaceState.filePath;
+      delete historyInterfaceState.fileName;
+      delete historyInterfaceState.cropFilePath;
+      out.historyBlock = {
+        ProductModification: out.block.ProductModification,
+        interfaceState: historyInterfaceState,
+        dynamicImage: out.block.dynamicImage,
+      };
+      out.block = {
+        ProductModification: out.block.ProductModification,
+        interfaceState: activeInterfaceState,
+        dynamicImage: [buildExpressLogoDynamicImage(product, logoFields.cropFilePath)],
+      };
+    }
   } else if (engine === 'logoOverlay') {
     // Inhouse (84) vs outsource (25) is a property of the product — auto-detect.
     const mods = product.ProductModification || [];
@@ -606,7 +648,9 @@ export function buildDecoration(product, decoration = {}) {
     return { block: null, customUserImage: noImage }; // engine === 'none'
   }
 
-  applySecondPole(out.block, decoration); // opposite-pole imprint (dual pole)
+  // Express uses a single legacy descriptor which must not be decorated with a
+  // modern Print2 member. Standard ball-logo and other ball engines retain it.
+  if (!(engine === 'ballLogo' && decoration.expressLogo === true)) applySecondPole(out.block, decoration);
   return out;
 }
 
@@ -769,7 +813,7 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     const hasBall = m.some((x) => x.Modification && x.Modification.modificationID === 1008);
     if (hasOverlay && !hasBall) decoForBuild = { ...decoForBuild, engine: 'logoOverlay' };
   }
-  const { block: decoBlock, customUserImage } = buildDecoration(product, decoForBuild);
+  const { block: decoBlock, historyBlock: decoHistoryBlock, customUserImage } = buildDecoration(product, decoForBuild);
 
   // Price the way golfballs.com recomputes it on cart load: from the product's
   // live fee ladders + the chosen modification (ParentItemFee + the mod's itemFee
@@ -848,7 +892,7 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     childFilters: [null],
     widgetSelections: selectedIds.map((v) => ({ values: [v] })),
     widgetApplicationOrder: [],
-    modificationHistory: decoBlock ? [decoBlock] : [],
+    modificationHistory: decoBlock ? [decoHistoryBlock || decoBlock] : [],
     modificationTemporaryHistory: [],
     selectionWidgets: (product.PropertyProduct || []).map((_, i) => ({ WidgetType: 'TextButtonGroup', Configuration: { propertyIndex: i, maxValues: 1 } })),
     modification: decoBlock || { interfaceState: {} },

@@ -16,9 +16,17 @@ import {
   saveProposalToOpportunity,
   fetchOpportunitiesForAccount, selectActiveOpportunitiesForProposal,
   buildProposalEmailCreatePayload, buildProposedOpportunityUpdate,
-  submitProposalEmail,
+  submitProposalEmail, expressLogoHasRenderableImage,
   PROPOSAL_STORE_FILE_KIND, PROPOSAL_STORE_FILE_VERSION,
 } from '../../src/lib/saveProposal.js';
+
+describe('proposal save · Express logo readiness', () => {
+  it('requires a cropped upload for Express while leaving other decorations unaffected', () => {
+    assert.equal(expressLogoHasRenderableImage({ engine: 'ballLogo', expressLogo: true, logo: { filePath: 'Source/logo.png' } }), false);
+    assert.equal(expressLogoHasRenderableImage({ engine: 'ballLogo', expressLogo: true, logo: { cropFilePath: 'UserUploads/crop.jpg' } }), true);
+    assert.equal(expressLogoHasRenderableImage({ engine: 'ballLogo', expressLogo: false, logo: null }), true);
+  });
+});
 
 const giftCatalogSource = readFileSync(new URL('../../src/modals/GiftCatalog.jsx', import.meta.url), 'utf8');
 

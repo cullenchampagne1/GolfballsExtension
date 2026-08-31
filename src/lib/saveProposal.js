@@ -94,6 +94,14 @@ async function uploadDecorationImage(decoration, skipped, title) {
   return d;
 }
 
+/* Express rendering depends on cropFilePath, not merely the original upload.
+   Fail the affected line closed when cropping/uploading did not produce it so
+   we never save another proposal whose Express personalization opens blank. */
+export function expressLogoHasRenderableImage(decoration) {
+  return !(decoration && decoration.engine === 'ballLogo' && decoration.expressLogo === true)
+    || !!(decoration.logo && decoration.logo.cropFilePath);
+}
+
 /* Build the saveCart itemsInCart[] from the proposal. Returns
    { items, skipped:[{title, reason}] }. Uploads any aligned images first. */
 export async function buildProposalLines(proposal) {
@@ -128,6 +136,10 @@ export async function buildProposalLines(proposal) {
     if (!raw) { skipped.push({ title: cat.title || cat.sku || 'item', reason: 'product page unavailable' }); continue; }
     const breaks = cat.breaks || [];
     const decoration = await uploadDecorationImage(line.decoration, skipped, cat.title || cat.sku || 'item');
+    if (!expressLogoHasRenderableImage(decoration)) {
+      skipped.push({ title: cat.title || cat.sku || 'item', reason: 'Express logo crop unavailable; item was not saved' });
+      continue;
+    }
     // The buyer's base-option picks → the right child/widgetSelections. Balls
     // carry them on the decoration (__base); other products on line.variant.
     const selValues = (decoration && decoration.baseSelection) || (line.variant && line.variant.values) || null;
