@@ -91,6 +91,26 @@ export function giftSetPreviewUrl(gs, { decoration, sleeveImage, brand } = {}) {
   return url;
 }
 
+/* A bundled line keeps the ball gallery, but the website prepends the selected
+   gift-set render as image zero and shifts every ball image down by one. The
+   cart uses that first entry for the product thumbnail; storing the preview
+   only under bundle.renderedPreviewImage leaves the ball as the visible image. */
+export function buildGiftSetImages(images, renderedPreviewImage) {
+  const source = Array.isArray(images) ? images : [];
+  if (!renderedPreviewImage) return source;
+  return [{
+    URL: renderedPreviewImage,
+    SortValue: 0,
+    PropertyValueProduct: null,
+    ProductImageConditionSpecial: null,
+    productImageID: 0,
+    productParentID: 0,
+  }, ...source.map((entry, index) => ({
+    ...entry,
+    SortValue: Number.isFinite(Number(entry && entry.SortValue)) ? Number(entry.SortValue) + 1 : index + 1,
+  }))];
+}
+
 /* The stored modificationHistory[].dynamicImage[0] object for a golf ball.
    `pole1` is the front imprint; `pole2` (optional) the second pole — pass
    null for single-pole or ExcludeDualPolePrinting products. Lines are kept
@@ -773,6 +793,37 @@ export function selectChild(product, selection = {}) {
   return child || children[0] || {};
 }
 
+/* Resolve the product's NameFormat placeholders from the selected child. The
+   raw product page can carry templates such as "{Color} {Decoration} …";
+   cart lines must contain the concrete value (for example White), not the
+   template token. */
+export function resolveLineName(product, child, selection = {}, decorationName = '') {
+  const values = new Map();
+  const norm = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const remember = (label, value) => {
+    const key = norm(label);
+    if (!key || value == null || String(value).trim() === '') return;
+    values.set(key, String(value).trim());
+    if (key.endsWith('color')) values.set('color', String(value).trim());
+  };
+  remember('Decoration', decorationName);
+  Object.entries((selection && selection.values) || {}).forEach(([label, value]) => remember(label, value));
+  const groups = new Map();
+  (product.PropertyProduct || []).forEach((group) => {
+    groups.set(group.propertyProductID, group);
+  });
+  ((child && child.PropertyValueProduct) || []).forEach((propertyValue) => {
+    const group = groups.get(propertyValue.propertyProductID) || {};
+    remember(group.Name || group.FriendlyName, propertyValue.Value);
+  });
+  const template = String(product.NameFormat || product.Name || '');
+  return template.replace(/\{([^{}]+)\}/g, (token, label) => {
+    const key = norm(label);
+    if (key === 'decoration') return decorationName || '';
+    return values.has(key) ? values.get(key) : token;
+  }).replace(/\s{2,}/g, ' ').trim();
+}
+
 /* The decorated per-unit price ladder for a line, computed from the raw product
    page exactly as assembleLine does — so the in-modal proposal DISPLAY matches the
    cart the site will load. Returns { breaks:[{q,p}], setupBreaks } or null when the
@@ -856,16 +907,13 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // plain orders collapse the slot to nothing → "… Golf Balls").
   const decoFriendly = (decoBlock && decoBlock.ProductModification && decoBlock.ProductModification.Modification
     && decoBlock.ProductModification.Modification.FriendlyName) || '';
-  const nameFmt = product.NameFormat || product.Name || '';
-  const baseName = nameFmt.includes('{Decoration}')
-    ? nameFmt.replace('{Decoration}', decoFriendly).replace(/\s{2,}/g, ' ').trim()
-    : (product.Name || '');
+  const baseName = resolveLineName(product, child, selection, decoFriendly);
   // A gift-set line reads "<gift set name> with <Brand> <ball name>".
   const ballTitle = [product.Brand && product.Brand.Name, baseName].filter(Boolean).join(' ').trim();
   const productTitle = giftSet ? `${giftSet.name} with ${ballTitle}` : ballTitle;
 
   return {
-    nameFormat: product.NameFormat || product.Name || '',
+    nameFormat: baseName,
     productTitle,
     qtyFields: [],
     ShortCode: product.ShortCode,
@@ -906,7 +954,9 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     bundle: bundleBlock ? bundleBlock.bundle : null,
     hasQtyParam: false,
     itemType: (product.ItemType && product.ItemType.Name) || (product.itemType_s || '').split('-').pop() || 'Golf Balls',
-    images: product.ProductImage || product.images || [],
+    images: bundleBlock
+      ? buildGiftSetImages(product.ProductImage || product.images || [], bundleBlock.bundle.renderedPreviewImage)
+      : (product.ProductImage || product.images || []),
     itemGuid: itemGuid || (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
     // Commissionable "_1" path for imprinted lines comes in via `url`; the page's
     // canonical (base) URL is the fallback for plain/retail lines.

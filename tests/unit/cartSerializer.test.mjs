@@ -12,11 +12,11 @@ import assert from 'node:assert/strict';
 
 import {
   SAVE_CART_URL, getCartUrl,
-  ballPreviewUrl, giftSetPreviewUrl, monogramPreviewUrl, teePreviewUrl,
+  ballPreviewUrl, giftSetPreviewUrl, buildGiftSetImages, monogramPreviewUrl, teePreviewUrl,
   buildBallDynamicImage, buildExpressLogoDynamicImage, priceAtQ, lineTotal,
   buildDecoration, decorationFromCartItem,
   promoDiscount, freeLinesFromPromo,
-  buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine,
+  buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine, resolveLineName,
   parseGetCart, buildCustomItemLine, buildAsCartContents,
 } from '../../src/lib/cartSerializer.js';
 
@@ -157,6 +157,63 @@ describe('giftSetPreviewUrl', () => {
   });
 });
 
+describe('gift-set cart images', () => {
+  it('prepends the rendered set as image zero and shifts the original product gallery', () => {
+    const productImages = [
+      { URL: 'assets/ball-white.webp', SortValue: 0, productImageID: 10 },
+      { URL: 'assets/ball-side.webp', SortValue: 1, productImageID: 11 },
+    ];
+    const preview = 'https://www.icustomize.com/GiftSet/SleeveBartender/r?Print=preview';
+    assert.deepEqual(buildGiftSetImages(productImages, preview), [
+      {
+        URL: preview,
+        SortValue: 0,
+        PropertyValueProduct: null,
+        ProductImageConditionSpecial: null,
+        productImageID: 0,
+        productParentID: 0,
+      },
+      { URL: 'assets/ball-white.webp', SortValue: 1, productImageID: 10 },
+      { URL: 'assets/ball-side.webp', SortValue: 2, productImageID: 11 },
+    ]);
+    assert.equal(productImages[0].SortValue, 0, 'the raw product gallery is not mutated');
+  });
+});
+
+describe('line name formatting', () => {
+  const product = {
+    Name: 'Performance Polo',
+    NameFormat: '{Color} {Decoration} Performance Polo',
+    PropertyProduct: [{ propertyProductID: 7, Name: 'Color' }],
+  };
+  const whiteChild = { PropertyValueProduct: [{ propertyProductID: 7, Value: 'White' }] };
+
+  it('replaces a Color placeholder with the selected child value', () => {
+    assert.equal(resolveLineName(product, whiteChild, {}, ''), 'White Performance Polo');
+  });
+
+  it('resolves Color and Decoration together without leaving template tokens', () => {
+    assert.equal(resolveLineName(product, whiteChild, {}, 'Custom Logo'), 'White Custom Logo Performance Polo');
+  });
+
+  it('stores the resolved name in the assembled cart line', () => {
+    const line = assembleLine({
+      product: {
+        ...product,
+        Brand: { Name: 'Acme' },
+        ProductChild: [{ ShortCode: 'WHITE-POLO', ...whiteChild }],
+      },
+      selection: { values: { Color: 'White' } },
+      pricing: { price: 20 },
+      qty: 8,
+      itemGuid: 'white-polo-line',
+    });
+    assert.equal(line.nameFormat, 'White Performance Polo');
+    assert.equal(line.productTitle, 'Acme White Performance Polo');
+    assert.equal(line.productTitle.includes('{Color}'), false);
+  });
+});
+
 describe('buildBallDynamicImage', () => {
   const pole1 = { lines: ['go', 'navy', null], font: 'Block', color: '#112233' };
 
@@ -271,6 +328,36 @@ describe('custom-logo ball Express serialization', () => {
     assert.equal(line.modification.dynamicImage[0].legacyICustomizeParams.image, logo.cropFilePath);
     assert.equal(line.modificationHistory[0].dynamicImage[0].sku, 'GolfBall');
     assert.notDeepEqual(line.modificationHistory[0], line.modification);
+  });
+
+  it('assembles a gift-set preview as the cart line primary image', () => {
+    const preview = 'https://www.icustomize.com/GiftSet/SleeveBartender/r?Print=preview';
+    const giftSet = {
+      name: 'Bartender Divot Tool Custom Logo Sleeve Gift Set',
+      oiq: 0.25,
+      wrapperImage: '',
+      thumbnail: preview,
+      kit: { shortCode: 'GIFTSETSLEEVEKIT2', qty: 1, ladder: [{ q: 1, p: 12 }] },
+    };
+    const line = assembleLine({
+      product: {
+        ...CUSTOM_LOGO_PRODUCT,
+        Name: 'Pro V1 Golf Balls',
+        NameFormat: 'Pro V1 Golf Balls',
+        ProductChild: [{ ShortCode: 'BALL-WHITE', PropertyValueProduct: [] }],
+        PropertyProduct: [],
+        ProductImage: [{ URL: 'assets/ball-white.webp', SortValue: 0, productImageID: 10 }],
+        itemFee_priceBreakHeader: { PriceBreak: [{ Quantity: 1, Price: 50 }, { Quantity: 12, Price: 45 }] },
+      },
+      decoration: { engine: 'ballLogo', logo, giftSet },
+      qty: 1,
+      itemGuid: 'gift-set-line',
+    });
+    assert.equal(line.bundle.renderedPreviewImage, preview);
+    assert.equal(line.images[0].URL, preview);
+    assert.equal(line.images[0].productImageID, 0);
+    assert.equal(line.images[1].URL, 'assets/ball-white.webp');
+    assert.equal(line.images[1].SortValue, 1);
   });
 
   it('restores the Express choice when a saved cart becomes a proposal line', () => {
