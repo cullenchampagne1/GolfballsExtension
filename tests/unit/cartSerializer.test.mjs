@@ -214,7 +214,11 @@ describe('line name formatting', () => {
   it('appends explicit web options when NameFormat has no matching token', () => {
     assert.equal(
       resolveLineName({ Name: 'Executive Tumbler' }, {}, { values: { 'Accessories Color': 'Midnight' } }, ''),
-      'Executive Tumbler — Midnight',
+      'Executive Tumbler - Midnight',
+    );
+    assert.equal(
+      resolveLineName({ Name: 'The Hampton Polo' }, {}, { values: { Color: 'Pink', Size: 'XX-Large' } }, ''),
+      'The Hampton Polo - Pink - XX-Large',
     );
   });
 

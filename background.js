@@ -514,7 +514,10 @@ function gbNormalizeProductConfig(prod) {
 // their base inputs ONLY on the product page, so the config fetch is load-bearing.
 // Cache the normalized config per URL so reopens are instant and a flaky fetch
 // falls back to the last-known config instead of dropping the inputs.
-const GB_CONFIG_CACHE_KEY = 'gbProductConfigCache';
+// v2 adds the child-specific `image` field. Do not reuse v1 entries: they have
+// valid prices/options but no image, which leaves the detail sidebar stuck on
+// the catalog's initial product photo after a color/style change.
+const GB_CONFIG_CACHE_KEY = 'gbProductConfigCache_v2';
 const GB_CONFIG_TTL_MS = 24 * 60 * 60 * 1000;
 const GB_CONFIG_CACHE_MAX = 400;
 

@@ -830,7 +830,7 @@ export function resolveLineName(product, child, selection = {}, decorationName =
       && !new RegExp(`\\{${String(label).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`, 'i').test(template)
       && !resolved.toLowerCase().includes(String(value).trim().toLowerCase()))
     .map(([, value]) => String(value).trim());
-  return explicit.length ? `${resolved} — ${explicit.join(' · ')}` : resolved;
+  return explicit.length ? `${resolved} - ${explicit.join(' - ')}` : resolved;
 }
 
 /* Put the selected child's product photo first. Product pages often ship one

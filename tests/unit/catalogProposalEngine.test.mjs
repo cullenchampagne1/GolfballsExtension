@@ -13,6 +13,10 @@ const giftCatalogSource = await readFile(
   new URL('../../src/modals/GiftCatalog.jsx', import.meta.url),
   'utf8',
 );
+const backgroundSource = await readFile(
+  new URL('../../background.js', import.meta.url),
+  'utf8',
+);
 
 function product(overrides = {}) {
   return {
@@ -46,6 +50,12 @@ describe('catalog proposal engine · current SKU resolution', () => {
     assert.match(giftCatalogSource, /proposalLineFromProduct\(p, \{ decoration, variant \}, \{ idFactory: rid \}\)/);
     assert.match(giftCatalogSource, /<CustomizeBlock/);
     assert.match(giftCatalogSource, /<ProductOptions/);
+  });
+
+  it('refreshes image-capable variant configs and displays the selected image in the sidebar', () => {
+    assert.match(backgroundSource, /GB_CONFIG_CACHE_KEY\s*=\s*['"]gbProductConfigCache_v2['"]/);
+    assert.match(giftCatalogSource, /giftImg \|\| \(variant && variant\.image\) \|\| p\.img/);
+    assert.match(giftCatalogSource, /onVariantChange=\{setVariant\}/);
   });
 
   it('prefers a current commissionable product but can explicitly select stock', () => {
