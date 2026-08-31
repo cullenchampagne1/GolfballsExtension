@@ -102,8 +102,8 @@ const _monoCount = (key) => _monoSpec(key).max;
 const _monoPlaceholder = (n) => (n === 1 ? 'A' : n === 2 ? 'MD' : 'ABC');
 
 /* AlignXL / IDAlign reference photos — the site's own cloudfront art for each
-   option, cropped to fill the tile (PhotoArt: overflow hidden + centered)
-   instead of a generic icon standing in for it. */
+   option, contained in the tile (PhotoArt: object-fit contain + centered) so the
+   full-width pattern shows instead of a generic icon standing in for it. */
 const IDALIGN_HOST = 'https://d1tp32r8b76g0z.cloudfront.net/images/IDalign/';
 
 /* AlignXL alignment styles (8) */
@@ -399,12 +399,12 @@ function SvgArt({ inner, viewBox = '0 0 84 48', w = 56, h = 32 }) {
      alignment-art registry; no API, storage, or user input reaches it. */
   return <svg viewBox={viewBox} width={w} height={h} preserveAspectRatio="xMidYMid meet" dangerouslySetInnerHTML={{ __html: inner }} />;
 }
-/* renders a real reference photo filling the tile — overflow hidden, cover +
-   centered — so the picker shows the actual printed pattern, not an icon
-   standing in for it. Fills the button's own padding: 0 box (set by the grid
-   below when an item is a photo), so the crop reaches every edge. */
+/* renders a real reference photo inside the tile — contained + centered so the
+   whole pattern stays visible (the AlignXL / IDAlign art is wide, and `cover`
+   cropped away the sides). Sits in the button's own padding: 0 box (set by the
+   grid below when an item is a photo); `contain` keeps the full width in frame. */
 function PhotoArt({ src, alt }) {
-  return <img src={src} alt={alt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }} />;
+  return <img src={src} alt={alt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center', display: 'block' }} />;
 }
 /* selectable grid of style tiles — a real reference photo (PhotoArt) when the
    item declares one (AlignXL / IDAlign), else the SVG-art thumbnail (Monogram). */
