@@ -30,6 +30,15 @@ const lineGiftImg = (line) => {
   const p = line.product || {};
   return giftSetPreviewUrl(gs, { decoration: line.decoration, sleeveImage: p.giftSetSleeveImage, brand: p.brand }) || gs.thumbnail || null;
 };
+const lineProductImg = (line) => lineGiftImg(line)
+  || (line && line.variant && line.variant.image)
+  || (line && line.product && line.product.img)
+  || '';
+const lineVariantSubtitle = (line) => {
+  const values = Object.values((line && line.variant && line.variant.values) || {}).filter(Boolean);
+  const details = line && line.variant && line.variant.details;
+  return [...values, details].filter((value, index, all) => value && all.indexOf(value) === index).join(' · ');
+};
 
 // Describe a line's imprint(s) for the email "Imprint preview" card — type
 // label, color (name + swatch), and a short per-pole detail line. Dual-pole
@@ -78,8 +87,8 @@ const proposalToEmailSource = (lines, name, opts = {}) => {
     // A gift-set line is identified by the SET (name + size + the ball it wraps)
     // and shows the boxed gift-set render — not the bare ball.
     const title = gs ? (gs.name || 'Gift set') : (p.title || '');
-    const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : ((l.variant && l.variant.values && l.variant.values.style) || '');
-    const img = (gs ? lineGiftImg(l) : null) || p.img || '';
+    const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : lineVariantSubtitle(l);
+    const img = lineProductImg(l);
     const imprint = lineImprint(l.decoration);
     const isFree = !!l.free;
     // Retail/"was" unit = the higher of MSRP, the 1-qty ladder price, and the

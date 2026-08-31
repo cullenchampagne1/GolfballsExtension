@@ -45,6 +45,11 @@ const MAX_PRODUCTS = 6000;  // safety bound, well above the live numFound (~3.1k
    category (deriveCat) on the client. Out-of-stock is excluded server-
    side via additionalFacets (-tag_ss:ExcludeStock) in the background. */
 const MAIN_QUERY = '*:*';
+// A small authoritative recovery crawl for commissionable products. The live
+// gateway only permits a non-unique sort, so tied docs can move across the deep
+// *:* page boundary while indexing. Merging this focused result guarantees that
+// listed custom-logo products (notably TP5/TP5x) cannot vanish from the catalog.
+const CUSTOM_LOGO_QUERY = 'modificationName_ss:"Custom Logo" OR itemType_ss:Corporate';
 
 /* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
    custom-logo section — the custom-logo rail/chips render in this order. */
@@ -66,7 +71,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v9'; // bumped: preserve stock + commissionable variants that share one Solr id (v8 kept only the first, hiding products such as custom-logo TP5)
+const CACHE_KEY = 'gbGiftCatalogCache_v10'; // bumped: merge a focused custom-logo recovery crawl into the full catalog
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -388,7 +393,7 @@ function setCache(payload) {
  *  rebuild truly clears stale data instead of falling back to the old cache. */
 export function clearCatalogCache() {
   return new Promise((resolve) => {
-    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5', 'gbGiftCatalogCache_v6', 'gbGiftCatalogCache_v7', 'gbGiftCatalogCache_v8'], resolve); }
+    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5', 'gbGiftCatalogCache_v6', 'gbGiftCatalogCache_v7', 'gbGiftCatalogCache_v8', 'gbGiftCatalogCache_v9'], resolve); }
     catch { resolve(); }
   });
 }
@@ -438,43 +443,40 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
   const seenKeys = new Set();
   const usedIds = new Set();
   const MAX_PAGE_RETRIES = 4;
-  let start = 0;
   let lastError = null;
-  let expected = 0;         // numFound reported by the service
-  let complete = false;
-  while (start < MAX_PRODUCTS) {
-    let page = { docs: [], numFound: 0, error: 'not attempted' };
-    for (let attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt += 1) {
-      page = await fetchPage(MAIN_QUERY, start, PAGE_ROWS);
-      if (!page.error) break;
-      lastError = page.error;
-      if (attempt < MAX_PAGE_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+  const crawl = async (query) => {
+    let start = 0;
+    let expected = 0;
+    let complete = false;
+    while (start < MAX_PRODUCTS) {
+      let page = { docs: [], numFound: 0, error: 'not attempted' };
+      for (let attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt += 1) {
+        page = await fetchPage(query, start, PAGE_ROWS);
+        if (!page.error) break;
+        lastError = page.error;
+        if (attempt < MAX_PAGE_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+        }
       }
+      if (page.error) break;
+      if (page.numFound) expected = page.numFound;
+      if (!page.docs.length) { complete = true; break; }
+      for (const d of page.docs) addCatalogProduct(out, normalizeDoc(d), seenKeys, usedIds);
+      start += page.docs.length;
+      if (typeof onProgress === 'function') {
+        try { onProgress({ loaded: out.length, total: Math.max(out.length, expected || 0) }); } catch { /* non-fatal */ }
+      }
+      if (expected && start >= expected) { complete = true; break; }
     }
-    if (page.error) break;                      // page failed every retry — incomplete pull
-    if (page.numFound) expected = page.numFound;
-    if (!page.docs.length) { complete = true; break; }   // genuine end of results
-    for (const d of page.docs) {
-      const p = normalizeDoc(d);
-      addCatalogProduct(out, p, seenKeys, usedIds);
-    }
-    // Advance by the number of docs the service ACTUALLY returned, never by a
-    // constant PAGE_ROWS — if the gateway hands back fewer rows than requested
-    // (an older build capped it at 200), a fixed +PAGE_ROWS stride steps over
-    // the un-returned rows and silently drops most of the catalog. Advancing by
-    // the real page size makes the offset walk contiguous regardless of cap.
-    start += page.docs.length;
-    if (typeof onProgress === 'function') {
-      try { onProgress({ loaded: out.length, total: expected || 0 }); } catch { /* non-fatal */ }
-    }
-    if (expected && start >= expected) { complete = true; break; }
-  }
+    return complete;
+  };
+  const fullComplete = await crawl(MAIN_QUERY);
+  const logoComplete = fullComplete ? await crawl(CUSTOM_LOGO_QUERY) : false;
   // Only a COMPLETE pull replaces the cache — a run cut short by errors must not
   // overwrite good data with a truncated catalog (missing every product after
   // the failure). A MANUAL refresh that couldn't complete surfaces the error so
   // the caller keeps previous data instead of quietly showing a partial list.
-  if (complete && out.length) { setCache({ ts: Date.now(), products: out }); return out; }
+  if (fullComplete && logoComplete && out.length) { setCache({ ts: Date.now(), products: out }); return out; }
   if (force) {
     throw new Error(lastError
       ? `Catalog service error (${lastError}) — please try again`

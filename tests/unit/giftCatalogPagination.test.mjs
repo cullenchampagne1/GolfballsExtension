@@ -27,6 +27,16 @@ const CATALOG = Array.from({ length: TOTAL }, (_, i) => ({
   price_d: 9.99,
   itemType_ss: ['Consumer-Accessories'],
 }));
+const RECOVERY_LOGO = {
+  id: 'taylormade-tp5-logo-2026',
+  parentCode_s: 'P-TP5-LOGO',
+  title_s: 'TaylorMade TP5 Custom Logo Golf Balls 2026 Model',
+  brand_s: 'TaylorMade',
+  price_d: 57.99,
+  product_url_s: '/Golf-Balls/TaylorMade-TP5-Custom-Logo-Golf-Balls-2026-Model',
+  itemType_ss: ['Consumer-Golf_Ball'],
+  modificationName_ss: ['Custom Logo'],
+};
 
 // The bug's fingerprint: the backend hands back at most SERVER_CAP rows per
 // page even when the client asks for more.
@@ -45,8 +55,9 @@ before(async () => {
         if (msg.action !== 'fetchGiftCatalog') { cb({ ok: false }); return; }
         const start = Number(msg.start) || 0;
         const rows = Math.min(SERVER_CAP, Number(msg.rows) || 60); // cap, as the old backend did
-        const docs = CATALOG.slice(start, start + rows);
-        cb({ ok: true, docs, numFound: CATALOG.length });
+        const source = msg.searchTerm === '*:*' ? CATALOG : [RECOVERY_LOGO];
+        const docs = source.slice(start, start + rows);
+        cb({ ok: true, docs, numFound: source.length });
       },
     },
     storage: {
@@ -65,18 +76,19 @@ after(() => { delete globalThis.chrome; });
 describe('gift catalog · pagination completeness', () => {
   it('collects every product even when the server caps pages below the client stride', async () => {
     const products = await loadCatalog({ force: true });
-    assert.equal(products.length, TOTAL,
-      `expected all ${TOTAL} products, got ${products.length} (a stride > server page size drops the gap)`);
+    assert.equal(products.length, TOTAL + 1,
+      `expected all ${TOTAL} broad-crawl products plus the custom-logo recovery result`);
     // no gaps: every parentCode present exactly once
     const codes = new Set(products.map((p) => p.parentCode));
-    assert.equal(codes.size, TOTAL);
+    assert.equal(codes.size, TOTAL + 1);
     assert.ok(codes.has('P00250') && codes.has('P00777'),
       'products inside the previously-skipped windows must be present');
+    assert.ok(codes.has('P-TP5-LOGO'), 'the focused custom-logo crawl must recover a listing omitted by the broad crawl');
   });
 
   it('caches the full pull so a reopen serves the complete set', async () => {
     const products = await loadCatalog({ force: false }); // served from cache written above
-    assert.equal(products.length, TOTAL);
+    assert.equal(products.length, TOTAL + 1);
   });
 
   it('keeps stock and commissionable custom-logo documents that share one Solr id', () => {

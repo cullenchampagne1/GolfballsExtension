@@ -121,10 +121,29 @@ function normStyleOptions(styleOptions, legacyStyle) {
   return opts;
 }
 
+/* A custom item can have a different photo and description for each selectable
+   personalization. Legacy string-only `styleOptions` are promoted on read so
+   existing libraries and shared stores remain compatible. */
+function normPersonalizationOptions(options, styleOptions, legacyStyle) {
+  const source = Array.isArray(options) && options.length
+    ? options
+    : normStyleOptions(styleOptions, legacyStyle).map((name) => ({ name }));
+  return source.map((option) => {
+    const raw = typeof option === 'string' ? { name: option } : (option || {});
+    const image = str(raw.image || raw.thumbnail);
+    return {
+      name: decodeEntities(str(raw.name || raw.label || raw.style)),
+      image: /^data:/i.test(image) ? '' : image,
+      details: decodeEntities(str(raw.details || raw.description)),
+    };
+  }).filter((option) => option.name);
+}
+
 /* Normalize a form/stored record into the spec shape. Migrates the legacy flat
    shape ({style, price, qty}) → ({styleOptions, breaks}) so old items keep
    working. `qty` is no longer a field (the ladder's first tier is the min qty). */
 export function normalizeCustomItem(rec = {}) {
+  const personalizationOptions = normPersonalizationOptions(rec.personalizationOptions, rec.styleOptions, rec.style);
   return {
     id: str(rec.id) || 'ci-' + _rid(),
     name: decodeEntities(str(rec.name)),
@@ -140,7 +159,9 @@ export function normalizeCustomItem(rec = {}) {
     // cart) — only keep an uploaded/pasted http(s) thumbnail.
     thumbnail: /^data:/i.test(str(rec.thumbnail)) ? '' : str(rec.thumbnail),
     description: str(rec.description),
-    styleOptions: normStyleOptions(rec.styleOptions, rec.style),
+    personalizationOptions,
+    // Retain the string projection for older builds/importers.
+    styleOptions: personalizationOptions.map((option) => option.name),
     breaks: normBreaks(rec.breaks, rec.price, rec.qty),
     costBreaks: normCostBreaks(rec.costBreaks),
     cost: num(rec.cost),
@@ -335,6 +356,7 @@ export function customItemToProduct(rec) {
     breaks,
     costBreaks: ci.costBreaks,
     styleOptions: ci.styleOptions,
+    personalizationOptions: ci.personalizationOptions,
     cost: ci.cost,
     setup: ci.setup,
     link: ci.link,

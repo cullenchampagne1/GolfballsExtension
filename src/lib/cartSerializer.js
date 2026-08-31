@@ -817,11 +817,39 @@ export function resolveLineName(product, child, selection = {}, decorationName =
     remember(group.Name || group.FriendlyName, propertyValue.Value);
   });
   const template = String(product.NameFormat || product.Name || '');
-  return template.replace(/\{([^{}]+)\}/g, (token, label) => {
+  const resolved = template.replace(/\{([^{}]+)\}/g, (token, label) => {
     const key = norm(label);
     if (key === 'decoration') return decorationName || '';
     return values.has(key) ? values.get(key) : token;
   }).replace(/\s{2,}/g, ' ').trim();
+  // Some web products expose selectable personalization properties but omit
+  // their tokens from NameFormat. Keep explicit user picks visible in the saved
+  // cart name instead of silently collapsing every option to the base title.
+  const explicit = Object.entries((selection && selection.values) || {})
+    .filter(([label, value]) => value != null && String(value).trim()
+      && !new RegExp(`\\{${String(label).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`, 'i').test(template)
+      && !resolved.toLowerCase().includes(String(value).trim().toLowerCase()))
+    .map(([, value]) => String(value).trim());
+  return explicit.length ? `${resolved} — ${explicit.join(' · ')}` : resolved;
+}
+
+/* Put the selected child's product photo first. Product pages often ship one
+   ProductImage per color/style and identify it with PropertyValueProduct; the
+   site's cart uses the first image as the line thumbnail. */
+export function buildSelectedProductImages(images = [], child = {}) {
+  const list = Array.isArray(images) ? images : [];
+  const selected = new Set((child.PropertyValueProduct || [])
+    .map((value) => value.propertyValueProductID)
+    .filter((id) => id != null)
+    .map(String));
+  if (!selected.size || list.length < 2) return list;
+  const score = (image) => (image.PropertyValueProduct || [])
+    .map((value) => value.propertyValueProductID != null ? value.propertyValueProductID : value)
+    .filter((id) => id != null && selected.has(String(id))).length;
+  const ranked = list.map((image, index) => ({ image, index, score: score(image) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  if (!ranked[0].score) return list;
+  return ranked.map(({ image }, index) => ({ ...image, SortValue: index + 1 }));
 }
 
 /* The decorated per-unit price ladder for a line, computed from the raw product
@@ -955,8 +983,8 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     hasQtyParam: false,
     itemType: (product.ItemType && product.ItemType.Name) || (product.itemType_s || '').split('-').pop() || 'Golf Balls',
     images: bundleBlock
-      ? buildGiftSetImages(product.ProductImage || product.images || [], bundleBlock.bundle.renderedPreviewImage)
-      : (product.ProductImage || product.images || []),
+      ? buildGiftSetImages(buildSelectedProductImages(product.ProductImage || product.images || [], child), bundleBlock.bundle.renderedPreviewImage)
+      : buildSelectedProductImages(product.ProductImage || product.images || [], child),
     itemGuid: itemGuid || (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
     // Commissionable "_1" path for imprinted lines comes in via `url`; the page's
     // canonical (base) URL is the fallback for plain/retail lines.
@@ -1017,7 +1045,7 @@ const _ciModOption = (name, value) => ({
   NotAvailableToSelect: false, CustomerNote: '', setupFee_priceBreakHeaderID: 0, itemFee_priceBreakHeaderID: 0,
 });
 
-export function buildCustomItemLine({ ci = {}, qty, price, style } = {}) {
+export function buildCustomItemLine({ ci = {}, qty, price, style, personalization } = {}) {
   const q = _ciNum(qty != null ? qty : ci.qty) || 1;
   const itemPrice = round2(price != null ? price : _ciNum(ci.price));
   const setup = round2(_ciNum(ci.setup));
@@ -1026,8 +1054,11 @@ export function buildCustomItemLine({ ci = {}, qty, price, style } = {}) {
   const styleVal = (style != null ? style
     : (ci.style != null ? ci.style : (Array.isArray(ci.styleOptions) ? ci.styleOptions[0] : '')) || '');
   const styleStr = (styleVal || '').toString();
-  const title = name + (styleStr ? ' ' + styleStr : '');
-  const thumb = (ci.thumbnail || '').toString();
+  const savedOption = (ci.personalizationOptions || []).find((option) => option && option.name === styleStr) || {};
+  const details = String((personalization && personalization.details) || savedOption.details || '').trim();
+  const titleParts = [name, styleStr, details].filter((part, index, all) => part && all.indexOf(part) === index);
+  const title = titleParts.join(' ');
+  const thumb = String((personalization && personalization.image) || savedOption.image || ci.thumbnail || '');
   return {
     nameFormat: '',
     productTitle: title,

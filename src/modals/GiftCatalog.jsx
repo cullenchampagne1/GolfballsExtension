@@ -52,6 +52,15 @@ const lineGiftImg = (line) => {
   const p = line.product || {};
   return giftSetPreviewUrl(gs, { decoration: line.decoration, sleeveImage: p.giftSetSleeveImage, brand: p.brand }) || gs.thumbnail || null;
 };
+const lineProductImg = (line) => lineGiftImg(line)
+  || (line && line.variant && line.variant.image)
+  || (line && line.product && line.product.img)
+  || '';
+const lineVariantSubtitle = (line) => {
+  const values = Object.values((line && line.variant && line.variant.values) || {}).filter(Boolean);
+  const details = line && line.variant && line.variant.details;
+  return [...values, details].filter((value, index, all) => value && all.indexOf(value) === index).join(' · ');
+};
 /* A gift-set line's display identity is the SET, not the bare ball — so the
    saved-card list, margin table, and email all read "6-Ball … Gift Set" instead
    of "a dozen balls". Null when the line isn't a gift set. */
@@ -578,8 +587,9 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
     setDecoration(null);
     // Custom items default to their first Style option so an un-touched add still
     // carries a style; catalog products start with no variant.
-    const opts = p.isCustom && Array.isArray(p.styleOptions) ? p.styleOptions : [];
-    setVariant(opts.length ? { values: { style: opts[0] }, price: null } : null);
+    const opts = p.isCustom && Array.isArray(p.personalizationOptions) ? p.personalizationOptions : [];
+    const first = opts[0] || null;
+    setVariant(first ? { values: { style: first.name }, price: null, image: first.image || p.img, details: first.details || '' } : null);
   }, [p.id]);
   // Headline: a chosen variant (Tee Count, …) wins; otherwise custom-logo items
   // show their "from" (first-ladder) imprint price and everything else retail.
@@ -616,7 +626,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
         </div>
         <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
           <div style={{ position: 'relative' }}>
-            <ProductImage src={giftImg || p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
+            <ProductImage src={giftImg || (variant && variant.image) || p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
             {p.customLogo && <CommissionDollar size={20} />}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -643,14 +653,15 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               into the cart's SERVICEITEM 'style'). Catalog items: base options
               that change price (Tee Count, …), which self-hide when none. */}
           {p.isCustom ? (
-            (p.styleOptions && p.styleOptions.length > 1) ? (
+            (p.personalizationOptions && p.personalizationOptions.length > 1) ? (
               <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 7 }}>
                 <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Style</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {p.styleOptions.map((s) => {
-                    const on = ((variant && variant.values && variant.values.style) || p.styleOptions[0]) === s;
+                  {p.personalizationOptions.map((option) => {
+                    const s = option.name;
+                    const on = ((variant && variant.values && variant.values.style) || p.personalizationOptions[0].name) === s;
                     return (
-                      <button key={s} onClick={() => setVariant({ values: { style: s }, price: null })}
+                      <button key={s} onClick={() => setVariant({ values: { style: s }, price: null, image: option.image || p.img, details: option.details || '' })}
                         style={{
                           padding: '5px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit',
                           fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
@@ -724,7 +735,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
           {/* Show the customization UI for ANY customizable product (custom
               logo, personalized, monogram, photo, ball-marker, …), not just
               custom-logo — e.g. a "Personalized Ball Marker" hat clip. */}
-          {!p.isCustom && (p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} />}
+          {!p.isCustom && (p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} onVariantChange={setVariant} />}
           {/* Inventory + cost for a catalog SKU (loads on press). */}
           {!p.isCustom && p.sku && <InventoryPanel sku={invSkuOf(p)} />}
           {p.isCustom && p.custom && p.custom.cost > 0 && (
@@ -980,7 +991,7 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <MiniThumb src={lineGiftImg(line) || p.img} size={38} />
+        <MiniThumb src={lineProductImg(line)} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 1 }}>
@@ -1290,7 +1301,7 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
   return (
     <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <MiniThumb src={lineGiftImg(e) || e.product.img} size={36} />
+        <MiniThumb src={lineProductImg(e)} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1656,7 +1667,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
               {decorated.map((e, i) => (
                 <div key={e.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <MiniThumb src={lineGiftImg(e) || e.product.img} size={22} />
+                    <MiniThumb src={lineProductImg(e)} size={22} />
                     <div style={{ minWidth: 0, fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
                   </div>
                   {e.decoration && e.decoration.giftSet && (
@@ -1737,7 +1748,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
     <div style={{ display: 'flex', alignItems: 'center' }}>
       {shown.map((e, i) => (
         <div key={i} style={{ marginLeft: i ? -13 : 0, zIndex: shown.length - i, width: size, height: size, flexShrink: 0, background: '#f4f4f1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', border: '1px solid var(--gb-border-default)', boxShadow: '0 0 0 2px var(--gb-surface-modal), 0 1px 5px rgba(0,0,0,.18)' }}>
-          {(lineGiftImg(e) || e.product.img) && <img src={lineGiftImg(e) || e.product.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 5, boxSizing: 'border-box' }} />}
+          {lineProductImg(e) && <img src={lineProductImg(e)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 5, boxSizing: 'border-box' }} />}
         </div>
       ))}
       {extra > 0 && (
@@ -2191,7 +2202,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               {/* Free giveaway lines from a FREE_QUANTITY coupon — read-only, $0. */}
               {freeLines.map((fl) => (
                 <div key={fl.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
-                  <MiniThumb src={lineGiftImg(fl) || (fl.product && fl.product.img)} size={30} />
+                  <MiniThumb src={lineProductImg(fl)} size={30} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(fl.product && fl.product.title) || 'Item'}</span>
@@ -2927,10 +2938,15 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
   const s = (v) => (v == null ? '' : String(v));
   // Seed style options + price ladder from the spec shape, migrating the legacy
   // flat shape ({style, price, qty}) so old items open correctly.
-  const seedStyles = () => {
-    if (Array.isArray(initial.styleOptions) && initial.styleOptions.length) return initial.styleOptions.slice();
-    if (initial.style) return [String(initial.style)];
-    return [''];
+  const seedPersonalizations = () => {
+    if (Array.isArray(initial.personalizationOptions) && initial.personalizationOptions.length) {
+      return initial.personalizationOptions.map((option) => ({ name: s(option.name), image: s(option.image), details: s(option.details) }));
+    }
+    if (Array.isArray(initial.styleOptions) && initial.styleOptions.length) {
+      return initial.styleOptions.map((name) => ({ name: s(name), image: '', details: '' }));
+    }
+    if (initial.style) return [{ name: String(initial.style), image: '', details: '' }];
+    return [{ name: '', image: '', details: '' }];
   };
   const seedBreaks = () => {
     if (Array.isArray(initial.breaks) && initial.breaks.length) return initial.breaks.map((b) => ({ q: s(b.q), p: s(b.p) }));
@@ -2942,12 +2958,19 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
     itemID: s(initial.itemID), thumbnail: s(initial.thumbnail), description: s(initial.description),
     cost: initial.cost != null ? String(initial.cost) : '', setup: initial.setup != null ? String(initial.setup) : '',
     weight: initial.weight != null ? String(initial.weight) : '', dropship: !!initial.dropship,
-    styleOptions: seedStyles(), breaks: seedBreaks(),
+    personalizationOptions: seedPersonalizations(), breaks: seedBreaks(),
   });
-  // Style-option list editors
-  const setStyleAt = (i, v) => setF((prev) => { const a = prev.styleOptions.slice(); a[i] = v; return { ...prev, styleOptions: a }; });
-  const addStyle = () => setF((prev) => ({ ...prev, styleOptions: [...prev.styleOptions, ''] }));
-  const removeStyle = (i) => setF((prev) => { const a = prev.styleOptions.filter((_, j) => j !== i); return { ...prev, styleOptions: a.length ? a : [''] }; });
+  // Personalization-option editors (label + optional photo/details).
+  const setOptionAt = (i, key, value) => setF((prev) => {
+    const options = prev.personalizationOptions.map((option) => ({ ...option }));
+    options[i][key] = value;
+    return { ...prev, personalizationOptions: options };
+  });
+  const addStyle = () => setF((prev) => ({ ...prev, personalizationOptions: [...prev.personalizationOptions, { name: '', image: '', details: '' }] }));
+  const removeStyle = (i) => setF((prev) => {
+    const options = prev.personalizationOptions.filter((_, j) => j !== i);
+    return { ...prev, personalizationOptions: options.length ? options : [{ name: '', image: '', details: '' }] };
+  });
   // Price-ladder editors
   const setBreakAt = (i, k, v) => setF((prev) => { const a = prev.breaks.map((b) => ({ ...b })); a[i][k] = v; return { ...prev, breaks: a }; });
   const addBreak = () => setF((prev) => ({ ...prev, breaks: [...prev.breaks, { q: '', p: '' }] }));
@@ -2956,6 +2979,8 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
   const fileRef = useRef(null);
+  const optionFileRef = useRef(null);
+  const pendingOptionRef = useRef(-1);
   const set = (k) => (v) => setF((prev) => ({ ...prev, [k]: v }));
   const onPickFile = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -2986,6 +3011,39 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
       .catch((err) => setUploadErr((err && err.message) || 'couldn’t fetch that link'))
       .finally(() => setUploading(false));
   };
+  const ingestOptionUrl = (index, url) => {
+    if (!needsIngest(url)) return;
+    setUploadErr('');
+    setUploading(true);
+    ingestImageUrl(url)
+      .then((s3) => setF((prev) => {
+        if (prev.personalizationOptions[index]?.image !== url) return prev;
+        const options = prev.personalizationOptions.map((option) => ({ ...option }));
+        options[index].image = s3;
+        return { ...prev, personalizationOptions: options };
+      }))
+      .catch((err) => setUploadErr((err && err.message) || 'couldn’t fetch that option image'))
+      .finally(() => setUploading(false));
+  };
+  const onPickOptionFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    const index = pendingOptionRef.current;
+    if (!file || index < 0) return;
+    setUploadErr('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setOptionAt(index, 'image', dataUrl);
+      setUploading(true);
+      uploadCustomItemImage(dataUrl, file.name || 'custom-item-option.png')
+        .then((url) => setOptionAt(index, 'image', url))
+        .catch((err) => setUploadErr((err && err.message) || 'upload failed'))
+        .finally(() => setUploading(false));
+    };
+    reader.onerror = () => setUploadErr('could not read file');
+    reader.readAsDataURL(file);
+  };
   const canSave = !!f.name.trim() && !saving && !uploading;
   const submit = async () => {
     if (!canSave) return;
@@ -3005,6 +3063,13 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
           // the item later retries the ingest.
         }
       }
+      const optionCopies = (rec.personalizationOptions || []).map((option) => ({ ...option }));
+      for (let index = 0; index < optionCopies.length; index += 1) {
+        if (!needsIngest(optionCopies[index].image)) continue;
+        try { optionCopies[index].image = await ingestImageUrl(optionCopies[index].image); }
+        catch { /* preserve the supplier URL; a later edit can retry */ }
+      }
+      rec = { ...rec, personalizationOptions: optionCopies };
       await onSave(rec);
     } catch (e) { setUploadErr((e && e.message) || 'couldn’t save'); setSaving(false); }
   };
@@ -3049,12 +3114,21 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
           {/* Style options — selectable choices; the rep picks one when adding. */}
           <CIField label="Style options" full>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {f.styleOptions.map((opt, i) => (
-                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <Input size="sm" value={opt} onChange={(v) => setStyleAt(i, v)} placeholder={i === 0 ? 'e.g. White' : 'Another option'} style={{ flex: 1 }} />
+              {f.personalizationOptions.map((option, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '42px 1fr 28px', gap: 6, alignItems: 'center', padding: 7, border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+                  <button type="button" title="Upload this option’s photo" onClick={() => { pendingOptionRef.current = i; optionFileRef.current && optionFileRef.current.click(); }}
+                    style={{ width: 42, height: 42, padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {option.image ? <img src={option.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <I.plus size={14} style={{ color: 'var(--gb-text-ghost)' }} />}
+                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                    <Input size="sm" value={option.name} onChange={(v) => setOptionAt(i, 'name', v)} placeholder={i === 0 ? 'e.g. White' : 'Another option'} />
+                    <Input size="sm" value={option.details} onChange={(v) => setOptionAt(i, 'details', v)} placeholder="Personalized detail shown in item name" />
+                    <Input size="sm" value={option.image.startsWith('data:') ? '' : option.image} onChange={(v) => setOptionAt(i, 'image', v)} onBlur={() => ingestOptionUrl(i, option.image)} placeholder="Option image URL (or click photo)" />
+                  </div>
                   <IconBtn size="sm" variant="ghost" icon={<I.close size={13} />} title="Remove option" onClick={() => removeStyle(i)} />
                 </div>
               ))}
+              <input ref={optionFileRef} type="file" accept="image/*" onChange={onPickOptionFile} style={{ display: 'none' }} />
               <button type="button" onClick={addStyle} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-brand-label)', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', padding: '2px 0' }}><I.plus size={12} /> Add style option</button>
             </div>
           </CIField>
@@ -3647,8 +3721,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       // A gift-set line is identified by the SET (name + size + the ball it wraps)
       // and shows the boxed gift-set render — not the bare ball.
       const title = gs ? (gs.name || 'Gift set') : (p.title || '');
-      const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : ((l.variant && l.variant.values && l.variant.values.style) || '');
-      const img = (gs ? lineGiftImg(l) : null) || p.img || '';
+      const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : lineVariantSubtitle(l);
+      const img = lineProductImg(l);
       const imprint = lineImprint(l.decoration);
       const isFree = !!l.free;
       // Retail/"was" unit = the higher of MSRP, the 1-qty ladder price, and the

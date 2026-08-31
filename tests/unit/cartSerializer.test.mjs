@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 import {
   SAVE_CART_URL, getCartUrl,
-  ballPreviewUrl, giftSetPreviewUrl, buildGiftSetImages, monogramPreviewUrl, teePreviewUrl,
+  ballPreviewUrl, giftSetPreviewUrl, buildGiftSetImages, buildSelectedProductImages, monogramPreviewUrl, teePreviewUrl,
   buildBallDynamicImage, buildExpressLogoDynamicImage, priceAtQ, lineTotal,
   buildDecoration, decorationFromCartItem,
   promoDiscount, freeLinesFromPromo,
@@ -180,6 +180,21 @@ describe('gift-set cart images', () => {
   });
 });
 
+describe('selected product images', () => {
+  it('moves the selected personalization image to the front of the saved gallery', () => {
+    const images = [
+      { URL: 'white.jpg', SortValue: 1, PropertyValueProduct: [{ propertyValueProductID: 11 }] },
+      { URL: 'red.jpg', SortValue: 2, PropertyValueProduct: [{ propertyValueProductID: 22 }] },
+    ];
+    const selected = buildSelectedProductImages(images, {
+      PropertyValueProduct: [{ propertyValueProductID: 22, Value: 'Red' }],
+    });
+    assert.equal(selected[0].URL, 'red.jpg');
+    assert.deepEqual(selected.map((image) => image.SortValue), [1, 2]);
+    assert.equal(images[0].SortValue, 1, 'the raw product gallery is not mutated');
+  });
+});
+
 describe('line name formatting', () => {
   const product = {
     Name: 'Performance Polo',
@@ -194,6 +209,13 @@ describe('line name formatting', () => {
 
   it('resolves Color and Decoration together without leaving template tokens', () => {
     assert.equal(resolveLineName(product, whiteChild, {}, 'Custom Logo'), 'White Custom Logo Performance Polo');
+  });
+
+  it('appends explicit web options when NameFormat has no matching token', () => {
+    assert.equal(
+      resolveLineName({ Name: 'Executive Tumbler' }, {}, { values: { 'Accessories Color': 'Midnight' } }, ''),
+      'Executive Tumbler — Midnight',
+    );
   });
 
   it('stores the resolved name in the assembled cart line', () => {
@@ -568,6 +590,21 @@ describe('buildCustomItemLine', () => {
     assert.equal(l.totalQty, 48);
     assert.equal(l.ItemPrice, 11);
     assert.equal(l.productTitle, 'Stainless Tumbler Gloss Red');
+  });
+
+  it('uses the selected personalization photo and details in the saved line', () => {
+    const l = buildCustomItemLine({
+      ci: {
+        ...ci,
+        thumbnail: 'base.jpg',
+        personalizationOptions: [{ name: 'Gloss Red', image: 'red.jpg', details: 'Laser engraved' }],
+      },
+      style: 'Gloss Red',
+    });
+    assert.equal(l.productTitle, 'Stainless Tumbler Gloss Red Laser engraved');
+    assert.equal(l.images[0].URL, 'red.jpg');
+    const options = l.modification.ProductModification.Modification.ModificationOption;
+    assert.equal(options.find((option) => option.Name === 'thumbnail').ModificationOptionValue[0].Name, 'red.jpg');
   });
 
   it('defaults to qty 1 and a generic name for an empty item', () => {

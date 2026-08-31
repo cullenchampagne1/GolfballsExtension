@@ -444,6 +444,25 @@ function gbModOptionValues(mod, name) {
 // Count" via each child's itemFeeModifier_priceBreakHeader ON TOP of the parent
 // itemFee. Resolve: price = child.Price ?? (parent itemFee + child modifier).
 // Returns [{ sku, values:{<propLabel>:<value>}, price, available }].
+function gbVariantImage(prod, child) {
+  const selected = new Set((child.PropertyValueProduct || [])
+    .map((value) => value.propertyValueProductID)
+    .filter((id) => id != null)
+    .map(String));
+  const images = (prod.ProductImage || []).map((image, index) => {
+    const matches = (image.PropertyValueProduct || [])
+      .map((value) => value.propertyValueProductID != null ? value.propertyValueProductID : value)
+      .filter((id) => id != null && selected.has(String(id))).length;
+    return { image, index, matches };
+  }).sort((a, b) => b.matches - a.matches
+    || Number(a.image.SortValue || a.index) - Number(b.image.SortValue || b.index));
+  const chosen = images.find((entry) => entry.matches > 0);
+  const url = chosen && chosen.image && (chosen.image.URL || chosen.image.Url || chosen.image.url);
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  return 'https://static.golfballs.com/C/800x800/' + String(url).replace(/^\/+/, '');
+}
+
 function gbExtractVariants(prod) {
   const round2 = (n) => Math.round(n * 100) / 100;
   const firstBreak = (h) => (h && Array.isArray(h.PriceBreak) && h.PriceBreak[0]) || null;
@@ -462,7 +481,7 @@ function gbExtractVariants(prod) {
       const modBreak = firstBreak(c.itemFeeModifier_priceBreakHeader);
       price = modBreak != null ? round2(base + (Number(modBreak.Price) || 0)) : (base || null);
     }
-    return { sku: c.ShortCode, values, price, available: c.AvailableForSale !== false };
+    return { sku: c.ShortCode, values, price, image: gbVariantImage(prod, c), available: c.AvailableForSale !== false };
   });
 }
 

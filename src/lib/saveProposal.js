@@ -127,8 +127,26 @@ export async function buildProposalLines(proposal) {
       }
       const style = (line.variant && line.variant.values && line.variant.values.style)
         || (Array.isArray(ci.styleOptions) && ci.styleOptions[0]) || ci.style || '';
+      let personalization = line.variant || null;
+      if (personalization && personalization.image && needsIngest(personalization.image)) {
+        try {
+          const image = await ingestImageUrl(personalization.image);
+          personalization = { ...personalization, image };
+          line.variant = personalization;
+          ci = {
+            ...ci,
+            personalizationOptions: (ci.personalizationOptions || []).map((option) => (
+              option && option.name === style ? { ...option, image } : option
+            )),
+          };
+          if (line.product) line.product.custom = ci;
+          saveCustomItem(ci).catch(() => {});
+        } catch (e) {
+          skipped.push({ title: ci.name || ci.sku || 'custom item', reason: 'personalization image upload failed (' + ((e && e.message) || 'error') + ')' });
+        }
+      }
       for (const split of (line.splits || [])) {
-        items.push(buildCustomItemLine({ ci, qty: split.qty, price: split.price, style }));
+        items.push(buildCustomItemLine({ ci, qty: split.qty, price: split.price, style, personalization }));
       }
       continue;
     }

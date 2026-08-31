@@ -5,6 +5,7 @@ import {
   PRODUCT_STORE_FILE_VERSION,
   buildProductStoreFile,
   importProductStoreFile,
+  normalizeCustomItem,
   parseProductStoreFile,
 } from '../../src/lib/customItems.js';
 import {
@@ -34,6 +35,23 @@ beforeEach(() => {
 });
 
 describe('custom item sharing', () => {
+  it('migrates legacy styles and preserves per-personalization images and details', () => {
+    const legacy = normalizeCustomItem({ name: 'Legacy', styleOptions: ['White', 'Blue'] });
+    assert.deepEqual(legacy.personalizationOptions, [
+      { name: 'White', image: '', details: '' },
+      { name: 'Blue', image: '', details: '' },
+    ]);
+
+    const modern = normalizeCustomItem({
+      name: 'Modern',
+      personalizationOptions: [{ name: 'Red', image: 'https://static.golfballs.com/red.jpg', details: 'Gold imprint' }],
+    });
+    assert.deepEqual(modern.styleOptions, ['Red']);
+    assert.deepEqual(modern.personalizationOptions[0], {
+      name: 'Red', image: 'https://static.golfballs.com/red.jpg', details: 'Gold imprint',
+    });
+  });
+
   it('round-trips selected items through a versioned, normalized JSON store', () => {
     const file = buildProductStoreFile('  Fall & Winter Picks  ', [{
       id: 'ci-umbrella',
