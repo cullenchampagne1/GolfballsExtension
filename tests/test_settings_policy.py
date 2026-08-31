@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from sqlalchemy import Boolean, Column, DateTime, JSON, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, JSON, String, create_engine, select
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.pool import StaticPool
 
@@ -336,12 +336,119 @@ class SettingsPolicyTests(unittest.TestCase):
         )
 
         current, current_selected = self.store.project_client_document(
-            document, "3.4.6",
+            document, "3.4.45",
         )
         self.assertEqual(current_selected, "current")
         self.assertEqual(current, document)
         self.assertIsNot(current, document)
         self.assertEqual(self.store.client_registry("not-a-version"), "3.4.2")
+
+    def test_custom_page_clients_receive_a_managed_off_retirement_policy(self):
+        source = (ROOT / "settings-registry.js").read_text(encoding="utf-8")
+        registry = json.loads(settings_policy._REGISTRY.search(source).group(1))
+
+        def entry(spec):
+            return {
+                "value": spec.get("default"),
+                "hidden": False,
+                "managed": spec.get("managedDefault", True) is True,
+                "label": spec.get("label", "Setting"),
+            }
+
+        document = {
+            "schema_version": 1,
+            "refresh_minutes": 15,
+            "developer_section": {"hidden": False},
+            "features": {
+                key: entry(spec) for key, spec in registry["features"].items()
+            },
+            "developer_settings": {
+                key: entry(spec)
+                for key, spec in registry["developerSettings"].items()
+            },
+        }
+
+        projected, selected = self.store.project_client_document(
+            document, "3.4.18",
+        )
+        self.assertEqual(selected, "3.4.3-3.4.44")
+        self.assertEqual(projected["custom_pages"], {
+            "value": False,
+            "hidden": True,
+            "managed": True,
+            "label": "Custom pages",
+            "scopes": {
+                "all": {
+                    "value": False,
+                    "hidden": True,
+                    "managed": True,
+                    "label": "Custom Pages",
+                },
+            },
+        })
+        self.assertEqual(
+            projected["features"]["salesFantasyEnabled"],
+            document["developer_settings"]["salesFantasy.enabled"],
+        )
+        self.assertEqual(
+            self.store.client_registry("3.4.44"), "3.4.3-3.4.44",
+        )
+
+        current, current_selected = self.store.project_client_document(
+            document, "3.4.45",
+        )
+        self.assertEqual(current_selected, "current")
+        self.assertNotIn("custom_pages", current)
+
+    def test_reconciliation_deletes_retired_custom_page_overrides(self):
+        self.store.global_document()
+        now = datetime.utcnow()
+        with Session(self.engine) as session:
+            session.add_all([
+                Override(
+                    credential_id="install-braxton",
+                    setting_path=settings_policy._path_key(["custom_pages"]),
+                    has_value_override=True,
+                    value_override=True,
+                    hidden_override=False,
+                    managed_override=False,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                Override(
+                    credential_id="install-braxton",
+                    setting_path=settings_policy._path_key([
+                        "custom_pages", "scopes", "all",
+                    ]),
+                    has_value_override=True,
+                    value_override=True,
+                    hidden_override=False,
+                    managed_override=False,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                Override(
+                    credential_id="install-braxton",
+                    setting_path=settings_policy._path_key([
+                        "features", "featureEnabled",
+                    ]),
+                    has_value_override=True,
+                    value_override=False,
+                    hidden_override=None,
+                    managed_override=None,
+                    created_at=now,
+                    updated_at=now,
+                ),
+            ])
+            session.commit()
+
+        self.store.global_document()
+        with Session(self.engine) as session:
+            paths = [
+                settings_policy._path_from_key(row.setting_path)
+                for row in session.scalars(select(Override)).all()
+            ]
+        self.assertEqual(paths, [["features", "featureEnabled"]])
 
     def test_renamed_settings_and_override_paths_keep_values_and_refresh_labels(self):
         legacy_document = json.loads(json.dumps(self.document))
