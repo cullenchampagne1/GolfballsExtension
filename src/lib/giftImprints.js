@@ -50,6 +50,9 @@ export function targetTakesEngine(target, engine) {
   switch (engine) {
     case 'ballLogo': case 'logoOverlay': return supportsLogo(target);
     case 'ballText':       return ballish(target) && supportsMod(target, 'Personalized');
+    case 'playerNumber':   return ballish(target) && supportsMod(target, 'Custom Player Number');
+    case 'alignXL':        return ballish(target) && supportsMod(target, 'AlignXL');
+    case 'idAlign':        return ballish(target) && supportsMod(target, 'IDAlign');
     case 'monogram':       return ballish(target) && supportsMod(target, 'Monogram');
     case 'accessoryText':  return !ballish(target) && supportsMod(target, 'Tee');
     case 'towelText': case 'towelMonogram': return !ballish(target) && supportsEmbroidery(target);
@@ -82,6 +85,9 @@ export function frontImprint(deco) {
   if (e === 'ballText' || e === 'accessoryText' || e === 'towelText') return _textImprint('front', e, deco.pole1);
   if (e === 'monogram' || e === 'towelMonogram') return _monoImprint('front', e, deco.monogram);
   if (e === 'ballLogo' || e === 'logoOverlay') return _logoImprint('front', e, deco);
+  if (e === 'playerNumber') return { slot: 'front', engine: e, kind: 'text', number: deco.number, colorName: deco.colorName, lines: [deco.number], font: 'Kabel Dm BT', color: deco.color || '#000000', label: `Player number — ${deco.number || '00'}`, image: null };
+  if (e === 'alignXL') return { slot: 'front', engine: e, kind: 'text', style: deco.style, text: deco.text, textColor: deco.textColor, lineColor: deco.lineColor, lines: [deco.text || ''], font: 'Kabel Dm BT', color: deco.textColor || '#000000', label: `Align XL — ${deco.style || 'star'}${deco.text ? ` · ${deco.text}` : ''}`, image: null };
+  if (e === 'idAlign') return { slot: 'front', engine: e, kind: 'text', style: deco.style, initials: deco.initials, textColor: deco.textColor, lineColor: deco.lineColor, lines: [deco.initials || ''], font: 'Kabel Dm BT', color: deco.textColor || '#000000', label: `IDAlign — ${deco.style || 'quadArrow'}${deco.initials ? ` · ${deco.initials}` : ''}`, image: null };
   return null;
 }
 // The opposite-pole (pole2) imprint as a portable descriptor (or null). pole2 is
@@ -108,6 +114,9 @@ export function decoImprints(deco) {
 // engine (validation has already confirmed the target supports it).
 export function frontFromImprint(target, imp) {
   const baseColor = '#FFFFFF', finish = { MFS: '279', SecondMFS: '279' };
+  if (imp.engine === 'playerNumber') return { engine: 'playerNumber', baseColor, finish, dualPole: false, pole2: null, number: imp.number || (imp.lines && imp.lines[0]) || '00', color: imp.color || '#000000', colorName: imp.colorName || 'Black' };
+  if (imp.engine === 'alignXL') return { engine: 'alignXL', baseColor, finish, dualPole: false, pole2: null, style: imp.style || 'star', text: imp.text || (imp.lines && imp.lines[0]) || '', textColor: imp.textColor || imp.color || '#000000', lineColor: imp.lineColor || '#000000' };
+  if (imp.engine === 'idAlign') return { engine: 'idAlign', baseColor, finish, dualPole: false, pole2: null, style: imp.style || 'quadArrow', initials: imp.initials || (imp.lines && imp.lines[0]) || '', textColor: imp.textColor || imp.color || '#000000', lineColor: imp.lineColor || '#000000' };
   if (imp.kind === 'logo') {
     return { engine: ballish(target) ? 'ballLogo' : 'logoOverlay', baseColor, finish, dualPole: false, pole2: null,
       logo: imp.logo || null, _localImageDataUrl: imp._localImageDataUrl || null };

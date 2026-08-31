@@ -141,6 +141,83 @@ export function buildBallDynamicImage({
   return img;
 }
 
+export function playerNumberPreviewUrl({ baseColor = '#FFFFFF', number = '00', color = '#000000', colorName = 'Black' } = {}) {
+  const digits = String(number).padStart(2, '0').slice(-2).split('');
+  const cfg = { GlossType: '', BC: baseColor, NumberColor: color, Number: '', InkColor: colorName };
+  const overlay = ['Titleist-Double-Digit', '', ...digits].join(',');
+  const print = `DoubleDigit?userOverlay=${enc(overlay)}&configOverrides=${enc(JSON.stringify(cfg))}`;
+  const blank = [{ lines: [], font: 'Kabel Dm BT', color: '#000000' }];
+  const print2 = `Personalized?userText=${enc(JSON.stringify(blank))}&configOverrides=${enc('{}')}`;
+  return `https://www.icustomize.com/Item/GolfBall/r?configOverrides=${enc(JSON.stringify({ BC: baseColor }))}`
+    + `&view=&Print=${enc(print)}&Print2=${enc(print2)}`;
+}
+
+export function buildPlayerNumberDynamicImage({ baseColor = '#FFFFFF', number = '00', color = '#000000', colorName = 'Black' } = {}) {
+  const digits = String(number).padStart(2, '0').slice(-2).split('');
+  return {
+    sku: 'GolfBall', clientID: 'Item', configOverrides: { BC: baseColor },
+    versionProperties: { versionNumber: 2 }, view: '',
+    Print: {
+      userOverlay: ['Titleist-Double-Digit', '', ...digits].map((fileName) => ({ visible: true, fileName })),
+      versionProperties: { versionNumber: 2, decorationType: 'DoubleDigit' },
+      configOverrides: { GlossType: '', BC: baseColor, NumberColor: color, Number: '', InkColor: colorName },
+    },
+    Print2: {
+      userText: [{ lines: [null], font: 'Kabel Dm BT', color: '#000000' }],
+      versionProperties: { versionNumber: 2, decorationType: 'Personalized' }, configOverrides: {},
+    },
+    renderedPreviewImage: playerNumberPreviewUrl({ baseColor, number, color, colorName }),
+  };
+}
+
+function alignXLPreviewUrl(image) {
+  const p = image.Print;
+  return 'https://www.icustomize.com/Render.aspx?sku=GolfBall&overlay=&useroverlay='
+    + enc((p.userOverlay || []).map((x) => x.fileName).join(','))
+    + `&usertext=${enc(JSON.stringify(p.userText || []))}`
+    + `&configoverrides=${enc(JSON.stringify(p.configOverrides || {}))}&clientID=Item&view=Large`;
+}
+
+export function buildAlignXLDynamicImage({ baseColor = '#FFFFFF', style = 'star', text = '', textColor = '#000000', lineColor = '#000000' } = {}) {
+  const image = {
+    sku: 'GolfBall', clientID: 'Item', configOverrides: { GlossType: '', BC: baseColor },
+    versionProperties: { versionNumber: 2 }, view: '',
+    Print: {
+      userText: [{ lines: [String(text || '').toUpperCase()], font: 'Kabel Dm BT', color: textColor }],
+      userOverlay: [{ visible: true, fileName: style }],
+      versionProperties: { versionNumber: 2, decorationType: 'AlignXLIcon' },
+      configOverrides: { LineColor: lineColor, IconColor: textColor },
+    },
+  };
+  image.renderedPreviewImage = alignXLPreviewUrl(image);
+  return image;
+}
+
+const ID_ALIGN_LINES = {
+  quadArrow: ['quadArrow', 'quadArrow2'], chevron: ['chevron', 'chevron2'],
+};
+export function idAlignPreviewUrl(image) {
+  const overlays = (image.userOverlay || []).map((x) => x.fileName.replace(/^full-/, ''));
+  const cfg = image.configOverrides || {};
+  const outer = { GlossType: cfg.GlossType || '', BC: cfg.BC || '#FFFFFF' };
+  const inner = { ArrowColor1: cfg.Color1, ArrowColor2: cfg.Color2 };
+  const print = `IDAlign?Line1=${overlays[0] || ''}${overlays[1] ? `&Line2=${overlays[1]}` : ''}`
+    + `&userText=${enc(JSON.stringify(image.userText || []))}&configOverrides=${enc(JSON.stringify(inner))}`;
+  return `https://www.icustomize.com/Item/GolfBall/r?configOverrides=${enc(JSON.stringify(outer))}&Print=${enc(print)}&view=Large`;
+}
+export function buildIDAlignDynamicImage({ baseColor = '#FFFFFF', style = 'quadArrow', initials = '', textColor = '#000000', lineColor = '#000000' } = {}) {
+  const lines = ID_ALIGN_LINES[style] || [style];
+  const image = {
+    sku: 'GolfBall', clientID: 'Item',
+    userText: [{ lines: [String(initials || '').toUpperCase()], font: 'Kabel Dm BT', color: textColor }],
+    overlay: [], userOverlay: lines.map((line) => ({ visible: true, fileName: `full-${line}` })),
+    configOverrides: { Color1: lineColor, Color2: lineColor, GlossType: null, BC: baseColor },
+    versionProperties: { decorationType: 'IDAlign', versionNumber: 2 }, view: '',
+  };
+  image.renderedPreviewImage = idAlignPreviewUrl(image);
+  return image;
+}
+
 /* The decoration block (modificationHistory[] entry / active `modification`)
    for a golf ball: the product's matching ProductModification + the chosen
    imprint, the live preview dynamicImage, and the raw UI state. */
@@ -426,6 +503,17 @@ function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = null
   return clone;
 }
 
+function selectModificationOption(pm, groupName, valueName) {
+  if (!pm) return pm;
+  const clone = JSON.parse(JSON.stringify(pm));
+  const groups = (clone.Modification && clone.Modification.ModificationOption) || [];
+  const group = groups.find((option) => option.Name === groupName);
+  if (group && Array.isArray(group.ModificationOptionValue)) {
+    group.ModificationOptionValue.forEach((value) => { value.selected = value.Name === valueName; });
+  }
+  return clone;
+}
+
 /* ── decoration dispatcher ─────────────────────────────────────────────────────
    Build the modificationHistory[] entry + line-level customUserImage from an
    engine-agnostic decoration descriptor (what CustomizeBlock emits). Engines:
@@ -480,6 +568,35 @@ export function buildDecoration(product, decoration = {}) {
 
   if (engine === 'ballText') {
     out = { block: buildBallDecorationBlock(product, { ...decoration, decorationType: 'Personalized' }), customUserImage: noImage };
+  } else if (engine === 'playerNumber') {
+    const number = String(decoration.number == null ? '00' : decoration.number).padStart(2, '0').slice(-2);
+    const color = decoration.color || '#000000';
+    const colorName = decoration.colorName || 'Black';
+    out = {
+      block: {
+        ProductModification: selectModificationOption(findMod(product, { modID: 79, friendly: 'Custom Player Number' }), 'Second Pole', 'No'),
+        interfaceState: { secondPoleUserText: {}, DoubleDigit: { color: colorName, number } },
+        dynamicImage: [buildPlayerNumberDynamicImage({ baseColor: decoration.baseColor, number, color, colorName })],
+        isTemporary: false,
+      }, customUserImage: noImage,
+    };
+  } else if (engine === 'alignXL') {
+    const text = String(decoration.text || '');
+    out = {
+      block: {
+        ProductModification: selectModificationOption(findMod(product, { modID: 10, friendly: 'Align XL' }), 'Personalized', text.trim() ? 'Yes' : 'No'),
+        interfaceState: {},
+        dynamicImage: [buildAlignXLDynamicImage(decoration)], isTemporary: false,
+      }, customUserImage: noImage,
+    };
+  } else if (engine === 'idAlign') {
+    out = {
+      block: {
+        ProductModification: findMod(product, { modID: 8, friendly: 'IDAlign' }),
+        interfaceState: {},
+        dynamicImage: [buildIDAlignDynamicImage(decoration)], isTemporary: false,
+      }, customUserImage: noImage,
+    };
   } else if (engine === 'monogram') {
     out = {
       block: {
@@ -723,6 +840,32 @@ export function decorationFromCartItem(it) {
       return { engine: 'towelText', baseColor, finish, dualPole: false, pole2: null, pole1: { lines: textU.lines, font: textU.font || 'Century', color: textU.color || '#000000' } };
     }
     return null;
+  }
+
+  const friendlyName = m.ProductModification && m.ProductModification.Modification
+    && m.ProductModification.Modification.FriendlyName;
+  if (friendlyName === 'Custom Player Number' || ((d0.Print || {}).versionProperties || {}).decorationType === 'DoubleDigit') {
+    const state = is.DoubleDigit || {};
+    const overlays = ((d0.Print || {}).userOverlay || []).map((x) => x.fileName);
+    const number = state.number || overlays.slice(2, 4).join('') || '00';
+    const cfg = (d0.Print || {}).configOverrides || {};
+    return { engine: 'playerNumber', baseColor, finish, dualPole: false, pole2: null,
+      number, color: cfg.NumberColor || '#000000', colorName: state.color || cfg.InkColor || 'Black' };
+  }
+  if (friendlyName === 'Align XL' || ((d0.Print || {}).versionProperties || {}).decorationType === 'AlignXLIcon') {
+    const slot = d0.Print || {};
+    const u = (slot.userText || [])[0] || {};
+    const cfg = slot.configOverrides || {};
+    return { engine: 'alignXL', baseColor, finish, dualPole: false, pole2: null,
+      style: (((slot.userOverlay || [])[0] || {}).fileName) || 'star', text: (u.lines || [])[0] || '',
+      textColor: u.color || cfg.IconColor || '#000000', lineColor: cfg.LineColor || '#000000' };
+  }
+  if (friendlyName === 'IDAlign' || (d0.versionProperties || {}).decorationType === 'IDAlign') {
+    const u = (d0.userText || [])[0] || {};
+    const cfg = d0.configOverrides || {};
+    const first = (((d0.userOverlay || [])[0] || {}).fileName || '').replace(/^full-/, '');
+    return { engine: 'idAlign', baseColor, finish, dualPole: false, pole2: null,
+      style: first || 'quadArrow', initials: (u.lines || [])[0] || '', textColor: u.color || '#000000', lineColor: cfg.Color1 || '#000000' };
   }
 
   // Monogram on a ball (decorationType MonogramPadded + metaData)

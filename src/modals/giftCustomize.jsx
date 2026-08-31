@@ -825,6 +825,9 @@ const DEFAULT_PT_DATA = {
   Monogram:      { style: 'circle',     initials: '', c1: 'Black', c2: 'Transparent' },
   Personalized:  { l1: '', l2: '', l3: '', color: 'Black', font: 'Kabel Dm BT', size: 'Standard' },
   Icons:         { icon: '' },
+  'Custom Player Number': { number: 73, color: 'Black' },
+  AlignXL:       { style: 'star', text: '', textColor: 'Black', lineColor: 'Black', sameColor: false },
+  IDAlign:       { style: 'quadArrow', initials: '', textColor: 'Black', lineColor: 'Black' },
   'Custom Logo': { imageDataUrl: null, fileName: null },
   Photo:         { imageDataUrl: null, fileName: null },
   Tee:           { text: '', color: 'Black' },
@@ -1258,6 +1261,21 @@ function useDecalUrl() {
   const syncUrl = useMemo(() => {
     if (sel === 'Custom Logo') return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
     if (sel === 'Photo') return (data.Photo && data.Photo.imageDataUrl) || null;
+    if (sel === 'Custom Player Number') {
+      const s = data['Custom Player Number'] || {};
+      const number = String(Math.max(0, Math.min(99, Number(s.number) || 0))).padStart(2, '0');
+      const color = _hexOf(s.color);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><text x="256" y="330" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="250" font-weight="900" fill="${color}">${number}</text></svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    }
+    if (sel === 'AlignXL') {
+      const key = (data.AlignXL || {}).style || 'star';
+      return (ALIGNXL_STYLES.find((x) => x.key === key) || ALIGNXL_STYLES[0]).img;
+    }
+    if (sel === 'IDAlign') {
+      const key = (data.IDAlign || {}).style || 'quadArrow';
+      return (IDALIGN_STYLES.find((x) => x.key === key) || IDALIGN_STYLES[0]).img;
+    }
     return null;
   }, [sel, data]);
 
@@ -1647,6 +1665,58 @@ function MonogramFlow() {
   );
 }
 
+function PlayerNumberFlow() {
+  const [number, setNumber] = usePTField('Custom Player Number', 'number');
+  const [color, setColor] = usePTField('Custom Player Number', 'color');
+  const n = Math.max(0, Math.min(99, Number(number) || 0));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Field label="Number">
+        <div style={{ display: 'inline-flex', alignItems: 'center', height: 32, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+          <button onClick={() => setNumber(Math.max(0, n - 1))} style={{ width: 30, height: 32, border: 'none', background: 'transparent', color: 'var(--gb-text-tertiary)', cursor: 'pointer' }}>−</button>
+          <input value={String(n).padStart(2, '0')} inputMode="numeric" onChange={(e) => setNumber(Math.max(0, Math.min(99, Number(e.target.value.replace(/\D/g, '')) || 0)))}
+            style={{ width: 50, height: 32, padding: 0, textAlign: 'center', fontFamily: 'var(--gb-font-mono)', fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)', background: 'transparent', border: 'none', borderLeft: '1px solid var(--gb-border-subtle)', borderRight: '1px solid var(--gb-border-subtle)', outline: 'none' }} />
+          <button onClick={() => setNumber(Math.min(99, n + 1))} style={{ width: 30, height: 32, border: 'none', background: 'transparent', color: 'var(--gb-text-tertiary)', cursor: 'pointer' }}>+</button>
+        </div>
+      </Field>
+      <Field label="Number Color"><ColorRow swatches={IMPRINT_COLORS} value={color} onChange={setColor} /></Field>
+    </div>
+  );
+}
+
+function AlignXLFlow() {
+  const [style, setStyle] = usePTField('AlignXL', 'style');
+  const [text, setText] = usePTField('AlignXL', 'text');
+  const [textColor, setTextColor] = usePTField('AlignXL', 'textColor');
+  const [lineColor, setLineColor] = usePTField('AlignXL', 'lineColor');
+  const [sameColor, setSameColor] = usePTField('AlignXL', 'sameColor');
+  const pickTextColor = (next) => { setTextColor(next); if (sameColor) setLineColor(next); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Field label="Alignment Style"><GraphicGrid items={ALIGNXL_STYLES} value={style} onChange={setStyle} /></Field>
+      <Field label="Enter Text (Optional)"><TextInput value={text} onChange={setText} maxLength={17} /></Field>
+      <Field label="Text Color"><ColorRow swatches={IMPRINT_COLORS} value={textColor} onChange={pickTextColor} /></Field>
+      <Field label="Line Color"><ColorRow swatches={IMPRINT_COLORS} value={sameColor ? textColor : lineColor} onChange={setLineColor} /></Field>
+      <Checkbox checked={sameColor} onClick={() => { const next = !sameColor; setSameColor(next); if (next) setLineColor(textColor); }} label="Use same Color" note="line = text color" />
+    </div>
+  );
+}
+
+function IDAlignFlow() {
+  const [style, setStyle] = usePTField('IDAlign', 'style');
+  const [initials, setInitials] = usePTField('IDAlign', 'initials');
+  const [textColor, setTextColor] = usePTField('IDAlign', 'textColor');
+  const [lineColor, setLineColor] = usePTField('IDAlign', 'lineColor');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Field label="Alignment"><GraphicGrid items={IDALIGN_STYLES} value={style} onChange={setStyle} /></Field>
+      <Field label="Initials"><TextInput value={initials} onChange={(s) => setInitials(s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3))} placeholder="ABC" maxLength={3} /></Field>
+      <Field label="Text Color"><ColorRow swatches={IMPRINT_COLORS} value={textColor} onChange={setTextColor} /></Field>
+      <Field label="Line Color"><ColorRow swatches={IMPRINT_COLORS} value={lineColor} onChange={setLineColor} /></Field>
+    </div>
+  );
+}
+
 /* one base-product input (Color, Size, Metal Finish, Imprint side, …) — from data */
 function PropertyInput({ label, options }) {
   // Local state drives the UI so it's always clickable (accessories aren't
@@ -1899,6 +1969,9 @@ function ModControls({ name, p, config, serviceLevel }) {
   // Monogram needs style ↔ initials to share state so the input can rescale
   // to the chosen layout's letter count — route through the composite.
   if (name === 'Monogram') return <MonogramFlow />;
+  if (name === 'Custom Player Number') return <PlayerNumberFlow />;
+  if (name === 'AlignXL') return <AlignXLFlow />;
+  if (name === 'IDAlign') return <IDAlignFlow />;
   // Second-pole imprint is offered by default but suppressed by the
   // ExcludeDualPolePrinting tag (e.g. Triple Track lines) — drop it then.
   const excludeDualPole = (p && p.excludeDualPole) || (config && config.excludeDualPole) || false;
@@ -2083,7 +2156,7 @@ function LivePreview3D({ shape = 'ball', p }) {
   // Chip + divot are products worth seeing blank, so they always mount; the ball
   // is only useful once there's a print to show.
   const showViewer = isGiftSet ? true : flat ? true : !!(decalUrl || secondUrl);
-  const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
+  const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo', 'Custom Player Number', 'AlignXL', 'IDAlign'].includes(ctx.sel);
   // Monogram fetches its art — distinguish "needs more initials" from "fetching".
   const monoStyle = (ctx.data.Monogram || {}).style;
   const monoMin = ctx.sel === 'Monogram' ? _monoSpec(monoStyle).min : 0;
@@ -2290,6 +2363,18 @@ function deriveBallDecoration(p, sel, data) {
   if (sel === 'Icons') {
     const iconName = (data.Icons || {}).icon || null;   // capture WHICH icon (+ its art) so the proposal can show it
     return { engine: 'ballLogo', baseColor, finish, logo: null, icon: iconName, iconImage: iconSrc(iconName), ...extra };
+  }
+  if (sel === 'Custom Player Number') {
+    const s = data['Custom Player Number'] || {};
+    return { engine: 'playerNumber', baseColor, finish, number: String(Math.max(0, Math.min(99, Number(s.number) || 0))).padStart(2, '0'), color: _hexOf(s.color), colorName: s.color || 'Black', ...extra };
+  }
+  if (sel === 'AlignXL') {
+    const s = data.AlignXL || {};
+    return { engine: 'alignXL', baseColor, finish, style: s.style || 'star', text: s.text || '', textColor: _hexOf(s.textColor), lineColor: _hexOf(s.sameColor ? s.textColor : s.lineColor), ...extra };
+  }
+  if (sel === 'IDAlign') {
+    const s = data.IDAlign || {};
+    return { engine: 'idAlign', baseColor, finish, style: s.style || 'quadArrow', initials: String(s.initials || '').toUpperCase(), textColor: _hexOf(s.textColor), lineColor: _hexOf(s.lineColor), ...extra };
   }
   return { engine: 'none', ...extra };
 }

@@ -425,6 +425,55 @@ describe('lineTotal', () => {
   });
 });
 
+describe('ball specialty personalizations', () => {
+  const option = (Name, values) => ({ Name, ModificationOptionValue: values.map((value) => ({ Name: value, selected: false })) });
+  const product = {
+    ProductModification: [
+      { Modification: { modificationID: 79, FriendlyName: 'Custom Player Number', Name: 'Golfballs.com - Golf Ball - Custom Player Number', ModificationOption: [option('Second Pole', ['Yes', 'No', '3in1'])] } },
+      { Modification: { modificationID: 10, FriendlyName: 'Align XL', Name: 'Golfballs.com - Golf Ball - Align XL', ModificationOption: [option('Personalized', ['Yes', 'No'])] } },
+      { Modification: { modificationID: 8, FriendlyName: 'IDAlign', Name: 'Golfballs.com - Golf Ball - IDAlign', ModificationOption: [] } },
+    ],
+  };
+
+  it('serializes Custom Player Number with the captured DoubleDigit schema', () => {
+    const { block } = buildDecoration(product, { engine: 'playerNumber', number: '86', color: '#000000', colorName: 'Black', baseColor: '#FFFFFF' });
+    assert.equal(block.ProductModification.Modification.modificationID, 79);
+    assert.deepEqual(block.interfaceState.DoubleDigit, { color: 'Black', number: '86' });
+    assert.deepEqual(block.dynamicImage[0].Print.userOverlay.map((x) => x.fileName), ['Titleist-Double-Digit', '', '8', '6']);
+    assert.equal(block.dynamicImage[0].Print.versionProperties.decorationType, 'DoubleDigit');
+    assert.equal(block.dynamicImage[0].Print.configOverrides.NumberColor, '#000000');
+    assert.equal(block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue[1].selected, true);
+    assert.match(block.dynamicImage[0].renderedPreviewImage, /Print=DoubleDigit%3FuserOverlay%3DTitleist-Double-Digit/);
+    assert.equal(decorationFromCartItem({ modification: block }).number, '86');
+  });
+
+  it('serializes Align XL style, optional text, colors, and Personalized option', () => {
+    const { block } = buildDecoration(product, { engine: 'alignXL', style: 'skull', text: 'CHAMP', textColor: '#d2232a', lineColor: '#000000' });
+    assert.equal(block.ProductModification.Modification.modificationID, 10);
+    assert.equal(block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue[0].selected, true);
+    assert.deepEqual(block.dynamicImage[0].Print.userOverlay, [{ visible: true, fileName: 'skull' }]);
+    assert.deepEqual(block.dynamicImage[0].Print.userText[0].lines, ['CHAMP']);
+    assert.deepEqual(block.dynamicImage[0].Print.configOverrides, { LineColor: '#000000', IconColor: '#d2232a' });
+    const restored = decorationFromCartItem({ modification: block });
+    assert.equal(restored.engine, 'alignXL');
+    assert.equal(restored.style, 'skull');
+    assert.equal(restored.text, 'CHAMP');
+  });
+
+  it('serializes IDAlign two-part styles using the storefront full-* overlays', () => {
+    const { block } = buildDecoration(product, { engine: 'idAlign', style: 'quadArrow', initials: 'CC', textColor: '#003087', lineColor: '#d2232a' });
+    assert.equal(block.ProductModification.Modification.modificationID, 8);
+    assert.deepEqual(block.dynamicImage[0].userOverlay.map((x) => x.fileName), ['full-quadArrow', 'full-quadArrow2']);
+    assert.deepEqual(block.dynamicImage[0].userText[0], { lines: ['CC'], font: 'Kabel Dm BT', color: '#003087' });
+    assert.equal(block.dynamicImage[0].configOverrides.Color1, '#d2232a');
+    assert.match(block.dynamicImage[0].renderedPreviewImage, /Print=IDAlign%3FLine1%3DquadArrow%26Line2%3DquadArrow2/);
+    const restored = decorationFromCartItem({ modification: block });
+    assert.equal(restored.engine, 'idAlign');
+    assert.equal(restored.style, 'quadArrow');
+    assert.equal(restored.initials, 'CC');
+  });
+});
+
 describe('promoDiscount', () => {
   it('returns 0 for no promotion', () => {
     assert.equal(promoDiscount(null), 0);
