@@ -78,19 +78,11 @@ const BASE_COLORS = [
 ];
 const FONTS = ['Kabel Dm BT', 'Calibri', 'Lucida Handwriting', 'Bradley Hand']; // live-verified
 const SIZES = ['Standard', 'Large', 'Max'];
-/* ── SVG art helpers — monochrome motifs (currentColor) built into the
-   style thumbnails so the selector shows what each option actually looks like.
-   viewBox 0 0 84 48; exact site art = the referenced cloudfront PNGs. ───── */
+/* ── SVG art helper — monochrome motifs (currentColor) traced into the
+   Monogram style paths below. AlignXL / IDAlign use real reference photos
+   instead (see IDALIGN_HOST) — a picker choice is what it looks like printed,
+   not a generic icon standing in for it. ─────────────────────────────────── */
 const _C = 'currentColor';
-function _starPts(cx, cy, r) { let p = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.4 : r; p.push((cx + rr * Math.cos(a)).toFixed(2) + ',' + (cy + rr * Math.sin(a)).toFixed(2)); } return p.join(' '); }
-const _star = (cx, cy, r) => `<polygon points="${_starPts(cx, cy, r)}" fill="${_C}"/>`;
-const _dot = (cx, cy, r = 3.5) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${_C}"/>`;
-const _skull = (cx, cy) => `<g stroke="${_C}" stroke-width="1.5" fill="none"><line x1="${cx - 5}" y1="${cy - 5}" x2="${cx + 5}" y2="${cy + 5}"/><line x1="${cx + 5}" y1="${cy - 5}" x2="${cx - 5}" y2="${cy + 5}"/></g><circle cx="${cx}" cy="${cy}" r="4" fill="${_C}"/>`;
-const _martini = (cx, cy) => `<g stroke="${_C}" stroke-width="1.5" fill="none"><path d="M${cx - 5},${cy - 7} L${cx + 5},${cy - 7} L${cx},${cy} Z"/><line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy + 7}"/><line x1="${cx - 4}" y1="${cy + 7}" x2="${cx + 4}" y2="${cy + 7}"/></g>`;
-const _wine = (cx, cy) => `<g stroke="${_C}" stroke-width="1.5" fill="none"><path d="M${cx - 4},${cy - 7} a4,5 0 0,0 8,0 Z"/><line x1="${cx}" y1="${cy - 2}" x2="${cx}" y2="${cy + 7}"/><line x1="${cx - 4}" y1="${cy + 7}" x2="${cx + 4}" y2="${cy + 7}"/></g>`;
-const _chev = (cx, cy, s = 6) => `<path d="M${cx - s / 2},${cy - s} L${cx + s / 2},${cy} L${cx - s / 2},${cy + s}" stroke="${_C}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-const _hline = (w) => `<line x1="8" y1="24" x2="76" y2="24" stroke="${_C}" stroke-width="${w}" stroke-linecap="round"/>`;
-const _row = (fn, xs) => xs.map((x) => fn(x, 24)).join('');
 const _txt = (x, y, s, str, extra = '') => `<text x="${x}" y="${y}" text-anchor="middle" font-family="Georgia,serif" font-size="${s}" fill="${_C}" ${extra}>${str}</text>`;
 
 /* Monogram styles (7) — real icustomize vectors (icustomize.com/GBC/Monogram/r),
@@ -109,32 +101,37 @@ const MONO_STYLES = [
 const _monoCount = (key) => _monoSpec(key).max;
 const _monoPlaceholder = (n) => (n === 1 ? 'A' : n === 2 ? 'MD' : 'ABC');
 
-/* AlignXL alignment styles (8) — cloudfront …/images/IDalign/align-xl-*.png */
+/* AlignXL / IDAlign reference photos — the site's own cloudfront art for each
+   option, cropped to fill the tile (PhotoArt: overflow hidden + centered)
+   instead of a generic icon standing in for it. */
+const IDALIGN_HOST = 'https://d1tp32r8b76g0z.cloudfront.net/images/IDalign/';
+
+/* AlignXL alignment styles (8) */
 const ALIGNXL_STYLES = [
-  { key: 'star', label: 'Star', svg: _row((x) => _star(x, 24, 5), [12, 26.5, 41, 55.5, 70]) },
-  { key: 'thin', label: 'Thin', svg: _hline(2) },
-  { key: 'medium', label: 'Medium', svg: _hline(5) },
-  { key: 'thick', label: 'Thick', svg: _hline(9) },
-  { key: 'dot', label: 'Dot', svg: _row((x) => _dot(x, 24, 3), [12, 24, 36, 48, 60, 72]) },
-  { key: 'skull', label: 'Skull', svg: _hline(2) + _skull(42, 24) },
-  { key: 'martini', label: 'Martini', svg: _hline(2) + _martini(42, 23) },
-  { key: 'wineglass', label: 'Wine', svg: _hline(2) + _wine(42, 23) },
+  { key: 'star', label: 'Star', img: `${IDALIGN_HOST}align-xl-icons-stars.png` },
+  { key: 'thin', label: 'Thin', img: `${IDALIGN_HOST}align-xl-thin.png` },
+  { key: 'medium', label: 'Medium', img: `${IDALIGN_HOST}align-xl-medium.png` },
+  { key: 'thick', label: 'Thick', img: `${IDALIGN_HOST}align-xl-thick.png` },
+  { key: 'dot', label: 'Dot', img: `${IDALIGN_HOST}align-xl-icons-dots.png` },
+  { key: 'skull', label: 'Skull', img: `${IDALIGN_HOST}align-xl-icons-skulls.png` },
+  { key: 'martini', label: 'Martini', img: `${IDALIGN_HOST}align-xl-icons-martini.png` },
+  { key: 'wineglass', label: 'Wine', img: `${IDALIGN_HOST}align-xl-icons-wine.png` },
 ];
 
-/* IDAlign alignment styles (12) — cloudfront …/images/IDalign/*.png */
+/* IDAlign alignment styles (12) */
 const IDALIGN_STYLES = [
-  { key: 'quadArrow', label: 'Quad Arrow', svg: _row((x) => _chev(x, 24, 5), [18, 33, 48, 63]) },
-  { key: 'doubleRow', label: 'Double Row', svg: `<g stroke="${_C}" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 7"><line x1="11" y1="20" x2="73" y2="20"/><line x1="11" y1="28" x2="73" y2="28"/></g>` },
-  { key: 'chevron', label: 'Chevron', svg: _row((x) => _chev(x, 24, 6), [34, 46, 58]) },
-  { key: 'line', label: 'Line', svg: `<line x1="10" y1="24" x2="74" y2="24" stroke="${_C}" stroke-width="2"/>` },
-  { key: 'skulls', label: 'Skulls', svg: _row((x) => _skull(x, 24), [27, 42, 57]) },
-  { key: 'arrowStyled', label: 'Arrow', svg: `<line x1="20" y1="24" x2="58" y2="24" stroke="${_C}" stroke-width="2.2" stroke-linecap="round"/>${_chev(60, 24, 7)}` },
-  { key: 'solidArrow', label: 'Solid Arrow', svg: `<line x1="18" y1="24" x2="55" y2="24" stroke="${_C}" stroke-width="3" stroke-linecap="round"/><polygon points="53,17 68,24 53,31" fill="${_C}"/>` },
-  { key: 'solidDots', label: 'Solid Dots', svg: _row((x) => _dot(x, 24, 3.5), [20, 31, 42, 53, 64]) },
-  { key: 'solidLine', label: 'Solid Line', svg: `<line x1="10" y1="24" x2="74" y2="24" stroke="${_C}" stroke-width="6" stroke-linecap="round"/>` },
-  { key: 'solidStars', label: 'Solid Stars', svg: _row((x) => _star(x, 24, 6), [24, 42, 60]) },
-  { key: 'martiniGlasses', label: 'Martini', svg: _row((x) => _martini(x, 23), [27, 42, 57]) },
-  { key: 'wine', label: 'Wine', svg: _row((x) => _wine(x, 23), [27, 42, 57]) },
+  { key: 'quadArrow', label: 'Quad Arrow', img: `${IDALIGN_HOST}quadArrow.png` },
+  { key: 'doubleRow', label: 'Double Row', img: `${IDALIGN_HOST}doubleRow.png` },
+  { key: 'chevron', label: 'Chevron', img: `${IDALIGN_HOST}chevron.png` },
+  { key: 'line', label: 'Line', img: `${IDALIGN_HOST}line.png` },
+  { key: 'skulls', label: 'Skulls', img: `${IDALIGN_HOST}skulls.png` },
+  { key: 'arrowStyled', label: 'Arrow', img: `${IDALIGN_HOST}arrowStyled.png` },
+  { key: 'solidArrow', label: 'Solid Arrow', img: `${IDALIGN_HOST}solidArrow.png` },
+  { key: 'solidDots', label: 'Solid Dots', img: `${IDALIGN_HOST}solidDots.png` },
+  { key: 'solidLine', label: 'Solid Line', img: `${IDALIGN_HOST}solidLine.png` },
+  { key: 'solidStars', label: 'Solid Stars', img: `${IDALIGN_HOST}solidStars.png` },
+  { key: 'martiniGlasses', label: 'Martini', img: `${IDALIGN_HOST}martiniGlasses.png` },
+  { key: 'wine', label: 'Wine', img: `${IDALIGN_HOST}wine.png` },
 ];
 
 /* Icons (30) — real site PNGs, themed; static.golfballs.com/A/icons/ */
@@ -402,15 +399,25 @@ function SvgArt({ inner, viewBox = '0 0 84 48', w = 56, h = 32 }) {
      alignment-art registry; no API, storage, or user input reaches it. */
   return <svg viewBox={viewBox} width={w} height={h} preserveAspectRatio="xMidYMid meet" dangerouslySetInnerHTML={{ __html: inner }} />;
 }
-/* selectable grid of SVG-art style tiles (alignment graphics) */
+/* renders a real reference photo filling the tile — overflow hidden, cover +
+   centered — so the picker shows the actual printed pattern, not an icon
+   standing in for it. Fills the button's own padding: 0 box (set by the grid
+   below when an item is a photo), so the crop reaches every edge. */
+function PhotoArt({ src, alt }) {
+  return <img src={src} alt={alt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }} />;
+}
+/* selectable grid of style tiles — a real reference photo (PhotoArt) when the
+   item declares one (AlignXL / IDAlign), else the SVG-art thumbnail (Monogram). */
 function GraphicGrid({ items, value, onChange, cols = 4, tileH = 50, artW = 56, artH = 32 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 7 }}>
       {items.map((it) => {
         const on = value === it.key;
         return (
-          <button key={it.key} onClick={() => onChange(it.key)} title={it.label || it.key} style={{ height: tileH, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>
-            <SvgArt inner={it.svg} viewBox={it.viewBox} w={artW} h={artH} />
+          <button key={it.key} onClick={() => onChange(it.key)} title={it.label || it.key} style={{ height: tileH, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: it.img ? 0 : 4, overflow: 'hidden', background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>
+            {it.img
+              ? <PhotoArt src={it.img} alt={it.label || it.key} />
+              : <SvgArt inner={it.svg} viewBox={it.viewBox} w={artW} h={artH} />}
           </button>
         );
       })}
@@ -1649,6 +1656,10 @@ function PropertyInput({ label, options }) {
   // cart's widgetSelections reflect it.
   const ctx = usePT();
   const [v, setV] = useState(options[0]);
+  useEffect(() => {
+    setV(options[0]);
+    try { ctx.update && ctx.update('__base', { [label]: options[0] }); } catch { /* no ctx */ }
+  }, [label, options[0]]);
   const onChange = (val) => { setV(val); try { ctx.update && ctx.update('__base', { [label]: val }); } catch { /* no ctx */ } };
   const clean = (label || 'Option').replace(/^(Accessories|Apparel|Product)\s+/i, '');
   return <BaseColorPicker label={clean} colors={options} value={v} onChange={onChange} />;
@@ -1675,6 +1686,21 @@ function BaseProperties({ p, config }) {
       return prop;
     });
   return <>{properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}</>;
+}
+
+/* Publish the selected child back to DetailPanel. BaseProperties writes the
+   visible picks into __base; this bridge adds the matching SKU, price and photo
+   from the product page's normalized variant config. */
+function VariantBridge({ config, onChange }) {
+  const { data } = usePT();
+  const values = (data && data.__base) || {};
+  const variants = (config && config.variants) || [];
+  const match = variants.find((variant) => Object.entries(values)
+    .every(([label, value]) => variant.values && variant.values[label] === value)) || variants[0] || null;
+  useEffect(() => {
+    if (match && onChange) onChange({ values: { ...match.values }, price: match.price, sku: match.sku, image: match.image || null });
+  }, [match, onChange]);
+  return null;
 }
 
 /* a tee imprint — text (up to 23 chars) + text color. Writes through context
@@ -2148,7 +2174,7 @@ export function ProductOptions({ p, onChange }) {
     () => (sel && variants.find((v) => Object.keys(sel).every((k) => v.values[k] === sel[k]))) || cheapest,
     [variants, sel, cheapest],
   );
-  useEffect(() => { if (match && onChange) onChange({ values: match.values, price: match.price, sku: match.sku }); }, [match, onChange]);
+  useEffect(() => { if (match && onChange) onChange({ values: match.values, price: match.price, sku: match.sku, image: match.image || null }); }, [match, onChange]);
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', color: 'var(--gb-text-muted)', fontSize: 11.5 }}>
@@ -2286,14 +2312,16 @@ function AccessoryDecorationEmitter({ p, onChange }) {
   const { data } = usePT();
   useEffect(() => {
     if (!onChange) return;
+    const baseSelection = (data.__base && Object.keys(data.__base).length) ? { ...data.__base } : null;
+    const emit = (decoration) => onChange({ ...decoration, baseSelection });
     const kind = (data.__accessory && data.__accessory.kind) || '';
-    if (kind === 'stock') { onChange({ engine: 'none' }); return; }
+    if (kind === 'stock') { emit({ engine: 'none' }); return; }
     // Tee text → its own engine (so it shows a "Personalized" tag, not a logo,
     // and can't be dragged onto balls). Empty text → no decoration yet.
     if (kind === 'tee') {
       const tee = data.Tee || {};
       const text = String(tee.text || '').trim();
-      onChange(text
+      emit(text
         ? { engine: 'accessoryText', dualPole: false, pole2: null, pole1: { lines: [tee.text, null, null], font: 'Kabel Dm BT', color: _hexOf(tee.color) } }
         : { engine: 'none' });
       return;
@@ -2304,7 +2332,7 @@ function AccessoryDecorationEmitter({ p, onChange }) {
     if (embroidery && kind === 'monogram') {
       const mg = data.Monogram || {};
       const initials = String(mg.initials || '').toUpperCase().replace(/[^A-Z]/g, '');
-      onChange(initials
+      emit(initials
         ? { engine: 'towelMonogram', dualPole: false, pole2: null, monogram: { text: initials, color: _hexOf(mg.c1) } }
         : { engine: 'none' });
       return;
@@ -2312,14 +2340,14 @@ function AccessoryDecorationEmitter({ p, onChange }) {
     if (embroidery && kind === 'personalized') {
       const ps = data.Personalized || {};
       const l1 = String(ps.l1 || '').trim();
-      onChange(l1
+      emit(l1
         ? { engine: 'towelText', dualPole: false, pole2: null, pole1: { l1: ps.l1, l2: ps.l2 || '', color: _hexOf(ps.color) } }
         : { engine: 'none' });
       return;
     }
     // Custom Logo (default) — the printed/embroidered logo overlay.
     const cl = data['Custom Logo'] || {};
-    onChange({
+    emit({
       engine: 'logoOverlay',
       logo: cl.fileName ? { filePath: '', fileName: cl.fileName, cropFilePath: '' } : null,
       _localImageDataUrl: cl.imageDataUrl || cl.rawDataUrl || null,
@@ -2386,7 +2414,7 @@ function GiftSetPicker({ p }) {
   );
 }
 
-export function CustomizeBlock({ p, onChange }) {
+export function CustomizeBlock({ p, onChange, onVariantChange }) {
   // A "Custom Accessory Bundle" (e.g. a Sleeve/Chip/Tee Kit) is a bundle, not a
   // plain ball — route it to the bundle path even though it's filed under Golf Balls.
   const isBundle = (p.modNames || []).includes('Custom Accessory Bundle');
@@ -2427,6 +2455,7 @@ export function CustomizeBlock({ p, onChange }) {
               {isBall ? (
                 <PrintTypeProvider mods={mods}>
                   <DecorationEmitter p={p} onChange={onChange} />
+                  <VariantBridge config={config} onChange={onVariantChange} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <LivePreview3D p={p} />
                     <BaseProperties p={p} config={config} />
@@ -2443,6 +2472,7 @@ export function CustomizeBlock({ p, onChange }) {
                   {/* Captures the attached logo (+ base picks) into the decoration —
                       accessories otherwise had no context to store the upload. */}
                   <AccessoryDecorationEmitter p={p} onChange={onChange} />
+                  <VariantBridge config={config} onChange={onVariantChange} />
                   <AccessoryCustomizer p={p} config={config} loading={loading} />
                 </PrintTypeProvider>
               )}
