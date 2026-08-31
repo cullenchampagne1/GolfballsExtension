@@ -1269,12 +1269,24 @@ function useDecalUrl() {
       return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }
     if (sel === 'AlignXL') {
-      const key = (data.AlignXL || {}).style || 'star';
-      return (ALIGNXL_STYLES.find((x) => x.key === key) || ALIGNXL_STYLES[0]).img;
+      const s = data.AlignXL || {};
+      const key = s.style || 'star';
+      const marks = ({ star: '★  ★', dot: '●  ●', skull: '☠  ☠', martini: '⌁  ⌁', wineglass: '▽  ▽', thin: '────', medium: '━━━━', thick: '━━━━' })[key] || '━━━━';
+      const text = _escXml(String(s.text || '').toUpperCase());
+      const line = _hexOf(s.sameColor ? s.textColor : s.lineColor);
+      const ink = _hexOf(s.textColor);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><text x="512" y="470" text-anchor="middle" font-family="Arial,sans-serif" font-size="126" font-weight="800" fill="${line}">${marks}</text>${text ? `<text x="512" y="610" text-anchor="middle" font-family="Arial,sans-serif" font-size="112" font-weight="800" fill="${ink}">${text}</text>` : ''}</svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }
     if (sel === 'IDAlign') {
-      const key = (data.IDAlign || {}).style || 'quadArrow';
-      return (IDALIGN_STYLES.find((x) => x.key === key) || IDALIGN_STYLES[0]).img;
+      const s = data.IDAlign || {};
+      const key = s.style || 'quadArrow';
+      const marks = ({ quadArrow: '≫  ≫', doubleRow: '════', chevron: '❯  ❯', line: '━━━━', skulls: '☠  ☠', arrowStyled: '➜  ➜', solidArrow: '▶  ▶', solidDots: '●  ●', solidLine: '━━━━', solidStars: '★  ★', martiniGlasses: '⌁  ⌁', wine: '▽  ▽' })[key] || '≫  ≫';
+      const text = _escXml(String(s.initials || '').toUpperCase());
+      const line = _hexOf(s.lineColor);
+      const ink = _hexOf(s.textColor);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><text x="512" y="470" text-anchor="middle" font-family="Arial,sans-serif" font-size="132" font-weight="800" fill="${line}">${marks}</text>${text ? `<text x="512" y="620" text-anchor="middle" font-family="Arial,sans-serif" font-size="130" font-weight="900" fill="${ink}">${text}</text>` : ''}</svg>`;
+      return `data:image/svg+xml,${encodeURIComponent(svg)}`;
     }
     return null;
   }, [sel, data]);
@@ -1674,7 +1686,7 @@ function PlayerNumberFlow() {
       <Field label="Number">
         <div style={{ display: 'inline-flex', alignItems: 'center', height: 32, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
           <button onClick={() => setNumber(Math.max(0, n - 1))} style={{ width: 30, height: 32, border: 'none', background: 'transparent', color: 'var(--gb-text-tertiary)', cursor: 'pointer' }}>−</button>
-          <input value={String(n).padStart(2, '0')} inputMode="numeric" onChange={(e) => setNumber(Math.max(0, Math.min(99, Number(e.target.value.replace(/\D/g, '')) || 0)))}
+          <input value={String(number == null ? '' : number)} inputMode="numeric" onChange={(e) => setNumber(e.target.value.replace(/\D/g, '').slice(0, 2))}
             style={{ width: 50, height: 32, padding: 0, textAlign: 'center', fontFamily: 'var(--gb-font-mono)', fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)', background: 'transparent', border: 'none', borderLeft: '1px solid var(--gb-border-subtle)', borderRight: '1px solid var(--gb-border-subtle)', outline: 'none' }} />
           <button onClick={() => setNumber(Math.min(99, n + 1))} style={{ width: 30, height: 32, border: 'none', background: 'transparent', color: 'var(--gb-text-tertiary)', cursor: 'pointer' }}>+</button>
         </div>
@@ -2094,13 +2106,27 @@ function PrintTypeGridInner({ p, mods, config }) {
 /* Provider that owns the personalization snapshot the print-type controls
    read/write through, plus the selected print-type itself. Wraps the inner
    grid AND any sibling preview pane the parent (CustomizeBlock) renders. */
-function PrintTypeProvider({ mods, children }) {
-  const [sel, setSel] = useState(mods[0]);
+function PrintTypeProvider({ mods, children, onStateChange }) {
+  const [selState, setSelState] = useState(mods[0]);
   const [data, setData] = useState(DEFAULT_PT_DATA);
+  const selRef = useRef(mods[0]);
+  const dataRef = useRef(DEFAULT_PT_DATA);
+  const publish = useCallback((nextSel, nextData) => {
+    if (onStateChange) onStateChange(nextSel, nextData);
+  }, [onStateChange]);
+  const setSel = useCallback((nextSel) => {
+    selRef.current = nextSel;
+    setSelState(nextSel);
+    publish(nextSel, dataRef.current);
+  }, [publish]);
   const update = useCallback((type, partial) => {
-    setData((d) => ({ ...d, [type]: { ...(d[type] || {}), ...partial } }));
-  }, []);
-  const value = useMemo(() => ({ sel, setSel, data, update }), [sel, data, update]);
+    const current = dataRef.current;
+    const next = { ...current, [type]: { ...(current[type] || {}), ...partial } };
+    dataRef.current = next;
+    setData(next);
+    publish(selRef.current, next);
+  }, [publish]);
+  const value = useMemo(() => ({ sel: selState, setSel, data, update }), [selState, setSel, data, update]);
   return <PrintTypeContext.Provider value={value}>{children}</PrintTypeContext.Provider>;
 }
 
@@ -2507,6 +2533,9 @@ export function CustomizeBlock({ p, onChange, onVariantChange }) {
   const { mods } = modsForProduct(p);
   const { config, loading } = useProductConfig(p);
   const [open, setOpen] = useState(false);
+  const publishBallState = useCallback((nextSel, nextData) => {
+    if (onChange) onChange(deriveBallDecoration(p, nextSel, nextData));
+  }, [p, onChange]);
   // Accessory emission is fully owned by <AccessoryDecorationEmitter> (it picks
   // logo / tee text / embroidery from the live print state); balls emit through
   // <DecorationEmitter>. (A blanket logoOverlay emit here would run after the
@@ -2538,7 +2567,7 @@ export function CustomizeBlock({ p, onChange, onVariantChange }) {
             style={{ overflow: 'hidden', border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)' }}>
             <div style={{ padding: 14 }}>
               {isBall ? (
-                <PrintTypeProvider mods={mods}>
+                <PrintTypeProvider mods={mods} onStateChange={publishBallState}>
                   <DecorationEmitter p={p} onChange={onChange} />
                   <VariantBridge config={config} onChange={onVariantChange} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

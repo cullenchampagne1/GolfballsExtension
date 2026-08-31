@@ -436,15 +436,15 @@ describe('ball specialty personalizations', () => {
   };
 
   it('serializes Custom Player Number with the captured DoubleDigit schema', () => {
-    const { block } = buildDecoration(product, { engine: 'playerNumber', number: '86', color: '#000000', colorName: 'Black', baseColor: '#FFFFFF' });
+    const { block } = buildDecoration(product, { engine: 'playerNumber', number: '72', color: '#000000', colorName: 'Black', baseColor: '#FFFFFF' });
     assert.equal(block.ProductModification.Modification.modificationID, 79);
-    assert.deepEqual(block.interfaceState.DoubleDigit, { color: 'Black', number: '86' });
-    assert.deepEqual(block.dynamicImage[0].Print.userOverlay.map((x) => x.fileName), ['Titleist-Double-Digit', '', '8', '6']);
+    assert.deepEqual(block.interfaceState.DoubleDigit, { color: 'Black', number: '72' });
+    assert.deepEqual(block.dynamicImage[0].Print.userOverlay.map((x) => x.fileName), ['Titleist-Double-Digit', '', '7', '2']);
     assert.equal(block.dynamicImage[0].Print.versionProperties.decorationType, 'DoubleDigit');
     assert.equal(block.dynamicImage[0].Print.configOverrides.NumberColor, '#000000');
     assert.equal(block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue[1].selected, true);
     assert.match(block.dynamicImage[0].renderedPreviewImage, /Print=DoubleDigit%3FuserOverlay%3DTitleist-Double-Digit/);
-    assert.equal(decorationFromCartItem({ modification: block }).number, '86');
+    assert.equal(decorationFromCartItem({ modification: block }).number, '72');
   });
 
   it('serializes Align XL style, optional text, colors, and Personalized option', () => {
@@ -461,16 +461,16 @@ describe('ball specialty personalizations', () => {
   });
 
   it('serializes IDAlign two-part styles using the storefront full-* overlays', () => {
-    const { block } = buildDecoration(product, { engine: 'idAlign', style: 'quadArrow', initials: 'CC', textColor: '#003087', lineColor: '#d2232a' });
+    const { block } = buildDecoration(product, { engine: 'idAlign', style: 'quadArrow', initials: 'TES', textColor: '#003087', lineColor: '#d2232a' });
     assert.equal(block.ProductModification.Modification.modificationID, 8);
     assert.deepEqual(block.dynamicImage[0].userOverlay.map((x) => x.fileName), ['full-quadArrow', 'full-quadArrow2']);
-    assert.deepEqual(block.dynamicImage[0].userText[0], { lines: ['CC'], font: 'Kabel Dm BT', color: '#003087' });
+    assert.deepEqual(block.dynamicImage[0].userText[0], { lines: ['TES'], font: 'Kabel Dm BT', color: '#003087' });
     assert.equal(block.dynamicImage[0].configOverrides.Color1, '#d2232a');
     assert.match(block.dynamicImage[0].renderedPreviewImage, /Print=IDAlign%3FLine1%3DquadArrow%26Line2%3DquadArrow2/);
     const restored = decorationFromCartItem({ modification: block });
     assert.equal(restored.engine, 'idAlign');
     assert.equal(restored.style, 'quadArrow');
-    assert.equal(restored.initials, 'CC');
+    assert.equal(restored.initials, 'TES');
   });
 });
 
