@@ -354,6 +354,10 @@
       "file": "tests/unit/cartSerializer.test.mjs"
     },
     {
+      "name": "modal \u00b7 canonical custom-logo crop placement",
+      "file": "tests/unit/logoPlacement.test.mjs"
+    },
+    {
       "name": "ui \u00b7 display scales clamp & persist",
       "file": "tests/unit/scales.test.mjs"
     },

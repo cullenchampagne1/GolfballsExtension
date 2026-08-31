@@ -14,10 +14,24 @@ import {
   SAVE_CART_URL, getCartUrl,
   ballPreviewUrl, giftSetPreviewUrl, monogramPreviewUrl, teePreviewUrl,
   buildBallDynamicImage, priceAtQ, lineTotal,
+  buildDecoration, decorationFromCartItem,
   promoDiscount, freeLinesFromPromo,
   buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine,
   parseGetCart, buildCustomItemLine, buildAsCartContents,
 } from '../../src/lib/cartSerializer.js';
+
+const CUSTOM_LOGO_PRODUCT = {
+  ProductModification: [{
+    Modification: {
+      modificationID: 1008,
+      FriendlyName: 'Custom Logo',
+      ModificationOption: [{
+        Name: 'Express Logo',
+        ModificationOptionValue: [{ Name: 'Yes', selected: false }, { Name: 'No', selected: false }],
+      }],
+    },
+  }],
+};
 
 /* Decode the Print/Print2 param of a GolfBall/r URL back to its parts:
    "<type>?userText=<enc JSON>&configOverrides=<enc JSON>". */
@@ -167,6 +181,53 @@ describe('buildBallDynamicImage', () => {
     assert.ok(img.renderedPreviewImage.startsWith('https://www.icustomize.com/Item/GolfBall/r?'));
     assert.deepEqual(decodePrintParam(img.renderedPreviewImage).userText,
       [{ lines: ['GO', 'NAVY'], font: 'Block', color: '#112233' }]);
+  });
+});
+
+describe('custom-logo ball Express serialization', () => {
+  const logo = {
+    filePath: 'Source/CustomerUploads/CustomLogo/logo.png',
+    fileName: 'logo.png',
+    cropFilePath: 'UserUploads/abc/crop.jpg',
+  };
+
+  it('writes an internally consistent standard-logo state by default', () => {
+    const { block } = buildDecoration(CUSTOM_LOGO_PRODUCT, { engine: 'ballLogo', logo });
+    const state = block.interfaceState.GolfBallCustomLogo;
+    const options = block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue;
+    assert.equal(state.customLogo.useCustomLogo, true);
+    assert.deepEqual(state.expressLogo, { isUsed: false });
+    assert.equal(options.find((option) => option.Name === 'Yes').selected, false);
+    assert.equal(options.find((option) => option.Name === 'No').selected, true);
+  });
+
+  it('matches the website Express option and effective interface shape', () => {
+    const { block } = buildDecoration(CUSTOM_LOGO_PRODUCT, { engine: 'ballLogo', logo, expressLogo: true });
+    const state = block.interfaceState;
+    const logoState = state.GolfBallCustomLogo;
+    const options = block.ProductModification.Modification.ModificationOption[0].ModificationOptionValue;
+    assert.deepEqual(logoState.customLogo, { useCustomLogo: false, ...logo });
+    assert.deepEqual(logoState.expressLogo, {
+      useCustomLogo: false,
+      filePath: logo.filePath,
+      fileName: logo.fileName,
+      isUsed: true,
+    });
+    assert.deepEqual({
+      useCustomLogo: state.useCustomLogo,
+      filePath: state.filePath,
+      fileName: state.fileName,
+      cropFilePath: state.cropFilePath,
+    }, { useCustomLogo: false, ...logo });
+    assert.equal(options.find((option) => option.Name === 'Yes').selected, true);
+    assert.equal(options.find((option) => option.Name === 'No').selected, false);
+  });
+
+  it('restores the Express choice when a saved cart becomes a proposal line', () => {
+    const { block, customUserImage } = buildDecoration(CUSTOM_LOGO_PRODUCT, { engine: 'ballLogo', logo, expressLogo: true });
+    const restored = decorationFromCartItem({ modification: block, customUserImage });
+    assert.equal(restored.expressLogo, true);
+    assert.equal(restored.logo.filePath, logo.filePath);
   });
 });
 

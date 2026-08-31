@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/email-template-submissions.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/logo-placement.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/email-template-submissions.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -8,6 +8,8 @@ importScripts('lib/bounce-queue.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
+const GB_LOGO_PLACEMENT = globalThis.GBLogoPlacement;
+if (!GB_LOGO_PLACEMENT) throw new Error('Logo placement model failed to initialize');
 const GB_PRIOR_ORDER = globalThis.GBPriorOrder;
 if (!GB_PRIOR_ORDER) throw new Error('Prior-order parser failed to initialize');
 const GB_CALENDAR_FORM = globalThis.GBCalendarForm;
@@ -595,22 +597,6 @@ async function gbGetProductConfig(rawUrl) {
    /prod/: there is no such stage and the crop would 404. */
 const GB_CONVERT_URL = 'https://7uyieah5s5.execute-api.us-east-2.amazonaws.com/dev/convert';
 
-// The fabric.js image object the cart stores (customUserImage.firstPole.userImage)
-// AND that /user/cropImage consumes. `scale` is the print-area fill factor (the
-// site used 0.41 of a 500-unit canvas); left/top center it. Tune if the decal
-// sits wrong on the ball.
-function gbLogoUserImage({ scale = 0.41, left = 250, top = 300, size = 500, src = '' } = {}) {
-  return {
-    type: 'image', version: '5.3.0', originX: 'center', originY: 'center',
-    left, top, width: size, height: size,
-    fill: 'rgb(0,0,0)', stroke: null, strokeWidth: 0, strokeDashArray: null, strokeLineCap: 'butt',
-    strokeDashOffset: 0, strokeLineJoin: 'miter', strokeUniform: false, strokeMiterLimit: 4,
-    scaleX: scale, scaleY: scale, angle: 0, flipX: false, flipY: false, opacity: 1,
-    shadow: null, visible: true, backgroundColor: '', fillRule: 'nonzero', paintFirst: 'fill',
-    globalCompositeOperation: 'source-over', skewX: 0, skewY: 0, cropX: 0, cropY: 0, src, crossOrigin: null, filters: [],
-  };
-}
-
 async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
   if (!dataUrl) throw new Error('No image data');
   const type = (/^data:([^;]+)/.exec(dataUrl) || [])[1] || 'image/png';
@@ -634,7 +620,7 @@ async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
   if (!pr.ok) throw new Error('S3 PUT HTTP ' + pr.status);
   // 3. crop → cropFilePath (the overlay the ball renders)
   const publicUrl = 'https://static.golfballs.com/' + filePath;
-  const userImage = gbLogoUserImage({ src: publicUrl });
+  const userImage = GB_LOGO_PLACEMENT.createUserImage(publicUrl);
   let cropFilePath = '';
   try {
     const cr = await fetch('https://master.api.icustomize.com/user/cropImage', {

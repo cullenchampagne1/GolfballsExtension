@@ -2226,7 +2226,7 @@ function deriveBallDecoration(p, sel, data) {
   // Gift-set packaging rides along on any engine; the serializer/pricing wrap the
   // ball's ladder into the per-set gift-set ladder when `giftSet` is present.
   const giftSet = (data.__giftSet && data.__giftSet.option) || null;
-  const extra = { baseSelection, dualPole, pole2: derivePole2(data, sel), ...(giftSet ? { giftSet } : {}) };
+  const extra = { baseSelection, dualPole, pole2: derivePole2(data, sel), expressLogo: false, ...(giftSet ? { giftSet } : {}) };
   // A gift set implies a custom-logo ball even before a print type is chosen, so a
   // set picked on its own still prices (engine 'none' would have no ladder).
   if (!sel) return giftSet

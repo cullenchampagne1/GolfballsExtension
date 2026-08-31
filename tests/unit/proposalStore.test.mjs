@@ -102,6 +102,25 @@ describe('proposal store · normalize', () => {
       /1 prior-order item need review/,
     );
   });
+
+  it('keeps a custom-logo ball Express choice through draft normalization and reload', () => {
+    const normalized = normalizeProposalEntry({
+      ...entry(),
+      lines: [{ ...entry().lines[0], decoration: { engine: 'ballLogo', expressLogo: true } }],
+    });
+    const [restored] = linesFromSaved(normalized, () => 'fresh-id');
+    assert.equal(restored.decoration.engine, 'ballLogo');
+    assert.equal(restored.decoration.expressLogo, true);
+  });
+});
+
+describe('proposal line · Express logo control', () => {
+  it('shows the control only for ball-logo lines and wires it to proposal state', () => {
+    assert.match(giftCatalogSource, /line\.decoration\.engine === 'ballLogo' && ballish\(p\) && supportsLogo\(p\)/);
+    assert.match(giftCatalogSource, /label="Run as Express"/);
+    assert.match(giftCatalogSource, /onToggleExpress=\{toggleExpressLogo\}/);
+    assert.match(giftCatalogSource, /expressLogo: checked === true/);
+  });
 });
 
 describe('proposal store · working draft ordering', () => {

@@ -36,6 +36,7 @@ export function blankLogoDecoration(product) {
     finish: { MFS: '279', SecondMFS: '279' },
     dualPole: false,
     pole2: null,
+    expressLogo: false,
     logo: null,
     _localImageDataUrl: null,
   };

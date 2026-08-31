@@ -927,12 +927,13 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   );
 }
 
-function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco, onRemoveFront, onRemoveSecond }) {
+function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco, onRemoveFront, onRemoveSecond, onToggleExpress }) {
   const p = line.product;
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
   const chips = decoImprints(line.decoration);   // one draggable tag per imprint (front + 2nd pole)
   const giftSet = line.decoration && line.decoration.giftSet;   // gift-set packaging (sleeve / 6-ball / wooden)
+  const canRunExpress = !!(line.decoration && line.decoration.engine === 'ballLogo' && ballish(p) && supportsLogo(p));
   // Each custom base-option (Tee Count, Set Makeup, Shaft …) becomes its own pill
   // so a long option set wraps onto new rows instead of overflowing the line.
   const variantPills = (line.variant && line.variant.values)
@@ -1025,6 +1026,17 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
           {variantPills.map((label, i) => (
             <span key={'v' + i} style={{ padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-tertiary)', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</span>
           ))}
+        </div>
+      )}
+      {canRunExpress && (
+        <div style={{ marginTop: 8, padding: '7px 8px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+          <Checkbox
+            size="sm"
+            checked={line.decoration.expressLogo === true}
+            onChange={onToggleExpress}
+            label="Run as Express"
+            hint="Uses the Express logo setup when the customer purchases this proposal."
+          />
         </div>
       )}
       <div style={{ marginTop: 8, borderTop: '1px solid var(--gb-border-subtle)' }}>
@@ -2003,7 +2015,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onApplyLogoToAll, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onApplyLogoToAll, onRemoveFront, onRemoveSecond, onToggleExpress, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
   // Free giveaway lines a FREE_QUANTITY coupon grants (shown read-only, $0).
@@ -2169,6 +2181,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                   <ProposalLine key={line.id} line={line}
                     drag={drag} onTagDragStart={startDrag} onTagDragEnd={endDrag} onDropDeco={dropDeco}
                     onRemoveFront={() => onRemoveFront(line.id)} onRemoveSecond={() => onRemoveSecond(line.id)}
+                    onToggleExpress={(checked) => onToggleExpress(line.id, checked)}
                     onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
                     onAddSplit={() => onAddSplit(line.id)}
                     onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
@@ -3441,6 +3454,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return repriceLine(l, { ...l.decoration, pole2: null, dualPole: false });
   }));
 
+  // Express is a fulfillment choice on custom-logo balls only. It does not
+  // change the quoted unit ladder, so preserve every split/override verbatim.
+  const toggleExpressLogo = (lineId, checked) => setProposal((prev) => prev.map((l) => (
+    l.id === lineId && l.decoration && l.decoration.engine === 'ballLogo'
+      ? { ...l, decoration: { ...l.decoration, expressLogo: checked === true } }
+      : l
+  )));
+
   // Save draft — snapshot the current proposal into the Saved Proposals
   // library (chrome.storage) under a name. Returns the promise so the panel's
   // confirm button can drive its success flash.
@@ -4231,6 +4252,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onApplyLogoToAll={applyLogoToAllEmpty}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
+              onToggleExpress={toggleExpressLogo}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
               onEmail={() => openProposalEmail(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
               promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}

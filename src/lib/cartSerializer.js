@@ -371,7 +371,7 @@ function findMod(product, { modID, friendly } = {}) {
    PriceTier = the SKU's tier), not just the cached ItemPrice — without them a
    real order re-prices as an undecorated ball. Clones so the shared product
    object is never mutated. Returns the original when there's nothing to mark. */
-function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = 'Default' } = {}) {
+function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = 'Default', expressLogo = false } = {}) {
   if (!pm) return pm;
   const clone = JSON.parse(JSON.stringify(pm));
   const groups = (clone.Modification && clone.Modification.ModificationOption) || [];
@@ -385,7 +385,7 @@ function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = 'Def
   choose('Service Level', () => false);                  // → first (default standard production)
   choose('Second Pole', (v) => v.Name === secondPole);   // No Print / Logo / Text
   choose('PriceTier', (v) => v.Name === priceTier);      // Econ / Rec / High / Tour / Mid
-  choose('Express Logo', (v) => v.Name === 'Yes');
+  choose('Express Logo', (v) => v.Name === (expressLogo ? 'Yes' : 'No'));
   return clone;
 }
 
@@ -455,31 +455,38 @@ export function buildDecoration(product, decoration = {}) {
     };
   } else if (engine === 'ballLogo') {
     const logo = decoration.logo || null;
+    const expressLogo = decoration.expressLogo === true;
     // Mark the SKU's price tier + the chosen second-pole option as selected so
     // the order bills the right custom-logo charge (and stays commissionable).
     const tier = (product.CustomData && String(product.CustomData.customPriceTier || '').trim()) || 'Default';
     const secondPole = decoration.pole2 ? (decoration.pole2.kind === 'logo' ? 'Logo' : 'Text') : 'No Print';
-    const customLogoMod = selectCustomLogoOptions(findMod(product, { modID: 1008, friendly: 'Custom Logo' }), { secondPole, priceTier: tier });
+    const customLogoMod = selectCustomLogoOptions(findMod(product, { modID: 1008, friendly: 'Custom Logo' }), { secondPole, priceTier: tier, expressLogo });
+    const logoFields = {
+      filePath: (logo && logo.filePath) || '',
+      fileName: (logo && logo.fileName) || '',
+      cropFilePath: (logo && logo.cropFilePath) || '',
+    };
+    const customLogo = { useCustomLogo: !expressLogo, ...logoFields };
+    const expressState = expressLogo
+      ? { useCustomLogo: false, filePath: logoFields.filePath, fileName: logoFields.fileName, isUsed: true }
+      : { isUsed: false };
+    const interfaceState = {
+      GolfBallCustomLogo: { customLogo, expressLogo: expressState },
+      DoubleDigit: {},
+    };
+    // The storefront duplicates the active Express-logo upload at the interface
+    // root. Its cart restore/purchase path reads these fields in addition to the
+    // GolfBallCustomLogo branch, so retain the captured shape.
+    if (expressLogo) Object.assign(interfaceState, { useCustomLogo: false, ...logoFields });
     out = {
       block: {
         ProductModification: customLogoMod,
-        interfaceState: {
-          GolfBallCustomLogo: {
-            customLogo: {
-              useCustomLogo: true,
-              filePath: (logo && logo.filePath) || '',
-              fileName: (logo && logo.fileName) || '',
-              cropFilePath: (logo && logo.cropFilePath) || '',
-            },
-            expressLogo: { isUsed: false },
-          },
-          DoubleDigit: {},
-        },
+        interfaceState,
         dynamicImage: [buildBallLogoDynamicImage({ baseColor: decoration.baseColor })],
         isTemporary: false,
       },
-      // The uploaded logo is referenced via filePath/cropFilePath; the real site
-      // also stores a fabric.js crop object in userImage we can't reproduce.
+      // The uploaded logo is referenced via filePath/cropFilePath; uploadCustomLogo
+      // also supplies the canonical Fabric crop object stored in userImage.
       customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
     };
     // Dual pole — a LOGO on the opposite pole. Stored under GolfBallCustomLogo
@@ -677,7 +684,7 @@ export function decorationFromCartItem(it) {
       const t = is.firstPoleUserText || {};
       if (nonEmpty(t.lines)) { pole2 = { kind: 'text', lines: t.lines, font: t.font || 'Kabel Dm BT', color: t.color || '#000000' }; dualPole = true; }
     }
-    if (frontLogo || pole2) return { engine: 'ballLogo', baseColor, finish, dualPole, pole2, logo: frontLogo };
+    if (frontLogo || pole2) return { engine: 'ballLogo', baseColor, finish, dualPole, pole2, logo: frontLogo, expressLogo: !!(gb.expressLogo && gb.expressLogo.isUsed) };
   }
 
   // Personalized text on a ball (Print.userText, + optional Print2 2nd pole)
