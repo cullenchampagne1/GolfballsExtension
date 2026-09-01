@@ -114,6 +114,16 @@ export async function openPageEngineInspector() {
   }
 }
 
+export async function openEmailCreationPreview() {
+  try {
+    return await sendBackgroundMessage('openEmailCreationPreview');
+  } catch (error) {
+    const message = error?.message || 'Unable to open the email creation preview.';
+    globalThis.window?.__gbToast?.error?.(message, { duration: 6_000 });
+    return { ok: false, error: message };
+  }
+}
+
 export const DEV_SETTINGS = [
   {
     key:     'numberDisplay.enabled',
@@ -193,6 +203,15 @@ export const DEV_SETTINGS = [
     buttonLabel: 'Open inspector',
     buttonIcon:  'code',
     runner:      openPageEngineInspector,
+  },
+  {
+    key:         'emailTemplates.creationPreview',
+    label:       'Email creation preview',
+    desc:        'Open a developer window that runs a selected email template against the active CRM page and shows the exact recipient, subject, formatted body, and resolved variables without sending anything.',
+    type:        'action',
+    buttonLabel: 'Open preview',
+    buttonIcon:  'mail',
+    runner:      openEmailCreationPreview,
   },
   {
     key:     'pageEngine.cachedContacts',

@@ -238,6 +238,7 @@ try {
 let editorWindowId   = null;
 let salesFantasyWindowId = null;
 let pageEngineInspectorWindowId = null;
+let emailCreationPreviewWindowId = null;
 let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
 
 // Keep editor dimensions stable while the fantasy experience uses a taller,
@@ -245,6 +246,7 @@ let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focu
 const MANAGER_WINDOW_BOUNDS = Object.freeze({ width: 860, height: 700 });
 const SALES_FANTASY_WINDOW_BOUNDS = Object.freeze({ width: 700, height: 900 });
 const PAGE_ENGINE_INSPECTOR_WINDOW_BOUNDS = Object.freeze({ width: 900, height: 780 });
+const EMAIL_CREATION_PREVIEW_WINDOW_BOUNDS = Object.freeze({ width: 980, height: 840 });
 
 const GB_PAGE_ENGINE_TAB_PATTERNS = [
   'https://www.golfballs.com/*',
@@ -2892,6 +2894,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'openEmailCreationPreview') {
+    if (emailCreationPreviewWindowId !== null) {
+      chrome.windows.get(emailCreationPreviewWindowId, (win) => {
+        if (chrome.runtime.lastError || !win) {
+          emailCreationPreviewWindowId = null;
+          createEmailCreationPreviewWindow();
+        } else {
+          chrome.windows.update(emailCreationPreviewWindowId, { focused: true });
+        }
+        sendResponse({ ok: true, success: true });
+      });
+    } else {
+      createEmailCreationPreviewWindow();
+      sendResponse({ ok: true, success: true });
+    }
+    return true;
+  }
+
   // ── Start pick: inject content script, switch to order tab ─
   if (msg.action === 'startPick') {
     const fieldId = typeof msg.fieldId === 'string' ? msg.fieldId.trim().slice(0, 200) : '';
@@ -3227,10 +3247,20 @@ function createPageEngineInspectorWindow() {
   });
 }
 
+function createEmailCreationPreviewWindow() {
+  chrome.windows.create({
+    url: chrome.runtime.getURL('email-creation-preview.html'),
+    type: 'popup', ...EMAIL_CREATION_PREVIEW_WINDOW_BOUNDS
+  }, (win) => {
+    emailCreationPreviewWindowId = win?.id ?? null;
+  });
+}
+
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === editorWindowId) editorWindowId = null;
   if (windowId === salesFantasyWindowId) salesFantasyWindowId = null;
   if (windowId === pageEngineInspectorWindowId) pageEngineInspectorWindowId = null;
+  if (windowId === emailCreationPreviewWindowId) emailCreationPreviewWindowId = null;
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

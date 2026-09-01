@@ -4,7 +4,7 @@
    Regenerate: node scripts/build-help-content.mjs */
 
 export const HELP_CONTENT = {
-  "version": "3.4.61",
+  "version": "3.4.62",
   "generatedAt": "2026-09-01",
   "tree": [
     {
@@ -5237,6 +5237,82 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
+            "text": "emailTemplates"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Email creation preview",
+                "action",
+                "—",
+                "",
+                "Open a developer window that runs a selected email template against the active CRM page and shows the exact recipient, subject, formatted body, and resolved variables without sending anything."
+              ],
+              [
+                "Email Template Creation",
+                "bool",
+                "On",
+                "",
+                "Show email-template creation controls and permit new local email templates. Note-template creation is unaffected."
+              ],
+              [
+                "Email Template Parent Account",
+                "bool",
+                "Off",
+                "",
+                "Make this installation a collaborative manager of the universal approved-template bucket. Existing local templates merge into the bucket; edits sync to other parents and managed users."
+              ],
+              [
+                "Email Template Link Import",
+                "bool",
+                "On",
+                "",
+                "Show the template import control and permit loading persistent, read-only shared-template links."
+              ],
+              [
+                "Allow Local Template Usage",
+                "bool",
+                "On",
+                "",
+                "Allow this installation to use its private local library. Turning this off preserves those rows but shows only management-approved templates and retained user shares."
+              ],
+              [
+                "Max Daily Bulk Send",
+                "number",
+                "0emails/day",
+                "",
+                "Maximum number of bulk-send deliveries allowed per day. 0 means unlimited. Runtime enforcement is implemented by the bulk-send feature."
+              ],
+              [
+                "Allow Bulk Sending",
+                "bool",
+                "On",
+                "",
+                "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "emailTemplates.creationPreview",
+                "emailTemplates.allowCreation",
+                "emailTemplates.allowParentAccount",
+                "emailTemplates.allowLinkImport",
+                "emailTemplates.allowLocalTemplateUsage",
+                "emailTemplates.maxDailyBulkSend",
+                "emailTemplates.allowBulkSending"
+              ]
+            }
+          },
+          {
+            "type": "heading",
             "text": "3D viewer"
           },
           {
@@ -5368,74 +5444,6 @@ export const HELP_CONTENT = {
               "settingKeys": [
                 "imageViewer.ballChipOnly",
                 "imageViewer.draggable"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "emailTemplates"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Setting",
-              "Type",
-              "Default",
-              "Range",
-              "What it does"
-            ],
-            "rows": [
-              [
-                "Email Template Creation",
-                "bool",
-                "On",
-                "",
-                "Show email-template creation controls and permit new local email templates. Note-template creation is unaffected."
-              ],
-              [
-                "Email Template Parent Account",
-                "bool",
-                "Off",
-                "",
-                "Make this installation a collaborative manager of the universal approved-template bucket. Existing local templates merge into the bucket; edits sync to other parents and managed users."
-              ],
-              [
-                "Email Template Link Import",
-                "bool",
-                "On",
-                "",
-                "Show the template import control and permit loading persistent, read-only shared-template links."
-              ],
-              [
-                "Allow Local Template Usage",
-                "bool",
-                "On",
-                "",
-                "Allow this installation to use its private local library. Turning this off preserves those rows but shows only management-approved templates and retained user shares."
-              ],
-              [
-                "Max Daily Bulk Send",
-                "number",
-                "0emails/day",
-                "",
-                "Maximum number of bulk-send deliveries allowed per day. 0 means unlimited. Runtime enforcement is implemented by the bulk-send feature."
-              ],
-              [
-                "Allow Bulk Sending",
-                "bool",
-                "On",
-                "",
-                "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces."
-              ]
-            ],
-            "meta": {
-              "settingKeys": [
-                "emailTemplates.allowCreation",
-                "emailTemplates.allowParentAccount",
-                "emailTemplates.allowLinkImport",
-                "emailTemplates.allowLocalTemplateUsage",
-                "emailTemplates.maxDailyBulkSend",
-                "emailTemplates.allowBulkSending"
               ]
             }
           },
@@ -9845,6 +9853,16 @@ export const HELP_CONTENT = {
         "pageEngine.liveInspector"
       ],
       "description": "Open a live developer window showing every Page Engine variable resolved from the active Contact, Account, Order, or Opportunity page.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailTemplates.creationPreview",
+      "category": "Settings",
+      "title": "Email creation preview",
+      "keywords": [
+        "emailTemplates.creationPreview"
+      ],
+      "description": "Open a developer window that runs a selected email template against the active CRM page and shows the exact recipient, subject, formatted body, and resolved variables without sending anything.",
       "article": "developer-settings"
     },
     {

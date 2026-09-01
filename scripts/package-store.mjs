@@ -28,6 +28,7 @@ export const RUNTIME_ROOT_FILES = Object.freeze([
   'background.js',
   'calendar-form-state.js',
   'editor.html',
+  'email-creation-preview.html',
   'guide.html',
   'page-engine-inspector.html',
   'popup.html',
