@@ -90,8 +90,10 @@ describe('Email creation developer preview', () => {
     assert.match(previewSource, /action: 'resolveVarsStream'/);
     assert.match(previewSource, /buildEmailCreationPreview/);
     assert.match(previewSource, /<EmailHtmlView/);
-    assert.match(previewSource, /className="ecp-card ecp-context"/);
+    assert.match(previewSource, /<section className="ecp-card ecp-context">/);
+    assert.match(previewSource, />Matched variables</);
     assert.match(previewSource, /grid-template-columns:repeat\(auto-fit,minmax\(230px,1fr\)\)/);
+    assert.doesNotMatch(previewSource, /<details className="ecp-card ecp-context"/);
     assert.doesNotMatch(previewSource, /className="ecp-grid"/);
     assert.doesNotMatch(previewSource, /max-width:1060px/);
     assert.doesNotMatch(previewSource, /action:\s*'sendEmailTemplate'/);

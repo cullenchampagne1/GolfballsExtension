@@ -58,18 +58,16 @@ const CSS = `
   .ecp-field-value { min-width:0; color:var(--gb-text-primary); font-size:11px; overflow-wrap:anywhere; }
   .ecp-field-value.empty { color:var(--gb-text-ghost); font-style:italic; }
   .ecp-body { width:100%; min-height:430px; padding:0 20px; background:var(--gb-surface-1); }
-  .ecp-context { overflow:visible; }
-  .ecp-context-summary { min-height:42px; padding:9px 12px; display:flex; align-items:center; gap:9px; cursor:pointer; color:var(--gb-text-primary); background:var(--gb-fill-faint); list-style:none; }
-  .ecp-context-summary::-webkit-details-marker { display:none; }
-  .ecp-context-chevron { display:grid; place-items:center; color:var(--gb-text-muted); transition:transform .16s ease; }
-  .ecp-context[open] .ecp-context-chevron { transform:rotate(90deg); }
-  .ecp-context-title { flex:1; font-size:12px; font-weight:800; }
-  .ecp-vars { max-height:360px; overflow:auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); border-top:1px solid var(--gb-border-subtle); }
-  .ecp-var { padding:8px 10px; display:grid; gap:3px; border-top:1px solid var(--gb-border-subtle); }
-  .ecp-var:first-child { border-top:0; }
-  .ecp-var-name { color:var(--gb-text-primary); font-family:var(--gb-font-mono); font-size:9.5px; font-weight:750; }
+  .ecp-vars { max-height:360px; padding:10px; overflow:auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px; }
+  .ecp-var { min-width:0; padding:9px 10px; display:grid; gap:5px; border:1px solid var(--gb-border-subtle); border-radius:var(--gb-r-md); background:var(--gb-fill-faint); }
+  .ecp-var-head { min-width:0; display:flex; align-items:center; gap:6px; }
+  .ecp-var-dot { width:6px; height:6px; flex:0 0 auto; border-radius:50%; background:var(--gb-text-ghost); }
+  .ecp-var.resolved .ecp-var-dot { background:var(--gb-success-fg); box-shadow:0 0 0 3px var(--gb-success-tint-soft); }
+  .ecp-var.pending .ecp-var-dot { background:var(--gb-brand-label); box-shadow:0 0 0 3px var(--gb-brand-tint-soft); }
+  .ecp-var-name { min-width:0; overflow:hidden; color:var(--gb-text-primary); font-family:var(--gb-font-mono); font-size:9.5px; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
   .ecp-var-value { color:var(--gb-text-secondary); font-family:var(--gb-font-mono); font-size:9px; white-space:pre-wrap; overflow-wrap:anywhere; }
   .ecp-var.pending .ecp-var-value { color:var(--gb-brand-label); }
+  .ecp-var.empty .ecp-var-value { color:var(--gb-text-ghost); font-style:italic; }
   .ecp-state { min-height:260px; padding:42px 22px; display:grid; place-items:center; align-content:center; gap:10px; color:var(--gb-text-muted); text-align:center; }
   .ecp-state-icon { width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--gb-border-default); border-radius:50%; background:var(--gb-fill-faint); }
   .ecp-state-title { color:var(--gb-text-primary); font-size:13px; font-weight:800; }
@@ -346,6 +344,10 @@ function EmailCreationPreview() {
   }, [selectedTemplate, sourceTab?.id]);
 
   const variableNames = Object.keys(selectedTemplate?.vars || {});
+  const resolvedVariableCount = variableNames.filter((name) => {
+    const value = resolvedVars[name];
+    return !pendingVars.includes(name) && value != null && String(value).length > 0;
+  }).length;
   const matchedIds = pageInfo.matchedTemplateIds || [];
   const supportedPage = ['order', 'account', 'contact'].includes(pageInfo.pageType);
   return <><style>{CSS}</style><div className="ecp-app" data-gb-ui-root>
@@ -359,7 +361,12 @@ function EmailCreationPreview() {
           : !selectedTemplate ? <section className="ecp-card"><State title="No compatible templates" copy="Create or enable a template for this page type, then it will appear here automatically." /></section>
             : <>
               <section className="ecp-card"><div className="ecp-panel-head"><div className="ecp-panel-title">Formatted email</div><div className="ecp-panel-meta">{resolving ? 'Resolving live context…' : 'Ready · no message created'}</div></div><div className="ecp-fields"><div className="ecp-field"><span className="ecp-field-label">To</span><span className={`ecp-field-value ${preview?.to ? '' : 'empty'}`}>{preview?.to || (resolving ? 'Resolving…' : 'No recipient resolved')}</span></div><div className="ecp-field"><span className="ecp-field-label">Subject</span><span className={`ecp-field-value ${preview?.subject ? '' : 'empty'}`}>{preview?.subject || (resolving ? 'Resolving…' : 'Empty subject')}</span></div></div><div className="ecp-body">{preview?.htmlBody ? <EmailHtmlView html={preview.htmlBody} style={{ width: '100%', border: 'none', borderRadius: 0, background: 'transparent' }} /> : <State loading={resolving} title={resolving ? 'Formatting email' : 'Empty email body'} copy={resolving ? 'Variables appear as each resolver finishes.' : 'This template produced no formatted body for the current page.'} />}</div></section>
-              <details className="ecp-card ecp-context"><summary className="ecp-context-summary"><span className="ecp-context-chevron"><I.chevr size={10} /></span><span className="ecp-context-title">Resolved context</span><span className="ecp-panel-meta">{variableNames.length} variables · expand for diagnostics</span></summary><div className="ecp-vars">{variableNames.length ? variableNames.map((name) => <div className={`ecp-var ${pendingVars.includes(name) ? 'pending' : ''}`} key={name}><div className="ecp-var-name">{name}</div><div className="ecp-var-value">{pendingVars.includes(name) ? 'resolving…' : displayValue(resolvedVars[name])}</div></div>) : <State title="No template variables" copy="This template only uses static content and the resolved recipient." />}</div></details>
+              <section className="ecp-card ecp-context"><div className="ecp-panel-head"><div className="ecp-panel-title">Matched variables</div><div className="ecp-panel-meta">{resolving ? `${resolvedVariableCount} resolved · ${pendingVars.length} resolving` : `${resolvedVariableCount} of ${variableNames.length} resolved`}</div></div><div className="ecp-vars">{variableNames.length ? variableNames.map((name) => {
+                const pending = pendingVars.includes(name);
+                const value = resolvedVars[name];
+                const hasValue = value != null && String(value).length > 0;
+                return <div className={`ecp-var ${pending ? 'pending' : hasValue ? 'resolved' : 'empty'}`} key={name}><div className="ecp-var-head"><span className="ecp-var-dot" /><span className="ecp-var-name" title={name}>{name}</span></div><div className="ecp-var-value">{pending ? 'resolving…' : displayValue(value)}</div></div>;
+              }) : <State title="No template variables" copy="This template only uses static content and the resolved recipient." />}</div></section>
             </>}
     </div></main>
   </div></>;
