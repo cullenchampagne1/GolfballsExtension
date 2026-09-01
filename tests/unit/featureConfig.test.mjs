@@ -123,7 +123,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, /minHeight: 36/);
     assert.match(salesFantasyButtonSource, /padding: '7px 10px'/);
     assert.match(salesFantasyButtonSource, /radial-gradient\(120% 220% at 6% 50%/);
-    assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-brand-label\)'/);
+    assert.match(salesFantasyButtonSource, /border: '1px solid color-mix\(in srgb, var\(--gb-brand-label\) 40%, transparent\)'/);
     assert.match(salesFantasyButtonSource, /background: 'var\(--gb-brand-tint-medium\)'/);
     assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-brand-tint-border\)'/);
     assert.match(salesFantasyButtonSource, /<I\.sparkle size=\{12\} \/>/);
