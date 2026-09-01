@@ -1,5 +1,5 @@
 // background.js
-importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/defaults.js', 'lib/logo-placement.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/email-template-submissions.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
+importScripts('lib/config.js', 'lib/security-policy.js', 'lib/prior-order.js', 'calendar-form-state.js', 'lib/runtime-state.js', 'lib/runtime-scripts.js', 'lib/installation-auth.js', 'lib/usage-telemetry.js', 'lib/runtime-bootstrap.js', 'lib/action-language.js', 'lib/action-runtime.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'lib/remote-settings-policy.js', 'lib/page-engine-index-model.js', 'lib/page-engine-index-store.js', 'lib/crm-index-store.js', 'lib/logo-placement.js', 'react-dist/vanilla/email-template-tracking.js', 'lib/notifications-store.js', 'lib/managed-email-templates.js', 'lib/email-template-submissions.js', 'lib/live-updates.js', 'lib/notifications-poll.js', 'lib/tracker-registry.js', 'lib/tracker-definitions.js', 'lib/tracker-store.js', 'lib/tracker-runtime.js');
 /* @admin:start */
 // Bounced-contact flagging: loads after the action language + notification
 // poll it reads from. Admin-only, so the served worker never imports it.
@@ -689,25 +689,6 @@ function gbInstallSmartyHeaderRule() {
 }
 gbInstallSmartyHeaderRule();
 if (chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(gbInstallSmartyHeaderRule);
-
-// ── Seed default state on first install ──────────────────────────────────────
-chrome.runtime.onInstalled.addListener(({ reason }) => {
-  gbInstallSmartyHeaderRule();
-  if (reason !== 'install') return; // skip updates and browser_update
-
-  // Only write keys that don't already exist — never overwrite user data
-  chrome.storage.local.get(null, (existing) => {
-    const toWrite = {};
-    for (const [key, value] of Object.entries(GB_FACTORY_DEFAULTS)) {
-      if (!(key in existing)) {
-        toWrite[key] = value;
-      }
-    }
-    if (Object.keys(toWrite).length) {
-      chrome.storage.local.set(toWrite);
-    }
-  });
-});
 
 /**
  * Central message router for the extension background service worker.
