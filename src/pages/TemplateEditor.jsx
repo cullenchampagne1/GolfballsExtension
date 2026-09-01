@@ -11,7 +11,11 @@ import {
   VariableTable, OrderRules, CaseRules, AccountConditions, CaseTagsEditor,
 } from '../ui/index.js';
 import { SENDER_OPTIONS } from '../lib/sender.js';
-import { updateVariableDefinition } from '../lib/templateVariableEditing.js';
+import {
+  updateVariableDefinition,
+  variableDefinitionForLiveResolution,
+  variableLiveResolutionSignature,
+} from '../lib/templateVariableEditing.js';
 import {
   buildEmailTemplateTrackerCatalog,
   emailTemplateTrackingIssue,
@@ -710,7 +714,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
      The editor window has no page DOM, so it asks the order /
      account tab (via editor.js' __gbResolveVars bridge) to resolve
      each variable, then overlays the values onto the table. */
-  const varSig = vars.map((v) => `${v.name}\0${v.kind}\0${v.config}`).join('\x01');
+  const varSig = variableLiveResolutionSignature(vars);
   useEffect(() => {
     if (typeof window.__gbResolveVars !== 'function' || vars.length === 0) {
       setResolvedMap({});
@@ -718,7 +722,9 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     }
     let cancelled = false;
     const obj = {};
-    vars.forEach((v) => { obj[v.name] = varDef(v); });
+    vars.forEach((v) => {
+      obj[v.name] = variableDefinitionForLiveResolution(varDef(v), v);
+    });
     Promise.resolve(window.__gbResolveVars(obj)).then((res) => {
       if (cancelled) return;
       const resolved = (res && res.resolved) || {};

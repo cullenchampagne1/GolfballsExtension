@@ -2,7 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  updateVariableDefinition, variableEditorKinds,
+  updateVariableDefinition,
+  variableDefinitionForLiveResolution,
+  variableEditorKinds,
+  variableLiveResolutionSignature,
 } from '../../src/lib/templateVariableEditing.js';
 
 
@@ -40,5 +43,26 @@ describe('email template variable editing', () => {
     assert.deepEqual(updated.smart, { conditional: true, scope: 'line' });
     assert.equal(updated.resolved, null);
     assert.equal(updated.status, 'miss');
+  });
+
+  it('forwards casing transforms and formatting to the live page resolver', () => {
+    const definition = variableDefinitionForLiveResolution(
+      { type: 'schema', path: 'contact.firstName' },
+      { smart: { transform: 'titleCase', format: { type: 'none' } } },
+    );
+    assert.deepEqual(definition, {
+      type: 'schema',
+      path: 'contact.firstName',
+      smart: { transform: 'titleCase', format: { type: 'none' } },
+    });
+  });
+
+  it('refreshes the live preview when only a smart transform changes', () => {
+    const before = [{ name: 'first', kind: 'schema', config: 'contact.firstName', smart: { transform: 'upper' } }];
+    const after = [{ ...before[0], smart: { transform: 'titleCase' } }];
+    assert.notEqual(
+      variableLiveResolutionSignature(before),
+      variableLiveResolutionSignature(after),
+    );
   });
 });

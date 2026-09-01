@@ -209,6 +209,7 @@ describe('cached Page Engine variable resolution', () => {
 
     const transformed = await dom.window.__gbResolveVarsForData(snapshot, {
       first: { type: 'literal', value: 'MARCUS', smart: { transform: 'titleCase' } },
+      firstLower: { type: 'literal', value: 'marcus', smart: { transform: 'titleCase' } },
       greeting: { type: 'literal', value: 'HELLO WORLD', smart: { transform: 'capitalize' } },
       centeredLogo: {
         type: 'attachment', mode: 'inline', source: 'url',
@@ -216,6 +217,7 @@ describe('cached Page Engine variable resolution', () => {
       },
     }, { type: 'auto' });
     assert.equal(transformed.resolved.first, 'Marcus');
+    assert.equal(transformed.resolved.firstLower, 'Marcus');
     assert.equal(transformed.resolved.greeting, 'Hello world');
     assert.match(transformed.resolved.centeredLogo, /data-gb-image-align="center"/);
     assert.match(transformed.resolved.centeredLogo, /margin:8px auto;/);
