@@ -791,91 +791,24 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Sales Fantasy launcher — surface-1 card with a brand glow bleeding from the
-   left behind a dark rounded-square icon chip, a brand sparkle, and "EVENT" as
-   spaced brand text. The pulse ring is a motion loop (no global keyframes).
-   Brand alphas go through color-mix on --gb-brand-label so the glow tracks the
-   active theme instead of staying golf-green. */
+/* Sales Fantasy launcher — intentionally composed from the same Btn and Tag
+   primitives as the rest of the popup. Keeping its geometry in Btn means new
+   button sizing/radius tokens apply here automatically instead of drifting. */
 function SalesFantasyButton({ onClick }) {
   return (
     <Btn
       full
       size="sm"
+      variant="secondary"
+      icon={<I.sparkle />}
       onClick={onClick}
       aria-label="Open Sales Fantasy event"
-      style={{
-        minHeight: 36,
-        height: 'auto',
-        padding: '7px 10px',
-        justifyContent: 'flex-start',
-        gap: 9,
-        borderRadius: 8,
-        border: '1px solid color-mix(in srgb, var(--gb-brand-label) 22%, transparent)',
-        background:
-          'radial-gradient(120% 220% at 6% 50%, color-mix(in srgb, var(--gb-brand-label) 22%, transparent), color-mix(in srgb, var(--gb-brand-label) 5%, transparent) 45%, transparent 72%), var(--gb-surface-1)',
-        boxShadow:
-          '0 0 0 1px rgba(0,0,0,.4), 0 6px 18px -10px color-mix(in srgb, var(--gb-brand-label) 55%, transparent)',
-        overflow: 'visible',
-      }}
+      style={{ justifyContent: 'flex-start' }}
     >
-      {/* icon chip — dark, brand hairline, brand sparkle */}
-      <span
-        style={{
-          position: 'relative',
-          width: 22,
-          height: 22,
-          borderRadius: 6,
-          flexShrink: 0,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--gb-brand-label)',
-          background: 'rgba(10,11,12,.72)',
-          boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 28%, transparent)',
-        }}
-      >
-        <I.sparkle size={12} />
-        <motion.span
-          aria-hidden="true"
-          initial={false}
-          animate={{ scale: [0.9, 1.5], opacity: [0.9, 0] }}
-          transition={{ duration: 2.8, ease: 'easeOut', repeat: Infinity, times: [0, 0.7] }}
-          style={{
-            position: 'absolute',
-            inset: -3,
-            borderRadius: 8,
-            border: '1px solid color-mix(in srgb, var(--gb-brand-label) 35%, transparent)',
-            pointerEvents: 'none',
-          }}
-        />
-      </span>
-
-      <span
-        style={{
-          flex: 1,
-          minWidth: 0,
-          textAlign: 'left',
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: '-.005em',
-          color: 'var(--gb-text-primary)',
-        }}
-      >
+      <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
         Sales Fantasy
       </span>
-
-      <span
-        style={{
-          flexShrink: 0,
-          fontSize: 8,
-          fontWeight: 800,
-          letterSpacing: 1.15,
-          textTransform: 'uppercase',
-          color: 'var(--gb-brand-label)',
-        }}
-      >
-        Event
-      </span>
+      <Tag tone="brand" size="xs">Event</Tag>
     </Btn>
   );
 }
