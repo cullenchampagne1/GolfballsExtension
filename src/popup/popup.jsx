@@ -791,21 +791,61 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Sales Fantasy launcher — intentionally composed from the same Btn and Tag
-   primitives as the rest of the popup. Keeping its geometry in Btn means new
-   button sizing/radius tokens apply here automatically instead of drifting. */
+/* Sales Fantasy launcher — keeps the taller event-card weight and brand glow,
+   while its corner radius comes from Btn and the icon chip uses theme tokens. */
 function SalesFantasyButton({ onClick }) {
   return (
     <Btn
       full
       size="sm"
       variant="secondary"
-      icon={<I.sparkle />}
       onClick={onClick}
       aria-label="Open Sales Fantasy event"
-      style={{ justifyContent: 'flex-start' }}
+      style={{
+        minHeight: 36,
+        height: 'auto',
+        padding: '7px 10px',
+        justifyContent: 'flex-start',
+        gap: 9,
+        border: '1px solid color-mix(in srgb, var(--gb-brand-label) 22%, transparent)',
+        background:
+          'radial-gradient(120% 220% at 6% 50%, color-mix(in srgb, var(--gb-brand-label) 22%, transparent), color-mix(in srgb, var(--gb-brand-label) 5%, transparent) 45%, transparent 72%), var(--gb-surface-1)',
+        boxShadow: '0 6px 18px -12px color-mix(in srgb, var(--gb-brand-label) 55%, transparent)',
+        overflow: 'visible',
+      }}
     >
-      <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+      <span
+        aria-hidden="true"
+        style={{
+          position: 'relative',
+          width: 22,
+          height: 22,
+          borderRadius: 'var(--gb-r-sm)',
+          flexShrink: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxSizing: 'border-box',
+          color: 'var(--gb-brand-label)',
+          background: 'var(--gb-brand-tint-medium)',
+          border: '1px solid var(--gb-brand-tint-border)',
+        }}
+      >
+        <I.sparkle size={12} />
+        <motion.span
+          initial={false}
+          animate={{ scale: [0.9, 1.5], opacity: [0.9, 0] }}
+          transition={{ duration: 2.8, ease: 'easeOut', repeat: Infinity, times: [0, 0.7] }}
+          style={{
+            position: 'absolute',
+            inset: -3,
+            borderRadius: 'var(--gb-r-md)',
+            border: '1px solid var(--gb-brand-tint-border)',
+            pointerEvents: 'none',
+          }}
+        />
+      </span>
+      <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12 }}>
         Sales Fantasy
       </span>
       <Tag tone="brand" size="xs">Event</Tag>

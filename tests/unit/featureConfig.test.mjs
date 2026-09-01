@@ -120,11 +120,15 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(popupSource, /action: 'openSalesFantasy'/);
     assert.match(salesFantasyButtonSource, /<Btn\s+full\s+size="sm"/);
     assert.match(salesFantasyButtonSource, /variant="secondary"/);
-    assert.match(salesFantasyButtonSource, /icon=\{<I\.sparkle \/>\}/);
+    assert.match(salesFantasyButtonSource, /minHeight: 36/);
+    assert.match(salesFantasyButtonSource, /padding: '7px 10px'/);
+    assert.match(salesFantasyButtonSource, /radial-gradient\(120% 220% at 6% 50%/);
+    assert.match(salesFantasyButtonSource, /background: 'var\(--gb-brand-tint-medium\)'/);
+    assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-brand-tint-border\)'/);
+    assert.match(salesFantasyButtonSource, /<I\.sparkle size=\{12\} \/>/);
     assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
     assert.match(salesFantasyButtonSource, /<Tag tone="brand" size="xs">Event<\/Tag>/);
-    assert.match(salesFantasyButtonSource, /style=\{\{ justifyContent: 'flex-start' \}\}/);
-    assert.doesNotMatch(salesFantasyButtonSource, /minHeight:|height:|padding:|borderRadius:|background:|boxShadow:/);
+    assert.doesNotMatch(salesFantasyButtonSource, /rgba\(10,11,12|background: 'rgba\(/);
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
     assert.match(backgroundSource, /const SALES_FANTASY_WINDOW_BOUNDS = Object\.freeze\(\{ width: 700, height: 900 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);

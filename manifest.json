@@ -3,7 +3,7 @@
   "name": "Golfballs.com Sales Toolkit",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApsGgTwjRq6hQeSoGlDpyMasggI2oqOt4ud6fFS4t2/msWZlic5axhibtC4Cos2lF7EO46ulwI3Zv3NXVdlIz3CJrP4p0OneHpU/BqBuZyiecFktTOyGPwjtYmRjpw/PoS+gNXLdQG56qXvEQVz24qudXuSZWia7TF5BiI2RszMx91IbqugrxNgKEiY7Xcf72gsasjhBPdXhmUndK5suIBc7hynVThvjvO+4JP5OLmtH0dBC2rfh9z6PrZbhYiP4fewQgRZIAdNvnqhQGTqaDHOZqA62qC+9o+/v77xqNEr9420wsBc+aIWF8t/z8k2a4nJ86lkXUwSbextrgO+FAuQIDAQAB",
   "update_url": "https://api.cullenchampagne.com/projects/golfballs-extension/updates.xml",
-  "version": "3.4.54",
+  "version": "3.4.55",
   "description": "Email, proposal, CRM-workflow, and order tools for the golfballs.com admin CRM.",
   "permissions": [
     "scripting",
