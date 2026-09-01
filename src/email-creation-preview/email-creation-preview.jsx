@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { filterLocalEmailTemplates } from '../lib/emailTemplateCapabilities.js';
 import {
@@ -7,7 +8,20 @@ import {
   templatesForEmailPreview,
 } from '../lib/emailCreationPreview.js';
 import { parseTemplateValue, TemplatePicker } from '../ui/components/TemplatePicker.jsx';
-import { Btn, EmailHtmlView, I, Spinner } from '../ui';
+import {
+  Btn,
+  DeveloperCard,
+  DeveloperContext,
+  DeveloperMetrics,
+  DeveloperPanelHeader,
+  DeveloperPill,
+  DeveloperStack,
+  DeveloperState,
+  DeveloperWorkspace,
+  EmailHtmlView,
+  I,
+  Spinner,
+} from '../ui';
 
 const EXTENSION_PROTOCOL = 'chrome-extension:';
 const REFRESH_INTERVAL_MS = 5_000;
@@ -30,50 +44,28 @@ const CONTENT_SCRIPT_FILES = [
 
 const CSS = `
   button { color: inherit; font: inherit; }
-  .ecp-app { width:100%; height:100%; display:flex; flex-direction:column; color:var(--gb-text-secondary); background:var(--gb-surface-canvas); font-family:var(--gb-font-sans); font-size:12px; line-height:1.45; }
-  .ecp-header { min-height:68px; padding:12px 18px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--gb-border-default); background:var(--gb-surface-1); }
-  .ecp-mark { width:38px; height:38px; flex:0 0 auto; display:grid; place-items:center; color:var(--gb-brand-label); border:1px solid var(--gb-brand-tint-border); border-radius:var(--gb-r-lg); background:var(--gb-brand-tint-medium); }
-  .ecp-title-wrap { min-width:0; flex:1; }
-  .ecp-title { color:var(--gb-text-primary); font-size:15px; font-weight:850; letter-spacing:-.25px; }
-  .ecp-subtitle { margin-top:2px; color:var(--gb-text-muted); font-size:10px; }
-  .ecp-preview-only { display:inline-flex; align-items:center; gap:6px; padding:5px 8px; color:var(--gb-brand-label); border:1px solid var(--gb-brand-tint-border); border-radius:var(--gb-r-pill); background:var(--gb-brand-tint-soft); font-size:9px; font-weight:850; letter-spacing:.5px; text-transform:uppercase; }
-  .ecp-main { flex:1; min-height:0; overflow:auto; padding:16px 18px 26px; scrollbar-width:thin; scrollbar-color:var(--gb-border-strong) transparent; }
-  .ecp-shell { width:100%; display:grid; gap:12px; }
-  .ecp-card { min-width:0; overflow:hidden; border:1px solid var(--gb-border-default); border-radius:var(--gb-r-xl); background:var(--gb-surface-1); box-shadow:0 3px 12px rgba(0,0,0,.08); }
-  .ecp-source { padding:12px 14px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; }
-  .ecp-source-title { overflow:hidden; color:var(--gb-text-primary); font-size:13px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
-  .ecp-source-url { margin-top:3px; overflow:hidden; color:var(--gb-text-muted); font-family:var(--gb-font-mono); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
-  .ecp-badges { margin-top:7px; display:flex; flex-wrap:wrap; gap:5px; }
-  .ecp-badge { min-height:20px; padding:2px 7px; display:inline-flex; align-items:center; color:var(--gb-text-tertiary); border:1px solid var(--gb-border-default); border-radius:var(--gb-r-pill); background:var(--gb-fill-faint); font-size:9px; font-weight:750; }
-  .ecp-badge.brand { color:var(--gb-brand-label); border-color:var(--gb-brand-tint-border); background:var(--gb-brand-tint-soft); }
-  .ecp-controls { padding:12px; display:grid; grid-template-columns:minmax(240px,1fr) auto; gap:10px; align-items:start; overflow:visible; }
-  .ecp-picker-label { margin:0 0 6px 2px; color:var(--gb-text-muted); font-size:8.5px; font-weight:800; letter-spacing:.55px; text-transform:uppercase; }
-  .ecp-panel-head { min-height:42px; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--gb-border-subtle); background:var(--gb-fill-faint); }
-  .ecp-panel-title { color:var(--gb-text-primary); font-size:12px; font-weight:800; }
-  .ecp-panel-meta { color:var(--gb-text-muted); font-size:9px; }
-  .ecp-fields { border-bottom:1px solid var(--gb-border-subtle); }
-  .ecp-field { min-height:38px; padding:8px 12px; display:grid; grid-template-columns:62px minmax(0,1fr); gap:10px; align-items:start; border-top:1px solid var(--gb-border-subtle); }
+  .ecp-controls { overflow:visible; }
+  .ecp-picker-shell { padding:14px; overflow:visible; }
+  .ecp-fields { border-bottom:1px solid var(--gb-border-subtle); background:linear-gradient(90deg,var(--gb-fill-faint),transparent 72%); }
+  .ecp-field { min-height:44px; padding:10px 14px; display:grid; grid-template-columns:68px minmax(0,1fr); gap:12px; align-items:start; border-top:1px solid var(--gb-border-subtle); }
   .ecp-field:first-child { border-top:0; }
   .ecp-field-label { padding-top:1px; color:var(--gb-text-muted); font-size:9px; font-weight:800; letter-spacing:.45px; text-transform:uppercase; }
-  .ecp-field-value { min-width:0; color:var(--gb-text-primary); font-size:11px; overflow-wrap:anywhere; }
+  .ecp-field-value { min-width:0; color:var(--gb-text-primary); font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
   .ecp-field-value.empty { color:var(--gb-text-ghost); font-style:italic; }
-  .ecp-body { width:100%; min-height:430px; padding:0 20px; background:var(--gb-surface-1); }
-  .ecp-vars { max-height:360px; padding:10px; overflow:auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px; }
-  .ecp-var { min-width:0; padding:9px 10px; display:grid; gap:5px; border:1px solid var(--gb-border-subtle); border-radius:var(--gb-r-md); background:var(--gb-fill-faint); }
+  .ecp-body { width:100%; min-height:460px; padding:4px 24px 12px; background:var(--gb-surface-1); }
+  .ecp-vars { max-height:380px; padding:12px; overflow:auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:9px; }
+  .ecp-var { min-width:0; min-height:58px; padding:10px 11px; display:grid; align-content:center; gap:6px; border:1px solid var(--gb-border-subtle); border-radius:var(--gb-r-lg); background:linear-gradient(145deg,var(--gb-fill-faint),transparent); transition:border-color .18s ease,background-color .18s ease,transform .18s ease,box-shadow .18s ease; }
+  .ecp-var:hover { transform:translateY(-1px); border-color:var(--gb-border-default); box-shadow:0 5px 14px color-mix(in srgb,#000 7%,transparent); }
   .ecp-var-head { min-width:0; display:flex; align-items:center; gap:6px; }
   .ecp-var-dot { width:6px; height:6px; flex:0 0 auto; border-radius:50%; background:var(--gb-text-ghost); }
   .ecp-var.resolved .ecp-var-dot { background:var(--gb-success-fg); box-shadow:0 0 0 3px var(--gb-success-tint-soft); }
   .ecp-var.pending .ecp-var-dot { background:var(--gb-brand-label); box-shadow:0 0 0 3px var(--gb-brand-tint-soft); }
-  .ecp-var-name { min-width:0; overflow:hidden; color:var(--gb-text-primary); font-family:var(--gb-font-mono); font-size:9.5px; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
-  .ecp-var-value { color:var(--gb-text-secondary); font-family:var(--gb-font-mono); font-size:9px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .ecp-var-name { min-width:0; overflow:hidden; color:var(--gb-text-primary); font-family:var(--gb-font-mono); font-size:9.5px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+  .ecp-var-value { color:var(--gb-text-secondary); font-family:var(--gb-font-mono); font-size:9px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
   .ecp-var.pending .ecp-var-value { color:var(--gb-brand-label); }
   .ecp-var.empty .ecp-var-value { color:var(--gb-text-ghost); font-style:italic; }
-  .ecp-state { min-height:260px; padding:42px 22px; display:grid; place-items:center; align-content:center; gap:10px; color:var(--gb-text-muted); text-align:center; }
-  .ecp-state-icon { width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--gb-border-default); border-radius:50%; background:var(--gb-fill-faint); }
-  .ecp-state-title { color:var(--gb-text-primary); font-size:13px; font-weight:800; }
-  .ecp-state-copy { max-width:470px; font-size:10.5px; line-height:1.55; }
-  .ecp-error { padding:9px 12px; display:flex; align-items:flex-start; gap:7px; color:var(--gb-danger-fg); border-top:1px solid var(--gb-danger-tint-border); background:var(--gb-danger-tint-soft); font-size:10px; }
-  @media (max-width:760px) { .ecp-controls { grid-template-columns:1fr; } .ecp-body { padding:0 14px; } }
+  .ecp-error { padding:11px 13px; display:flex; align-items:flex-start; gap:8px; color:var(--gb-danger-fg); border-color:var(--gb-danger-tint-border); background:var(--gb-danger-tint-soft); font-size:10px; }
+  @media (max-width:760px) { .ecp-body { padding:0 14px 10px; } }
 `;
 
 function isExtensionTab(tab) {
@@ -154,7 +146,7 @@ function displayValue(value) {
 }
 
 function State({ title, copy, loading = false }) {
-  return <div className="ecp-state"><span className="ecp-state-icon">{loading ? <Spinner size={16} /> : <I.mail size={18} />}</span><div className="ecp-state-title">{title}</div><div className="ecp-state-copy">{copy}</div></div>;
+  return <DeveloperState icon={loading ? <Spinner size={16} /> : <I.mail size={18} />} title={title} copy={copy} />;
 }
 
 function EmailCreationPreview() {
@@ -349,27 +341,40 @@ function EmailCreationPreview() {
     return !pendingVars.includes(name) && value != null && String(value).length > 0;
   }).length;
   const matchedIds = pageInfo.matchedTemplateIds || [];
+  const matchedTemplateCount = matchedIds.filter((id) => visibleTemplates.some((template) => template.id === id)).length;
   const supportedPage = ['order', 'account', 'contact'].includes(pageInfo.pageType);
-  return <><style>{CSS}</style><div className="ecp-app" data-gb-ui-root>
-    <header className="ecp-header"><span className="ecp-mark"><I.mail size={18} /></span><div className="ecp-title-wrap"><div className="ecp-title">Email Creation Preview</div><div className="ecp-subtitle">Select a template to run it against the active CRM page</div></div><span className="ecp-preview-only"><I.eye size={11} />Preview only · nothing sends</span></header>
-    <main className="ecp-main"><div className="ecp-shell">
-      <section className="ecp-card ecp-source"><div><div className="ecp-source-title">{sourceTab?.title || 'Waiting for an active CRM page'}</div><div className="ecp-source-url" title={sourceTab?.url}>{sourceTab?.url || 'Switch to a Golfballs Contact, Account, or Order page.'}</div><div className="ecp-badges"><span className={`ecp-badge ${supportedPage ? 'brand' : ''}`}>{pageInfo.pageType || 'unknown page'}</span>{pageInfo.orderNo && <span className="ecp-badge">Order · {pageInfo.orderNo}</span>}{pageInfo.contactId && <span className="ecp-badge">Contact · {pageInfo.contactId}</span>}{pageInfo.accountId && <span className="ecp-badge">Account · {pageInfo.accountId}</span>}<span className="ecp-badge">Tab {sourceTab?.id ?? '—'}</span></div></div><Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={() => sourceTabRef.current && inspectTab(sourceTabRef.current)}>Refresh page</Btn></section>
-      <section className="ecp-card ecp-controls"><div><div className="ecp-picker-label">Template and variation</div><TemplatePicker mode="single" templates={visibleTemplates} matchedIds={matchedIds} value={selectedValue} onChange={setSelectedValue} placeholder={loadingPage ? 'Reading page…' : 'Pick a template'} initialOpen={false} floating={false} listMaxHeight={330} disabled={loadingPage || !visibleTemplates.length} /></div><div className="ecp-badges"><span className="ecp-badge">{visibleTemplates.length} compatible</span><span className="ecp-badge brand">{matchedIds.filter((id) => visibleTemplates.some((template) => template.id === id)).length} matched</span></div></section>
-      {error && <section className="ecp-card ecp-error"><I.alert size={12} /><span>{error}</span></section>}
-      {loadingPage ? <section className="ecp-card"><State loading title="Reading the active page" copy="Loading the same page context used by normal email creation." /></section>
-        : !supportedPage ? <section className="ecp-card"><State title="No email context on this tab" copy="Switch to a Golfballs Contact, Account, or Order page. This preview window will follow the active tab automatically." /></section>
-          : !selectedTemplate ? <section className="ecp-card"><State title="No compatible templates" copy="Create or enable a template for this page type, then it will appear here automatically." /></section>
+  const metrics = [
+    { label: 'Compatible', value: visibleTemplates.length, detail: 'Templates for this page type' },
+    { label: 'Matched', value: matchedTemplateCount, detail: 'Rule matches on this record' },
+    { label: 'Variables', value: `${resolvedVariableCount}/${variableNames.length}`, detail: resolving ? `${pendingVars.length} still resolving` : 'Resolved for this template' },
+    { label: 'Preview state', value: resolving ? 'Running' : preview ? 'Ready' : 'Waiting', detail: 'No email will be created' },
+  ];
+  return <><style>{CSS}</style><DeveloperWorkspace icon={<I.mail size={19} />} title="Email Creation Preview" subtitle="Run curated templates against the active CRM record without creating a message" status="Preview only" statusTone="brand">
+    <DeveloperStack>
+      <DeveloperContext
+        title={sourceTab?.title || 'Waiting for an active CRM page'}
+        url={sourceTab?.url || 'Switch to a Golfballs Contact, Account, or Order page.'}
+        pills={<><DeveloperPill tone={supportedPage ? 'brand' : 'neutral'}>{pageInfo.pageType || 'unknown page'}</DeveloperPill>{pageInfo.orderNo && <DeveloperPill>Order · {pageInfo.orderNo}</DeveloperPill>}{pageInfo.contactId && <DeveloperPill>Contact · {pageInfo.contactId}</DeveloperPill>}{pageInfo.accountId && <DeveloperPill>Account · {pageInfo.accountId}</DeveloperPill>}</>}
+        meta={<DeveloperPill>Tab {sourceTab?.id ?? '—'}</DeveloperPill>}
+        action={<Btn size="sm" variant="secondary" icon={<I.refresh />} onClick={() => sourceTabRef.current && inspectTab(sourceTabRef.current)}>Refresh page</Btn>}
+      />
+      <DeveloperMetrics items={metrics} />
+      <DeveloperCard className="ecp-controls" delay={.1}><DeveloperPanelHeader title="Template and variation" subtitle="Choose the exact saved content to resolve against this page" meta={`${matchedTemplateCount} matched`} /><div className="ecp-picker-shell"><TemplatePicker mode="single" templates={visibleTemplates} matchedIds={matchedIds} value={selectedValue} onChange={setSelectedValue} placeholder={loadingPage ? 'Reading page…' : 'Pick a template'} initialOpen={false} floating={false} listMaxHeight={330} disabled={loadingPage || !visibleTemplates.length} /></div></DeveloperCard>
+      {error && <DeveloperCard className="ecp-error"><I.alert size={12} /><span>{error}</span></DeveloperCard>}
+      {loadingPage ? <DeveloperCard><State loading title="Reading the active page" copy="Loading the same page context used by normal email creation." /></DeveloperCard>
+        : !supportedPage ? <DeveloperCard><State title="No email context on this tab" copy="Switch to a Golfballs Contact, Account, or Order page. This preview window will follow the active tab automatically." /></DeveloperCard>
+          : !selectedTemplate ? <DeveloperCard><State title="No compatible templates" copy="Create or enable a template for this page type, then it will appear here automatically." /></DeveloperCard>
             : <>
-              <section className="ecp-card"><div className="ecp-panel-head"><div className="ecp-panel-title">Formatted email</div><div className="ecp-panel-meta">{resolving ? 'Resolving live context…' : 'Ready · no message created'}</div></div><div className="ecp-fields"><div className="ecp-field"><span className="ecp-field-label">To</span><span className={`ecp-field-value ${preview?.to ? '' : 'empty'}`}>{preview?.to || (resolving ? 'Resolving…' : 'No recipient resolved')}</span></div><div className="ecp-field"><span className="ecp-field-label">Subject</span><span className={`ecp-field-value ${preview?.subject ? '' : 'empty'}`}>{preview?.subject || (resolving ? 'Resolving…' : 'Empty subject')}</span></div></div><div className="ecp-body">{preview?.htmlBody ? <EmailHtmlView html={preview.htmlBody} style={{ width: '100%', border: 'none', borderRadius: 0, background: 'transparent' }} /> : <State loading={resolving} title={resolving ? 'Formatting email' : 'Empty email body'} copy={resolving ? 'Variables appear as each resolver finishes.' : 'This template produced no formatted body for the current page.'} />}</div></section>
-              <section className="ecp-card ecp-context"><div className="ecp-panel-head"><div className="ecp-panel-title">Matched variables</div><div className="ecp-panel-meta">{resolving ? `${resolvedVariableCount} resolved · ${pendingVars.length} resolving` : `${resolvedVariableCount} of ${variableNames.length} resolved`}</div></div><div className="ecp-vars">{variableNames.length ? variableNames.map((name) => {
+              <DeveloperCard delay={.12}><DeveloperPanelHeader title="Formatted email" subtitle={selectedTemplate.name || 'Selected template'} meta={resolving ? 'Resolving live context…' : 'Ready · no message created'} /><div className="ecp-fields"><div className="ecp-field"><span className="ecp-field-label">To</span><span className={`ecp-field-value ${preview?.to ? '' : 'empty'}`}>{preview?.to || (resolving ? 'Resolving…' : 'No recipient resolved')}</span></div><div className="ecp-field"><span className="ecp-field-label">Subject</span><span className={`ecp-field-value ${preview?.subject ? '' : 'empty'}`}>{preview?.subject || (resolving ? 'Resolving…' : 'Empty subject')}</span></div></div><div className="ecp-body">{preview?.htmlBody ? <EmailHtmlView html={preview.htmlBody} style={{ width: '100%', border: 'none', borderRadius: 0, background: 'transparent' }} /> : <State loading={resolving} title={resolving ? 'Formatting email' : 'Empty email body'} copy={resolving ? 'Variables appear as each resolver finishes.' : 'This template produced no formatted body for the current page.'} />}</div></DeveloperCard>
+              <DeveloperCard className="ecp-context" delay={.15}><DeveloperPanelHeader title="Matched variables" subtitle="Exact values inserted into the selected template" meta={resolving ? `${resolvedVariableCount} resolved · ${pendingVars.length} resolving` : `${resolvedVariableCount} of ${variableNames.length} resolved`} /><div className="ecp-vars">{variableNames.length ? variableNames.map((name, index) => {
                 const pending = pendingVars.includes(name);
                 const value = resolvedVars[name];
                 const hasValue = value != null && String(value).length > 0;
-                return <div className={`ecp-var ${pending ? 'pending' : hasValue ? 'resolved' : 'empty'}`} key={name}><div className="ecp-var-head"><span className="ecp-var-dot" /><span className="ecp-var-name" title={name}>{name}</span></div><div className="ecp-var-value">{pending ? 'resolving…' : displayValue(value)}</div></div>;
-              }) : <State title="No template variables" copy="This template only uses static content and the resolved recipient." />}</div></section>
+                return <motion.div className={`ecp-var ${pending ? 'pending' : hasValue ? 'resolved' : 'empty'}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .22, delay: Math.min(index * .025, .2) }} key={name}><div className="ecp-var-head"><span className="ecp-var-dot" /><span className="ecp-var-name" title={name}>{name}</span></div><div className="ecp-var-value">{pending ? 'resolving…' : displayValue(value)}</div></motion.div>;
+              }) : <State title="No template variables" copy="This template only uses static content and the resolved recipient." />}</div></DeveloperCard>
             </>}
-    </div></main>
-  </div></>;
+    </DeveloperStack>
+  </DeveloperWorkspace></>;
 }
 
 ensureTheme();

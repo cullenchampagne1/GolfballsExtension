@@ -125,6 +125,9 @@ describe('Page Engine live inspector snapshot', () => {
     assert.match(inspectorSource, /setInterval\([\s\S]*REFRESH_INTERVAL_MS/);
     assert.match(inspectorSource, /inspectTab\(sourceTabRef\.current, \{ silent: true \}\)/);
     assert.match(inspectorSource, /sendBackgroundMessage\('pageEngineDebugSnapshot'/);
+    assert.match(inspectorSource, /<DeveloperWorkspace/);
+    assert.match(inspectorSource, /<DeveloperContext/);
+    assert.match(inspectorSource, /<DeveloperMetrics/);
     assert.match(inspectorHtml, /react-dist\/page-engine-inspector\/page-engine-inspector\.js/);
     assert.match(buildSource, /src\/page-engine-inspector/);
     assert.match(packageStoreSource, /'page-engine-inspector\.html'/);

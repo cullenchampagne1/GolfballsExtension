@@ -70,6 +70,16 @@ export { CollapsibleSection } from './components/CollapsibleSection.jsx';
 export { TYPE_ICONS, TYPE_COLORS } from './typeIcons.jsx';
 export { ProofCard } from './components/ProofCard.jsx';
 export { EmailHtmlView } from './components/EmailHtmlView.jsx';
+export {
+  DeveloperWorkspace,
+  DeveloperStack,
+  DeveloperCard,
+  DeveloperPill,
+  DeveloperContext,
+  DeveloperMetrics,
+  DeveloperPanelHeader,
+  DeveloperState,
+} from './components/DeveloperWorkspace.jsx';
 export { CategorizeRail } from './components/CategorizeRail.jsx';
 
 export { FeatureSpotlight } from './components/FeatureSpotlight.jsx';
