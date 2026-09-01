@@ -125,7 +125,8 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, /minHeight: 36/);
     assert.match(salesFantasyButtonSource, /padding: '7px 10px'/);
     assert.match(salesFantasyButtonSource, /radial-gradient\(120% 220% at 6% 50%/);
-    assert.match(salesFantasyButtonSource, /border: '1px solid color-mix\(in srgb, var\(--gb-brand-label\) 40%, transparent\)'/);
+    assert.match(salesFantasyButtonSource, /var\(--gb-brand-tint-soft\)/);
+    assert.match(salesFantasyButtonSource, /var\(--gb-brand-tint-strong\)/);
     assert.match(salesFantasyButtonSource, /background: 'var\(--gb-brand-tint-medium\)'/);
     assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-brand-tint-border\)'/);
     assert.match(salesFantasyButtonSource, /<I\.sparkle size=\{12\} \/>/);
@@ -133,7 +134,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.doesNotMatch(salesFantasyButtonSource, /scale: \[0\.9, 1\.5\]/);
     assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
     assert.match(salesFantasyButtonSource, /<Tag tone="brand" size="xs">Event<\/Tag>/);
-    assert.doesNotMatch(salesFantasyButtonSource, /rgba\(10,11,12|background: 'rgba\(/);
+    assert.doesNotMatch(salesFantasyButtonSource, /color-mix|#[0-9a-f]{3,8}|rgba?\(/i);
     assert.ok(
       emptyStateSource.indexOf('New Template') < emptyStateSource.lastIndexOf('<SalesFantasyButton'),
       'empty popup keeps Sales Fantasy after the primary template action',

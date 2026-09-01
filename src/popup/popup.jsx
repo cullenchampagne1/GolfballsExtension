@@ -807,10 +807,10 @@ function SalesFantasyButton({ onClick }) {
         padding: '7px 10px',
         justifyContent: 'flex-start',
         gap: 9,
-        border: '1px solid color-mix(in srgb, var(--gb-brand-label) 40%, transparent)',
+        border: '1px solid var(--gb-brand-tint-border)',
         background:
-          'radial-gradient(120% 220% at 6% 50%, color-mix(in srgb, var(--gb-brand-label) 22%, transparent), color-mix(in srgb, var(--gb-brand-label) 5%, transparent) 45%, transparent 72%), var(--gb-surface-1)',
-        boxShadow: '0 6px 18px -12px color-mix(in srgb, var(--gb-brand-label) 55%, transparent)',
+          'radial-gradient(120% 220% at 6% 50%, var(--gb-brand-tint-medium), var(--gb-brand-tint-soft) 45%, transparent 72%), var(--gb-surface-1)',
+        boxShadow: '0 6px 18px -12px var(--gb-brand-tint-strong)',
         overflow: 'visible',
       }}
     >
