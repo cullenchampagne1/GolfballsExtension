@@ -124,6 +124,9 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, /variant="secondary"/);
     assert.match(salesFantasyButtonSource, /minHeight: 36/);
     assert.match(salesFantasyButtonSource, /padding: '7px 10px'/);
+    assert.match(salesFantasyButtonSource, /whileHover=\{\{ filter: 'brightness\(1\.04\)' \}\}/);
+    assert.match(salesFantasyButtonSource, /background: 'var\(--gb-surface-1\)'/);
+    assert.match(salesFantasyButtonSource, /backgroundImage:/);
     assert.match(salesFantasyButtonSource, /radial-gradient\(120% 220% at 6% 50%/);
     assert.match(salesFantasyButtonSource, /var\(--gb-brand-tint-soft\)/);
     assert.match(salesFantasyButtonSource, /var\(--gb-brand-tint-strong\)/);
@@ -135,6 +138,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
     assert.match(salesFantasyButtonSource, /<Tag tone="brand" size="xs">Event<\/Tag>/);
     assert.doesNotMatch(salesFantasyButtonSource, /color-mix|#[0-9a-f]{3,8}|rgba?\(/i);
+    assert.doesNotMatch(salesFantasyButtonSource, /whileHover=\{\{ background/);
     assert.ok(
       emptyStateSource.indexOf('New Template') < emptyStateSource.lastIndexOf('<SalesFantasyButton'),
       'empty popup keeps Sales Fantasy after the primary template action',

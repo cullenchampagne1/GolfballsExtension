@@ -801,6 +801,7 @@ function SalesFantasyButton({ onClick }) {
       variant="secondary"
       onClick={onClick}
       aria-label="Open Sales Fantasy event"
+      whileHover={{ filter: 'brightness(1.04)' }}
       style={{
         minHeight: 36,
         height: 'auto',
@@ -808,8 +809,9 @@ function SalesFantasyButton({ onClick }) {
         justifyContent: 'flex-start',
         gap: 9,
         border: '1px solid var(--gb-brand-tint-border)',
-        background:
-          'radial-gradient(120% 220% at 6% 50%, var(--gb-brand-tint-medium), var(--gb-brand-tint-soft) 45%, transparent 72%), var(--gb-surface-1)',
+        background: 'var(--gb-surface-1)',
+        backgroundImage:
+          'radial-gradient(120% 220% at 6% 50%, var(--gb-brand-tint-medium), var(--gb-brand-tint-soft) 45%, transparent 72%)',
         boxShadow: '0 6px 18px -12px var(--gb-brand-tint-strong)',
         overflow: 'visible',
       }}
