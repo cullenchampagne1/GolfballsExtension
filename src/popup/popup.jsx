@@ -763,11 +763,6 @@ function RevokedNotice() {
 function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy }) {
   return (
     <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--gb-text-muted)', fontSize: 12, lineHeight: 1.7 }}>
-      {salesFantasyEnabled && (
-        <div style={{ marginBottom: 18 }}>
-          <SalesFantasyButton onClick={onOpenSalesFantasy} />
-        </div>
-      )}
       <div style={{
         width: 38, height: 38, margin: '0 auto 10px',
         borderRadius: 'var(--gb-r-md)',
@@ -787,6 +782,11 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
           New Template
         </Btn>
       </div>
+      {salesFantasyEnabled && (
+        <div style={{ marginTop: 18 }}>
+          <SalesFantasyButton onClick={onOpenSalesFantasy} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1218,15 +1218,11 @@ function MainView({
         </AnimatePresence>
 
         {/* Action stack — matches original popup order:
-            Charge → Order Edit → Watch + Watch List row → Tasks → CRM Search → Submit Proof.
+            Charge → Order Edit → Watch + Watch List row → Tasks → CRM Search →
+            Submit Proof → registry tools → Sales Fantasy.
             Each wrapped in <Reveal> so flipping its feature flag collapses
             the height + opacity with siblings sliding to fill the gap. */}
         <AnimatePresence initial={false}>
-          {salesFantasyEnabled && (
-            <Reveal key="sales-fantasy">
-              <SalesFantasyButton onClick={onOpenSalesFantasy} />
-            </Reveal>
-          )}
           {flags.chargeEnabled && (
             <Reveal key="charge">
               <Btn full size="sm"
@@ -1313,6 +1309,11 @@ function MainView({
               </Btn>
             </Reveal>
           ))}
+          {salesFantasyEnabled && (
+            <Reveal key="sales-fantasy">
+              <SalesFantasyButton onClick={onOpenSalesFantasy} />
+            </Reveal>
+          )}
         </AnimatePresence>
       </div>
 

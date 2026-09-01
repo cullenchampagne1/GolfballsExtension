@@ -19,6 +19,8 @@ const salesFantasyHtml = await readFile(new URL('../../sales-fantasy.html', impo
 const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales-fantasy.jsx', import.meta.url), 'utf8');
 const salesFantasyModelSource = await readFile(new URL('../../src/lib/salesFantasy.js', import.meta.url), 'utf8');
 const salesFantasyButtonSource = popupSource.match(/function SalesFantasyButton[\s\S]*?\n}\n/)?.[0] || '';
+const emptyStateSource = popupSource.match(/function EmptyState[\s\S]*?\n}\n\n\/\* Sales Fantasy launcher/)?.[0] || '';
+const popupActionStackSource = popupSource.match(/\{\/\* Action stack[\s\S]*?<\/AnimatePresence>/)?.[0] || '';
 
 describe('featureRegistry · surfaces', () => {
   it('a dual-surface feature has popup + a page-scoped shelf', () => {
@@ -132,6 +134,14 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
     assert.match(salesFantasyButtonSource, /<Tag tone="brand" size="xs">Event<\/Tag>/);
     assert.doesNotMatch(salesFantasyButtonSource, /rgba\(10,11,12|background: 'rgba\(/);
+    assert.ok(
+      emptyStateSource.indexOf('New Template') < emptyStateSource.lastIndexOf('<SalesFantasyButton'),
+      'empty popup keeps Sales Fantasy after the primary template action',
+    );
+    assert.ok(
+      popupActionStackSource.indexOf('toolFeatures.map') < popupActionStackSource.lastIndexOf('<SalesFantasyButton'),
+      'main popup keeps Sales Fantasy after every registry-driven tool',
+    );
     assert.match(backgroundSource, /const MANAGER_WINDOW_BOUNDS = Object\.freeze\(\{ width: 860, height: 700 \}\)/);
     assert.match(backgroundSource, /const SALES_FANTASY_WINDOW_BOUNDS = Object\.freeze\(\{ width: 700, height: 900 \}\)/);
     assert.match(backgroundSource, /url: chrome\.runtime\.getURL\('editor\.html'\),\s*type: 'popup', \.\.\.MANAGER_WINDOW_BOUNDS/);
