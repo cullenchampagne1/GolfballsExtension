@@ -246,7 +246,7 @@ let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focu
 const MANAGER_WINDOW_BOUNDS = Object.freeze({ width: 860, height: 700 });
 const SALES_FANTASY_WINDOW_BOUNDS = Object.freeze({ width: 700, height: 900 });
 const PAGE_ENGINE_INSPECTOR_WINDOW_BOUNDS = Object.freeze({ width: 900, height: 780 });
-const EMAIL_CREATION_PREVIEW_WINDOW_BOUNDS = Object.freeze({ width: 980, height: 840 });
+const EMAIL_CREATION_PREVIEW_WINDOW_BOUNDS = Object.freeze({ width: 1160, height: 860 });
 
 const GB_PAGE_ENGINE_TAB_PATTERNS = [
   'https://www.golfballs.com/*',

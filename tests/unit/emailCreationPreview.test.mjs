@@ -90,6 +90,10 @@ describe('Email creation developer preview', () => {
     assert.match(previewSource, /action: 'resolveVarsStream'/);
     assert.match(previewSource, /buildEmailCreationPreview/);
     assert.match(previewSource, /<EmailHtmlView/);
+    assert.match(previewSource, /className="ecp-card ecp-context"/);
+    assert.match(previewSource, /grid-template-columns:repeat\(auto-fit,minmax\(230px,1fr\)\)/);
+    assert.doesNotMatch(previewSource, /className="ecp-grid"/);
+    assert.doesNotMatch(previewSource, /max-width:1060px/);
     assert.doesNotMatch(previewSource, /action:\s*'sendEmailTemplate'/);
     assert.match(previewSource, /chrome\.tabs\.onActivated\.addListener/);
     assert.match(previewSource, /chrome\.windows\.onFocusChanged\.addListener/);
