@@ -791,9 +791,11 @@ function EmptyState({ onCreate, salesFantasyEnabled = false, onOpenSalesFantasy 
   );
 }
 
-/* Flat event launcher with one theme-primary wave inside the button. The wave
-   uses a translucent three-stop fill plus a stronger gradient band clipped
-   inside its crest; only the button itself receives a solid primary outline. */
+/* Sales Fantasy launcher — surface-1 card with a brand glow bleeding from the
+   left behind a dark rounded-square icon chip, a brand sparkle, and "EVENT" as
+   spaced brand text. The pulse ring is a motion loop (no global keyframes).
+   Brand alphas go through color-mix on --gb-brand-label so the glow tracks the
+   active theme instead of staying golf-green. */
 function SalesFantasyButton({ onClick }) {
   return (
     <Btn
@@ -802,61 +804,77 @@ function SalesFantasyButton({ onClick }) {
       onClick={onClick}
       aria-label="Open Sales Fantasy event"
       style={{
-        height: 36, padding: '0 8px', justifyContent: 'flex-start', gap: 7,
-        border: '1px solid var(--gb-brand-label)',
-        background: 'var(--gb-fill-subtle)', boxShadow: 'none', overflow: 'hidden',
+        minHeight: 36,
+        height: 'auto',
+        padding: '7px 10px',
+        justifyContent: 'flex-start',
+        gap: 9,
+        borderRadius: 8,
+        border: '1px solid color-mix(in srgb, var(--gb-brand-label) 22%, transparent)',
+        background:
+          'radial-gradient(120% 220% at 6% 50%, color-mix(in srgb, var(--gb-brand-label) 22%, transparent), color-mix(in srgb, var(--gb-brand-label) 5%, transparent) 45%, transparent 72%), var(--gb-surface-1)',
+        boxShadow:
+          '0 0 0 1px rgba(0,0,0,.4), 0 6px 18px -10px color-mix(in srgb, var(--gb-brand-label) 55%, transparent)',
+        overflow: 'visible',
       }}
     >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 360 34"
-        preserveAspectRatio="none"
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+      {/* icon chip — dark, brand hairline, brand sparkle */}
+      <span
+        style={{
+          position: 'relative',
+          width: 22,
+          height: 22,
+          borderRadius: 6,
+          flexShrink: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--gb-brand-label)',
+          background: 'rgba(10,11,12,.72)',
+          boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 28%, transparent)',
+        }}
       >
-        <defs>
-          <linearGradient id="sales-fantasy-wave" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="var(--gb-brand-dark)" />
-            <stop offset="0.58" stopColor="var(--gb-brand)" />
-            <stop offset="1" stopColor="var(--gb-brand-label)" />
-          </linearGradient>
-          <clipPath id="sales-fantasy-wave-clip">
-            <path d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0 L360 34 Z" />
-          </clipPath>
-        </defs>
-        <path
-          d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0 L360 34 Z"
-          fill="url(#sales-fantasy-wave)"
-          opacity="0.22"
+        <I.sparkle size={12} />
+        <motion.span
+          aria-hidden="true"
+          initial={false}
+          animate={{ scale: [0.9, 1.5], opacity: [0.9, 0] }}
+          transition={{ duration: 2.8, ease: 'easeOut', repeat: Infinity, times: [0, 0.7] }}
+          style={{
+            position: 'absolute',
+            inset: -3,
+            borderRadius: 8,
+            border: '1px solid color-mix(in srgb, var(--gb-brand-label) 35%, transparent)',
+            pointerEvents: 'none',
+          }}
         />
-        <path
-          d="M72 34 C122 33 138 18 181 18 C229 18 247 29 287 18 C317 10 337 3 360 0"
-          fill="none"
-          stroke="url(#sales-fantasy-wave)"
-          strokeWidth="8"
-          strokeLinecap="round"
-          opacity="0.58"
-          clipPath="url(#sales-fantasy-wave-clip)"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <span style={{
-        position: 'relative', zIndex: 1,
-        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)',
-      }}>
-        <I.sparkle size={11} />
       </span>
-      <span style={{ position: 'relative', zIndex: 1, flex: 1, textAlign: 'left', fontWeight: 700 }}>
+
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          textAlign: 'left',
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: '-.005em',
+          color: 'var(--gb-text-primary)',
+        }}
+      >
         Sales Fantasy
       </span>
-      <span style={{
-        position: 'relative', zIndex: 1,
-        padding: '2px 5px', borderRadius: 999, flexShrink: 0,
-        color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)',
-        fontSize: 7.5, fontWeight: 850, letterSpacing: .75, lineHeight: 1,
-      }}>
-        EVENT
+
+      <span
+        style={{
+          flexShrink: 0,
+          fontSize: 8,
+          fontWeight: 800,
+          letterSpacing: 1.15,
+          textTransform: 'uppercase',
+          color: 'var(--gb-brand-label)',
+        }}
+      >
+        Event
       </span>
     </Btn>
   );
