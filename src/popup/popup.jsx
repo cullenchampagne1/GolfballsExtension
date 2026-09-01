@@ -834,7 +834,7 @@ function SalesFantasyButton({ onClick }) {
         <I.sparkle size={12} />
         <motion.span
           initial={false}
-          animate={{ scale: [0.9, 1.5], opacity: [0.9, 0] }}
+          animate={{ scale: [0.9, 1.4], opacity: [0.9, 0] }}
           transition={{ duration: 2.8, ease: 'easeOut', repeat: Infinity, times: [0, 0.7] }}
           style={{
             position: 'absolute',

@@ -126,6 +126,8 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasyButtonSource, /background: 'var\(--gb-brand-tint-medium\)'/);
     assert.match(salesFantasyButtonSource, /border: '1px solid var\(--gb-brand-tint-border\)'/);
     assert.match(salesFantasyButtonSource, /<I\.sparkle size=\{12\} \/>/);
+    assert.match(salesFantasyButtonSource, /scale: \[0\.9, 1\.4\]/);
+    assert.doesNotMatch(salesFantasyButtonSource, /scale: \[0\.9, 1\.5\]/);
     assert.match(salesFantasyButtonSource, />\s*Sales Fantasy\s*</);
     assert.match(salesFantasyButtonSource, /<Tag tone="brand" size="xs">Event<\/Tag>/);
     assert.doesNotMatch(salesFantasyButtonSource, /rgba\(10,11,12|background: 'rgba\(/);
