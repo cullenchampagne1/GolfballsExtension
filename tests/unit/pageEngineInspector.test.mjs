@@ -14,7 +14,7 @@ import {
 } from '../../src/lib/devSettings.js';
 
 const root = new URL('../../', import.meta.url);
-const [backgroundSource, mainSource, entrySource, runnerSource, debugSource, inspectorSource, inspectorHtml, buildSource, packageStoreSource] = await Promise.all([
+const [backgroundSource, mainSource, entrySource, runnerSource, debugSource, inspectorSource, inspectorHtml, buildSource, packageStoreSource, developerWorkspaceSource] = await Promise.all([
   readFile(new URL('background.js', root), 'utf8'),
   readFile(new URL('src/vanilla/main.js', root), 'utf8'),
   readFile(new URL('src/vanilla-build/page-engine.entry.js', root), 'utf8'),
@@ -24,6 +24,7 @@ const [backgroundSource, mainSource, entrySource, runnerSource, debugSource, ins
   readFile(new URL('page-engine-inspector.html', root), 'utf8'),
   readFile(new URL('build.js', root), 'utf8'),
   readFile(new URL('scripts/package-store.mjs', root), 'utf8'),
+  readFile(new URL('src/ui/components/DeveloperWorkspace.jsx', root), 'utf8'),
 ]);
 
 afterEach(() => {
@@ -128,6 +129,7 @@ describe('Page Engine live inspector snapshot', () => {
     assert.match(inspectorSource, /<DeveloperWorkspace/);
     assert.match(inspectorSource, /<DeveloperContext/);
     assert.match(inspectorSource, /<DeveloperMetrics/);
+    assert.doesNotMatch(developerWorkspaceSource, /\.gb-dev-status\{font-size:0/);
     assert.match(inspectorHtml, /react-dist\/page-engine-inspector\/page-engine-inspector\.js/);
     assert.match(buildSource, /src\/page-engine-inspector/);
     assert.match(packageStoreSource, /'page-engine-inspector\.html'/);

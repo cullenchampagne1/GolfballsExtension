@@ -14,12 +14,13 @@ import {
 } from '../../src/lib/devSettings.js';
 
 const root = new URL('../../', import.meta.url);
-const [backgroundSource, previewSource, previewHtml, buildSource, packageStoreSource] = await Promise.all([
+const [backgroundSource, previewSource, previewHtml, buildSource, packageStoreSource, developerWorkspaceSource] = await Promise.all([
   readFile(new URL('background.js', root), 'utf8'),
   readFile(new URL('src/email-creation-preview/email-creation-preview.jsx', root), 'utf8'),
   readFile(new URL('email-creation-preview.html', root), 'utf8'),
   readFile(new URL('build.js', root), 'utf8'),
   readFile(new URL('scripts/package-store.mjs', root), 'utf8'),
+  readFile(new URL('src/ui/components/DeveloperWorkspace.jsx', root), 'utf8'),
 ]);
 
 afterEach(() => {
@@ -96,6 +97,8 @@ describe('Email creation developer preview', () => {
     assert.match(previewSource, /<DeveloperCard className="ecp-context"/);
     assert.match(previewSource, /title="Matched variables"/);
     assert.match(previewSource, /grid-template-columns:repeat\(auto-fit,minmax\(240px,1fr\)\)/);
+    assert.match(developerWorkspaceSource, /\.gb-dev-context-meta \{[^}]*display:flex[^}]*flex-wrap:nowrap/);
+    assert.doesNotMatch(developerWorkspaceSource, /\.gb-dev-context\{grid-template-columns:1fr/);
     assert.doesNotMatch(previewSource, /<details className="ecp-card ecp-context"/);
     assert.doesNotMatch(previewSource, /className="ecp-grid"/);
     assert.doesNotMatch(previewSource, /max-width:1060px/);
