@@ -267,6 +267,12 @@ describe('settings menus', () => {
     assert.match(statCellSource, /icon=\{<I\.download \/>\}/);
   });
 
+  it('reports the exact number of records removed after a cache clear completes', () => {
+    assert.match(statCellSource, /const result = await def\.clearer\(settings\)/);
+    assert.match(statCellSource, /removed\.toLocaleString\('en-US'\)/);
+    assert.match(statCellSource, /Deleted \$\{removed\.toLocaleString\('en-US'\)\} cached record/);
+  });
+
   it('keeps management explicit in global and per-key dashboard editors', {
     skip: !hasProjectRoutes && 'local-only RevStack project routes are not present',
   }, () => {

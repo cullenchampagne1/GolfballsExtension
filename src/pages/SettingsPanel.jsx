@@ -970,10 +970,16 @@ function StatCell({ def, settings }) {
     if (typeof def.clearer !== 'function' || clearing) return;
     setClearing(true);
     try {
-      await def.clearer(settings);
+      const result = await def.clearer(settings);
       const next = typeof def.reader === 'function' ? await def.reader(settings) : null;
       if (next) setView(next);
-      window.__gbToast?.success?.('Cached contacts deleted');
+      const removed = Number(result?.cleared);
+      const message = Number.isFinite(removed)
+        ? (removed > 0
+          ? `Deleted ${removed.toLocaleString('en-US')} cached record${removed === 1 ? '' : 's'}`
+          : 'Cache was already empty')
+        : 'Cached contacts deleted';
+      window.__gbToast?.success?.(message);
     } catch (error) {
       window.__gbToast?.error?.(error?.message || 'Unable to delete this cache');
     } finally {

@@ -226,6 +226,9 @@ export function makeFakeIndexedDb() {
       getAll() {
         return requestResult([...meta.values.values()].map(clone));
       },
+      count() {
+        return requestResult(meta.values.size);
+      },
       delete(key) {
         meta.values.delete(key);
         return requestResult(undefined);

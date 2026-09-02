@@ -396,4 +396,26 @@ describe('Page Engine index roundtrip', () => {
     assert.equal(fakeDb.pageFields.size, 0);
     assert.equal(fakeDb.pageKeys.size, 1, 'cache clearing keeps the device key pair');
   });
+
+  it('clears 7,874 cached contacts in one store-level maintenance operation', async () => {
+    for (let index = 0; index < 7_874; index += 1) {
+      const storageKey = `bulk-contact-${index}`;
+      fakeDb.pageEntities.set(storageKey, {
+        storageKey,
+        owner: index % 2 ? 'former-territory' : 'current-territory',
+        entityType: 'contact',
+        updatedAt: index,
+      });
+      fakeDb.pageFields.set(`bulk-field-${index}`, {
+        fieldKey: `bulk-field-${index}`,
+        recordKey: storageKey,
+      });
+    }
+
+    const cleared = await indexClient.clearEngineIndex();
+    assert.equal(cleared.cleared, 7_874);
+    assert.equal(fakeDb.pageEntities.size, 0);
+    assert.equal(fakeDb.pageFields.size, 0);
+    assert.equal(fakeDb.pageKeys.size, 1, 'bulk clear preserves the device key pair');
+  });
 });

@@ -73,7 +73,10 @@ await window.__gbPageEngine.engineIndex.query({
 
 Supported operators are `eq`, `neq`, `in`, `exists`, `notExists`,
 `contains`, `startsWith`, `lt`, `lte`, `gt`, and `gte`. The same bridge
-provides `stats()` and `clear()` for the configured Territory partition.
+provides `stats()` for the configured Territory partition. `clear()` removes
+all locally cached entity and field rows in one transaction while preserving
+the device encryption keys, so switching Territory cannot leave hidden cache
+rows behind and large caches do not require one delete operation per record.
 
 The first run after upgrading from the retired owner-gated index clears that
 old cache once. Owner IDs and Territory values are unrelated namespaces, so
