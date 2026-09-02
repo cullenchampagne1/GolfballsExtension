@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   SALES_FANTASY_CURRENT_WEEK,
   SALES_FANTASY_LINEUPS,
@@ -22,7 +23,19 @@ import {
   weekState,
 } from '../../src/lib/salesFantasy.js';
 
+const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales-fantasy.jsx', import.meta.url), 'utf8');
+
 describe('salesFantasy · league model', () => {
+  it('keeps passive arena surfaces stable and member changes understated', () => {
+    assert.doesNotMatch(salesFantasySource, /\.sf-card:hover/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-stat:hover/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-role-rule-card:hover/);
+    assert.doesNotMatch(salesFantasySource, /layoutId="sf-member-active"/);
+    assert.match(salesFantasySource, /\.sf-bottom-nav \{ border-top:0;[^}]*box-shadow:none/);
+    assert.match(salesFantasySource, /\.sf-rank-badge\.top \{ color:var\(--gb-brand-label\);[^}]*background:var\(--gb-brand-tint-soft\)/);
+    assert.match(salesFantasySource, /className="sf-performance-detail"[^>]*initial=\{\{ opacity: 0 \}\}[^>]*transition=\{PERSON_TRANSITION\}/);
+  });
+
   it('formats member names as compact first-and-last initials for avatars', () => {
     assert.equal(memberInitials('Lorie Ojeman'), 'LO');
     assert.equal(memberInitials('JP Furman'), 'JF');

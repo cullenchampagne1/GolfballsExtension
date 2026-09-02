@@ -24,6 +24,7 @@ const MY_POD_ID = 'pod-1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
 const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
+const PERSON_TRANSITION = { duration: 0.15, ease: EASE };
 const NAV_TRANSITION = { type: 'spring', stiffness: 430, damping: 34, mass: 0.72 };
 
 const FantasyIcon = {
@@ -467,18 +468,14 @@ const ARENA_CSS = `
   .sf-week-label-inner { white-space:nowrap; }
 
   /* Cards */
-  .sf-card { position:relative; border-color:var(--gb-border-subtle); background:var(--sf-grad-surface); box-shadow:0 14px 34px -22px rgba(0,0,0,.95), var(--sf-lit); transition:box-shadow var(--sf-t-slow) var(--sf-ease), border-color var(--sf-t-slow) var(--sf-ease); }
+  .sf-card { position:relative; border-color:var(--gb-border-subtle); background:var(--sf-grad-surface); box-shadow:0 12px 30px -24px rgba(0,0,0,.95), var(--sf-lit); }
   .sf-card::before { content:''; position:absolute; top:0; left:14px; right:14px; height:1px; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--gb-brand-label) 55%, transparent), color-mix(in srgb, var(--gb-success) 35%, transparent), transparent); opacity:.7; }
-  .sf-card:hover { border-color:color-mix(in srgb, var(--gb-brand-label) 20%, transparent); box-shadow:0 18px 40px -22px rgba(0,0,0,1), var(--sf-glow-brand), var(--sf-lit); }
   .sf-card-head { border-bottom-color:var(--gb-border-subtle); background:linear-gradient(180deg, rgba(255,255,255,.035), transparent); }
   .sf-card-title { font-weight:800; color:var(--gb-text-primary); }
   .sf-section-title { background:var(--sf-text-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
 
   /* Stat tiles */
-  .sf-stat { position:relative; overflow:hidden; border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease); }
-  .sf-stat::after { content:''; position:absolute; inset:auto -30% -70% -30%; height:120%; background:radial-gradient(50% 60% at 50% 100%, color-mix(in srgb, var(--gb-brand-label) 18%, transparent), transparent 70%); opacity:0; transition:opacity var(--sf-t-slow) var(--sf-ease); }
-  .sf-stat:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--gb-brand-label) 24%, transparent); box-shadow:var(--sf-glow-brand), var(--sf-lit); }
-  .sf-stat:hover::after { opacity:1; }
+  .sf-stat { position:relative; overflow:hidden; border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); }
   .sf-stat-label { color:var(--gb-text-tertiary); }
   .sf-stat-value { position:relative; background:var(--sf-text-grad-tri); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .sf-positive { color:var(--gb-success); }
@@ -528,9 +525,8 @@ const ARENA_CSS = `
   .sf-league-table tbody tr.mine:hover td { background:color-mix(in srgb, var(--gb-brand-label) 15%, transparent); }
   .sf-league-table tr.mine td { background:color-mix(in srgb, var(--gb-brand-label) 10%, transparent); }
   .sf-league-table tr.mine td:first-child { box-shadow:inset 3px 0 0 var(--gb-brand-label); }
-  .sf-rank-badge { border:0; color:var(--gb-text-tertiary); background:rgba(255,255,255,.06); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease); }
-  .sf-rank-badge.top { color:color-mix(in srgb, var(--gb-warning) 26%, #000); background:var(--sf-grad-hot); box-shadow:0 3px 12px -5px color-mix(in srgb, var(--gb-warning) 82%, transparent), inset 0 1px 0 rgba(255,255,255,.4); }
-  .sf-league-table tbody tr:hover .sf-rank-badge { transform:scale(1.08); }
+  .sf-rank-badge { border:1px solid var(--gb-border-default); color:var(--gb-text-tertiary); background:var(--gb-fill-subtle); box-shadow:var(--sf-lit); }
+  .sf-rank-badge.top { color:var(--gb-brand-label); border-color:var(--gb-brand-tint-border); background:var(--gb-brand-tint-soft); box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
   .sf-member-name { font-weight:800; }
   .sf-metric-primary { background:none; color:var(--gb-brand-label) !important; }
 
@@ -544,9 +540,8 @@ const ARENA_CSS = `
   .sf-metric-row { border-bottom-color:var(--gb-border-subtle); transition:background var(--sf-t) var(--sf-ease); }
   .sf-metric-row:hover { background:rgba(255,255,255,.03); }
   .sf-metric-points { color:var(--gb-brand-label); }
-  .sf-margin-chip { border-color:var(--gb-border-subtle); background:rgba(255,255,255,.035); transition:transform var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease); }
+  .sf-margin-chip { border-color:var(--gb-border-subtle); background:rgba(255,255,255,.035); }
   .sf-margin-chip.hit { color:var(--gb-text-secondary); border-color:var(--gb-border-default); background:rgba(255,255,255,.055); box-shadow:inset 2px 0 0 color-mix(in srgb, var(--gb-brand-label) 45%, transparent); }
-  .sf-margin-chip.hit:hover { transform:translateY(-1px); color:var(--gb-text-primary); }
 
   /* Member tabs */
   .sf-member-tab { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease); }
@@ -569,15 +564,13 @@ const ARENA_CSS = `
 
   /* Rules */
   .sf-rule-intro { color:var(--gb-text-secondary); background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 5%, transparent), transparent); }
-  .sf-role-rule-card { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease); }
-  .sf-role-rule-card:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--gb-brand-label) 22%, transparent); box-shadow:var(--sf-glow-brand), var(--sf-lit); }
+  .sf-role-rule-card { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); }
   .sf-role-rule-head { background:linear-gradient(180deg, rgba(255,255,255,.05), transparent); }
   .sf-role-rule-group { border-top-color:var(--gb-border-subtle); }
   .sf-role-rule-group-title { background:var(--sf-grad-spine); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .sf-role-rule-row + .sf-role-rule-row { border-top-color:var(--gb-border-subtle); }
   .sf-role-rule-value { color:var(--gb-brand-label); }
-  .sf-schedule-week { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease); }
-  .sf-schedule-week:hover { transform:translateY(-1px); border-color:color-mix(in srgb, var(--gb-brand-label) 20%, transparent); }
+  .sf-schedule-week { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); }
   .sf-schedule-week.live { border-color:transparent; background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--gb-success) 5%, transparent) 55%, transparent), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 45%, transparent), var(--sf-glow-brand); }
   .sf-schedule-game { border-color:var(--gb-border-subtle); background:rgba(255,255,255,.03); }
   .sf-schedule-bye { border-color:color-mix(in srgb, var(--gb-brand-label) 22%, transparent); background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 6%, transparent), transparent); }
@@ -589,8 +582,7 @@ const ARENA_CSS = `
   .sf-bracket-lane { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); }
   .sf-bracket-lane.winner { border-color:transparent; background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--gb-success) 4%, transparent) 30%, transparent 60%), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 35%, transparent), 0 14px 34px -22px color-mix(in srgb, var(--gb-brand-label) 50%, transparent), var(--sf-lit); }
   .sf-bracket-lane-title { background:var(--sf-text-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .sf-bracket-game { border-color:var(--gb-border-subtle); background:var(--sf-grad-surface); box-shadow:0 8px 20px -14px rgba(0,0,0,.95), var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease); }
-  .sf-bracket-game:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--gb-brand-label) 26%, transparent); box-shadow:var(--sf-glow-brand), var(--sf-lit); }
+  .sf-bracket-game { border-color:var(--gb-border-subtle); background:var(--sf-grad-surface); box-shadow:0 8px 20px -14px rgba(0,0,0,.95), var(--sf-lit); }
   .sf-bracket-game-label { border-bottom-color:var(--gb-border-subtle); background:linear-gradient(180deg, rgba(255,255,255,.05), transparent); color:var(--gb-text-tertiary); }
   .sf-bracket-slot + .sf-bracket-slot { border-top-color:var(--gb-border-subtle); }
   .sf-bracket-slot.mine { background:linear-gradient(90deg, color-mix(in srgb, var(--gb-brand-label) 18%, transparent), transparent 75%); box-shadow:inset 2px 0 0 var(--gb-brand-label); }
@@ -602,8 +594,8 @@ const ARENA_CSS = `
   .sf-matchup-tab-row strong { color:var(--gb-text-primary); }
 
   /* Bottom nav */
-  .sf-bottom-nav { border-top:0; background:linear-gradient(180deg, var(--gb-surface-2), var(--gb-surface-canvas)); box-shadow:0 -1px 0 rgba(0,0,0,.7), 0 -14px 30px -24px rgba(0,0,0,1); }
-  .sf-bottom-nav::before { content:''; position:absolute; top:0; left:0; right:0; height:1.5px; background:var(--sf-grad-spine); background-size:200% 100%; animation:sfShimmer 9s linear infinite; opacity:.7; }
+  .sf-bottom-nav { border-top:0; background:linear-gradient(180deg, var(--gb-surface-2), var(--gb-surface-canvas)); box-shadow:none; }
+  .sf-bottom-nav::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--gb-brand-label) 42%, var(--gb-border-default)) 18%, color-mix(in srgb, var(--gb-brand-label) 42%, var(--gb-border-default)) 82%, transparent); opacity:.72; }
   .sf-bottom-item { transition:color var(--sf-t) var(--sf-ease), transform var(--sf-t) var(--sf-ease); }
   .sf-bottom-item:hover:not(.active) { transform:translateY(-1px); }
   .sf-bottom-item .sf-bottom-item-icon { transition:transform var(--sf-t) var(--sf-ease), filter var(--sf-t) var(--sf-ease); }
@@ -844,11 +836,11 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
       <div className="sf-member-tabs" aria-label="Select individual performance">
         {pod.members.map((candidate) => {
           const active = candidate.id === member.id;
-          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <motion.span aria-hidden="true" className="sf-member-active" layoutId="sf-member-active" transition={PAGE_TRANSITION} />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidate.name)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
+          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <span aria-hidden="true" className="sf-member-active" />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidate.name)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
         })}
       </div>
       <AnimatePresence initial={false} mode="wait">
-        <motion.div className="sf-performance-detail" key={member.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={PAGE_TRANSITION}>
+        <motion.div className="sf-performance-detail" key={member.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={PERSON_TRANSITION}>
           <article className="sf-card sf-performance-card">
             <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
