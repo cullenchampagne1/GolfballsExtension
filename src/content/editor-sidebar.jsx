@@ -23,6 +23,7 @@ import { ownedTemplateShares } from '../lib/templateShareSync.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   canSubmitEmailTemplate,
+  emailTemplateCanOwnShare,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
   managedEmailTemplate,
@@ -250,6 +251,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
   const ownerShared = ownedShares.length > 0;
   const managed = !isNote ? managedEmailTemplate(tpl) : null;
   const managedEditable = managed?.editable === true;
+  const canOwnShare = !isNote && emailTemplateCanOwnShare(tpl);
   const trackingIssue = !isNote && !disabled
     ? emailTemplateTrackingIssue(tracker)
     : null;
@@ -455,7 +457,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
               ))}
               <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '4px 6px 2px' }} />
               </>}
-              {!isNote && !imported && !managed && !ownerShared && (
+              {canOwnShare && !ownerShared && (
                 <MenuItem onClick={() => {
                   setMenuOpen(false);
                   window.dispatchEvent(new CustomEvent('gb:share-email-template', { detail: tpl }));
@@ -999,7 +1001,7 @@ function TemplateSidebar() {
     const listener = (event) => {
       const template = event.detail || null;
       if (template && emailTemplateIsEditable(template, devSettings)
-          && !managedEmailTemplate(template) && ownedTemplateShares(template).length === 0) {
+          && emailTemplateCanOwnShare(template) && ownedTemplateShares(template).length === 0) {
         setShareTemplate(template);
       }
     };

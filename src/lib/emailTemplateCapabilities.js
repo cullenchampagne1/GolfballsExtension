@@ -82,6 +82,17 @@ export function isManagedEmailTemplate(template) {
   return !!managedEmailTemplate(template);
 }
 
+/** Only the installation that contributed a managed row may publish that
+ * source outside the managed bucket. Other parents may collaboratively edit
+ * the bucket row, but cannot create a second distribution authority for it;
+ * child mirrors and retained share imports are never share owners. A local
+ * template remains shareable while its first bucket enrollment is pending. */
+export function emailTemplateCanOwnShare(template) {
+  if (!template || template.shareImport) return false;
+  const managed = managedEmailTemplate(template);
+  return !managed || (managed.editable === true && managed.createdByCurrent === true);
+}
+
 export function emailTemplateIsEditable(template, devSettings = {}) {
   if (template?.shareImport) return false;
   const managed = managedEmailTemplate(template);

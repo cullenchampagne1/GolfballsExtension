@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   EMAIL_TEMPLATE_CAPABILITY_KEYS,
   canSubmitEmailTemplate,
+  emailTemplateCanOwnShare,
   emailTemplateIsBucketEnrolled,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
@@ -82,6 +83,22 @@ describe('managed email-template capabilities', () => {
       .map((row) => row.id), ['local', 'managed']);
     assert.equal(emailTemplateIsEditable(managed, settings), true);
     assert.equal(emailTemplateIsEditable(managed, {}), false);
+  });
+
+  it('lets only the contributing parent publish a managed template by link', () => {
+    const managed = (patch = {}) => ({
+      id: 'managed',
+      managedTemplate: {
+        kind: 'revstack-managed-email-template', bucketId: 'bucket',
+        editable: true, createdByCurrent: true, ...patch,
+      },
+    });
+
+    assert.equal(emailTemplateCanOwnShare({ id: 'local' }), true);
+    assert.equal(emailTemplateCanOwnShare(managed()), true);
+    assert.equal(emailTemplateCanOwnShare(managed({ createdByCurrent: false })), false);
+    assert.equal(emailTemplateCanOwnShare(managed({ editable: false })), false);
+    assert.equal(emailTemplateCanOwnShare({ id: 'imported', shareImport: {} }), false);
   });
 
   it('enrolls and detaches a local template without changing its document', () => {

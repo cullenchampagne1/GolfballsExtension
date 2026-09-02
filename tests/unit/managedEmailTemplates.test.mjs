@@ -29,7 +29,7 @@ const item = (patch = {}) => ({
   ...patch,
 });
 
-function syncHarness(initial = {}) {
+function syncHarness(initial = {}, apiHandler = null) {
   const stored = {
     templates: [],
     devSettings: { 'emailTemplates.allowLocalTemplateUsage': false },
@@ -57,7 +57,8 @@ function syncHarness(initial = {}) {
   });
   context.globalThis = context;
   context.GBInstallationAuth = {
-    apiJson() {
+    apiJson(...args) {
+      if (apiHandler) return apiHandler(...args);
       return new Promise((resolve) => requests.push(resolve));
     },
   };
@@ -98,6 +99,69 @@ describe('managed email-template bucket cache', () => {
     assert.equal(bucket.needsPublish(result, { templates: [item({ created_by_current: true })] }), false);
     result[0].subject = 'Pending local edit';
     assert.equal(bucket.needsPublish(result, { templates: [item({ created_by_current: true })] }), true);
+  });
+
+  it('preserves a contributing parent share without leaking its metadata into the bucket', () => {
+    const shareSync = {
+      kind: 'revstack-owned-email-template-shares',
+      owned: [{
+        shareId: 'S'.repeat(32), version: 3,
+        snapshot: item().template, syncedAt: '2026-09-01T12:00:00Z',
+      }],
+    };
+    const local = {
+      id: 'welcome', folderId: 'sales', ...item().template, shareSync,
+    };
+    const [managed] = bucket.reconcile([local], {
+      templates: [item({ created_by_current: true })],
+    }, { 'emailTemplates.allowParentAccount': true });
+
+    assert.deepEqual(managed.shareSync, shareSync);
+    const update = bucket.writes([managed], { templates: [] });
+    assert.equal(update.templates[0].template.shareSync, undefined);
+  });
+
+  it('fans a remote managed edit out through the contributor share link', async () => {
+    const shareId = 'S'.repeat(32);
+    const previousItem = item({ created_by_current: true });
+    const [previous] = bucket.reconcile([], { templates: [previousItem] }, {
+      'emailTemplates.allowParentAccount': true,
+    });
+    previous.shareSync = {
+      kind: 'revstack-owned-email-template-shares',
+      owned: [{ shareId, version: 1, snapshot: structuredClone(item().template) }],
+    };
+    const calls = [];
+    const h = syncHarness({
+      templates: [previous],
+      devSettings: { 'emailTemplates.allowParentAccount': true },
+    }, async (path, options = {}) => {
+      calls.push({ path, options });
+      if (path.endsWith('/email-template-bucket')) {
+        return {
+          revision: 'remote-edit', is_parent: true,
+          templates: [item({
+            created_by_current: true, version: 2, last_editor: 'Parent Two',
+            template: { ...item().template, subject: 'Updated by another parent' },
+          })],
+        };
+      }
+      return { id: shareId, version: 2, updated_at: '2026-09-02T12:00:00Z' };
+    });
+
+    await h.bucket.sync({ force: true });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].path.endsWith(`/email-template-shares/${shareId}`), true);
+    assert.equal(calls[1].options.method, 'PATCH');
+    assert.deepEqual(JSON.parse(calls[1].options.body).patch, {
+      subject: 'Updated by another parent',
+    });
+    assert.equal(h.stored.templates[0].shareSync.owned[0].version, 2);
+    assert.equal(
+      h.stored.templates[0].shareSync.owned[0].snapshot.subject,
+      'Updated by another parent',
+    );
   });
 
   it('publishes only explicitly enrolled local templates', () => {

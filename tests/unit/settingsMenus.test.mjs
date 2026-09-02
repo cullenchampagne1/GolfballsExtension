@@ -118,6 +118,8 @@ describe('settings menus', () => {
     assert.match(richTextEditorSource, /appliedExternalRevision\.current === externalRevision/);
     assert.match(sidebarSource, /__gbTrackTemplateShare\(template\.id, response\.share, template\)/);
     assert.match(sidebarSource, /ownedTemplateShares\(tpl\)/);
+    assert.match(sidebarSource, /emailTemplateCanOwnShare\(tpl\)/);
+    assert.match(sidebarSource, /emailTemplateCanOwnShare\(template\)/);
     assert.match(sidebarSource, /> Revoke share/);
     assert.match(sidebarSource, /!ownerShared[\s\S]*?> Share template/);
     assert.doesNotMatch(templateEditorSource, /ownerShared|Shared by you/);
