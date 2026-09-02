@@ -24,7 +24,6 @@ const MY_POD_ID = 'pod-1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
 const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
-const PERSON_TRANSITION = { duration: 0.15, ease: EASE };
 const NAV_TRANSITION = { type: 'spring', stiffness: 430, damping: 34, mass: 0.72 };
 
 const FantasyIcon = {
@@ -214,12 +213,16 @@ const CSS = `
   .sf-metric-label { min-width: 0; color: var(--gb-text-secondary); font-size: 10px; overflow-wrap: anywhere; }
   .sf-metric-value { color: var(--gb-text-muted); font-size: 9.5px; font-variant-numeric: tabular-nums; }
   .sf-metric-points { min-width: 43px; color: var(--gb-text-primary); font-size: 10px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
-  .sf-margin-summary { padding-top: var(--sf-2); display: flex; flex-wrap: wrap; gap: 4px; }
-  .sf-margin-chip { padding: 3px 5px; color: var(--gb-text-muted); border: 1px solid var(--gb-border-subtle); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); font-size: 8.5px; white-space: nowrap; }
-  .sf-margin-chip.hit { color: var(--gb-brand-label); border-color: var(--gb-brand-tint-border); background: var(--gb-brand-tint-soft); }
+  .sf-margin-summary { margin-top: var(--sf-2); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-fill-faint); }
+  .sf-margin-tier { min-width: 0; padding: 7px 8px; display: grid; gap: 2px; color: var(--gb-text-muted); }
+  .sf-margin-tier + .sf-margin-tier { border-left: 1px solid var(--gb-border-subtle); }
+  .sf-margin-tier.hit { color: var(--gb-text-secondary); background: var(--gb-brand-tint-soft); }
+  .sf-margin-tier-label { overflow: hidden; font-size: 7.5px; font-weight: 800; letter-spacing: .3px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+  .sf-margin-tier-count { color: var(--gb-text-tertiary); font-size: 8px; white-space: nowrap; }
+  .sf-margin-tier-count strong { color: var(--gb-text-primary); font-size: 9.5px; font-weight: 850; font-variant-numeric: tabular-nums; }
   .sf-member-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sf-2); }
-  .sf-member-tab { position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
-  .sf-member-tab:hover:not(.active) { border-color: var(--gb-border-strong); transform: translateY(-1px); }
+  .sf-member-tab { position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var(--sf-3) var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-lg); cursor: pointer; color: var(--gb-text-secondary); background: var(--gb-surface-1); text-align: left; transition: border-color .18s ease, background-color .18s ease; }
+  .sf-member-tab:hover:not(.active) { border-color: var(--gb-border-strong); }
   .sf-member-tab.active { color: var(--gb-brand-label); border-color: var(--gb-brand-label); box-shadow: 0 3px 10px var(--gb-brand-tint-soft); }
   .sf-member-active { position: absolute; z-index: 0; inset: 0; border-radius: inherit; background: var(--gb-brand-tint-soft); }
   .sf-member-tab > :not(.sf-member-active) { position: relative; z-index: 1; }
@@ -396,6 +399,11 @@ const CSS = `
     .sf-bottom-center { top: -24px; width: 76px; min-height: 63px; border-radius: 20px; }
     .sf-bottom-label { font-size: 8px; }
   }
+  @media (max-width: 440px) {
+    .sf-margin-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sf-margin-tier:nth-child(odd) { border-left: 0; }
+    .sf-margin-tier:nth-child(n + 3) { border-top: 1px solid var(--gb-border-subtle); }
+  }
   @media (prefers-reduced-motion: reduce) {
     .sf-app *, .sf-app *::before, .sf-app *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
   }
@@ -411,14 +419,13 @@ const CSS = `
    pulse) and collapses under prefers-reduced-motion. */
 const ARENA_CSS = `
   .sf-app {
-    --sf-lime: color-mix(in srgb, var(--gb-brand-label) 82%, #fff);
+    --sf-brand-light: color-mix(in srgb, var(--gb-brand-label) 82%, #fff);
     --sf-brand: var(--gb-brand-label);
-    --sf-deep: var(--gb-brand-border);
-    --sf-mint: var(--gb-success);
+    --sf-brand-deep: color-mix(in srgb, var(--gb-brand-label) 72%, #000);
     --sf-hot: var(--gb-warning);
     --sf-hot-deep: color-mix(in srgb, var(--gb-warning) 66%, #000);
-    --sf-grad-spine: linear-gradient(120deg, var(--sf-lime), var(--sf-brand) 42%, var(--sf-mint));
-    --sf-grad-brand: linear-gradient(165deg, color-mix(in srgb, var(--gb-brand-label) 76%, #fff), var(--gb-brand) 46%, var(--gb-brand-dark));
+    --sf-grad-spine: linear-gradient(120deg, var(--sf-brand-light), var(--sf-brand) 46%, var(--sf-brand-deep));
+    --sf-grad-brand: linear-gradient(165deg, var(--sf-brand-light), var(--sf-brand) 46%, var(--sf-brand-deep));
     --sf-grad-hot: linear-gradient(150deg, color-mix(in srgb, var(--gb-warning) 70%, #fff), var(--sf-hot) 50%, var(--sf-hot-deep));
     --sf-grad-surface: linear-gradient(178deg, var(--gb-surface-2), var(--gb-surface-1) 62%, var(--gb-surface-canvas));
     --sf-grad-raise: linear-gradient(178deg, color-mix(in srgb, var(--gb-surface-2) 86%, #fff), var(--gb-surface-2) 70%, var(--gb-surface-1));
@@ -426,10 +433,10 @@ const ARENA_CSS = `
     --sf-glow-brand: 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 18%, transparent), 0 10px 30px -14px color-mix(in srgb, var(--gb-brand-label) 55%, transparent);
     --sf-ease: cubic-bezier(.22,1,.36,1); --sf-t: .22s; --sf-t-slow: .42s;
     --sf-text-grad: linear-gradient(100deg, var(--gb-text-primary), color-mix(in srgb, var(--gb-text-primary) 60%, var(--gb-brand-label)));
-    --sf-text-grad-tri: linear-gradient(120deg, var(--gb-text-primary), color-mix(in srgb, var(--gb-text-primary) 58%, var(--gb-brand-label)) 58%, color-mix(in srgb, var(--gb-text-primary) 52%, var(--gb-success)));
+    --sf-text-grad-tri: linear-gradient(120deg, var(--gb-text-primary), color-mix(in srgb, var(--gb-text-primary) 58%, var(--sf-brand)) 58%, color-mix(in srgb, var(--gb-text-primary) 52%, var(--sf-brand-deep)));
     background:
       radial-gradient(120% 80% at 10% -10%, color-mix(in srgb, var(--gb-brand-label) 10%, transparent), transparent 60%),
-      radial-gradient(100% 70% at 95% 8%, color-mix(in srgb, var(--gb-success) 7%, transparent), transparent 62%),
+      radial-gradient(100% 70% at 95% 8%, color-mix(in srgb, var(--sf-brand-deep) 7%, transparent), transparent 62%),
       var(--gb-surface-canvas);
   }
 
@@ -452,8 +459,8 @@ const ARENA_CSS = `
   /* Live dot / pills */
   .sf-live-dot { position:relative; box-shadow:0 0 8px currentColor; }
   .sf-live-dot::after { content:''; position:absolute; inset:0; border-radius:50%; background:currentColor; animation:sfPulse 2.2s var(--sf-ease) infinite; }
-  .sf-live-pill { color:color-mix(in srgb, var(--gb-warning) 24%, #000); border:0; background:var(--sf-grad-hot); box-shadow:0 3px 12px -5px color-mix(in srgb, var(--gb-warning) 72%, transparent), var(--sf-lit); }
-  .sf-live-pill .sf-live-dot { color:color-mix(in srgb, var(--gb-warning) 32%, #000); }
+  .sf-live-pill { color:var(--gb-brand-label); border:1px solid color-mix(in srgb, var(--gb-brand-label) 34%, transparent); background:linear-gradient(178deg, color-mix(in srgb, var(--gb-brand-label) 15%, transparent), color-mix(in srgb, var(--gb-brand-label) 5%, transparent)); box-shadow:var(--sf-lit); }
+  .sf-live-pill .sf-live-dot { color:var(--gb-brand-label); }
   .sf-event-pill { color:var(--gb-text-on-brand); border:0; background:var(--sf-grad-spine); box-shadow:0 3px 10px -5px color-mix(in srgb, var(--gb-brand-label) 68%, transparent); }
 
   /* Page head */
@@ -469,7 +476,7 @@ const ARENA_CSS = `
 
   /* Cards */
   .sf-card { position:relative; border-color:var(--gb-border-subtle); background:var(--sf-grad-surface); box-shadow:0 12px 30px -24px rgba(0,0,0,.95), var(--sf-lit); }
-  .sf-card::before { content:''; position:absolute; top:0; left:14px; right:14px; height:1px; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--gb-brand-label) 55%, transparent), color-mix(in srgb, var(--gb-success) 35%, transparent), transparent); opacity:.7; }
+  .sf-card::before { content:''; position:absolute; top:0; left:14px; right:14px; height:1px; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--gb-brand-label) 55%, transparent), color-mix(in srgb, var(--sf-brand-deep) 35%, transparent), transparent); opacity:.7; }
   .sf-card-head { border-bottom-color:var(--gb-border-subtle); background:linear-gradient(180deg, rgba(255,255,255,.035), transparent); }
   .sf-card-title { font-weight:800; color:var(--gb-text-primary); }
   .sf-section-title { background:var(--sf-text-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
@@ -497,13 +504,13 @@ const ARENA_CSS = `
   /* Compact matchups / tabs */
   .sf-compact-matchup { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease), background var(--sf-t) var(--sf-ease); }
   .sf-compact-matchup:hover { transform:translateY(-2px); border-color:color-mix(in srgb, var(--gb-brand-label) 28%, transparent); background:var(--sf-grad-raise); box-shadow:var(--sf-glow-brand), var(--sf-lit); }
-  .sf-compact-matchup.selected { border-color:transparent; background:linear-gradient(178deg, color-mix(in srgb, var(--gb-brand-label) 18%, transparent), color-mix(in srgb, var(--gb-success) 6%, transparent) 70%, transparent), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 55%, transparent), var(--sf-glow-brand); }
+  .sf-compact-matchup.selected { border-color:transparent; background:linear-gradient(178deg, color-mix(in srgb, var(--gb-brand-label) 18%, transparent), color-mix(in srgb, var(--sf-brand-deep) 6%, transparent) 70%, transparent), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 55%, transparent), var(--sf-glow-brand); }
   .sf-compact-score { background:var(--sf-text-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .sf-matchup-switcher { border-color:var(--gb-border-subtle); background:linear-gradient(178deg, rgba(255,255,255,.035), transparent); box-shadow:var(--sf-lit); }
   .sf-matchup-tab { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease), color var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease); }
   .sf-matchup-tab:hover:not(.selected) { transform:translateY(-2px); border-color:color-mix(in srgb, var(--gb-brand-label) 26%, transparent); }
   .sf-matchup-tab.selected { border-color:transparent; box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 55%, transparent), var(--sf-glow-brand); }
-  .sf-matchup-tab-active { background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 22%, transparent), color-mix(in srgb, var(--gb-success) 7%, transparent) 65%, transparent); }
+  .sf-matchup-tab-active { background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 22%, transparent), color-mix(in srgb, var(--sf-brand-deep) 7%, transparent) 65%, transparent); }
   .sf-matchup-switcher-track { padding:5px 2px 7px; margin-top:-4px; }
   .sf-match-status.live { color:var(--gb-warning); }
 
@@ -537,29 +544,31 @@ const ARENA_CSS = `
   .sf-category-head { border-bottom-color:color-mix(in srgb, var(--gb-brand-label) 18%, transparent); }
   .sf-category-name { color:var(--gb-text-secondary); }
   .sf-category-points { background:var(--sf-grad-spine); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .sf-metric-row { border-bottom-color:var(--gb-border-subtle); transition:background var(--sf-t) var(--sf-ease); }
-  .sf-metric-row:hover { background:rgba(255,255,255,.03); }
+  .sf-metric-row { border-bottom-color:var(--gb-border-subtle); }
   .sf-metric-points { color:var(--gb-brand-label); }
-  .sf-margin-chip { border-color:var(--gb-border-subtle); background:rgba(255,255,255,.035); }
-  .sf-margin-chip.hit { color:var(--gb-text-secondary); border-color:var(--gb-border-default); background:rgba(255,255,255,.055); box-shadow:inset 2px 0 0 color-mix(in srgb, var(--gb-brand-label) 45%, transparent); }
+  .sf-margin-summary { border-color:var(--gb-border-subtle); background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)); box-shadow:var(--sf-lit); }
+  .sf-margin-tier + .sf-margin-tier { border-left-color:var(--gb-border-subtle); }
+  .sf-margin-tier.hit { background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 13%, transparent), color-mix(in srgb, var(--gb-brand-label) 4%, transparent)); box-shadow:inset 0 2px 0 color-mix(in srgb, var(--gb-brand-label) 72%, transparent); }
+  .sf-margin-tier.hit .sf-margin-tier-label { color:var(--gb-brand-label); }
 
   /* Member tabs */
-  .sf-member-tab { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:transform var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease); }
-  .sf-member-tab:hover:not(.active) { transform:translateY(-2px); border-color:color-mix(in srgb, var(--gb-brand-label) 26%, transparent); box-shadow:var(--sf-glow-brand), var(--sf-lit); }
+  .sf-member-tab { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); transition:border-color var(--sf-t) var(--sf-ease), background-color var(--sf-t) var(--sf-ease); }
+  .sf-member-tab:hover:not(.active) { border-color:color-mix(in srgb, var(--gb-brand-label) 26%, transparent); background:color-mix(in srgb, var(--gb-surface-2) 94%, var(--gb-brand-label)); }
   .sf-member-tab.active { border-color:transparent; box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 60%, transparent), var(--sf-glow-brand); }
-  .sf-member-active { background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 24%, transparent), color-mix(in srgb, var(--gb-success) 8%, transparent) 62%, transparent); }
+  .sf-member-active { background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 24%, transparent), color-mix(in srgb, var(--sf-brand-deep) 8%, transparent) 62%, transparent); }
   .sf-member-tab-name { color:var(--gb-text-primary); }
 
   /* Performance hero + trend */
-  .sf-performance-hero { position:relative; overflow:hidden; border-bottom-color:var(--gb-border-subtle); background:radial-gradient(120% 180% at 0% 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--gb-success) 5%, transparent) 45%, transparent 72%), linear-gradient(180deg, rgba(255,255,255,.03), transparent); }
+  .sf-performance-hero { position:relative; overflow:hidden; border-bottom-color:var(--gb-border-subtle); background:radial-gradient(120% 180% at 0% 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--sf-brand-deep) 5%, transparent) 45%, transparent 72%), linear-gradient(180deg, rgba(255,255,255,.03), transparent); }
   .sf-performance-name { background:var(--sf-text-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .sf-performance-score-value { background:var(--sf-grad-spine); -webkit-background-clip:text; background-clip:text; color:transparent; filter:drop-shadow(0 4px 14px color-mix(in srgb, var(--gb-brand-label) 35%, transparent)); }
   .sf-week-trend { background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--gb-brand-label) 4%, transparent)); }
   .sf-week-bar-button { transition:color var(--sf-t) var(--sf-ease); }
   .sf-week-bar-track { max-width:24px; border-radius:6px 6px 3px 3px; background:rgba(255,255,255,.05); box-shadow:inset 0 1px 0 rgba(255,255,255,.05); }
-  .sf-week-bar-fill { background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 32%, var(--gb-surface-2)), var(--gb-surface-2)); border-radius:5px 5px 2px 2px; transition:background var(--sf-t-slow) var(--sf-ease), box-shadow var(--sf-t-slow) var(--sf-ease); }
-  .sf-week-bar-button:hover .sf-week-bar-fill { background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 70%, #fff), var(--gb-brand)); }
-  .sf-week-bar-button.active .sf-week-bar-fill { background:linear-gradient(180deg, var(--sf-lime), var(--sf-brand) 45%, var(--sf-deep)); box-shadow:0 0 16px color-mix(in srgb, var(--gb-brand-label) 55%, transparent), inset 0 1px 0 rgba(255,255,255,.35); }
+  .sf-week-bar-fill { background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 28%, var(--gb-surface-2)), var(--gb-surface-2)); border-radius:5px 5px 2px 2px; }
+  .sf-week-bar-button:hover:not(.active) { color:var(--gb-text-secondary); }
+  .sf-week-bar-button:hover:not(.active) .sf-week-bar-track { box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 24%, transparent), inset 0 1px 0 rgba(255,255,255,.06); }
+  .sf-week-bar-button.active .sf-week-bar-fill { background:var(--sf-grad-spine); box-shadow:0 0 16px color-mix(in srgb, var(--gb-brand-label) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.28); }
   .sf-week-bar-value { font-weight:800; }
 
   /* Rules */
@@ -571,16 +580,16 @@ const ARENA_CSS = `
   .sf-role-rule-row + .sf-role-rule-row { border-top-color:var(--gb-border-subtle); }
   .sf-role-rule-value { color:var(--gb-brand-label); }
   .sf-schedule-week { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); }
-  .sf-schedule-week.live { border-color:transparent; background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--gb-success) 5%, transparent) 55%, transparent), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 45%, transparent), var(--sf-glow-brand); }
+  .sf-schedule-week.live { border-color:transparent; background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--sf-brand-deep) 5%, transparent) 55%, transparent), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 45%, transparent), var(--sf-glow-brand); }
   .sf-schedule-game { border-color:var(--gb-border-subtle); background:rgba(255,255,255,.03); }
   .sf-schedule-bye { border-color:color-mix(in srgb, var(--gb-brand-label) 22%, transparent); background:linear-gradient(150deg, color-mix(in srgb, var(--gb-brand-label) 6%, transparent), transparent); }
-  .sf-status-pill.scheduled { color:color-mix(in srgb, var(--gb-success) 28%, #000); border-color:transparent; background:linear-gradient(150deg, color-mix(in srgb, var(--gb-success) 72%, #fff), var(--gb-success)); box-shadow:0 3px 10px -5px color-mix(in srgb, var(--gb-success) 80%, transparent); }
+  .sf-status-pill.scheduled { color:var(--gb-brand-label); border-color:color-mix(in srgb, var(--gb-brand-label) 28%, transparent); background:color-mix(in srgb, var(--gb-brand-label) 10%, transparent); box-shadow:var(--sf-lit); }
   .sf-status-pill.final { color:var(--gb-text-tertiary); border-color:var(--gb-border-default); background:rgba(255,255,255,.05); }
 
   /* Bracket */
   .sf-bracket-viewport { background:radial-gradient(90% 60% at 50% 0%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent), transparent 65%); }
   .sf-bracket-lane { border-color:var(--gb-border-subtle); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); }
-  .sf-bracket-lane.winner { border-color:transparent; background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--gb-success) 4%, transparent) 30%, transparent 60%), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 35%, transparent), 0 14px 34px -22px color-mix(in srgb, var(--gb-brand-label) 50%, transparent), var(--sf-lit); }
+  .sf-bracket-lane.winner { border-color:transparent; background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 16%, transparent), color-mix(in srgb, var(--sf-brand-deep) 4%, transparent) 30%, transparent 60%), var(--sf-grad-raise); box-shadow:0 0 0 1.5px color-mix(in srgb, var(--gb-brand-label) 35%, transparent), 0 14px 34px -22px color-mix(in srgb, var(--gb-brand-label) 50%, transparent), var(--sf-lit); }
   .sf-bracket-lane-title { background:var(--sf-text-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .sf-bracket-game { border-color:var(--gb-border-subtle); background:var(--sf-grad-surface); box-shadow:0 8px 20px -14px rgba(0,0,0,.95), var(--sf-lit); }
   .sf-bracket-game-label { border-bottom-color:var(--gb-border-subtle); background:linear-gradient(180deg, rgba(255,255,255,.05), transparent); color:var(--gb-text-tertiary); }
@@ -607,22 +616,22 @@ const ARENA_CSS = `
   .sf-bottom-label { transition:letter-spacing var(--sf-t) var(--sf-ease); }
   .sf-bottom-item.active .sf-bottom-label { letter-spacing:.5px; color:color-mix(in srgb, var(--gb-text-primary) 78%, var(--gb-brand-label)); }
   .sf-bottom-center { position:absolute; border:1px solid var(--gb-border-default); color:var(--gb-text-secondary); background:linear-gradient(178deg, var(--gb-surface-2), var(--gb-surface-1) 62%, var(--gb-surface-canvas)); box-shadow:0 16px 30px -18px rgba(0,0,0,1), 0 2px 0 rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.09); transition:transform var(--sf-t) var(--sf-ease), color var(--sf-t) var(--sf-ease), border-color var(--sf-t) var(--sf-ease), box-shadow var(--sf-t) var(--sf-ease); }
-  .sf-bottom-center::before { content:''; position:absolute; inset:0; border-radius:inherit; padding:1px; background:linear-gradient(160deg, color-mix(in srgb, var(--gb-brand-label) 55%, transparent), color-mix(in srgb, var(--gb-success) 22%, transparent) 45%, transparent 70%); -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; pointer-events:none; opacity:.9; }
+  .sf-bottom-center::before { content:''; position:absolute; inset:0; border-radius:inherit; padding:1px; background:linear-gradient(160deg, color-mix(in srgb, var(--gb-brand-label) 55%, transparent), color-mix(in srgb, var(--sf-brand-deep) 22%, transparent) 45%, transparent 70%); -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; pointer-events:none; opacity:.9; }
   .sf-bottom-center::after { content:''; position:absolute; left:50%; top:-42%; width:112%; height:88%; transform:translateX(-50%); border-radius:50%; background:radial-gradient(50% 50% at 50% 50%, color-mix(in srgb, var(--gb-brand-label) 30%, transparent), transparent 70%); opacity:0; transition:opacity var(--sf-t-slow) var(--sf-ease); pointer-events:none; }
   .sf-bottom-center:hover { transform:translateY(-3px); filter:none; color:var(--gb-text-primary); border-color:color-mix(in srgb, var(--gb-brand-label) 35%, transparent); box-shadow:0 22px 36px -18px rgba(0,0,0,1), 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.12); }
   .sf-bottom-center:hover::after { opacity:1; }
-  .sf-bottom-center.active { color:var(--gb-text-on-brand); border-color:transparent; background:linear-gradient(178deg, var(--sf-lime), var(--gb-brand-label) 48%, var(--gb-brand-dark)); box-shadow:0 18px 34px -16px color-mix(in srgb, var(--gb-brand-label) 60%, transparent), 0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.45); }
+  .sf-bottom-center.active { color:var(--gb-text-on-brand); border-color:transparent; background:var(--sf-grad-brand); box-shadow:0 18px 34px -16px color-mix(in srgb, var(--gb-brand-label) 60%, transparent), 0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.45); }
   .sf-bottom-center.active::before { opacity:0; }
   .sf-bottom-center.active::after { opacity:0; }
   .sf-bottom-center-selected { inset:-4px; border:1.5px solid color-mix(in srgb, var(--gb-brand-label) 75%, transparent); border-radius:24px; box-shadow:0 0 0 3px color-mix(in srgb, var(--gb-brand-label) 12%, transparent); }
-  .sf-bottom-center-selected::after { top:3px; right:6px; width:6px; height:6px; border:1.5px solid var(--gb-text-on-brand); background:var(--sf-lime); }
+  .sf-bottom-center-selected::after { top:3px; right:6px; width:6px; height:6px; border:1.5px solid var(--gb-text-on-brand); background:var(--sf-brand-light); }
   .sf-bottom-center-week { letter-spacing:-.2px; }
   .sf-bottom-center-rank { opacity:.7; }
   .sf-bottom-center.active .sf-bottom-center-rank { opacity:.75; }
 
   /* Focus + scrollbar + view entrance */
   .sf-bottom-item:focus-visible, .sf-bottom-center:focus-visible, .sf-icon-button:focus-visible, .sf-compact-matchup:focus-visible, .sf-link-button:focus-visible, .sf-member-tab:focus-visible, .sf-week-bar-button:focus-visible, .sf-matchup-tab:focus-visible { outline:none; box-shadow:0 0 0 2px color-mix(in srgb, var(--gb-brand-label) 85%, transparent), 0 0 0 5px color-mix(in srgb, var(--gb-brand-label) 18%, transparent); }
-  .sf-content::-webkit-scrollbar-thumb { background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 60%, transparent), color-mix(in srgb, var(--gb-success) 35%, transparent)); border:2px solid transparent; background-clip:padding-box; }
+  .sf-content::-webkit-scrollbar-thumb { background:linear-gradient(180deg, color-mix(in srgb, var(--gb-brand-label) 60%, transparent), color-mix(in srgb, var(--sf-brand-deep) 35%, transparent)); border:2px solid transparent; background-clip:padding-box; }
   .sf-link-button { transition:background var(--sf-t) var(--sf-ease), color var(--sf-t) var(--sf-ease); }
   .sf-link-button:hover { color:var(--gb-brand-label); background:color-mix(in srgb, var(--gb-brand-label) 14%, transparent); }
   .sf-view-motion .sf-stack > * { animation:sfRise .34s var(--sf-ease) both; }
@@ -630,6 +639,7 @@ const ARENA_CSS = `
   .sf-view-motion .sf-stack > *:nth-child(3) { animation-delay:.08s; }
   .sf-view-motion .sf-stack > *:nth-child(4) { animation-delay:.12s; }
   .sf-view-motion .sf-stack > *:nth-child(n+5) { animation-delay:.16s; }
+  .sf-view-motion .sf-performance-stack > * { animation:none; }
 
   @media (prefers-reduced-motion: reduce) {
     .sf-app *, .sf-app *::before, .sf-app *::after { animation:none !important; transition-duration:.01ms !important; }
@@ -832,15 +842,14 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
   const previous = week > 1 ? weekScores[week - 2] : null;
   const change = previous === null ? null : Number((points.total - previous).toFixed(1));
   return (
-    <div className="sf-stack">
+    <div className="sf-stack sf-performance-stack">
       <div className="sf-member-tabs" aria-label="Select individual performance">
         {pod.members.map((candidate) => {
           const active = candidate.id === member.id;
           return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <span aria-hidden="true" className="sf-member-active" />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidate.name)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
         })}
       </div>
-      <AnimatePresence initial={false} mode="wait">
-        <motion.div className="sf-performance-detail" key={member.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={PERSON_TRANSITION}>
+      <div className="sf-performance-detail">
           <article className="sf-card sf-performance-card">
             <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
@@ -861,8 +870,7 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
               {weekScores.map((score, index) => <button type="button" className={`sf-week-bar-button ${week === index + 1 ? 'active' : ''}`} aria-label={`Week ${index + 1}: ${score.toFixed(1)} points`} aria-pressed={week === index + 1} key={index + 1} onClick={() => onSelectWeek(index + 1)}><span className="sf-week-bar-value">{score.toFixed(0)}</span><span className="sf-week-bar-track"><span className="sf-week-bar-fill" style={{ height: `${Math.max(5, score / maximum * 100)}%` }} /></span><span className="sf-week-bar-label">W{index + 1}</span></button>)}
             </div>
           </article>
-        </motion.div>
-      </AnimatePresence>
+      </div>
       <div className="sf-data-note">Every displayed point reconciles to the raw metric rows above.</div>
     </div>
   );
@@ -1087,8 +1095,9 @@ function MetricCategory({ name, score }) {
       {score.marginTiers && (
         <div className="sf-margin-summary" aria-label="Proposals and completed orders by margin tier">
           {score.marginTiers.map((tier) => (
-            <span className={`sf-margin-chip ${tier.proposals || tier.orders ? 'hit' : ''}`} key={tier.id}>
-              {tier.label}: {tier.proposals}P / {tier.orders}O
+            <span className={`sf-margin-tier ${tier.proposals || tier.orders ? 'hit' : ''}`} key={tier.id}>
+              <span className="sf-margin-tier-label">{tier.label}</span>
+              <span className="sf-margin-tier-count"><strong>{tier.proposals}</strong> P&nbsp;&nbsp;·&nbsp;&nbsp;<strong>{tier.orders}</strong> O</span>
             </span>
           ))}
         </div>
@@ -1149,7 +1158,9 @@ function SalesFantasyApp() {
     setWeek(SALES_FANTASY_CURRENT_WEEK);
     setView('pods');
   };
-  const contentKey = showWeekControl ? `${view}-${week}` : view;
+  const animateWeekChange = showWeekControl && view !== 'performance';
+  const contentKey = animateWeekChange ? `${view}-${week}` : view;
+  const pageHeadKey = animateWeekChange ? `head-${page.id}-${week}` : `head-${page.id}`;
 
   return (
     <><style>{CSS}</style><style>{ARENA_CSS}</style><div className="sf-app" data-gb-ui-root>
@@ -1169,7 +1180,7 @@ function SalesFantasyApp() {
       <main className="sf-main">
         <div className="sf-content">
           <AnimatePresence initial={false} mode="wait">
-            <motion.div className="sf-mobile-page-head" key={`head-${page.id}-${week}`} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={PAGE_TRANSITION}>
+            <motion.div className="sf-mobile-page-head" key={pageHeadKey} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={PAGE_TRANSITION}>
               <div><div className="sf-page-title-row"><h1 className="sf-page-title">{page.label}</h1><span className="sf-event-pill">EVENT</span></div><div className="sf-page-subtitle">{pageSubtitle(view, week)}</div></div>
               {view === 'matchups' && <span className={`sf-status-pill sf-live-pill ${weekState(week)}`}><span className="sf-live-dot" />{statusLabel(weekState(week))}</span>}
             </motion.div>

@@ -24,16 +24,36 @@ import {
 } from '../../src/lib/salesFantasy.js';
 
 const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales-fantasy.jsx', import.meta.url), 'utf8');
+const arenaCss = salesFantasySource.match(/const ARENA_CSS = `([\s\S]*?)`;/)?.[1] || '';
 
 describe('salesFantasy · league model', () => {
-  it('keeps passive arena surfaces stable and member changes understated', () => {
+  it('keeps passive arena surfaces and performance changes visually stable', () => {
     assert.doesNotMatch(salesFantasySource, /\.sf-card:hover/);
     assert.doesNotMatch(salesFantasySource, /\.sf-stat:hover/);
     assert.doesNotMatch(salesFantasySource, /\.sf-role-rule-card:hover/);
     assert.doesNotMatch(salesFantasySource, /layoutId="sf-member-active"/);
+    assert.doesNotMatch(salesFantasySource, /PERSON_TRANSITION/);
+    assert.doesNotMatch(salesFantasySource, /motion\.div className="sf-performance-detail"/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-member-tab:hover:not\(\.active\)\s*\{[^}]*transform/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-metric-row:hover/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-week-bar-button:hover \.sf-week-bar-fill/);
+    assert.match(salesFantasySource, /view !== 'performance'/);
+    assert.match(salesFantasySource, /\.sf-view-motion \.sf-performance-stack > \* \{ animation:none; \}/);
     assert.match(salesFantasySource, /\.sf-bottom-nav \{ border-top:0;[^}]*box-shadow:none/);
     assert.match(salesFantasySource, /\.sf-rank-badge\.top \{ color:var\(--gb-brand-label\);[^}]*background:var\(--gb-brand-tint-soft\)/);
-    assert.match(salesFantasySource, /className="sf-performance-detail"[^>]*initial=\{\{ opacity: 0 \}\}[^>]*transition=\{PERSON_TRANSITION\}/);
+  });
+
+  it('uses theme-derived gradients, readable status pills, and structured margin tiers', () => {
+    const decorativeArenaCss = arenaCss.replace(/\.sf-positive \{[^}]+\}/, '');
+    assert.match(arenaCss, /--sf-brand-deep: color-mix\(in srgb, var\(--gb-brand-label\) 72%, #000\)/);
+    assert.match(arenaCss, /--sf-grad-spine: linear-gradient\([^;]*var\(--sf-brand-deep\)\)/);
+    assert.match(arenaCss, /--sf-text-grad-tri: linear-gradient\([^;]*var\(--sf-brand-deep\)\)/);
+    assert.doesNotMatch(decorativeArenaCss, /var\(--gb-success\)/);
+    assert.match(arenaCss, /\.sf-live-pill \{ color:var\(--gb-brand-label\);[^}]*border:1px solid/);
+    assert.match(arenaCss, /\.sf-status-pill\.scheduled \{ color:var\(--gb-brand-label\);[^}]*background:color-mix\(in srgb, var\(--gb-brand-label\)/);
+    assert.match(salesFantasySource, /\.sf-margin-summary \{ margin-top:[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+    assert.match(salesFantasySource, /className=\{`sf-margin-tier \$\{tier\.proposals \|\| tier\.orders \? 'hit' : ''\}`\}/);
+    assert.doesNotMatch(salesFantasySource, /sf-margin-chip/);
   });
 
   it('formats member names as compact first-and-last initials for avatars', () => {
