@@ -191,8 +191,8 @@ describe('cached Page Engine variable resolution', () => {
           firstName: 'Ada',
           lastName: 'Lovelace',
           email: 'ada@example.test',
-          emails: [{ date: '2026-07-21T12:00:00Z' }],
         },
+        emails: [{ date: '2026-07-21T12:00:00Z' }],
         stats: { totalRevenue: 1250 },
       },
     };

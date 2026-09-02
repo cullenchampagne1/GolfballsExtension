@@ -446,16 +446,29 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
     if (!v.nextTaskName) v.nextTaskName = '';
     if (!v.nextTaskDue)  v.nextTaskDue  = '';
 
-    const emailRows = doc.querySelectorAll('tr[data-gb-ep="1"]');
-    if (emailRows.length > 0) {
-      const cells = emailRows[0].querySelectorAll('td');
-      v.lastEmailFrom    = cells[1]?.textContent.trim() || '';
-      v.lastEmailTo      = cells[2]?.textContent.trim() || '';
-      v.lastEmailSubject = cells[3]?.textContent.trim() || '';
-      v.lastEmailDate    = cells[4]?.textContent.trim() || '';
-    } else {
-      v.lastEmailFrom = v.lastEmailTo = v.lastEmailSubject = v.lastEmailDate = '';
-    }
+    /* CRM inserted Attachment(s) ahead of Date. Resolve the native row first,
+       then use its visible headings instead of treating cell 4 as permanent. */
+    const markedRow = doc.querySelector('tr[data-gb-ep="1"]');
+    const nativeRow = [...doc.querySelectorAll('tr')].find((row) => (
+      row.querySelector('a[href*="Page=268" i][href*="MessageID=" i]')
+    ));
+    const emailRow = markedRow || nativeRow;
+    const emailCells = Array.from(emailRow?.querySelectorAll('td') || []);
+    const headings = [...(emailRow?.closest('table')?.querySelectorAll('tr') || [])]
+      .map((row) => [...row.children].map((cell) => cell.textContent.trim().toLowerCase().replace(/[^a-z0-9]/g, '')))
+      .find((cells) => cells.includes('from') && cells.includes('to')
+        && cells.includes('subject') && cells.includes('date'));
+    const cellText = (heading, fallbackIndex) => {
+      const headingIndex = headings?.indexOf(heading) ?? -1;
+      return emailCells[headingIndex >= 0 ? headingIndex : fallbackIndex]?.textContent.trim() || '';
+    };
+    const dateIndex = headings?.indexOf('date') ?? emailCells.findIndex((cell, index) => (
+      index >= 4 && /^\d{1,2}\/\d{1,2}\/\d{4}/.test(cell.textContent.trim())
+    ));
+    v.lastEmailFrom = cellText('from', 1);
+    v.lastEmailTo = cellText('to', 2);
+    v.lastEmailSubject = cellText('subject', 3);
+    v.lastEmailDate = dateIndex >= 0 ? emailCells[dateIndex]?.textContent.trim() || '' : '';
 
     const now = new Date();
     v.today       = (now.getMonth()+1) + '/' + now.getDate() + '/' + now.getFullYear();
@@ -494,7 +507,8 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
       const dir = r.cells[3]?.textContent.trim();
       return dir === 'Out' || dir === 'Sent';
     });
-    raw.lastEmailDate_dt = emailRow ? emailRow.cells[5]?.textContent.trim() : null;
+    raw.lastEmailDate_dt = pageVars.lastEmailDate
+      || (emailRow ? emailRow.cells[5]?.textContent.trim() : null);
 
     const parseNum  = v => v != null ? parseFloat(String(v).replace(/[$,]/g, '')) : null;
     const parseDate = v => v ? new Date(v) : null;

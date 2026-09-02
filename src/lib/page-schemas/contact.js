@@ -813,8 +813,10 @@ const FIELDS = {
   emails: {
     type: 'array',
     label: 'Email history',
-    /* Row layout: [0:icon] [1:from] [2:to] [3:subject] [4:date]
-       [5:size] [6:download-link]. Found by each row's native
+    /* Fields are mapped from the table's semantic headings rather than fixed
+       cell indexes, so CRM can insert columns such as Attachment(s) without
+       shifting Date/Size into the wrong Page Engine values. Rows are found by
+       each row's native
        Page=268/MessageID view link (present in raw fetched HTML), NOT
        the data-gb-ep="1" marker — that is injected at runtime by the
        email-preview content script and is absent when EmailRunner
@@ -824,26 +826,26 @@ const FIELDS = {
     itemFields: {
       from: {
         type: 'string', label: 'From',
-        extract: { cell: 1, attr: 'innerText' },
+        extract: { rowFn: 'emailHistoryField', args: ['from'] },
         transform: 'trim',
       },
       to: {
         type: 'string', label: 'To',
-        extract: { cell: 2, attr: 'innerText' },
+        extract: { rowFn: 'emailHistoryField', args: ['to'] },
         transform: 'trim',
       },
       subject: {
         type: 'string', label: 'Subject',
-        extract: { cell: 3, attr: 'innerText' },
+        extract: { rowFn: 'emailHistoryField', args: ['subject'] },
         transform: 'trim',
       },
       date: {
         type: 'date', label: 'Sent date',
-        extract: { cell: 4, attr: 'innerText' },
+        extract: { rowFn: 'emailHistoryField', args: ['date'] },
       },
       sizeBytes: {
         type: 'number', label: 'Size (bytes)',
-        extract: { cell: 5, attr: 'innerText' },
+        extract: { rowFn: 'emailHistoryField', args: ['sizeBytes'] },
       },
     },
   },

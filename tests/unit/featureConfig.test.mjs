@@ -190,7 +190,8 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.doesNotMatch(salesFantasySource, /className="sf-avatar">\{(?:candidate|member)\.name\}/);
     assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
     assert.match(salesFantasySource, /setView\('pods'\)/);
-    assert.match(salesFantasySource, /key=\{`head-\$\{page\.id\}-\$\{week\}`\}/);
+    assert.match(salesFantasySource, /const pageHeadKey = animateWeekChange \? `head-\$\{page\.id\}-\$\{week\}` : `head-\$\{page\.id\}`/);
+    assert.match(salesFantasySource, /key=\{pageHeadKey\}/);
     assert.match(salesFantasySource, /className="sf-page-subtitle">\{pageSubtitle\(view, week\)\}/);
     assert.doesNotMatch(salesFantasySource, /sf-view-head|sf-view-heading|sf-view-copy/);
     assert.doesNotMatch(salesFantasySource, /sf-sidebar|<aside|sf-nav-button|sf-topbar/);
@@ -234,9 +235,9 @@ describe('developer settings · Sales Fantasy event', () => {
 
     assert.match(performanceSource, /memberWeekPointSplit/);
     assert.match(performanceSource, /Select individual performance/);
-    assert.match(performanceSource, /layoutId="sf-member-active"/);
-    assert.match(performanceSource, /className="sf-performance-detail" key=\{member\.id\}/);
-    assert.match(performanceSource, /initial=\{\{ opacity: 0, y: 8 \}\}/);
+    assert.doesNotMatch(performanceSource, /layoutId="sf-member-active"/);
+    assert.match(performanceSource, /className="sf-performance-detail sf-detail-transition" key=\{`\$\{member\.id\}-\$\{week\}`\}/);
+    assert.match(performanceSource, /initial=\{DETAIL_INITIAL\} animate=\{DETAIL_ANIMATE\} exit=\{DETAIL_EXIT\} transition=\{DETAIL_TRANSITION\}/);
     assert.match(performanceSource, /Weekly performance/);
     assert.match(performanceSource, /sf-week-bar-button/);
     assert.match(salesFantasySource, /grid-template-columns: repeat\(10, minmax\(0, 1fr\)\)/);

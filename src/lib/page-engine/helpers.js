@@ -234,13 +234,73 @@ export function contactOrderRows(doc) {
  *  EmailRunner fetches a contact page in the background — which silently
  *  broke the "skip if emailed within N days" guard (it saw no history, so
  *  every contact looked never-emailed). The native link is in the raw HTML
- *  and covers the same rows, so this works live AND fetched. Cells match
- *  the email-preview reader: [1:from][2:to][3:subject][4:date][5:size]. */
+ *  and covers the same rows, so this works live AND fetched. Field extraction
+ *  is heading-aware below because CRM can insert columns into this table. */
 export function contactEmailRows(doc) {
   if (!doc || typeof doc.querySelectorAll !== 'function') return [];
   return Array.from(doc.querySelectorAll('tr'))
     .filter((tr) => tr.querySelector('a[href*="Page=268" i][href*="MessageID=" i]'))
     .slice(0, 100);
+}
+
+/* Cache the semantic column map once per Email History table. CRM has added
+ * columns to this grid before (most recently Attachment(s), immediately ahead
+ * of Date), so positional cell indexes are not a stable contract. */
+const EMAIL_HISTORY_COLUMNS = new WeakMap();
+const EMAIL_HISTORY_HEADINGS = {
+  from: ['from'],
+  to: ['to'],
+  subject: ['subject'],
+  date: ['date', 'sentdate'],
+  sizeBytes: ['size', 'sizebytes'],
+};
+
+function emailHistoryColumns(rowEl) {
+  const table = rowEl?.closest?.('table');
+  if (!table) return null;
+  if (EMAIL_HISTORY_COLUMNS.has(table)) return EMAIL_HISTORY_COLUMNS.get(table);
+
+  let columns = null;
+  for (const tr of table.querySelectorAll('tr')) {
+    const cells = Array.from(tr.children || []);
+    const headings = cells.map((cell) => readText(cell)?.toLowerCase().replace(/[^a-z0-9]/g, '') || '');
+    if (!headings.includes('from') || !headings.includes('to')
+        || !headings.includes('subject') || !headings.includes('date')) continue;
+    columns = {};
+    for (const [field, aliases] of Object.entries(EMAIL_HISTORY_HEADINGS)) {
+      columns[field] = headings.findIndex((heading) => aliases.includes(heading));
+    }
+    break;
+  }
+  EMAIL_HISTORY_COLUMNS.set(table, columns);
+  return columns;
+}
+
+/** Read a logical field from one native Email History row. Prefer the table's
+ *  visible headings, which makes inserted/reordered columns harmless. The
+ *  date-shaped fallback preserves older raw fixtures/pages without headings. */
+export function emailHistoryField(rowEl, field) {
+  if (!rowEl || !EMAIL_HISTORY_HEADINGS[field]) return null;
+  const cells = Array.from(rowEl.children || []);
+  const columns = emailHistoryColumns(rowEl);
+  let index = columns?.[field];
+
+  if (!Number.isInteger(index) || index < 0) {
+    if (field === 'from') index = 1;
+    else if (field === 'to') index = 2;
+    else if (field === 'subject') index = 3;
+    else {
+      const dateIndex = cells.findIndex((cell, cellIndex) => (
+        cellIndex >= 4
+        && /^\d{1,2}\/\d{1,2}\/\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?$/i.test(readText(cell) || '')
+      ));
+      index = field === 'date'
+        ? (dateIndex >= 0 ? dateIndex : 4)
+        : (dateIndex >= 0 ? dateIndex + 1 : 5);
+    }
+  }
+
+  return index < cells.length ? readText(cells[index]) : null;
 }
 
 /** Logo-proof table rows (#Table2 on contact/account pages). Keyed off each
@@ -803,6 +863,7 @@ export const FN_REGISTRY = {
   readHrefParam,
   contactOrderRows,
   contactEmailRows,
+  emailHistoryField,
   contactItemRows,
   contactProofRows,
   proofLogoUrl,

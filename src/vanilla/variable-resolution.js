@@ -700,7 +700,9 @@
       const first = value('contact.firstName', '') || '';
       const last = value('contact.lastName', '') || '';
       let lastEmailMs = 0;
-      const emails = value('contact.emails', []);
+      /* Canonical Page Engine snapshots store Email History at the root. The
+         nested fallback keeps already-saved legacy snapshots sendable. */
+      const emails = value('emails', value('contact.emails', []));
       if (Array.isArray(emails)) {
         for (const email of emails) {
           const stamp = email?.date instanceof Date

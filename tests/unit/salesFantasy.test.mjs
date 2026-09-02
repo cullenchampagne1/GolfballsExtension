@@ -48,6 +48,9 @@ describe('salesFantasy · league model', () => {
     assert.match(salesFantasySource, /\.sf-view-motion \.sf-performance-stack > \* \{ animation:none; \}/);
     assert.match(salesFantasySource, /\.sf-bottom-nav \{ border-top:0;[^}]*box-shadow:none/);
     assert.match(salesFantasySource, /\.sf-rank-badge\.top \{ color:var\(--gb-brand-label\);[^}]*background:var\(--gb-brand-tint-soft\)/);
+    assert.equal((salesFantasySource.match(/\.sf-icon-button:hover:not\(:disabled\) \{ color:\s*var\(--gb-text-tertiary\); background:\s*var\(--gb-fill-soft\); \}/g) || []).length, 2);
+    assert.doesNotMatch(salesFantasySource, /\.sf-icon-button:hover:not\(:disabled\) \{[^}]*var\(--sf-grad-brand\)/);
+    assert.doesNotMatch(salesFantasySource, /\.sf-icon-button:hover:not\(:disabled\) \{[^}]*transform/);
   });
 
   it('uses theme-derived gradients, readable status pills, and structured margin tiers', () => {

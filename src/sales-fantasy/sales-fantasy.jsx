@@ -97,8 +97,8 @@ const CSS = `
   .sf-event-pill { padding: 4px 7px; color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); border: 1px solid var(--gb-brand-tint-border); font-size: 9px; letter-spacing: .6px; }
   .sf-week-wrap { flex: 0 0 auto; }
   .sf-week-control { min-height: 30px; display: flex; align-items: stretch; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-sm); background: var(--gb-fill-faint); overflow: hidden; }
-  .sf-icon-button { width: 29px; min-height: 28px; padding: 0; display: grid; place-items: center; border: 0; cursor: pointer; color: var(--gb-text-tertiary); background: transparent; transition: color .16s ease, background-color .16s ease; }
-  .sf-icon-button:hover:not(:disabled) { color: var(--gb-text-primary); background: var(--gb-fill-soft); }
+  .sf-icon-button { width: 29px; min-height: 28px; padding: 0; display: grid; place-items: center; border: 0; cursor: pointer; color: var(--gb-text-tertiary); background: transparent; transition: background-color .16s ease; }
+  .sf-icon-button:hover:not(:disabled) { color: var(--gb-text-tertiary); background: var(--gb-fill-soft); }
   .sf-icon-button:disabled { cursor: default; color: var(--gb-text-ghost); }
   .sf-week-label { position: relative; width: 56px; min-height: 28px; overflow: hidden; color: var(--gb-text-primary); border-inline: 1px solid var(--gb-border-default); font-size: 9.5px; font-weight: 750; text-align: center; }
   .sf-week-label-inner { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--sf-1) var(--sf-2); }
@@ -475,8 +475,8 @@ const ARENA_CSS = `
 
   /* Week stepper */
   .sf-week-control { border-color:color-mix(in srgb, var(--gb-brand-label) 22%, transparent); background:var(--sf-grad-raise); box-shadow:var(--sf-lit); border-radius:var(--gb-r-md); }
-  .sf-icon-button { transition:color var(--sf-t) var(--sf-ease), background var(--sf-t) var(--sf-ease), transform var(--sf-t) var(--sf-ease); }
-  .sf-icon-button:hover:not(:disabled) { color:var(--gb-text-on-brand); background:var(--sf-grad-brand); transform:translateY(-1px); }
+  .sf-icon-button { transition:background-color var(--sf-t) var(--sf-ease); }
+  .sf-icon-button:hover:not(:disabled) { color:var(--gb-text-tertiary); background:var(--gb-fill-soft); }
   .sf-week-label { border-inline-color:rgba(255,255,255,.07); color:var(--gb-brand-label); font-size:9.5px; line-height:1.2; white-space:nowrap; }
   .sf-week-label-inner { white-space:nowrap; }
 

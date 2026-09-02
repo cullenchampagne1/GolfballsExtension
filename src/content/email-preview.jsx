@@ -11,6 +11,7 @@ import { bareEmail, replyRecipient, replySenderAccount, replySubject, sendThread
 import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
 import { filterLocalEmailTemplates } from '../lib/emailTemplateCapabilities.js';
 import { reportFeatureUsage } from '../lib/usageEvents.js';
+import { emailHistoryField } from '../lib/page-engine/helpers.js';
 
 /* ───────────────────────────────────────────────────────────────
    email-preview.jsx — content-script entry for the React Email
@@ -403,12 +404,11 @@ if (!window.__gbEmailPreviewLoaded) {
     row.__gbEpAttached = true;
     row.setAttribute('data-gb-ep', '1');
 
-    const cells = row.querySelectorAll('td');
     const meta = {
-      from:    cells[1]?.textContent?.trim() || '',
-      to:      cells[2]?.textContent?.trim() || '',
-      subject: cells[3]?.textContent?.trim() || '',
-      date:    cells[4]?.textContent?.trim() || '',
+      from: emailHistoryField(row, 'from') || '',
+      to: emailHistoryField(row, 'to') || '',
+      subject: emailHistoryField(row, 'subject') || '',
+      date: emailHistoryField(row, 'date') || '',
     };
     const target = {
       messageId: decodeURIComponent(messageId),
