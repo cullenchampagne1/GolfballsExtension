@@ -27,16 +27,23 @@ const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales
 const arenaCss = salesFantasySource.match(/const ARENA_CSS = `([\s\S]*?)`;/)?.[1] || '';
 
 describe('salesFantasy · league model', () => {
-  it('keeps passive arena surfaces and performance changes visually stable', () => {
+  it('keeps passive surfaces stable and uses one anchored detail transition', () => {
     assert.doesNotMatch(salesFantasySource, /\.sf-card:hover/);
     assert.doesNotMatch(salesFantasySource, /\.sf-stat:hover/);
     assert.doesNotMatch(salesFantasySource, /\.sf-role-rule-card:hover/);
     assert.doesNotMatch(salesFantasySource, /layoutId="sf-member-active"/);
     assert.doesNotMatch(salesFantasySource, /PERSON_TRANSITION/);
-    assert.doesNotMatch(salesFantasySource, /motion\.div className="sf-performance-detail"/);
     assert.doesNotMatch(salesFantasySource, /\.sf-member-tab:hover:not\(\.active\)\s*\{[^}]*transform/);
     assert.doesNotMatch(salesFantasySource, /\.sf-metric-row:hover/);
     assert.doesNotMatch(salesFantasySource, /\.sf-week-bar-button:hover \.sf-week-bar-fill/);
+    assert.match(salesFantasySource, /const DETAIL_TRANSITION = \{ duration: 0\.18, ease: EASE \}/);
+    assert.match(salesFantasySource, /const DETAIL_INITIAL = \{ opacity: 0, scale: 0\.996 \}/);
+    assert.match(salesFantasySource, /const DETAIL_EXIT = \{ opacity: 0, scale: 1\.002 \}/);
+    assert.equal((salesFantasySource.match(/<div className="sf-detail-stage">\s*<AnimatePresence initial=\{false\} mode="popLayout">/g) || []).length, 2);
+    assert.equal((salesFantasySource.match(/transition=\{DETAIL_TRANSITION\}/g) || []).length, 2);
+    assert.match(salesFantasySource, /className="sf-performance-detail sf-detail-transition" key=\{`\$\{member\.id\}-\$\{week\}`\}/);
+    assert.match(salesFantasySource, /className="sf-detail-transition" key=\{selectedGame\?\.id \|\| `bye-\$\{week\}`\}/);
+    assert.doesNotMatch(salesFantasySource, /key=\{selectedGame\?\.id[^>]*y:/);
     assert.match(salesFantasySource, /view !== 'performance'/);
     assert.match(salesFantasySource, /\.sf-view-motion \.sf-performance-stack > \* \{ animation:none; \}/);
     assert.match(salesFantasySource, /\.sf-bottom-nav \{ border-top:0;[^}]*box-shadow:none/);

@@ -24,6 +24,10 @@ const MY_POD_ID = 'pod-1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
 const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
+const DETAIL_TRANSITION = { duration: 0.18, ease: EASE };
+const DETAIL_INITIAL = { opacity: 0, scale: 0.996 };
+const DETAIL_ANIMATE = { opacity: 1, scale: 1 };
+const DETAIL_EXIT = { opacity: 0, scale: 1.002 };
 const NAV_TRANSITION = { type: 'spring', stiffness: 430, damping: 34, mass: 0.72 };
 
 const FantasyIcon = {
@@ -229,6 +233,8 @@ const CSS = `
   .sf-member-tab-copy { min-width: 0; }
   .sf-member-tab-name { display: block; color: var(--gb-text-primary); font-size: 11px; font-weight: 800; }
   .sf-member-tab-role { display: block; margin-top: 2px; overflow: hidden; color: var(--gb-text-muted); font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-detail-stage { position: relative; min-width: 0; }
+  .sf-detail-transition { min-width: 0; transform-origin: 50% 12%; }
   .sf-performance-detail { min-width: 0; display: grid; gap: var(--sf-4); }
   .sf-performance-card .sf-stat-grid { padding: var(--sf-4); }
   .sf-performance-hero { padding: var(--sf-4); display: flex; align-items: center; gap: var(--sf-3); border-bottom: 1px solid var(--gb-border-default); background: var(--gb-fill-faint); }
@@ -849,7 +855,9 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
           return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <span aria-hidden="true" className="sf-member-active" />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidate.name)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
         })}
       </div>
-      <div className="sf-performance-detail">
+      <div className="sf-detail-stage">
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.div className="sf-performance-detail sf-detail-transition" key={`${member.id}-${week}`} initial={DETAIL_INITIAL} animate={DETAIL_ANIMATE} exit={DETAIL_EXIT} transition={DETAIL_TRANSITION}>
           <article className="sf-card sf-performance-card">
             <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
@@ -870,6 +878,8 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
               {weekScores.map((score, index) => <button type="button" className={`sf-week-bar-button ${week === index + 1 ? 'active' : ''}`} aria-label={`Week ${index + 1}: ${score.toFixed(1)} points`} aria-pressed={week === index + 1} key={index + 1} onClick={() => onSelectWeek(index + 1)}><span className="sf-week-bar-value">{score.toFixed(0)}</span><span className="sf-week-bar-track"><span className="sf-week-bar-fill" style={{ height: `${Math.max(5, score / maximum * 100)}%` }} /></span><span className="sf-week-bar-label">W{index + 1}</span></button>)}
             </div>
           </article>
+          </motion.div>
+        </AnimatePresence>
       </div>
       <div className="sf-data-note">Every displayed point reconciles to the raw metric rows above.</div>
     </div>
@@ -1009,11 +1019,13 @@ function Matchups({ week, standings, selectedGameId, onSelectGame }) {
           {weekData.games.map((game, index) => <MatchupTab game={game} week={week} index={index} key={game.id} selected={game.id === selectedGame.id} onSelect={() => onSelectGame(game.id)} />)}
         </div>
       </section>
-      <AnimatePresence initial={false} mode="wait">
-        <motion.div key={selectedGame?.id || `bye-${week}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={PAGE_TRANSITION}>
-          <MatchupBreakdown game={selectedGame} week={week} standings={standings} />
-        </motion.div>
-      </AnimatePresence>
+      <div className="sf-detail-stage">
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.div className="sf-detail-transition" key={selectedGame?.id || `bye-${week}`} initial={DETAIL_INITIAL} animate={DETAIL_ANIMATE} exit={DETAIL_EXIT} transition={DETAIL_TRANSITION}>
+            <MatchupBreakdown game={selectedGame} week={week} standings={standings} />
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
