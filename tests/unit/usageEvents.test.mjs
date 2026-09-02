@@ -3,6 +3,7 @@ import { afterEach, describe, it } from 'node:test';
 
 import {
   emailUsageDimensions,
+  reportContactImportUsage,
   reportFeatureUsage,
 } from '../../src/lib/usageEvents.js';
 
@@ -54,6 +55,28 @@ describe('feature utilization event boundary', () => {
         ok: true,
       },
     }]);
+  });
+
+  it('reports contact import runs separately from accepted record volume', () => {
+    const messages = [];
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) { messages.push(message); callback?.(); },
+      },
+    };
+
+    assert.equal(reportContactImportUsage(2_000, { flush: 'soon' }), true);
+    assert.deepEqual(
+      messages.map(({ event }) => ({ feature: event.feature, count: event.count })),
+      [
+        { feature: 'contact_import', count: 2_000 },
+        { feature: 'contact_import_run', count: 1 },
+      ],
+    );
+    assert.ok(messages.every(({ flush, event }) => (
+      flush === 'soon' && event.source === 'crm_search'
+    )));
   });
 
   it('silences live guide demos so they cannot inflate adoption', () => {

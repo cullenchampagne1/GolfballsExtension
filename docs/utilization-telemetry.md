@@ -12,7 +12,8 @@ The dashboard now displays only stored telemetry. There is no generated example-
 | --- | --- | --- | --- | --- |
 | Email deliveries | Power Automate confirms a send, or the extension successfully opens an Outlook `mailto` compose window | One delivered or handed-off message | Entry point: Popup, Task List, CRM Search, Email Preview, Contact, or Other. Transport: Power Automate or Outlook handoff | Coalesced and sent in the periodic batch |
 | Email previews | A user opens the email-preview surface | One preview open | Email Preview | Coalesced and sent in the periodic batch |
-| Contacts imported | A spreadsheet is parsed and accepted records are loaded into CRM Search | Number of accepted records, not number of files | CRM Search | Flush requested about 1.5 seconds after success |
+| Contacts imported | A spreadsheet is parsed and accepted records are loaded into CRM Search | Number of accepted records; retained for Utilization Details | CRM Search | Flush requested about 1.5 seconds after success |
+| Contact import runs | The same successful import completes | One completed import, regardless of spreadsheet size; used by Core tools | CRM Search | Flush requested about 1.5 seconds after success |
 | Proofs submitted | A real, non-mock submission returns at least one successful proof link | Number of successful proof requests | Submit Proof | Flush requested about 1.5 seconds after success |
 | Catalog opens | The Gifting Catalog mounts | One catalog open | Gifting Catalog | Coalesced and sent in the periodic batch |
 | Catalog searches | A trimmed catalog search of at least two characters remains unchanged for 1.2 seconds; slash category commands are excluded | One settled search | Gifting Catalog | Coalesced and sent in the periodic batch |
@@ -106,10 +107,17 @@ The Tool Utilization chart offers 30-day, 90-day, and 1-year ranges and these sw
 | Email words | Total body words by email entry point |
 | Email attachments | Messages containing a file, by email entry point |
 | Email inline images | Messages containing an inline image, by email entry point |
-| Core tools | Email previews, contacts imported, proofs submitted, and catalog opens |
+| Core tools | Email previews, contact import runs, proofs submitted, and catalog opens |
 | Catalog workflow | Opens, searches, products added, proposals saved, proposals published, proposal-email builder opens, and checkout opens |
 
-The Utilization Details table aggregates the same successful data by feature, source, and transport, with totals for uses, words, messages with files, and messages with inline images. Both blocks refresh every two minutes. Chart series colors are derived by the dashboard from its active primary theme color.
+The Core tools chart uses the dedicated contact-import run counter rather than
+charting the number of rows in the spreadsheet. The accepted-record total
+remains available in Utilization Details, so a 2,000-row import contributes one
+point beside previews, proofs, and catalog opens while its volume is still
+visible. Telemetry created before the dedicated counter is estimated from its
+successful coalesced import samples, with exact counters taking precedence on
+mixed rollout days. Both blocks refresh every two minutes. Chart series colors
+are derived by the dashboard from its active primary theme color.
 
 ## Privacy boundary
 

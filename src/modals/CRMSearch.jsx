@@ -17,7 +17,7 @@ import {
 } from '../lib/crmIndex.js';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { parseContactFile, contactIdsFromRow } from '../lib/contactImport.js';
-import { reportFeatureUsage } from '../lib/usageEvents.js';
+import { reportContactImportUsage } from '../lib/usageEvents.js';
 import {
   attachCachedPageEngineSnapshots, pageEngineIdentity,
 } from '../lib/page-engine/cache-actions.js';
@@ -526,10 +526,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp, initial }
       setLastIdx(null);
       setSelected(new Set(records.map((row) => row.id)));
       if (records.length) {
-        reportFeatureUsage('contact_import', {
-          source: 'crm_search',
-          count: records.length,
-        }, { flush: 'soon' });
+        reportContactImportUsage(records.length, { flush: 'soon' });
       }
       const skipped = parsed.errors.length + parsed.warnings.length;
       toast?.success?.(

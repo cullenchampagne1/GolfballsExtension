@@ -137,6 +137,30 @@ describe('usage telemetry', () => {
     assert.equal('subject' in popup, false, 'free-text fields are stripped before the wire');
   });
 
+  it('coalesces import runs independently from imported record volume', async () => {
+    const sent = [];
+    const { reporter } = loadTelemetry({ fetchImpl: recordingFetch(sent) });
+
+    for (const recordCount of [2_000, 3_000]) {
+      reporter.record({
+        kind: 'feature', feature: 'contact_import', source: 'crm_search',
+        count: recordCount,
+      });
+      reporter.record({
+        kind: 'feature', feature: 'contact_import_run', source: 'crm_search',
+        count: 1,
+      });
+    }
+
+    assert.equal(reporter.pending(), 2, 'records and runs occupy separate buckets');
+    await reporter.flush();
+    await settle();
+
+    const featureRows = sent[0].events.filter((event) => event.kind === 'feature');
+    assert.equal(featureRows.find((event) => event.feature === 'contact_import')?.count, 5_000);
+    assert.equal(featureRows.find((event) => event.feature === 'contact_import_run')?.count, 2);
+  });
+
   it('retains a pending aggregate across service-worker eviction', async () => {
     const sent = [];
     const first = loadTelemetry({ fetchImpl: recordingFetch(sent) });

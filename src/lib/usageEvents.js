@@ -12,6 +12,7 @@ export const USAGE_FEATURES = Object.freeze([
   'email_send',
   'email_preview',
   'contact_import',
+  'contact_import_run',
   'proof_submit',
   'gift_catalog_open',
   'gift_catalog_search',
@@ -66,6 +67,22 @@ export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
     inline_image_count: nonNegativeInt(dimensions.inline_image_count),
     ok: dimensions.ok !== false,
   }, options);
+}
+
+/**
+ * Record both sides of a successful contact import without mixing their units.
+ * The record-volume event feeds Utilization Details; the run event keeps the
+ * Core tools comparison on the same action scale as previews and submissions.
+ */
+export function reportContactImportUsage(acceptedCount, options = {}) {
+  const recordsReported = reportFeatureUsage('contact_import', {
+    source: 'crm_search',
+    count: acceptedCount,
+  }, options);
+  const runReported = reportFeatureUsage('contact_import_run', {
+    source: 'crm_search',
+  }, options);
+  return recordsReported && runReported;
 }
 
 /**

@@ -28,7 +28,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
         names = {
             "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
             "_USAGE_TRANSPORT_LABELS", "_USAGE_COLORS",
-            "_usage_days", "_utilization_series",
+            "_usage_days", "_utilization_series", "_core_tool_rows",
             "_console_usage_utilization",
             "_console_usage_utilization_table",
         }
@@ -54,6 +54,13 @@ class UsageTelemetryContractTests(unittest.TestCase):
         })
         self.assertEqual(event.count, 4)
         self.assertEqual(event.word_count, 381)
+
+    def test_accepts_a_coalesced_contact_import_run_counter(self):
+        event = self.UsageEvent.model_validate({
+            "kind": "feature", "feature": "contact_import_run",
+            "source": "crm_search", "count": 2,
+        })
+        self.assertEqual(event.count, 2)
 
     def test_rejects_content_and_unregistered_dimensions(self):
         for patch in (
@@ -125,6 +132,63 @@ class UsageTelemetryContractTests(unittest.TestCase):
             len({column["key"] for column in table["columns"]}),
             len(table["columns"]),
         )
+
+    def test_core_tools_counts_import_runs_instead_of_imported_records(self):
+        day = datetime.utcnow().date().isoformat()
+        self.routes["_usage_feature_rows"] = lambda _days: [
+            {
+                "day": day, "feature": "contact_import", "source": "crm_search",
+                "transport": "none", "events": 1, "uses": 2_000,
+                "words": 0, "attachments": 0, "inline_images": 0,
+            },
+            {
+                "day": day, "feature": "contact_import_run", "source": "crm_search",
+                "transport": "none", "events": 1, "uses": 1,
+                "words": 0, "attachments": 0, "inline_images": 0,
+            },
+            {
+                "day": day, "feature": "proof_submit", "source": "submit_proof",
+                "transport": "none", "events": 1, "uses": 4,
+                "words": 0, "attachments": 0, "inline_images": 0,
+            },
+        ]
+
+        payload = self.routes["_console_usage_utilization"](30)
+        core = next(view for view in payload["views"] if view["id"] == "core_tools")
+        series = {item["id"]: item for item in core["series"]}
+
+        self.assertEqual(series["contact_import_run"]["label"], "Import runs")
+        self.assertEqual(series["contact_import_run"]["values"][-1], 1)
+        self.assertEqual(series["contact_import_run"]["total"], 1)
+        self.assertEqual(series["proof_submit"]["values"][-1], 4)
+        self.assertEqual(core["total"], 5)
+
+        details = self.routes["_console_usage_utilization_table"](30)
+        imported = next(row for row in details["rows"] if row["id"].startswith("contact_import:"))
+        self.assertEqual(imported["uses"]["text"], "2,000")
+        self.assertFalse(any(row["id"].startswith("contact_import_run:") for row in details["rows"]))
+
+    def test_core_tools_uses_legacy_import_samples_only_without_exact_runs(self):
+        day = datetime.utcnow().date().isoformat()
+        legacy = {
+            "day": day, "feature": "contact_import", "source": "crm_search",
+            "transport": "none", "events": 2, "uses": 5_000,
+            "words": 0, "attachments": 0, "inline_images": 0,
+        }
+        self.routes["_usage_feature_rows"] = lambda _days: [legacy]
+        core = next(
+            view for view in self.routes["_console_usage_utilization"](30)["views"]
+            if view["id"] == "core_tools"
+        )
+        self.assertEqual(core["series"][0]["values"][-1], 2)
+
+        exact = {**legacy, "feature": "contact_import_run", "events": 1, "uses": 3}
+        self.routes["_usage_feature_rows"] = lambda _days: [legacy, exact]
+        core = next(
+            view for view in self.routes["_console_usage_utilization"](30)["views"]
+            if view["id"] == "core_tools"
+        )
+        self.assertEqual(core["series"][0]["values"][-1], 3)
 
     def test_catalog_usage_is_the_default_when_email_data_is_missing(self):
         day = datetime.utcnow().date().isoformat()
