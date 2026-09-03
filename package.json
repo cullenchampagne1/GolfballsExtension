@@ -250,6 +250,10 @@
       "file": "tests/unit/emailRunControl.test.mjs"
     },
     {
+      "name": "email \u00b7 bulk send matched-only rule gate",
+      "file": "tests/unit/emailRunnerMatch.test.mjs"
+    },
+    {
       "name": "email \u00b7 template editor clipboard (vars + bullets)",
       "file": "tests/unit/rteClipboard.test.mjs"
     },

@@ -553,37 +553,6 @@ function __gbAccessAllowed(st, now) {
         const accountId = smartAccountId();
         const engine    = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
 
-        // Sync value resolver for grouped conditions (schema path / legacy
-        // DOM selector). Match rules must NOT use variables: code/template
-        // variables are expensive (they fetch past orders, hit the catalog)
-        // and resolving them for every template on page load is exactly
-        // what we're avoiding. A `var` condition therefore resolves to ''
-        // here — it's inert in matching. Variables resolve ONLY when a
-        // template is clicked, via the streaming resolver.
-        const getMatchValue = (cond) => {
-          if (!cond) return '';
-          if (cond.source === 'schema') {
-            if (!engine) return '';
-            const quant = engine.arrayQuantifier && engine.arrayQuantifier(cond.ref);
-            if (quant) {
-              const mm = cond.ref.match(/^(.*?)\[(?:any|none)\](.*)$/);
-              if (!mm) return [];
-              const arr = engine.resolvePath(document, mm[1], []);
-              if (!Array.isArray(arr)) return [];
-              const suffix = (mm[2] || '').replace(/^\./, '');
-              return arr.map((item) => (suffix ? engine.resolve(item, suffix, '') : item));
-            }
-            return engine.resolvePath(document, cond.ref, '');
-          }
-          if (cond.source === 'dom') {
-            try {
-              const el = document.querySelector(cond.ref);
-              return el ? ((typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '').trim()) : '';
-            } catch { return ''; }
-          }
-          return '';
-        };
-
         const matched = [];
         // Per-template group/condition breakdown for grouped trees, keyed
         // by template id — lets the email creation preview show WHICH
@@ -591,23 +560,9 @@ function __gbAccessAllowed(st, now) {
         // not just the flattened pass/fail the popup needs.
         const matchDetails = {};
         for (const t of (msg.templates || [])) {
-          const tree = t.type === 'account' ? t.accountConditions : t.rules;
-          if (engine && engine.isGroupedTree(tree)) {
-            // Evaluated synchronously, NO variable resolution. Any `var`
-            // condition reads '' (see getMatchValue) so it can't gate a
-            // match — matching never runs the code chain on page load.
-            let ok = false;
-            try {
-              const detail = await engine.evalTreeDetailed(tree, getMatchValue);
-              matchDetails[t.id] = detail;
-              ok = detail.result;
-            } catch { ok = false; }
-            if (ok) matched.push(t.id);
-          } else if (t.type === 'account') {
-            if (checkRules(t.rules) && checkAccountConditions(t.accountConditions)) matched.push(t.id);
-          } else if (checkRules(t.rules)) {
-            matched.push(t.id);
-          }
+          const { matched: ok, detail } = await gbEvalTemplateMatch(t, document, engine);
+          if (detail) matchDetails[t.id] = detail;
+          if (ok) matched.push(t.id);
         }
 
         // Only resolve order number on actual order pages to avoid false
@@ -817,6 +772,68 @@ function __gbAccessAllowed(st, now) {
     return `<head>${tag}</head>${html}`;
   }
 
+  /* Shared value resolver for grouped match-rule conditions (schema path /
+     legacy DOM selector), parameterized by `doc` so the SAME logic drives
+     matching against the live tab (getPageInfo, doc = document) and against
+     an offscreen-parsed document (EmailRunner's bulk-send loop, via
+     __gbResolveMatchForHtml below — a fetched contact page, not the tab
+     this script is injected into).
+
+     Match rules must NOT use variables: code/template variables are
+     expensive (they fetch past orders, hit the catalog) and resolving them
+     for every template on page load — or every row in a bulk send — is
+     exactly what we're avoiding. A `var` condition therefore resolves to ''
+     here — it's inert in matching. Variables resolve ONLY when a template
+     is clicked (or a bulk send actually renders a row), via the streaming
+     resolver. */
+  function gbBuildMatchValueGetter(doc, engine) {
+    return (cond) => {
+      if (!cond) return '';
+      if (cond.source === 'schema') {
+        if (!engine) return '';
+        const quant = engine.arrayQuantifier && engine.arrayQuantifier(cond.ref);
+        if (quant) {
+          const mm = cond.ref.match(/^(.*?)\[(?:any|none)\](.*)$/);
+          if (!mm) return [];
+          const arr = engine.resolvePath(doc, mm[1], []);
+          if (!Array.isArray(arr)) return [];
+          const suffix = (mm[2] || '').replace(/^\./, '');
+          return arr.map((item) => (suffix ? engine.resolve(item, suffix, '') : item));
+        }
+        return engine.resolvePath(doc, cond.ref, '');
+      }
+      if (cond.source === 'dom') {
+        try {
+          const el = doc.querySelector(cond.ref);
+          return el ? ((doc === document && typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '').trim()) : '';
+        } catch { return ''; }
+      }
+      return '';
+    };
+  }
+
+  /* Evaluate one template's match rules (grouped tree OR legacy flat
+     rules/accountConditions) against `doc`. Shared by getPageInfo (loops
+     every template against the live tab) and __gbResolveMatchForHtml
+     (checks one template against a bulk-send row's fetched page) so the
+     "which rule format, which fields" branching lives in exactly one
+     place. */
+  async function gbEvalTemplateMatch(t, doc, engine) {
+    const tree = t && t.type === 'account' ? t.accountConditions : t?.rules;
+    if (engine && engine.isGroupedTree(tree)) {
+      // Evaluated synchronously, NO variable resolution — see
+      // gbBuildMatchValueGetter above.
+      try {
+        const detail = await engine.evalTreeDetailed(tree, gbBuildMatchValueGetter(doc, engine));
+        return { matched: !!detail.result, detail };
+      } catch { return { matched: false, detail: null }; }
+    }
+    if (t && t.type === 'account') {
+      return { matched: !!(checkRules(t.rules, doc) && checkAccountConditions(t.accountConditions, doc)), detail: null };
+    }
+    return { matched: !!checkRules(t?.rules, doc), detail: null };
+  }
+
   window.__gbResolveVarsForHtml = (html, vars, toField, baseUrl) => {
     try {
       const doc = new DOMParser().parseFromString(gbWithBase(html || '', baseUrl), 'text/html');
@@ -854,6 +871,24 @@ function __gbAccessAllowed(st, now) {
         .catch((err) => ({ resolved: {}, toEmail: '', displayName, lastEmailMs, error: err?.message || 'resolve failed' }));
     } catch (e) {
       return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
+    }
+  };
+
+  /* EmailRunner's "Matched Only" option: re-check a template's own match
+     rules (rules / accountConditions) against a bulk-send row's fetched
+     page before sending, instead of trusting the row was pre-filtered.
+     Same parse-into-an-offscreen-doc approach as __gbResolveVarsForHtml
+     above, then delegates to the exact branching getPageInfo uses per
+     template (gbEvalTemplateMatch) so grouped AND legacy rule formats both
+     work here. */
+  window.__gbResolveMatchForHtml = async (html, template, baseUrl) => {
+    try {
+      const doc = new DOMParser().parseFromString(gbWithBase(html || '', baseUrl), 'text/html');
+      const engine = window.__gbPageEngine || null;
+      const { matched, detail } = await gbEvalTemplateMatch(template, doc, engine);
+      return { matched, detail };
+    } catch (e) {
+      return { matched: false, error: e?.message || 'parse failed' };
     }
   };
 

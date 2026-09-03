@@ -15,6 +15,7 @@ import { directContactVariables } from '../lib/contactImport.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { cachedSnapshotForContact } from '../lib/page-engine/cache-actions.js';
 import { contactPageFetchError } from '../lib/contactPageFetch.js';
+import { resolveMatchedOnlyOutcome } from '../lib/emailRunnerMatch.js';
 import { createPauseGate, waitForPausableDelay } from '../lib/emailRunControl.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -278,6 +279,11 @@ export function EmailRunner({
   const [skipDnc, setSkipDnc] = useState(true);            // name/email says "do not contact"
   const [skipRecent, setSkipRecent] = useState(false);     // emailed within N days
   const [skipRecentDays, setSkipRecentDays] = useState(30);
+  // Inverted from the two skip rules above: skips a row when the selected
+  // template's OWN match rules do NOT evaluate true against that row's page
+  // (re-checked here because task lists / search results aren't pre-filtered
+  // by template rules — see src/lib/emailRunnerMatch.js).
+  const [matchedOnly, setMatchedOnly] = useState(false);
   const [status, setStatus] = useState('idle');  // 'idle' | 'running' | 'done'
   /* Pausing is deliberately separate from status/cancellation: the run stays
      active with the same token, counts, trail, row states, and remaining
@@ -637,6 +643,26 @@ export function EmailRunner({
           if (fetched?.ok && typeof fetched.text === 'string') fetchedText = fetched.text;
         }
 
+        /* 1b. "Matched Only": re-check the selected template's OWN match
+           rules against this row's page before sending. Task lists and CRM
+           search results are never pre-filtered by template rules — a rep
+           can queue any row for any template — so this is the only point
+           in the pipeline that knows both "which template" and "this row's
+           actual page data" at once. See src/lib/emailRunnerMatch.js for
+           how each of the three row shapes (cached snapshot / fetched HTML
+           / imported CSV) is evaluated, and why an unverifiable row fails
+           closed. Skipped entirely (always "matched") in mock mode, same
+           as the other resolvers above. */
+        const matchOutcome = !matchedOnly || useMock
+          ? { matched: true, reason: '' }
+          : await resolveMatchedOnlyOutcome({
+              template: selectedTpl,
+              cachedSnapshot,
+              fetchedText,
+              baseUrl: c.contactUrl || '',
+              imported: !!c.imported,
+            });
+
         /* 2. Resolve template vars against the fetched HTML. Prefer
            the direct window global exposed by vanilla/main.js — it
            runs in this same content-script realm with a parsed
@@ -695,6 +721,10 @@ export function EmailRunner({
         } else if (skipRecent && lastEmailedMs && (Date.now() - lastEmailedMs) < recentCutoff) {
           const days = Math.floor((Date.now() - lastEmailedMs) / DAY_MS);
           outcome = { status: 'skipped', reason: days <= 0 ? 'Emailed today' : `Emailed ${days}d ago`, email: toEmail, name: pageName };
+        } else if (!matchOutcome.matched) {
+          // Matched Only: the template's own rules don't (or can't be
+          // verified to) evaluate true against this row's page.
+          outcome = { status: 'skipped', reason: matchOutcome.reason || 'Did not match template rules', email: toEmail, name: pageName };
         } else {
           // 3. Render template strings. The signature is applied by
           //    emailSender on the PA path (and dropped on the mailto
@@ -950,6 +980,14 @@ export function EmailRunner({
                     )}
                   />
                 </div>
+              </Field>
+
+              <Field label="Matched only" hint="Re-checks the template's own match rules against each row's page right before sending — rows that don't (or can't be) verified are skipped instead.">
+                <SkipRow
+                  on={matchedOnly} onChange={setMatchedOnly} disabled={status === 'running'}
+                  title="Require a rule match"
+                  desc="Skip a row when the selected template's match rules don't evaluate true against its page."
+                />
               </Field>
             </div>
           )}
