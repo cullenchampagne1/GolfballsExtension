@@ -585,6 +585,11 @@ function __gbAccessAllowed(st, now) {
         };
 
         const matched = [];
+        // Per-template group/condition breakdown for grouped trees, keyed
+        // by template id — lets the email creation preview show WHICH
+        // logical group (and which condition inside it) decided a match,
+        // not just the flattened pass/fail the popup needs.
+        const matchDetails = {};
         for (const t of (msg.templates || [])) {
           const tree = t.type === 'account' ? t.accountConditions : t.rules;
           if (engine && engine.isGroupedTree(tree)) {
@@ -592,7 +597,11 @@ function __gbAccessAllowed(st, now) {
             // condition reads '' (see getMatchValue) so it can't gate a
             // match — matching never runs the code chain on page load.
             let ok = false;
-            try { ok = await engine.evalTree(tree, getMatchValue); } catch { ok = false; }
+            try {
+              const detail = await engine.evalTreeDetailed(tree, getMatchValue);
+              matchDetails[t.id] = detail;
+              ok = detail.result;
+            } catch { ok = false; }
             if (ok) matched.push(t.id);
           } else if (t.type === 'account') {
             if (checkRules(t.rules) && checkAccountConditions(t.accountConditions)) matched.push(t.id);
@@ -612,7 +621,7 @@ function __gbAccessAllowed(st, now) {
         const pageChargeRows  = smartPageChargeRows();
         const messageId       = smartMessageId();
         const pageVars        = (pageType === 'contact' || pageType === 'account') ? smartPageVariables() : {};
-        sendResponse({ email, orderNo, matchedTemplateIds: matched, pendingTemplateIds: [], userId, pageOrderTotal, pageChargeTotal, pageChargeRows, messageId, pageType, contactId, accountId, pageVars });
+        sendResponse({ email, orderNo, matchedTemplateIds: matched, pendingTemplateIds: [], matchDetails, userId, pageOrderTotal, pageChargeTotal, pageChargeRows, messageId, pageType, contactId, accountId, pageVars });
       })();
       return true;
     }

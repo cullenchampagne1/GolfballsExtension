@@ -36,7 +36,7 @@ import {
 import { contactSchema, accountSchema, opportunitySchema } from '../lib/page-schemas/contact.js';
 import { orderSchema } from '../lib/page-schemas/order.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
-import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
+import { evalTree, evalTreeDetailed, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
 import { getPageContext, detectPageType } from '../lib/pageContext.js';
 import { buildPageEngineDebugSnapshot } from '../lib/page-engine/debug-snapshot.js';
 import { PAGE_TYPE } from '../lib/constants.js';
@@ -88,9 +88,12 @@ const api = Object.freeze({
 
   /* Grouped AND/OR rule matching (matchEngine). evalTree(tree,
      getValue) evaluates a rule tree against a caller-supplied value
-     resolver; the rest let the matcher split var-free vs var-driven
-     conditions and detect grouped (vs legacy flat) rules. */
+     resolver; evalTreeDetailed does the same but also returns the
+     per-group (and per-condition) booleans that decided the result,
+     for match-rule previews; the rest let the matcher split var-free
+     vs var-driven conditions and detect grouped (vs legacy flat) rules. */
   evalTree,
+  evalTreeDetailed,
   treeUsesVars,
   varsReferenced,
   isGroupedTree,

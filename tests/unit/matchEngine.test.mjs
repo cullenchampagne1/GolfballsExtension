@@ -17,6 +17,7 @@ import {
   isGroupedTree,
   varsReferenced,
   evalTree,
+  evalTreeDetailed,
 } from '../../src/lib/matchEngine.js';
 
 const DAY = 864e5;
@@ -290,5 +291,60 @@ describe('evalTree', () => {
       ],
     };
     assert.equal(await evalTree(tree, getValue), true);
+  });
+});
+
+describe('evalTreeDetailed', () => {
+  const data = { status: 'Shipped', total: '150', carrier: 'UPS' };
+  const getValue = (c) => data[c.ref];
+  const cond = (ref, op, value, not = false) => ({ source: 'schema', ref, op, value, not });
+
+  it('reports the failing condition inside a failing AND group, without short-circuiting', async () => {
+    const tree = { outerJoiner: 'AND', groups: [{ joiner: 'AND', conditions: [cond('status', 'is', 'Shipped'), cond('total', 'gt', '200')] }] };
+    const detail = await evalTreeDetailed(tree, getValue);
+    assert.equal(detail.result, false);
+    assert.equal(detail.groups.length, 1);
+    assert.equal(detail.groups[0].joiner, 'AND');
+    assert.equal(detail.groups[0].result, false);
+    assert.deepEqual(detail.groups[0].conditions.map((c) => c.result), [true, false]);
+  });
+
+  it('reports which condition in an OR group actually passed', async () => {
+    const tree = { outerJoiner: 'AND', groups: [{ joiner: 'OR', conditions: [cond('total', 'gt', '999'), cond('carrier', 'is', 'ups')] }] };
+    const detail = await evalTreeDetailed(tree, getValue);
+    assert.equal(detail.result, true);
+    assert.deepEqual(detail.groups[0].conditions.map((c) => c.result), [false, true]);
+  });
+
+  it('reports per-group results under an OR outerJoiner, including the group that failed', async () => {
+    const tree = {
+      outerJoiner: 'OR',
+      groups: [
+        { joiner: 'AND', conditions: [cond('total', 'gt', '999')] },
+        { joiner: 'AND', conditions: [cond('status', 'startsWith', 'ship')] },
+      ],
+    };
+    const detail = await evalTreeDetailed(tree, getValue);
+    assert.equal(detail.result, true);
+    assert.equal(detail.outerJoiner, 'OR');
+    assert.deepEqual(detail.groups.map((g) => g.result), [false, true]);
+  });
+
+  it('an empty tree evaluates to true with no groups', async () => {
+    const detail = await evalTreeDetailed({ outerJoiner: 'AND', groups: [] }, getValue);
+    assert.deepEqual(detail, { outerJoiner: 'AND', result: true, groups: [] });
+    assert.deepEqual(await evalTreeDetailed(null, getValue), { outerJoiner: 'AND', result: true, groups: [] });
+  });
+
+  it('agrees with evalTree\'s flattened result across mixed AND/OR trees', async () => {
+    const tree = {
+      outerJoiner: 'OR',
+      groups: [
+        { joiner: 'OR', conditions: [cond('total', 'gt', '999'), cond('carrier', 'is', 'fedex')] },
+        { joiner: 'AND', conditions: [cond('status', 'is', 'Shipped'), cond('carrier', 'is', 'UPS')] },
+      ],
+    };
+    const [flat, detailed] = await Promise.all([evalTree(tree, getValue), evalTreeDetailed(tree, getValue)]);
+    assert.equal(detailed.result, flat);
   });
 });

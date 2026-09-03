@@ -96,6 +96,10 @@ describe('Email creation developer preview', () => {
     assert.match(previewSource, /<DeveloperMetrics/);
     assert.match(previewSource, /<DeveloperCard className="ecp-context"/);
     assert.match(previewSource, /title="Matched variables"/);
+    assert.match(previewSource, /title="Matching rules"/);
+    assert.match(previewSource, /pageInfo\.matchDetails\?\.\[selectedTemplate\.id\]/);
+    assert.match(previewSource, /Group \{String\.fromCharCode\(65 \+ index\)\}/);
+    assert.match(previewSource, /matchDetail\.outerJoiner/);
     assert.match(previewSource, /grid-template-columns:repeat\(auto-fit,minmax\(240px,1fr\)\)/);
     assert.match(developerWorkspaceSource, /\.gb-dev-context-meta \{[^}]*display:flex[^}]*flex-wrap:nowrap/);
     assert.doesNotMatch(developerWorkspaceSource, /\.gb-dev-context\{grid-template-columns:1fr/);

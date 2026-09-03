@@ -330,6 +330,40 @@ export async function evalTree(tree, getValue) {
   return !orJoin;
 }
 
+async function evalGroupDetailed(group, getValue) {
+  const conds = (group && group.conditions) || [];
+  const joiner = group?.joiner === 'OR' ? 'OR' : 'AND';
+  if (conds.length === 0) return { joiner, result: true, conditions: [] };
+  const orJoin = joiner === 'OR';
+  // No short-circuiting here (unlike evalGroup) — a preview wants every
+  // condition's individual result, not just enough to decide the group.
+  const conditions = [];
+  for (const cond of conds) conditions.push({ ...cond, result: await evalCondition(cond, getValue) });
+  const result = orJoin ? conditions.some((c) => c.result) : conditions.every((c) => c.result);
+  return { joiner, result, conditions };
+}
+
+/**
+ * evalTreeDetailed(tree, getValue) → Promise<{ outerJoiner, result, groups }>.
+ *
+ * Same semantics as evalTree, but surfaces the per-group (and per-
+ * condition) booleans that decided the final result instead of just
+ * the flattened outcome — what a rule-matching preview needs to show
+ * WHICH group made a template match or fail, not only that it did.
+ * Intentionally does not short-circuit, so every group/condition in
+ * the tree gets an evaluated result.
+ */
+export async function evalTreeDetailed(tree, getValue) {
+  const groups = tree && tree.groups;
+  const outerJoiner = tree?.outerJoiner === 'OR' ? 'OR' : 'AND';
+  if (!Array.isArray(groups) || groups.length === 0) return { outerJoiner, result: true, groups: [] };
+  const orJoin = outerJoiner === 'OR';
+  const groupResults = [];
+  for (const g of groups) groupResults.push(await evalGroupDetailed(g, getValue));
+  const result = orJoin ? groupResults.some((g) => g.result) : groupResults.every((g) => g.result);
+  return { outerJoiner, result, groups: groupResults };
+}
+
 /* Shared blank-tree + node factories so the rule UIs and the
    migration produce identical shapes. */
 export function emptyTree() {
