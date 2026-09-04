@@ -10,6 +10,7 @@ const SHARE_ID = 'T1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p-';
 
 function harness(initial = {}, remoteShare = null, {
   managedError = null, policyError = null, submissionError = null,
+  managedErrorCount = Infinity, policyErrorCount = Infinity, submissionErrorCount = Infinity,
 } = {}) {
   const stored = structuredClone(initial);
   let policySyncs = 0;
@@ -38,21 +39,21 @@ function harness(initial = {}, remoteShare = null, {
     async sync(options) {
       assert.equal(options?.force, true);
       policySyncs += 1;
-      if (policyError) throw policyError;
+      if (policyError && policySyncs <= policyErrorCount) throw policyError;
     },
   };
   context.GBManagedEmailTemplates = {
     async sync(options) {
       assert.equal(options?.force, true);
       managedSyncs += 1;
-      if (managedError) throw managedError;
+      if (managedError && managedSyncs <= managedErrorCount) throw managedError;
     },
   };
   context.GBEmailTemplateSubmissions = {
     async sync(options) {
       assert.equal(options?.force, true);
       submissionSyncs += 1;
-      if (submissionError) throw submissionError;
+      if (submissionError && submissionSyncs <= submissionErrorCount) throw submissionError;
     },
   };
   context.GBInstallationAuth = {
@@ -244,6 +245,39 @@ describe('typed extension live updates', () => {
     );
     assert.equal(stored.gbEmailTemplateSubmissionRevision, undefined);
     assert.equal(stored.gbLiveUpdate, undefined);
+  });
+
+  it('gives up on a notification after repeated failures instead of blocking the rows behind it forever', async () => {
+    const { updates, stored, policySyncs } = harness({}, null, {
+      policyError: new Error('configuration unavailable'),
+    });
+    const failing = notification('settings.changed', { revision: 'd'.repeat(64) }, 100);
+    const unrelated = notification('catalog.changed', { catalog_id: 'fall' }, 101);
+
+    await assert.rejects(updates.applyAll([failing]), /configuration unavailable/);
+    await assert.rejects(updates.applyAll([failing]), /configuration unavailable/);
+    assert.equal(policySyncs(), 2, 'ordinary transient failures still retry across poll cycles');
+
+    const applied = await updates.applyAll([failing, unrelated]);
+    assert.equal(policySyncs(), 3, 'gives up on the third attempt instead of retrying forever');
+    assert.equal(applied.length, 1,
+      'a notification behind a poison row is no longer blocked once that row is abandoned');
+    assert.equal(applied[0].type, 'catalog.changed');
+    assert.equal(stored.gbSettingsPolicyRevision, undefined,
+      'the abandoned settings event never wrote its own state');
+  });
+
+  it('clears the retry count once a previously-failing notification succeeds', async () => {
+    const { updates, policySyncs } = harness({}, null, {
+      policyError: new Error('configuration unavailable'),
+      policyErrorCount: 1,
+    });
+    const event = notification('settings.changed', { revision: 'e'.repeat(64) }, 102);
+
+    await assert.rejects(updates.applyAll([event]), /configuration unavailable/);
+    const applied = await updates.applyAll([event]);
+    assert.equal(policySyncs(), 2);
+    assert.equal(applied[0].type, 'settings.changed', 'a later success is applied normally, not skipped');
   });
 
   it('keeps future valid events generic and rejects malformed envelopes', async () => {
