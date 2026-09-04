@@ -14,7 +14,6 @@ export const EMAIL_TEMPLATE_SENDS_KEY = 'gbEmailTemplateSends';
 const TEMPLATE_KEY = 'templates';
 const MAX_SENDS = 5_000;
 const MAX_SEND_AGE_MS = 365 * 86_400_000;
-const ORDER_WINDOW_MS = 90 * 86_400_000;
 
 const clean = (value, maximum = 500) => String(value == null ? '' : value)
   .trim().slice(0, maximum);
@@ -88,23 +87,16 @@ function sendClusterId(send, catalog) {
   ) || null;
 }
 
-function normalizedSendSubject(send) {
-  return clean(send?.normalizedSubject, 998) || normalizeEmailSubject(send?.subject);
-}
-
-function sendCanReceiveOutcome(send) {
-  return !!clean(send?.templateId, 200)
-    && clean(send?.trackingStatus, 40).toLowerCase() !== 'not_applicable';
-}
-
 function migrateSendRecord(row) {
-  // Reply attribution was retired. Strip its historical outcome fields while
-  // normalizing so existing installations stop retaining or surfacing them.
+  // Outcome attribution was retired. Strip its historical fields while
+  // normalizing so this store retains successful sends only.
   const next = { ...(row || {}) };
   delete next.respondedAt;
   delete next.replyNotificationId;
+  delete next.orderedAt;
+  delete next.orderId;
   const clusterId = sendClusterId(row);
-  const normalizedSubject = normalizedSendSubject(row);
+  const normalizedSubject = clean(row?.normalizedSubject, 998) || normalizeEmailSubject(row?.subject);
   const priorStatus = clean(row?.trackingStatus, 40) || 'unknown';
   const trackingStatus = priorStatus === 'not_applicable' || !normalizedSubject
     ? priorStatus
@@ -147,8 +139,6 @@ export function summarizeEmailTemplateSends(sends, catalog) {
       trackerId: tracker.trackerId,
       conflictsWith: tracker.conflictsWith || [],
       sent: 0,
-      ordered: 0,
-      orderRate: 0,
     });
   }
   for (const send of records(sends)) {
@@ -157,15 +147,10 @@ export function summarizeEmailTemplateSends(sends, catalog) {
         templateId: send?.templateId || '', templateName: send?.templateName || 'Deleted template',
         status: 'deleted', clusterId: sendClusterId(send), trackerId: sendClusterId(send),
         conflictsWith: [], sent: 0,
-        ordered: 0, orderRate: 0,
       });
     }
     const row = byTemplate.get(send.templateId);
     row.sent += 1;
-    if (send.orderedAt) row.ordered += 1;
-  }
-  for (const row of byTemplate.values()) {
-    row.orderRate = row.sent ? row.ordered / row.sent : 0;
   }
   return [...byTemplate.values()];
 }
@@ -287,9 +272,7 @@ export function createEmailTemplateTrackingStore(options = {}) {
       enriched.forEach((email, index) => {
         if (!email?.templateId || !deliveryWasSuccessful(records(results)[index])) return;
         // A reply-in-thread (and every case reply) belongs to the original
-        // outbound conversation. Recording it as a fresh send would split a
-        // later order away from the initial template that owns the subject
-        // cluster.
+        // outbound conversation and does not count as a fresh template send.
         if (email.templateTrackingStatus === 'not_applicable') return;
         const row = {
           id: sendId(email, now, index),
@@ -306,45 +289,10 @@ export function createEmailTemplateTrackingStore(options = {}) {
           normalizedSubject: normalizeEmailSubject(email.subject),
           sentAt: now,
           transport: clean(transport, 30) || 'unknown',
-          orderedAt: null,
-          orderId: null,
         };
         added.push(row);
       });
       return { sends: [...added, ...sends], value: { added } };
-    });
-  }
-
-  async function recordOrders(orderRecords) {
-    const currentCatalog = await catalog();
-    return mutateSends((sends) => {
-      const updatedIds = [];
-      const next = [...sends];
-      for (const order of records(orderRecords)) {
-        const contactId = clean(order?.data?.contactId || order?.contactId, 120);
-        const orderedAt = Number(order?.at || Date.parse(order?.data?.orderDate || '')) || 0;
-        if (!contactId || !orderedAt) continue;
-        const index = next.findIndex((send) => (
-          sendCanReceiveOutcome(send)
-          && !send.orderedAt
-          && clean(send.contactId, 120) === contactId
-          && Number(send.sentAt) <= orderedAt
-          && orderedAt - Number(send.sentAt) <= ORDER_WINDOW_MS
-        ));
-        if (index < 0) continue;
-        const clusterId = sendClusterId(next[index], currentCatalog);
-        next[index] = {
-          ...next[index],
-          clusterId,
-          trackerId: clusterId,
-          trackingStatus: 'ready',
-          normalizedSubject: normalizedSendSubject(next[index]),
-          orderedAt,
-          orderId: clean(order.externalId || order.id, 200) || null,
-        };
-        updatedIds.push(next[index].id);
-      }
-      return { sends: next, value: { updatedIds } };
     });
   }
 
@@ -366,7 +314,6 @@ export function createEmailTemplateTrackingStore(options = {}) {
     reconcileTemplates,
     enrichEmails,
     recordDelivery,
-    recordOrders,
     summaries,
     listSends,
   });

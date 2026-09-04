@@ -238,7 +238,7 @@ describe('automatic email-template subject clusters', () => {
   });
 });
 
-describe('template send and order attribution', () => {
+describe('template send counts', () => {
   it('regenerates the stored catalog whenever templates change', async () => {
     const memory = memoryStorage({
       templates: [orderTemplate('one', 'First · Order #{{order_number}}')],
@@ -268,8 +268,8 @@ describe('template send and order attribution', () => {
     assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[1].clusterId, 'email-template:two');
   });
 
-  it('records a successful send and the recipient contact’s later order without reply outcomes', async () => {
-    let now = 2_000_000_000_000;
+  it('records a successful send without reply or order outcomes', async () => {
+    const now = 2_000_000_000_000;
     const memory = memoryStorage({
       templates: [orderTemplate('update', 'Order #{{order_number}} update')],
     });
@@ -283,12 +283,6 @@ describe('template send and order attribution', () => {
       trackingContext: { contactId: 'contact-9', accountId: 'account-2' },
     }], 'pa', [{ status: 'sent' }]);
 
-    now += 60_000;
-    await store.recordOrders([{
-      externalId: 'contact-9@2033-05-18', at: now,
-      data: { contactId: 'contact-9', orderDate: '2033-05-18' },
-    }]);
-
     const [send] = memory.data[EMAIL_TEMPLATE_SENDS_KEY];
     assert.equal(send.trackingStatus, 'ready');
     assert.equal(send.clusterId, 'email-template:update');
@@ -297,15 +291,16 @@ describe('template send and order attribution', () => {
     assert.equal(send.normalizedSubject, 'order #5512 update');
     assert.equal('respondedAt' in send, false);
     assert.equal('replyNotificationId' in send, false);
-    assert.equal(send.orderedAt, 2_000_000_060_000);
+    assert.equal('orderedAt' in send, false);
+    assert.equal('orderId' in send, false);
     assert.equal(store.recordReplies, undefined);
+    assert.equal(store.recordOrders, undefined);
     const [summary] = await store.summaries();
-    assert.deepEqual(
-      { sent: summary.sent, ordered: summary.ordered, orderRate: summary.orderRate },
-      { sent: 1, ordered: 1, orderRate: 1 },
-    );
+    assert.equal(summary.sent, 1);
     assert.equal('responded' in summary, false);
     assert.equal('responseRate' in summary, false);
+    assert.equal('ordered' in summary, false);
+    assert.equal('orderRate' in summary, false);
   });
 
   it('does not create tracked-send rows for actual reply-in-thread deliveries', async () => {
@@ -339,8 +334,8 @@ describe('template send and order attribution', () => {
     );
   });
 
-  it('upgrades legacy rows, strips reply outcomes, and still attributes later orders', async () => {
-    let now = 2_000_000_060_000;
+  it('upgrades legacy rows and strips all historical outcome fields', async () => {
+    const now = 2_000_000_060_000;
     const memory = memoryStorage({
       templates: [orderTemplate('legacy', 'Callaway Promos for {{name}}')],
       [EMAIL_TEMPLATE_SENDS_KEY]: [{
@@ -348,7 +343,8 @@ describe('template send and order attribution', () => {
         trackerId: 'email-template:legacy:old-regex-hash', trackingStatus: 'conflict', recipient: 'buyer@example.com',
         contactId: 'contact-9', subject: 'Callaway Promos for Dana',
         sentAt: 2_000_000_000_000, respondedAt: 2_000_000_030_000,
-        replyNotificationId: 'reply-44', orderedAt: null,
+        replyNotificationId: 'reply-44', orderedAt: 2_000_000_040_000,
+        orderId: 'order-55',
       }],
     });
     const store = createEmailTemplateTrackingStore({
@@ -359,11 +355,11 @@ describe('template send and order attribution', () => {
     assert.equal(memory.data[EMAIL_TEMPLATE_SENDS_KEY][0].trackingStatus, 'ready');
     assert.equal('respondedAt' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
     assert.equal('replyNotificationId' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
-    await store.recordOrders([{ externalId: 'o1', at: now, data: { contactId: 'contact-9' } }]);
+    assert.equal('orderedAt' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
+    assert.equal('orderId' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
 
     const [send] = memory.data[EMAIL_TEMPLATE_SENDS_KEY];
     assert.equal(send.clusterId, 'email-template:legacy');
     assert.equal(send.trackingStatus, 'ready');
-    assert.equal(send.orderedAt, 2_000_000_060_000);
   });
 });

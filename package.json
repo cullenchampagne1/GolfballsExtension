@@ -1,7 +1,7 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.4.75",
+  "version": "3.4.76",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
@@ -50,7 +50,7 @@
       "file": "tests/unit/emailSender.test.mjs"
     },
     {
-      "name": "email \u00b7 deterministic template subject clusters, send & order attribution",
+      "name": "email \u00b7 deterministic template subject clusters & send counts",
       "file": "tests/unit/emailSubjectTracking.test.mjs"
     },
     {

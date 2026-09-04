@@ -428,22 +428,22 @@ export function TemplatesPage() {
         <p>Those names show wherever the version is offered. In the popup, selecting the parent (shuffle badge) sends a <strong>random</strong> version each time; expand the row to <strong>pin</strong> one (check badge). In bulk sends, Quick Send lets you set <strong>weighted</strong> splits instead.</p>
       </TourBox>
 
-      <h2 className="sec">Automatic send &amp; order tracking</h2>
+      <h2 className="sec">Automatic send tracking</h2>
       <p>
         Every enabled standalone order or account template gets one stable subject cluster automatically. Its cluster ID comes from the saved template ID, so changing wording, reordering templates, or restarting the extension never renumbers it. The editor shows both that ID and a readable shape such as <code>Welcome to {'<*>'} — your report is ready</code>.
       </p>
       <p>
-        When an email is sent, the extension stores the fully rendered subject after schema, Smart, and Code variables have run. Reply outcomes are not tracked. A later order can still be credited to the originating send through its contact and send window. Structural shapes explain the stable cluster without turning incoming replies into performance analytics.
+        When an email is sent, the extension stores the fully rendered subject after schema, Smart, and Code variables have run. Reply and order outcomes are not tracked here; those results belong to their dedicated reporting surfaces. Structural shapes explain the stable cluster without turning downstream activity into template performance analytics.
       </p>
       <table className="spectable">
         <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><Tag tone="success" size="xs">Tracked</Tag></td><td>The template has a stable cluster. Successful sends and later orders from that contact can be counted without tracking replies.</td></tr>
+          <tr><td><Tag tone="success" size="xs">Tracked</Tag></td><td>The template has a stable cluster, and successful sends can be counted.</td></tr>
           <tr><td><Tag tone="warning" size="xs">Untracked</Tag></td><td>The template is not saved yet or one of its subject variations is empty.</td></tr>
           <tr><td><Tag tone="neutral" size="xs">Inherited</Tag></td><td>Reply-in-thread and case templates keep the current conversation subject and do not create a second tracked send.</td></tr>
         </tbody>
       </table>
-      <p>The template list shows sent and order counts beside each standalone template. Reply-in-thread and case templates do not receive a separate subject cluster or create a second tracked send.</p>
+      <p>The template list shows a sent count beside each standalone template. Reply-in-thread and case templates do not receive a separate subject cluster or create a second tracked send.</p>
 
       <h2 className="sec">When does a template show up?</h2>
       <p>

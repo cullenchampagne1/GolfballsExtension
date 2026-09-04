@@ -123,6 +123,7 @@ async function crmPage({ identity = 'session', pages = [[contactDoc()]], numFoun
 function worker({ tabs = [{ id: 7 }], deliver = async () => ({ ok: false, error: 'no page' }) } = {}) {
   const stored = { featureFlags: { trackersEnabled: true } };
   const sent = [];
+  const templateOrderAttributions = [];
   const chrome = {
     storage: {
       local: {
@@ -161,10 +162,16 @@ function worker({ tabs = [{ id: 7 }], deliver = async () => ({ ok: false, error:
     parseHttpsUrl: (url) => (String(url).startsWith(ORIGIN) ? { href: String(url) } : null),
     isAllowedFetchUrl: (url) => String(url).startsWith(ORIGIN),
   };
+  context.GBEmailTemplateTracking = {
+    async recordOrders(rows) { templateOrderAttributions.push(...rows); },
+  };
   for (const file of WORKER_SOURCES) {
     vm.runInContext(read(file), context, { filename: file });
   }
-  return { stored, sent, store: context.GBTrackerStore, trackers: context.GBTrackers };
+  return {
+    stored, sent, templateOrderAttributions,
+    store: context.GBTrackerStore, trackers: context.GBTrackers,
+  };
 }
 
 describe('recent orders · sweep flow', () => {
@@ -176,7 +183,7 @@ describe('recent orders · sweep flow', () => {
         contactDoc({ id: 'contact_5223', contactName_t: 'Jordan Brown', accountName_t: '', lastOrderDate_dt: '2026-08-05T00:00:00Z' }),
       ]],
     });
-    const { store, trackers } = worker({ deliver: page.deliver });
+    const { store, trackers, templateOrderAttributions } = worker({ deliver: page.deliver });
 
     const swept = await trackers.sweep({ now: NOW });
     assert.equal(swept.polled, 1);
@@ -203,6 +210,7 @@ describe('recent orders · sweep flow', () => {
     assert.equal(marcus.data.orderDate, '2026-08-04');
     // Nothing to re-ask about: the row records an order that already happened.
     assert.equal(marcus.nextRefreshAt, null);
+    assert.deepEqual(templateOrderAttributions, []);
   });
 
   it('resumes from the last sweep instead of re-reading the whole week', async () => {
