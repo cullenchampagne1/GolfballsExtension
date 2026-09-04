@@ -112,7 +112,7 @@ describe('settings menus', () => {
     assert.match(editorBridgeSource, /currentTemplate && window\.__gbOpenTemplate/);
     assert.match(editorTemplatesSource, /key=\{tpl\.id\}/);
     assert.doesNotMatch(editorTemplatesSource, /key=\{`\$\{tpl\.id\}:\$\{tpl\.shareImport/);
-    assert.match(templateEditorSource, /seenImportRevision\.current === importRevision/);
+    assert.match(templateEditorSource, /importRevision <= lastKnownVersion\.current/);
     assert.match(templateEditorSource, /setContentRevision\(importRevision\)/);
     assert.match(templateEditorSource, /externalRevision=\{contentRevision\}/);
     assert.match(richTextEditorSource, /appliedExternalRevision\.current === externalRevision/);

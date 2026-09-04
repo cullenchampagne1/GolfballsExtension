@@ -750,6 +750,10 @@
       "file": "tests/unit/settingsMenus.test.mjs"
     },
     {
+      "name": "email \u00b7 template submission reconciliation skips its own echo",
+      "file": "tests/unit/templateEditorSubmissionReconciliation.test.mjs"
+    },
+    {
       "name": "catalog \u00b7 brand promo tag recognition",
       "file": "tests/unit/giftCatalogPromo.test.mjs"
     },

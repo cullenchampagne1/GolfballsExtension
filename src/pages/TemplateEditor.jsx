@@ -352,8 +352,23 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   // only — the base still sends tpl.subject/body).
   const [baseLabel, setBaseLabel] = useState(tpl.baseLabel || '');
   const [contentRevision, setContentRevision] = useState(importRevision);
-  const seenImportRevision = useRef(importRevision);
-  const localSubmissionSnapshot = useRef(
+  // The submission cache is rewritten in full on *every* write to it —
+  // including this editor's own autosave landing back after its round trip —
+  // so a version bump alone doesn't mean "someone else changed this". That
+  // used to be filtered by comparing JSON.stringify of the incoming
+  // server-echoed document against the last document this editor sent, but
+  // that string comparison is fragile against a server round trip (nothing
+  // guarantees the echoed document re-serializes byte-identical) and a false
+  // mismatch reset the fields — and the contenteditable cursor with them — on
+  // every autosave, i.e. while the user was still typing. Versions are
+  // authoritative and strictly monotonic per revision (the backend's own
+  // conflict check bumps by exactly 1 per accepted change), so track the
+  // version *this editor* predicts its own outstanding save will produce and
+  // compare against that instead: only an incoming version beyond what this
+  // editor itself could have produced is a genuine external edit.
+  const lastKnownVersion = useRef(importRevision);
+  const ownPendingVersion = useRef(0);
+  const lastSentSnapshot = useRef(
     submission ? JSON.stringify(submissionTemplateDocument(tpl)) : '',
   );
   const skipSave     = useRef(true);
@@ -367,12 +382,11 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
      which clamped its scrollTop to zero. Recipient-owned overrides are already
      folded into `tpl` by live-updates, so these controls keep their values. */
   useEffect(() => {
-    if ((!readOnly && !submission) || seenImportRevision.current === importRevision) return;
-    seenImportRevision.current = importRevision;
-    const incomingSnapshot = submission
-      ? JSON.stringify(submissionTemplateDocument(tpl)) : '';
-    if (submission && incomingSnapshot === localSubmissionSnapshot.current) return;
-    if (submission) localSubmissionSnapshot.current = incomingSnapshot;
+    if ((!readOnly && !submission) || importRevision <= lastKnownVersion.current) return;
+    const isOwnEcho = submission && importRevision <= ownPendingVersion.current;
+    lastKnownVersion.current = importRevision;
+    if (isOwnEcho) return;
+    if (submission) lastSentSnapshot.current = JSON.stringify(submissionTemplateDocument(tpl));
     skipSave.current = true;
     clearTimeout(saveTimer.current);
     const nextType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
@@ -669,6 +683,22 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       : next;
   }
 
+  /* Predict the submission version this save produces if the backend accepts
+     it (see _require_submission_version: +1 per accepted change), so the
+     reconciliation effect can recognize this editor's own echo landing back
+     without comparing server-round-tripped JSON. `next` and the last-sent
+     snapshot are both built by this same buildTemplate()/
+     submissionTemplateDocument() call, so the string compare here is only
+     ever local-vs-local and can't be thrown off by a server re-serializing
+     the document differently. */
+  function notePendingSubmissionSave(next) {
+    if (!submission) return;
+    const snapshot = JSON.stringify(submissionTemplateDocument(next));
+    if (snapshot === lastSentSnapshot.current) return;
+    lastSentSnapshot.current = snapshot;
+    ownPendingVersion.current = Math.max(ownPendingVersion.current, lastKnownVersion.current) + 1;
+  }
+
   const subjectTracker = useMemo(() => {
     const draft = buildTemplate();
     return trackerForTemplate(
@@ -686,9 +716,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const next = buildTemplate();
-      if (submission) {
-        localSubmissionSnapshot.current = JSON.stringify(submissionTemplateDocument(next));
-      }
+      notePendingSubmissionSave(next);
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(next);
     }, 500);
     return () => clearTimeout(saveTimer.current);
@@ -703,9 +731,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     if (skipTypeSave.current) { skipTypeSave.current = false; return; }
     if (typeof window.__gbSaveTemplate === 'function') {
       const next = buildTemplate();
-      if (submission) {
-        localSubmissionSnapshot.current = JSON.stringify(submissionTemplateDocument(next));
-      }
+      notePendingSubmissionSave(next);
       window.__gbSaveTemplate(next);
     }
   }, [typeId]); // eslint-disable-line react-hooks/exhaustive-deps
