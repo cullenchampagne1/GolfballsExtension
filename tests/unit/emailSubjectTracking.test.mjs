@@ -238,7 +238,7 @@ describe('automatic email-template subject clusters', () => {
   });
 });
 
-describe('template response and order attribution', () => {
+describe('template send and order attribution', () => {
   it('regenerates the stored catalog whenever templates change', async () => {
     const memory = memoryStorage({
       templates: [orderTemplate('one', 'First · Order #{{order_number}}')],
@@ -268,7 +268,7 @@ describe('template response and order attribution', () => {
     assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[1].clusterId, 'email-template:two');
   });
 
-  it('records a successful send, its reply, and the recipient contact’s later order', async () => {
+  it('records a successful send and the recipient contact’s later order without reply outcomes', async () => {
     let now = 2_000_000_000_000;
     const memory = memoryStorage({
       templates: [orderTemplate('update', 'Order #{{order_number}} update')],
@@ -284,13 +284,6 @@ describe('template response and order attribution', () => {
     }], 'pa', [{ status: 'sent' }]);
 
     now += 60_000;
-    await store.recordReplies([{
-      id: 'remote:44', remoteId: 44, topic: 'message.reply.received',
-      body: 'Re: [External] Order #5512 update', createdAt: now,
-      actions: [{ payload: JSON.stringify({ version: 1, command: 'open_contact', target: 'buyer@example.com' }) }],
-    }]);
-
-    now += 60_000;
     await store.recordOrders([{
       externalId: 'contact-9@2033-05-18', at: now,
       data: { contactId: 'contact-9', orderDate: '2033-05-18' },
@@ -302,13 +295,17 @@ describe('template response and order attribution', () => {
     assert.equal(send.trackerId, send.clusterId);
     assert.equal(send.recipient, 'buyer@example.com');
     assert.equal(send.normalizedSubject, 'order #5512 update');
-    assert.equal(send.respondedAt, 2_000_000_060_000);
-    assert.equal(send.orderedAt, 2_000_000_120_000);
+    assert.equal('respondedAt' in send, false);
+    assert.equal('replyNotificationId' in send, false);
+    assert.equal(send.orderedAt, 2_000_000_060_000);
+    assert.equal(store.recordReplies, undefined);
     const [summary] = await store.summaries();
     assert.deepEqual(
-      { sent: summary.sent, responded: summary.responded, ordered: summary.ordered, responseRate: summary.responseRate, orderRate: summary.orderRate },
-      { sent: 1, responded: 1, ordered: 1, responseRate: 1, orderRate: 1 },
+      { sent: summary.sent, ordered: summary.ordered, orderRate: summary.orderRate },
+      { sent: 1, ordered: 1, orderRate: 1 },
     );
+    assert.equal('responded' in summary, false);
+    assert.equal('responseRate' in summary, false);
   });
 
   it('does not create tracked-send rows for actual reply-in-thread deliveries', async () => {
@@ -342,98 +339,7 @@ describe('template response and order attribution', () => {
     );
   });
 
-  it('attributes overlapping code-variable clusters by their exact rendered subjects', async () => {
-    let now = 2_000_000_000_000;
-    const memory = memoryStorage({
-      templates: [
-        orderTemplate('callaway', '{{campaign_subject}}', {
-          vars: { campaign_subject: { type: 'code', body: 'if (ctx.promo) return ctx.promo.subject; return ctx.brand;' } },
-        }),
-        orderTemplate('srixon', '{{campaign_subject}}', {
-          vars: { campaign_subject: { type: 'code', body: 'if (ctx.promo) return ctx.promo.subject; return ctx.brand;' } },
-        }),
-      ],
-    });
-    const store = createEmailTemplateTrackingStore({
-      storage: memory.local, storageEvents: memory.events, now: () => now,
-    });
-    await store.install();
-    await store.recordDelivery([
-      { templateId: 'callaway', to: 'buyer@example.com', subject: 'Callaway Promos for Dana', trackingContext: { contactId: 'c1' } },
-      { templateId: 'srixon', to: 'buyer@example.com', subject: 'Srixon Spring Sale for Dana', trackingContext: { contactId: 'c1' } },
-    ], 'pa', [{ status: 'sent' }, { status: 'sent' }]);
-    assert.deepEqual(
-      memory.data[EMAIL_TEMPLATE_SENDS_KEY].map((send) => send.trackingStatus),
-      ['ready', 'ready'],
-    );
-
-    now += 60_000;
-    await store.recordReplies([{
-      topic: 'message.reply.received', body: 'Re: Srixon Spring Sale for Dana', createdAt: now,
-      actions: [{ payload: JSON.stringify({ command: 'open_contact', target: 'buyer@example.com' }) }],
-    }]);
-    const byTemplate = new Map(memory.data[EMAIL_TEMPLATE_SENDS_KEY]
-      .map((send) => [send.templateId, send]));
-    assert.equal(byTemplate.get('srixon').respondedAt, now);
-    assert.equal(byTemplate.get('callaway').respondedAt, null);
-  });
-
-  it('does not guess between identical recorded subjects when a reply has no recipient', async () => {
-    let now = 2_000_000_000_000;
-    const memory = memoryStorage({
-      templates: [
-        orderTemplate('one', 'Shared promotion'),
-        orderTemplate('two', 'Shared promotion'),
-      ],
-    });
-    const store = createEmailTemplateTrackingStore({
-      storage: memory.local, storageEvents: memory.events, now: () => now,
-    });
-    await store.install();
-    await store.recordDelivery([
-      { templateId: 'one', to: 'one@example.com', subject: 'Shared promotion' },
-      { templateId: 'two', to: 'two@example.com', subject: 'Shared promotion' },
-    ], 'pa', [{ status: 'sent' }, { status: 'sent' }]);
-
-    now += 60_000;
-    await store.recordReplies([{
-      topic: 'message.reply.received', body: 'Re: Shared promotion', createdAt: now,
-    }]);
-    assert.ok(memory.data[EMAIL_TEMPLATE_SENDS_KEY].every((send) => !send.respondedAt));
-  });
-
-  it('deterministically credits the newest matching send for the same recipient and subject', async () => {
-    let now = 2_000_000_000_000;
-    const memory = memoryStorage({
-      templates: [
-        orderTemplate('older', 'Shared promotion'),
-        orderTemplate('newer', 'Shared promotion'),
-      ],
-    });
-    const store = createEmailTemplateTrackingStore({
-      storage: memory.local, storageEvents: memory.events, now: () => now,
-    });
-    await store.install();
-    await store.recordDelivery([
-      { templateId: 'older', to: 'buyer@example.com', subject: 'Shared promotion' },
-    ], 'pa', [{ status: 'sent' }]);
-    now += 60_000;
-    await store.recordDelivery([
-      { templateId: 'newer', to: 'buyer@example.com', subject: 'Shared promotion' },
-    ], 'pa', [{ status: 'sent' }]);
-
-    now += 60_000;
-    await store.recordReplies([{
-      topic: 'message.reply.received', body: 'Re: Shared promotion', createdAt: now,
-      actions: [{ payload: JSON.stringify({ command: 'open_contact', target: 'buyer@example.com' }) }],
-    }]);
-    const byTemplate = new Map(memory.data[EMAIL_TEMPLATE_SENDS_KEY]
-      .map((send) => [send.templateId, send]));
-    assert.equal(byTemplate.get('newer').respondedAt, now);
-    assert.equal(byTemplate.get('older').respondedAt, null);
-  });
-
-  it('upgrades legacy conflict rows when an exact reply or order arrives', async () => {
+  it('upgrades legacy rows, strips reply outcomes, and still attributes later orders', async () => {
     let now = 2_000_000_060_000;
     const memory = memoryStorage({
       templates: [orderTemplate('legacy', 'Callaway Promos for {{name}}')],
@@ -441,7 +347,8 @@ describe('template response and order attribution', () => {
         id: 'old-send', templateId: 'legacy', templateName: 'Legacy',
         trackerId: 'email-template:legacy:old-regex-hash', trackingStatus: 'conflict', recipient: 'buyer@example.com',
         contactId: 'contact-9', subject: 'Callaway Promos for Dana',
-        sentAt: 2_000_000_000_000, respondedAt: null, orderedAt: null,
+        sentAt: 2_000_000_000_000, respondedAt: 2_000_000_030_000,
+        replyNotificationId: 'reply-44', orderedAt: null,
       }],
     });
     const store = createEmailTemplateTrackingStore({
@@ -450,17 +357,13 @@ describe('template response and order attribution', () => {
     await store.install();
     assert.equal(memory.data[EMAIL_TEMPLATE_SENDS_KEY][0].trackerId, 'email-template:legacy');
     assert.equal(memory.data[EMAIL_TEMPLATE_SENDS_KEY][0].trackingStatus, 'ready');
-    await store.recordReplies([{
-      topic: 'message.reply.received', body: 'Re: Callaway Promos for Dana', createdAt: now,
-      actions: [{ payload: JSON.stringify({ command: 'open_contact', target: 'buyer@example.com' }) }],
-    }]);
-    now += 60_000;
+    assert.equal('respondedAt' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
+    assert.equal('replyNotificationId' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
     await store.recordOrders([{ externalId: 'o1', at: now, data: { contactId: 'contact-9' } }]);
 
     const [send] = memory.data[EMAIL_TEMPLATE_SENDS_KEY];
     assert.equal(send.clusterId, 'email-template:legacy');
     assert.equal(send.trackingStatus, 'ready');
-    assert.equal(send.respondedAt, 2_000_000_060_000);
-    assert.equal(send.orderedAt, 2_000_000_120_000);
+    assert.equal(send.orderedAt, 2_000_000_060_000);
   });
 });

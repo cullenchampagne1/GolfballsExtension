@@ -14,6 +14,7 @@ function harness({ notificationsEnabled = true, applyError = null } = {}) {
   const receipts = [];
   const messages = [];
   const notificationUrls = [];
+  const replyAttributions = [];
   const listeners = { installed: [], startup: [], alarm: [], storage: [] };
   const chrome = {
     runtime: {
@@ -61,6 +62,9 @@ function harness({ notificationsEnabled = true, applyError = null } = {}) {
     },
     async setActionUrl() {},
   };
+  context.GBEmailTemplateTracking = {
+    async recordReplies(rows) { replyAttributions.push(...rows); },
+  };
   context.GBInstallationAuth = {
     async apiJson(url, options = {}) {
       if (url.endsWith('/receipts')) {
@@ -74,7 +78,7 @@ function harness({ notificationsEnabled = true, applyError = null } = {}) {
   new vm.Script(source, { filename: 'notifications-poll.js' }).runInContext(context);
   return {
     poll: context.GBNotificationPoll,
-    stored, applied, merged, receipts, messages, notificationUrls,
+    stored, applied, merged, receipts, messages, notificationUrls, replyAttributions,
   };
 }
 
@@ -105,6 +109,7 @@ describe('notification cursor as live-update transport', () => {
     assert.equal(h.messages.length, 1);
     assert.equal(h.messages[0].action, 'GB_EXTENSION_NOTIFICATION');
     assert.equal(h.messages[0].notification.remoteId, 92);
+    assert.deepEqual(h.replyAttributions, []);
   });
 
   it('continues applying events and advancing receipts when visible notifications are off', async () => {

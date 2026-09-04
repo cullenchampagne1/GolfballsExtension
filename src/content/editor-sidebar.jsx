@@ -384,7 +384,7 @@ function TemplateRow({ tpl, tracker, summary, isNote, type, active, onClick, onM
                   <>{' · '}{varsN} variation{varsN !== 1 ? 's' : ''}</>
                 )}
                 {summary?.sent > 0 && (
-                  <>{' · '}{summary.responded}/{summary.sent} replies{' · '}{summary.ordered} orders</>
+                  <>{' · '}{summary.sent} sent{' · '}{summary.ordered} orders</>
                 )}
               </span>
               {imported && (
@@ -1057,9 +1057,8 @@ function TemplateSidebar() {
     const result = new Map();
     for (const send of emailSends) {
       if (!send?.templateId) continue;
-      const row = result.get(send.templateId) || { sent: 0, responded: 0, ordered: 0 };
+      const row = result.get(send.templateId) || { sent: 0, ordered: 0 };
       row.sent += 1;
-      if (send.respondedAt) row.responded += 1;
       if (send.orderedAt) row.ordered += 1;
       result.set(send.templateId, row);
     }

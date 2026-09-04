@@ -77,26 +77,6 @@ function deliveryWasSuccessful(result) {
   return !status || ['sent', 'accepted', 'success', 'succeeded'].includes(status);
 }
 
-function actionPayload(action) {
-  const raw = action?.payload ?? action;
-  try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch { return null; }
-}
-
-function replyEmail(notification) {
-  const actions = Array.isArray(notification?.actions)
-    ? notification.actions : (notification?.action ? [notification.action] : []);
-  for (const action of actions) {
-    const payload = actionPayload(action);
-    if (clean(payload?.command || payload?.type, 80).toLowerCase() === 'open_contact') {
-      return lower(payload.target || payload.contact_email || payload.arguments?.contact_email);
-    }
-  }
-  return '';
-}
-
 function sendClusterId(send, catalog) {
   const current = trackerForTemplate(catalog, send?.templateId);
   return clean(
@@ -118,6 +98,11 @@ function sendCanReceiveOutcome(send) {
 }
 
 function migrateSendRecord(row) {
+  // Reply attribution was retired. Strip its historical outcome fields while
+  // normalizing so existing installations stop retaining or surfacing them.
+  const next = { ...(row || {}) };
+  delete next.respondedAt;
+  delete next.replyNotificationId;
   const clusterId = sendClusterId(row);
   const normalizedSubject = normalizedSendSubject(row);
   const priorStatus = clean(row?.trackingStatus, 40) || 'unknown';
@@ -125,7 +110,7 @@ function migrateSendRecord(row) {
     ? priorStatus
     : 'ready';
   return {
-    ...row,
+    ...next,
     clusterId,
     trackerId: clusterId,
     trackingStatus,
@@ -162,9 +147,7 @@ export function summarizeEmailTemplateSends(sends, catalog) {
       trackerId: tracker.trackerId,
       conflictsWith: tracker.conflictsWith || [],
       sent: 0,
-      responded: 0,
       ordered: 0,
-      responseRate: 0,
       orderRate: 0,
     });
   }
@@ -174,16 +157,14 @@ export function summarizeEmailTemplateSends(sends, catalog) {
         templateId: send?.templateId || '', templateName: send?.templateName || 'Deleted template',
         status: 'deleted', clusterId: sendClusterId(send), trackerId: sendClusterId(send),
         conflictsWith: [], sent: 0,
-        responded: 0, ordered: 0, responseRate: 0, orderRate: 0,
+        ordered: 0, orderRate: 0,
       });
     }
     const row = byTemplate.get(send.templateId);
     row.sent += 1;
-    if (send.respondedAt) row.responded += 1;
     if (send.orderedAt) row.ordered += 1;
   }
   for (const row of byTemplate.values()) {
-    row.responseRate = row.sent ? row.responded / row.sent : 0;
     row.orderRate = row.sent ? row.ordered / row.sent : 0;
   }
   return [...byTemplate.values()];
@@ -306,9 +287,9 @@ export function createEmailTemplateTrackingStore(options = {}) {
       enriched.forEach((email, index) => {
         if (!email?.templateId || !deliveryWasSuccessful(records(results)[index])) return;
         // A reply-in-thread (and every case reply) belongs to the original
-        // outbound conversation. Recording it as a fresh send would split
-        // later replies/orders away from the initial template that owns the
-        // subject cluster.
+        // outbound conversation. Recording it as a fresh send would split a
+        // later order away from the initial template that owns the subject
+        // cluster.
         if (email.templateTrackingStatus === 'not_applicable') return;
         const row = {
           id: sendId(email, now, index),
@@ -325,56 +306,12 @@ export function createEmailTemplateTrackingStore(options = {}) {
           normalizedSubject: normalizeEmailSubject(email.subject),
           sentAt: now,
           transport: clean(transport, 30) || 'unknown',
-          respondedAt: null,
-          replyNotificationId: null,
           orderedAt: null,
           orderId: null,
         };
         added.push(row);
       });
       return { sends: [...added, ...sends], value: { added } };
-    });
-  }
-
-  async function recordReplies(notifications) {
-    const currentCatalog = await catalog();
-    return mutateSends((sends) => {
-      const updatedIds = [];
-      const next = [...sends];
-      for (const notification of records(notifications)) {
-        if (notification?.topic !== 'message.reply.received') continue;
-        const subject = normalizeEmailSubject(notification.body);
-        if (!subject) continue;
-        const recipient = replyEmail(notification);
-        const repliedAt = Number(notification.createdAt || notification.updatedAt) || Number(clock());
-        const candidates = next
-          .map((send, index) => ({ send, index }))
-          .filter(({ send }) => (
-            sendCanReceiveOutcome(send)
-            && !send.respondedAt
-            && Number(send.sentAt) <= repliedAt
-            && (!recipient || lower(send.recipient) === recipient)
-            && normalizedSendSubject(send) === subject
-          ));
-        // The contact action normally supplies a recipient. Without it, only
-        // accept a single exact send; choosing among several identical
-        // subjects would turn a missing signal into a false attribution.
-        if (!recipient && candidates.length !== 1) continue;
-        const index = candidates[0]?.index ?? -1;
-        if (index < 0) continue;
-        const clusterId = sendClusterId(next[index], currentCatalog);
-        next[index] = {
-          ...next[index],
-          clusterId,
-          trackerId: clusterId,
-          trackingStatus: 'ready',
-          normalizedSubject: subject,
-          respondedAt: repliedAt,
-          replyNotificationId: clean(notification.remoteId || notification.id, 120) || null,
-        };
-        updatedIds.push(next[index].id);
-      }
-      return { sends: next, value: { updatedIds } };
     });
   }
 
@@ -429,7 +366,6 @@ export function createEmailTemplateTrackingStore(options = {}) {
     reconcileTemplates,
     enrichEmails,
     recordDelivery,
-    recordReplies,
     recordOrders,
     summaries,
     listSends,
