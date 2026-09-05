@@ -240,7 +240,10 @@ describe('managed email-template bucket cache', () => {
     assert.equal(sameRevision.subject, 'My pending subject');
 
     const [merged] = bucket.reconcile([sameRevision], {
-      templates: [item({ version: 2, last_editor: 'Parent Two', template: { ...item().template, body: '<p>Remote</p>' } })],
+      templates: [item({
+        version: 2, last_editor: 'Parent Two', conflict_with: ['Parent Two'],
+        template: { ...item().template, body: '<p>Remote</p>' },
+      })],
     }, { 'emailTemplates.allowParentAccount': true });
 
     assert.equal(merged.subject, 'My pending subject');
@@ -255,6 +258,45 @@ describe('managed email-template bucket cache', () => {
     }, { 'emailTemplates.allowParentAccount': true }, { acceptRemote: true });
     assert.equal(acknowledged.body, '<p>Remote</p>');
     assert.equal(acknowledged.managedTemplate.remoteVersion, undefined);
+  });
+
+  it('does not flag a solo edit as conflicted just because its own publish bumped the version', () => {
+    const [parent] = bucket.reconcile([], { templates: [item()] }, {
+      'emailTemplates.allowParentAccount': true,
+    });
+    parent.subject = 'Still typing';
+
+    // No other parent touched this template — the server reports version 2
+    // (this installation's own earlier autosave landing) and an empty
+    // conflict_with, but this row is still locally dirty (still typing).
+    // That must not manufacture a "Conflict with …" badge against yourself.
+    const [reconciled] = bucket.reconcile([parent], {
+      templates: [item({ version: 2, last_editor: 'This parent', conflict_with: [] })],
+    }, { 'emailTemplates.allowParentAccount': true });
+
+    assert.equal(reconciled.subject, 'Still typing');
+    assert.equal(reconciled.managedTemplate.remoteVersion, 2);
+    assert.deepEqual(reconciled.managedTemplate.conflictWith, []);
+  });
+
+  it('clears a stale conflict badge as soon as the server stops reporting one, even while still dirty', () => {
+    const [parent] = bucket.reconcile([], { templates: [item()] }, {
+      'emailTemplates.allowParentAccount': true,
+    });
+    parent.subject = 'My pending subject';
+    const [conflicted] = bucket.reconcile([parent], {
+      templates: [item({ version: 2, last_editor: 'Parent Two', conflict_with: ['Parent Two'] })],
+    }, { 'emailTemplates.allowParentAccount': true });
+    assert.deepEqual(conflicted.managedTemplate.conflictWith, ['Parent Two']);
+
+    // Parent Two's conflicting edit is resolved server-side; this row is
+    // still locally dirty (still typing), but the badge must clear anyway.
+    const [resolved] = bucket.reconcile([conflicted], {
+      templates: [item({ version: 2, last_editor: 'Parent Two', conflict_with: [] })],
+    }, { 'emailTemplates.allowParentAccount': true });
+
+    assert.equal(resolved.subject, 'My pending subject');
+    assert.deepEqual(resolved.managedTemplate.conflictWith, []);
   });
 
   it('runs a forced refresh after an overlapping startup sync', async () => {
