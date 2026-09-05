@@ -12,6 +12,7 @@ directly, so this test has no cross-repo import dependency.
 """
 
 import ast
+import math
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -138,14 +139,30 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 feature="gift_catalog_add", source="gift_catalog", transport="none",
                 ok=True, occurred_at=cls.now))
 
+            # Latency events (kind=latency) — the Response time percentile
+            # trend's only source. Four samples on one day, deliberately
+            # spread so p50 and p95/p99 cannot coincide.
+            for duration in (100, 200, 900, 1500):
+                session.add(ExtensionUsageEvent(
+                    owner_credential_id="cred-a", session_id="sess-a", kind="latency",
+                    duration_ms=duration, ok=True, occurred_at=cls.now))
+
             # Rep B: unregistered, low activity — 1 feature event, 1 surface.
+            # Its session carries the dropped/total counters the Integrity
+            # block's dropped-event rate divides (2 dropped of 8 = 25%).
             session.add(ExtensionUsageSession(
                 id="sess-b", owner_credential_id="cred-b",
-                started_at=cls.now - timedelta(hours=1), last_seen_at=cls.now))
+                started_at=cls.now - timedelta(hours=1), last_seen_at=cls.now,
+                events=8, dropped=2))
             session.add(ExtensionUsageEvent(
                 owner_credential_id="cred-b", session_id="sess-b", kind="feature",
                 feature="email_send", source="popup", transport="pa", count=1,
                 ok=True, occurred_at=cls.now))
+            # …and one FAILED feature event, so the error rate has a numerator.
+            session.add(ExtensionUsageEvent(
+                owner_credential_id="cred-b", session_id="sess-b", kind="feature",
+                feature="email_send", source="popup", transport="pa", count=1,
+                ok=False, occurred_at=cls.now))
             session.add(ExtensionUsageEvent(
                 owner_credential_id="cred-b", session_id="sess-b", kind="surface_open",
                 surface="Toolbar Popup", occurred_at=cls.now))
@@ -170,8 +187,11 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_top_surfaces_list",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
+                "_console_reliability_trend", "_console_reliability_integrity",
+                "_LATENCY_OUTLIER_MS",
             },
             extra_globals={
+                "math": math,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
                 "select": select, "Session": Session, "Optional": Optional,
                 "auth_manager": type("Auth", (), {"engine": cls.engine})(),
@@ -226,6 +246,50 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(rows[0]["id"], "Gifting Catalog")  # 3 opens, the most
         self.assertEqual(rows[0]["opens"]["value"], 1.0)  # normalized against itself
         self.assertEqual(rows[0]["opens"]["text"], "3")
+
+    def test_percentile_trend_leads_with_p95_dashes_p99_and_names_its_slo_line(self):
+        payload = self.routes["_console_reliability_trend"](30)
+        # `ms`, not `int`: the chart renders 1500 as "1.50s", never "$1,500.00".
+        self.assertEqual(payload["fmt"], "ms")
+        window = payload["ranges"][0]
+        self.assertEqual(window["threshold"], 800)
+        self.assertEqual(window["thresholdLabel"], "SLO 800ms")
+        layers = window["layers"]
+        # p95 leads so it is the filled curve, exactly as the design fills it.
+        self.assertEqual([layer["id"] for layer in layers], ["p95", "p50", "p99"])
+        self.assertFalse(layers[0].get("dashed"))
+        self.assertFalse(layers[1].get("dashed"))
+        self.assertTrue(layers[2]["dashed"])  # the p99 tail is a reference line
+        # Percentiles never sum, so the card reads from this rail instead of a
+        # headline: nearest-rank over the window's own 100/200/900/1500 samples.
+        stats = {entry["label"]: entry["value"] for entry in window["stats"]}
+        self.assertEqual(stats["p50"], "200ms")
+        self.assertEqual(stats["p95"], "1.50s")
+        self.assertEqual(stats["p99"], "1.50s")
+        self.assertEqual(stats[""], "4 latency events")
+
+    def test_integrity_rates_stay_numeric_and_carry_their_window_peak(self):
+        payload = self.routes["_console_reliability_integrity"](30)
+        rows = {row["id"]: row for row in payload["rows"]}
+        errors, dropped = rows["errors"], rows["dropped"]
+        # The rate is org-wide per day, not per install: the seeded day carries
+        # 9 `feature` events across every install and exactly 1 of them failed
+        # → 1/9; 2 of that session's 8 events dropped → 25%. Asserted as the
+        # window PEAK, not the last bucket, so the test cannot flip on a UTC
+        # day rollover.
+        self.assertAlmostEqual(max(errors["values"]), 100 / 9, places=6)
+        self.assertEqual(max(dropped["values"]), 25.0)
+        # The headline value is the window's latest bucket, always.
+        self.assertEqual(errors["value"], round(errors["values"][-1], 2))
+        self.assertEqual(dropped["value"], round(dropped["values"][-1], 2))
+        # Numeric + `pct` (not a pre-baked "50.0%" string), so the card can
+        # animate the value and swap in the hovered day while scrubbing.
+        self.assertEqual(errors["format"], "pct")
+        self.assertIsInstance(errors["value"], float)
+        self.assertEqual(errors["label"], "error rate · ok = false")
+        self.assertEqual(dropped["label"], "dropped events per session")
+        self.assertEqual(errors["note"], "30d peak 11.1%")
+        self.assertEqual(len(errors["values"]), 30)  # one point per window day
 
     def test_activity_heatmap_lists_sunday_first_and_buckets_by_real_hour(self):
         payload = self.routes["_console_usage_activity_heatmap"](30)
