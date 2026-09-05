@@ -188,7 +188,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_console_usage_adoption_trend", "_console_usage_top_surfaces_list",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
                 "_console_reliability_trend", "_console_reliability_integrity",
-                "_LATENCY_OUTLIER_MS",
+                "_LATENCY_OUTLIER_MS", "_LEADERBOARD_SORTS", "_console_usage_concurrency",
+                "_presence_hourly_buckets", "_console_usage_kpi_strip",
             },
             extra_globals={
                 "math": math,
@@ -246,6 +247,48 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(rows[0]["id"], "Gifting Catalog")  # 3 opens, the most
         self.assertEqual(rows[0]["opens"]["value"], 1.0)  # normalized against itself
         self.assertEqual(rows[0]["opens"]["text"], "3")
+
+    def test_kpi_strip_annotates_every_cell_and_never_fakes_an_untracked_one(self):
+        payload = self.routes["_console_usage_kpi_strip"](30)
+        cells = {cell["label"]: cell for cell in payload["kpis"]}
+        self.assertEqual(len(payload["kpis"]), 8)  # the design's eight cells
+        # Every cell states where its number comes from, the way the design does.
+        self.assertTrue(all(cell["note"] for cell in payload["kpis"]))
+        self.assertEqual(cells["New installs"]["value"], "3")  # all three seeded installs
+        self.assertEqual(cells["New installs"]["note"], "SESSION min")
+        # The strip's error rate spans the WHOLE window (1 of 19 feature
+        # events), unlike the Integrity block's per-day series — same column,
+        # different grain, and both are stated in their own note.
+        self.assertEqual(cells["Error rate"]["value"], "5.3%")
+        # The one metric with no read-side path today says so instead of
+        # rendering a plausible-looking zero.
+        self.assertEqual(cells["Time to first action"]["value"], "—")
+        self.assertEqual(cells["Time to first action"]["note"], "NOT TRACKED")
+
+    def test_leaderboard_sort_control_reranks_server_side_with_the_rank_column(self):
+        # cred-a leads on volume; cred-b touched a funnel stage cred-a's own
+        # count can't beat on breadth, so the two orderings must differ in
+        # SOME sortable dimension — and rank must always follow the order.
+        for sort in ("actions", "funnel", "tools"):
+            payload = self.routes["_console_usage_leaderboard"](sort)
+            key = self.routes["_LEADERBOARD_SORTS"][sort][1]
+            self.assertIn(f"by {key}", payload["summary"])
+            self.assertEqual([row["rank"] for row in payload["rows"]],
+                             list(range(1, len(payload["rows"]) + 1)))
+        # An unknown sort falls back to the rate ranking instead of erroring.
+        self.assertEqual(self.routes["_console_usage_leaderboard"]("nonsense")["rows"][0]["_select"],
+                         self.routes["_console_usage_leaderboard"]("actions")["rows"][0]["_select"])
+
+    def test_concurrency_chart_carries_the_designs_footer_rail(self):
+        payload = self.routes["_console_usage_concurrency"]()
+        window = payload["ranges"][0]
+        self.assertEqual(len(window["series"]), 24)  # one bucket per hour
+        rail = [entry["value"] for entry in window["stats"]]
+        # The card header owns the live count; the rail owns the 24h bounds
+        # and the peak/median summary between them.
+        self.assertEqual(rail[0], "00:00")
+        self.assertEqual(rail[2], "23:00")
+        self.assertEqual(rail[1], f"peak {payload['peak']} · median {payload['median']}")
 
     def test_percentile_trend_leads_with_p95_dashes_p99_and_names_its_slo_line(self):
         payload = self.routes["_console_reliability_trend"](30)
