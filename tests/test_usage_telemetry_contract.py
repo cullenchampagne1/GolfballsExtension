@@ -211,5 +211,82 @@ class UsageTelemetryContractTests(unittest.TestCase):
         self.assertEqual(views["catalog"]["total"], 6)
 
 
+@unittest.skipUnless(CLIENT_API.exists(), "local project runtime is not available")
+class ExtensionAnalyticsContractTests(unittest.TestCase):
+    """Pure-logic slices of the Extension Analytics endpoints (routes.py) that
+    don't need a live database: the presence-bucket math (shared by the
+    Presence card and the new Concurrency chart) and the static Backlog
+    content (curated from the metrics catalog, not a telemetry aggregate)."""
+
+    @classmethod
+    def setUpClass(cls):
+        routes_tree = ast.parse((ROOT / ".revstack" / "routes.py").read_text())
+        names = {
+            "_presence_hourly_buckets", "_console_backlog", "_BACKLOG_ITEMS",
+            "_CATALOG_FUNNEL", "_WORKFLOW_STAGES",
+        }
+        selected = []
+        for node in routes_tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name in names:
+                selected.append(node)
+            elif isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id in names
+                for target in node.targets
+            ):
+                selected.append(node)
+        cls.routes = {"datetime": datetime, "timedelta": timedelta, "timezone": timezone}
+        exec(compile(ast.Module(body=selected, type_ignores=[]), "analytics-routes", "exec"), cls.routes)
+
+    def test_presence_buckets_count_only_sessions_alive_in_each_hour(self):
+        day_floor = datetime(2026, 9, 1, 0, 0, 0)
+
+        class FakeSession:
+            def __init__(self, started_at, last_seen_at):
+                self.started_at = started_at
+                self.last_seen_at = last_seen_at
+
+        sessions = [
+            # alive 00:30-02:15 -> counts in hours 0, 1, 2
+            FakeSession(day_floor + timedelta(minutes=30), day_floor + timedelta(hours=2, minutes=15)),
+            # alive only within hour 5
+            FakeSession(day_floor + timedelta(hours=5, minutes=10), day_floor + timedelta(hours=5, minutes=40)),
+        ]
+        buckets = self.routes["_presence_hourly_buckets"](sessions, day_floor)
+        self.assertEqual(len(buckets), 24)
+        self.assertEqual(buckets[0], 1)
+        self.assertEqual(buckets[1], 1)
+        self.assertEqual(buckets[2], 1)
+        self.assertEqual(buckets[3], 0)
+        self.assertEqual(buckets[5], 1)
+        self.assertEqual(sum(buckets), 4)
+
+    def test_backlog_mirrors_the_metrics_catalog_priority_order(self):
+        payload = self.routes["_console_backlog"]()
+        self.assertEqual(len(payload["rows"]), len(self.routes["_BACKLOG_ITEMS"]))
+        first, last = payload["rows"][0], payload["rows"][-1]
+        self.assertEqual(first["status"]["tone"], "ok")  # "shipped"
+        self.assertEqual(last["status"]["tone"], "warning")  # "not started"
+        self.assertEqual(first["n"], 1)
+        self.assertEqual(last["n"], len(payload["rows"]))
+        column_keys = {column["key"] for column in payload["columns"]}
+        self.assertEqual(column_keys, {"n", "title", "unlocks", "status", "effort"})
+
+    def test_catalog_funnel_stages_are_the_seven_tracked_gift_catalog_features(self):
+        features = [feature for feature, _label in self.routes["_CATALOG_FUNNEL"]]
+        self.assertEqual(len(features), 7)
+        self.assertTrue(all(feature.startswith("gift_catalog_") for feature in features))
+        self.assertEqual(features[0], "gift_catalog_open")
+        self.assertEqual(features[-1], "gift_catalog_checkout")
+
+    def test_workflow_stages_are_a_strict_subset_of_the_catalog_funnel(self):
+        # WORKFLOW re-labels a subset of the same funnel features — this pins
+        # that they stay a subset, so the two lists can't silently diverge
+        # (e.g. a renamed feature id breaking one list but not the other).
+        funnel_features = {feature for feature, _label in self.routes["_CATALOG_FUNNEL"]}
+        workflow_features = [feature for feature, _label in self.routes["_WORKFLOW_STAGES"]]
+        self.assertTrue(set(workflow_features).issubset(funnel_features))
+        self.assertEqual(workflow_features[-1], "gift_catalog_checkout")
+
+
 if __name__ == "__main__":
     unittest.main()
