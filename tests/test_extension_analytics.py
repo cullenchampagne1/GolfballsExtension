@@ -183,7 +183,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_COLORS", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
-                "_USAGE_TRANSPORT_LABELS", "_MOCK_SEED", "_REP_WINDOW_DAYS", "_rep_aggregates",
+                "_USAGE_TRANSPORT_LABELS", "_MOCK_SEED", "_REP_WINDOW_DAYS", "_rep_aggregates", "_ago",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_top_surfaces_list",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
@@ -213,13 +213,55 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         rows = payload["rows"]
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0]["_select"], "cred-a")
-        self.assertEqual(rows[0]["rank"], 1)
+        # Zero-padded so the rank column is a fixed-width rail past ten.
+        self.assertEqual(rows[0]["rank"], {"kind": "mono", "text": "01"})
         self.assertEqual(rows[0]["rep"]["text"], "Alex Rep")
-        self.assertEqual(rows[0]["rep"]["sub"], "registered")
+        self.assertEqual(rows[0]["rep"]["face"], "sans")
         # cred-c did nothing but hold a session open — must still show a
         # finite rate, never a crash from a divide-by-zero denominator.
         idle_row = next(row for row in rows if row["_select"] == "cred-c")
-        self.assertEqual(idle_row["actions"]["text"], "0.0/hr")
+        self.assertEqual(idle_row["actions"]["text"], "0.0")
+
+    def test_leaderboard_rep_cell_qualifies_the_name_with_its_install(self):
+        # A display name alone can't be acted on — two reps can share one, and
+        # an unregistered install has none at all. The sub line is what makes
+        # the row identify a specific installation.
+        rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
+        registered = rows["cred-a"]["rep"]
+        self.assertTrue(registered["sub"].startswith("rsk_aaaa_… · "))
+        self.assertTrue(registered["sub"].endswith(" · 1 session"))
+        self.assertIsNone(registered["tone"])
+        # An unregistered install reads as a quieter name, never as a person.
+        self.assertEqual(rows["cred-c"]["rep"]["tone"], "muted")
+
+    def test_leaderboard_measures_breadth_against_the_orgs_own_tool_catalog(self):
+        # "2/19" hard-coded next to the UI goes stale the day a surface ships;
+        # the denominator is how many distinct tools anyone actually opened.
+        rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
+        # Gifting Catalog + CRM Search + Toolbar Popup across the whole org.
+        self.assertEqual(rows["cred-a"]["tools"]["text"], "2/3")
+        self.assertEqual(rows["cred-c"]["tools"]["text"], "0/3")
+
+    def test_leaderboard_deviation_cell_is_signed_around_the_team_median(self):
+        # A 0→1 fill can't say "behind the team" — the median has to be the
+        # ZERO of this column, with the sign carrying the direction.
+        rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
+        self.assertEqual(rows["cred-a"]["dev"]["kind"], "diverge")
+        self.assertGreater(rows["cred-a"]["dev"]["value"], 0)   # busiest rep
+        self.assertLess(rows["cred-c"]["dev"]["value"], 0)      # idle install
+        for row in rows.values():
+            self.assertGreaterEqual(row["dev"]["value"], -1.0)
+            self.assertLessEqual(row["dev"]["value"], 1.0)
+
+    def test_leaderboard_footer_states_the_baseline_the_bars_are_drawn_against(self):
+        payload = self.routes["_console_usage_leaderboard"]()
+        rates = sorted(entry["actions_per_hour"] for entry in self.routes["_rep_aggregates"]()["reps"].values())
+        median = rates[len(rates) // 2]
+        self.assertEqual(payload["footer"]["note"], f"3 reps · median {median:.1f} act/hr")
+        self.assertIn("scorecard", payload["footer"]["hint"])
+        # `summary` would draw a second rail above the column labels restating
+        # what the sort pills and the row count already say.
+        self.assertNotIn("summary", payload)
 
     def test_leaderboard_row_click_selection_feeds_the_scorecard(self):
         leaderboard_top = self.routes["_console_usage_leaderboard"]()["rows"][0]["_select"]
@@ -230,6 +272,52 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # the leaderboard's own #1 row, not silently pick a different rep.
         default_scorecard = self.routes["_console_usage_rep_scorecard"](None)
         self.assertEqual(default_scorecard["name"], "Alex Rep")
+
+    def test_scorecard_stats_never_repeat_the_number_the_ring_already_shows(self):
+        # The ring IS the funnel; a tile repeating it spends a quarter of the
+        # grid saying the same thing twice. These four answer what it can't.
+        scorecard = self.routes["_console_usage_rep_scorecard"]("cred-a")
+        stats = {stat["label"]: stat["value"] for stat in scorecard["stats"]}
+        self.assertEqual(list(stats), ["Active hours", "Actions / hr", "Tools touched", "Time to 1st action"])
+        self.assertEqual(stats["Tools touched"], "2/3")
+        # sess-a's first feature event lands on its own start instant.
+        self.assertEqual(stats["Time to 1st action"], "0m")
+        self.assertEqual(stats["Active hours"], "3.0h")
+
+    def test_scorecard_reports_no_first_action_rather_than_a_plausible_zero(self):
+        # cred-c held a session open and did nothing. "0m" would read as the
+        # fastest rep on the team; the truth is there is no sample.
+        stats = {stat["label"]: stat["value"]
+                 for stat in self.routes["_console_usage_rep_scorecard"]("cred-c")["stats"]}
+        self.assertEqual(stats["Time to 1st action"], "—")
+
+    def test_scorecard_funnel_ring_severity_tracks_the_designs_thresholds(self):
+        # 3 of 7 stages = 43% — at or above the design's 40% "healthy" mark, so
+        # the ring reads as normal rather than as a warning.
+        self.assertEqual(self.routes["_console_usage_rep_scorecard"]("cred-a")["funnel"]["severity"], "normal")
+        # cred-c reached no stage at all.
+        self.assertEqual(self.routes["_console_usage_rep_scorecard"]("cred-c")["funnel"]["severity"], "warning")
+
+    def test_scorecard_dwell_bars_diverge_around_the_team_median(self):
+        # Every dwell bar is normalised against the LARGEST deviation in this
+        # rep's own set, so the widest bar reaches the track edge instead of
+        # every bar hugging the centre rule.
+        bars = self.routes["_console_usage_rep_scorecard"]("cred-a")["dwell"]["bars"]
+        for bar in bars:
+            self.assertIn("value", bar)
+            self.assertGreaterEqual(bar["value"], -1.0)
+            self.assertLessEqual(bar["value"], 1.0)
+            self.assertTrue(bar["delta_text"].endswith("%"))
+        if bars:
+            self.assertEqual(max(abs(bar["value"]) for bar in bars), 1.0)
+
+    def test_ago_never_reports_a_never_seen_install_as_just_now(self):
+        ago, now = self.routes["_ago"], self.now
+        self.assertEqual(ago(None, now), "never seen")
+        self.assertEqual(ago(now - timedelta(seconds=30), now), "just now")
+        self.assertEqual(ago(now - timedelta(minutes=12), now), "12m ago")
+        self.assertEqual(ago(now - timedelta(hours=5), now), "5h ago")
+        self.assertEqual(ago(now - timedelta(days=5), now), "5d ago")
 
     def test_adoption_trend_counts_active_installs_and_marks_the_new_line_dashed(self):
         payload = self.routes["_console_usage_adoption_trend"](30)
@@ -269,11 +357,16 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # cred-a leads on volume; cred-b touched a funnel stage cred-a's own
         # count can't beat on breadth, so the two orderings must differ in
         # SOME sortable dimension — and rank must always follow the order.
+        reps = self.routes["_rep_aggregates"]()["reps"]
         for sort in ("actions", "funnel", "tools"):
             payload = self.routes["_console_usage_leaderboard"](sort)
-            key = self.routes["_LEADERBOARD_SORTS"][sort][1]
-            self.assertIn(f"by {key}", payload["summary"])
-            self.assertEqual([row["rank"] for row in payload["rows"]],
+            aggregate = self.routes["_LEADERBOARD_SORTS"][sort][0]
+            self.assertEqual(payload["sort"]["key"], aggregate)
+            # The rows really are ordered by THAT aggregate, descending — a
+            # label alone would still pass if the ranking never changed.
+            self.assertEqual([row["_select"] for row in payload["rows"]],
+                             sorted(reps, key=lambda owner: -reps[owner][aggregate]))
+            self.assertEqual([int(row["rank"]["text"]) for row in payload["rows"]],
                              list(range(1, len(payload["rows"]) + 1)))
         # An unknown sort falls back to the rate ranking instead of erroring.
         self.assertEqual(self.routes["_console_usage_leaderboard"]("nonsense")["rows"][0]["_select"],
