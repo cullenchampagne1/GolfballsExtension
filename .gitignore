@@ -49,3 +49,7 @@ dist/safari-stage/
 .revstack/
 /revstack.project.json
 .revstack-runtime/
+# Block Definition v3 moves this project's block declarations out of
+# .revstack/blocks.py and into /blocks/**/*.block.yaml. Same integration, same
+# rule: loaded from disk by the backend, never part of the public repo.
+/blocks/
