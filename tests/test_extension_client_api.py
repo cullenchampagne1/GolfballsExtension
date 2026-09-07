@@ -202,6 +202,61 @@ class ExtensionClientAccessTests(unittest.TestCase):
         self.assertEqual(payload["configuration_registry"], "current")
         self.assertEqual(self.settings_policy.calls[-1], ("install-1", "3.4.6"))
 
+    def test_email_exchange_flow_maps_template_cc_into_graph_recipients(self):
+        """The extension sends `cc` as plain strings; Graph wants objects.
+
+        The packaged flow has to do that mapping itself, or a template CC list
+        leaves the extension and is silently dropped by the send.
+        """
+        response = self.api.email_exchange_flow(self.request(), "cullen")
+        with zipfile.ZipFile(io.BytesIO(response.body)) as package:
+            definition_name = next(
+                name for name in package.namelist()
+                if name.endswith("/definition.json")
+            )
+            definition = json.loads(package.read(definition_name))["properties"]["definition"]
+
+        email_fields = (
+            definition["triggers"]["manual"]["inputs"]["schema"]
+            ["properties"]["emails"]["items"]["properties"]
+        )
+        self.assertEqual(email_fields["cc"], {"type": "array", "items": {"type": "string"}})
+
+        per_email = definition["actions"]["Apply_to_each"]["actions"]
+        select_cc = per_email["Select_Cc"]
+        self.assertEqual(
+            select_cc["inputs"],
+            {
+                "from": "@coalesce(items('Apply_to_each')?['cc'], json('[]'))",
+                "select": {"emailAddress": {"address": "@item()"}},
+            },
+            "cc must be mapped to Graph's {emailAddress:{address}} shape",
+        )
+        # A missing cc coalesces to [], so the branch below never sees null.
+        self.assertEqual(per_email["Condition"]["runAfter"], {"Select_Cc": ["Succeeded"]})
+
+        composed = {}
+
+        def collect(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key.startswith("Compose_") and isinstance(value, dict):
+                        composed[key] = value["inputs"]
+                    collect(value)
+            elif isinstance(node, list):
+                for value in node:
+                    collect(value)
+
+        collect(definition["actions"])
+        self.assertEqual(
+            composed["Compose_Standalone_Body"]["ccRecipients"], "@body('Select_Cc')")
+        self.assertEqual(
+            composed["Compose_Fallback_Body"]["ccRecipients"], "@body('Select_Cc')")
+        self.assertEqual(
+            composed["Compose_Reply_Body"]["message"]["ccRecipients"], "@body('Select_Cc')",
+            "a reply inherits its thread recipients, so CC rides in the message override",
+        )
+
     def test_email_exchange_flow_creates_reply_drafts_without_sending(self):
         response = self.api.email_exchange_flow(self.request(), "cullen")
         self.assertEqual(response.media_type, "application/zip")
