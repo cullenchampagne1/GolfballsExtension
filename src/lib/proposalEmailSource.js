@@ -18,6 +18,8 @@ import { rid, priceAtBreaks } from './giftCatalogMath.js';
 import { promoDiscount, giftSetPreviewUrl } from './cartSerializer.js';
 import { decoImprints } from './giftImprints.js';
 import { giftSetSizeLabel } from './giftSets.js';
+import { lineSetupFee, SETUP_FEE_LABEL } from './lineSetupFee.js';
+import { lineAttributeSubtitle } from './lineAttributes.js';
 import { colorNameOf } from '../modals/giftCustomize.jsx';
 
 /* ── GiftCatalog-local helpers, copied verbatim ───────────────── */
@@ -34,11 +36,10 @@ const lineProductImg = (line) => lineGiftImg(line)
   || (line && line.variant && line.variant.image)
   || (line && line.product && line.product.img)
   || '';
-const lineVariantSubtitle = (line) => {
-  const values = Object.values((line && line.variant && line.variant.values) || {}).filter(Boolean);
-  const details = line && line.variant && line.variant.details;
-  return [...values, details].filter((value, index, all) => value && all.indexOf(value) === index).join(' · ');
-};
+/* Identity attributes (colour/size) first, then the customization options —
+   the shared ordering every surface uses, so an attribute never moves between
+   the title area and the options list. See src/lib/lineAttributes.js. */
+const lineVariantSubtitle = (line) => lineAttributeSubtitle(line && line.variant);
 
 // Describe a line's imprint(s) for the email "Imprint preview" card — type
 // label, color (name + swatch), and a short per-pole detail line. Dual-pole
@@ -78,8 +79,10 @@ const lineImprint = (deco) => {
   return { type: deco.engine, typeLabel, frontLabel, color, colorHex: colorHex || null, detailLines, text };
 };
 
-/* proposalToEmailSource — copied verbatim from GiftCatalog.jsx (~line 3098). */
-const proposalToEmailSource = (lines, name, opts = {}) => {
+/* proposalToEmailSource — THE proposal → email `source` builder. GiftCatalog
+   used to carry its own verbatim copy; both now call this one, which is why the
+   setup-fee row and the attribute ordering can't drift between them again. */
+export const proposalToEmailSource = (lines, name, opts = {}) => {
   const rows = []; let total = 0; let freeTotal = 0;
   for (const l of (lines || [])) {
     const p = l.product || {};
@@ -96,6 +99,7 @@ const proposalToEmailSource = (lines, name, opts = {}) => {
     // (a sale or a volume break).
     const brks = p.breaks || [];
     const retailUnit = Math.max(Number(p.orig) || 0, (brks[0] && Number(brks[0].p)) || 0, Number(p.price) || 0);
+    const firstRow = rows.length;          // where THIS line's split rows begin
     for (const s of (l.splits || [])) {
       const qty = s.qty || 0;
       // HAR layout: a FREE line is shown at its FULL price (so the subtotal
@@ -119,7 +123,19 @@ const proposalToEmailSource = (lines, name, opts = {}) => {
       // a free row to the line that earned it (Separated-theme grouping).
       // `imprint` drives the preview card's spec line.
       rows.push({ lineId: l.id, parentLineId: l.parentLineId || null, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal,
-        origUnit, origTotal: origUnit != null ? Math.round(qty * origUnit * 100) / 100 : null, free: isFree, imprint });
+        origUnit, origTotal: origUnit != null ? Math.round(qty * origUnit * 100) / 100 : null, free: isFree, imprint, setupFee: 0 });
+    }
+    /* The line item's one-time setup fee — golfballs.com prints it as a
+       "Set Up Fee" row UNDER the line and folds it into the estimated total
+       (verified: 12 × $23.99 = $287.88 + $50 per towel colour → $675.76). It's
+       charged once per line item, so it rides on the LAST split row: with price
+       breaks it floats to the bottom of the stack, exactly like the site. */
+    const setupFee = lineSetupFee(l);
+    if (setupFee > 0 && rows.length > firstRow) {
+      const last = rows[rows.length - 1];
+      last.setupFee = setupFee;
+      last.setupLabel = SETUP_FEE_LABEL;
+      total += setupFee;
     }
   }
   const promotion = opts.promotion || null;

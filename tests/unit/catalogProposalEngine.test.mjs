@@ -130,7 +130,22 @@ describe('catalog proposal engine · action save', () => {
     assert.match(result.proposalUrl, /opportunityID=88/);
     assert.equal(result.itemCount, 2);
     assert.equal(result.lineCount, 2);
-    assert.equal(result.total, 1474.68);
+    assert.equal(result.total, 1474.68, 'falls back to the split sum when the save reports no total');
+  });
+
+  it('reports the SAVED CART total so one-time setup fees are not left out', async () => {
+    // Catalog products carry no setupFee ladder (only the product page does), so
+    // re-summing splits under-reports a decorated proposal by its setup fees.
+    // saveProposalToOpportunity returns what the cart really holds.
+    const result = await createCatalogProposal({
+      opportunityId: '88',
+      items: [{ sku: 'B5338', quantity: 12 }],
+    }, {}, {
+      catalog: [product()],
+      idFactory: ids(),
+      saveProposal: async () => ({ cartID: 'cart-11', savedLines: 1, savedTotal: 837.88, skipped: [] }),
+    });
+    assert.equal(result.total, 837.88);
   });
 
   it('rejects malformed nested item instructions before any save', async () => {

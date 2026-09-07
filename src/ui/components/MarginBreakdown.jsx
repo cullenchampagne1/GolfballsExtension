@@ -12,6 +12,8 @@ import { marginReport, primeProposalCosts, unitCostOf, hasRealCost } from '../..
 import { money, usd } from '../../lib/giftCatalogMath.js';
 import { decoImprints } from '../../lib/giftImprints.js';
 import { giftSetPreviewUrl } from '../../lib/cartSerializer.js';
+import { SETUP_FEE_LABEL } from '../../lib/lineSetupFee.js';
+import { identitySuffix } from '../../lib/lineAttributes.js';
 
 /* ── design-token helpers (copied verbatim from GiftCatalog.jsx) ─────────── */
 const marginTone = (m) => (m >= 0.45 ? 'success' : m >= 0.32 ? 'warning' : 'error');
@@ -30,6 +32,12 @@ const lineGiftImg = (line) => {
 const lineGiftTitle = (line) => {
   const gs = line && line.decoration && line.decoration.giftSet;
   return gs ? (gs.name || 'Gift set') : null;
+};
+/* Colour / size read next to the title (as the site's own product names do),
+   never as a customization chip — see src/lib/lineAttributes.js. */
+const lineTitleOf = (line) => {
+  const title = (line && line.product && line.product.title) || '';
+  return title + identitySuffix(line && line.variant, title);
 };
 
 /* product thumbnail (copied verbatim from GiftCatalog.jsx) */
@@ -59,10 +67,12 @@ function StatTile({ label, value, sub, accent, tone }) {
   );
 }
 
-/* One product row in the line-items + margin table. Copied verbatim from
+/* One PRICE-BREAK row in the line-items + margin table. Copied from
    GiftCatalog.jsx's MarginLineRow, then made READ-ONLY: the inline price-edit
    affordance (onEditPrice / EditablePrice) is dropped — prices render as plain
-   text — while the `estimated` "no cost on file" star indicator is kept. */
+   text — while the `estimated` "no cost on file" star indicator is kept.
+   marginReport emits one row per break, so each row shows its OWN margin
+   rather than the blend of a line's breaks. */
 function MarginLineRow({ e, first, estimated }) {
   const chips = decoImprints(e.decoration);
   const star = estimated ? <sup title="No cost on file — estimated" style={{ color: 'var(--gb-warning-fg, #b6830a)', fontWeight: 800, marginLeft: 1 }}>*</sup> : null;
@@ -73,7 +83,8 @@ function MarginLineRow({ e, first, estimated }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || lineTitleOf(e)}</span>
+            {e.splitCount > 1 && <span title={`Price break ${e.splitIndex + 1} of ${e.splitCount}`} style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px', fontFamily: 'var(--gb-font-mono)' }}>Break {e.splitIndex + 1}/{e.splitCount}</span>}
             {e.free && <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>}
           </div>
         </div>
@@ -84,11 +95,11 @@ function MarginLineRow({ e, first, estimated }) {
           ? <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-success-fg)', fontFamily: 'var(--gb-font-mono)' }}>Promo</span>
           : <MarginBadge m={e.margin} />}</span>
       </div>
-      {/* Per-split detail — shown when there are multiple splits / imprints
-          (read-only: no inline price editing). */}
-      {(e.splits.length > 1 || chips.length > 0) && (
+      {/* Break detail (read-only): the unit price + unit cost behind this row's
+          margin, plus the item's setup fee when it lands on this break. */}
+      {(e.splitCount > 1 || e.setupFee > 0 || chips.length > 0) && (
         <div style={{ marginTop: 7, paddingLeft: 46, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {e.splits.length > 1 && e.splits.map((s, i) => (
+          {e.splitCount > 1 && e.splits.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>
               <span>{s.qty} × </span>
               <span>{usd(s.price)}</span>
@@ -99,8 +110,15 @@ function MarginLineRow({ e, first, estimated }) {
               <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{money((s.qty || 0) * (s.price || 0))}</span>
             </div>
           ))}
+          {e.setupFee > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>
+              <span style={{ color: 'var(--gb-text-muted)' }}>{SETUP_FEE_LABEL}</span>
+              <div style={{ flex: 1 }} />
+              <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{money(e.setupFee)}</span>
+            </div>
+          )}
           {chips.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: e.splits.length > 1 ? 3 : 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: e.splitCount > 1 ? 3 : 0 }}>
               {chips.map((c) => (
                 <span key={c.slot} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9, fontWeight: 700 }}>{c.label}</span>
               ))}
@@ -143,7 +161,7 @@ export function MarginBreakdown({ entries }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* stat strip */}
       <div style={{ display: 'flex', gap: 10, position: 'relative' }}>
-        <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}`} />
+        <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}${M.setupTotal > 0 ? ` · ${money(M.setupTotal)} setup` : ''}`} />
         <StatTile label={M.costBasis === 'actual' ? 'Cost' : 'Est. cost'} value={money(M.cost)} sub={priming ? 'pricing…' : M.costBasis === 'actual' ? 'actual' : M.costBasis === 'mixed' ? 'part actual' : 'assumed'} />
         <StatTile label="Gross profit" value={money(M.profit)} accent />
         <StatTile label="Blended margin" value={pctOf(M.margin)} tone={TONE_FG[marginTone(M.margin)]} sub="all-in" />

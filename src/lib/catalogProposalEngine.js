@@ -163,7 +163,12 @@ export async function createCatalogProposal(input = {}, context = {}, options = 
     name,
     lineCount: Number(saved.savedLines) || lines.reduce((count, line) => count + line.splits.length, 0),
     itemCount: lines.length,
-    total: round2(lines.reduce((sum, line) => sum + line.splits.reduce((lineSum, split) => lineSum + split.qty * split.price, 0), 0)),
+    // Prefer what the SAVED CART holds: catalog lines carry no setup ladder
+    // (only the product page does), so re-summing splits here would report a
+    // total below the one-time setup fees the cart actually charges.
+    total: saved.savedTotal != null
+      ? round2(saved.savedTotal)
+      : round2(lines.reduce((sum, line) => sum + line.splits.reduce((lineSum, split) => lineSum + split.qty * split.price, 0), 0)),
     skipped: Array.isArray(saved.skipped) ? saved.skipped.length : 0,
     promoCode,
   };

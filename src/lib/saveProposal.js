@@ -14,7 +14,8 @@
    and PUT it through the giftSaveCart relay.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents, decorationFromCartItem } from './cartSerializer.js';
+import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents, decorationFromCartItem, collapseSetupFee, lineTotal } from './cartSerializer.js';
+import { hasEditedSetupFee, lineSetupFee, setupFeeSnapshot } from './lineSetupFee.js';
 import { runEngine } from './page-engine/index.js';
 import { needsIngest, ingestImageUrl, saveCustomItem } from './customItems.js';
 import { API } from './constants.js';
@@ -145,9 +146,12 @@ export async function buildProposalLines(proposal) {
           skipped.push({ title: ci.name || ci.sku || 'custom item', reason: 'personalization image upload failed (' + ((e && e.message) || 'error') + ')' });
         }
       }
-      for (const split of (line.splits || [])) {
-        items.push(buildCustomItemLine({ ci, qty: split.qty, price: split.price, style, personalization }));
-      }
+      // Same per-line-item rule as catalog lines: the custom item's own setup
+      // charge is billed once, on the last price break.
+      const customSplitLines = (line.splits || []).map((split) => (
+        buildCustomItemLine({ ci, qty: split.qty, price: split.price, style, personalization })
+      ));
+      items.push(...collapseSetupFee(customSplitLines, hasEditedSetupFee(line) ? lineSetupFee(line) : null));
       continue;
     }
     const raw = rawByUrl.get(cat.url);
@@ -182,20 +186,21 @@ export async function buildProposalLines(proposal) {
     // base and "_1" pages serve the same product — only the line URL differs).
     const urlPath = cat.urlPath || '';
     const lineUrl = urlPath ? (isLogoLine ? urlPath : urlPath.replace(/_1$/, '')) : undefined;
-    for (const split of (line.splits || [])) {
-      items.push(assembleLine({
-        product: raw,
-        // `override` carries a hand-edited price straight through to ItemPrice —
-        // without it assembleLine re-derives the list ladder and the rep's quoted
-        // price silently reverts to the catalog price on save.
-        pricing: { price: split.price, breaks: lineBreaks, override: !!split.priceEdited },
-        decoration,
-        selection,
-        qty: split.qty,
-        url: lineUrl,
-        itemGuid: split.id,        // deterministic → promotion freeItems map back to this split
-      }));
-    }
+    const splitLines = (line.splits || []).map((split) => assembleLine({
+      product: raw,
+      // `override` carries a hand-edited price straight through to ItemPrice —
+      // without it assembleLine re-derives the list ladder and the rep's quoted
+      // price silently reverts to the catalog price on save.
+      pricing: { price: split.price, breaks: lineBreaks, override: !!split.priceEdited },
+      decoration,
+      selection,
+      qty: split.qty,
+      url: lineUrl,
+      itemGuid: split.id,        // deterministic → promotion freeItems map back to this split
+    }));
+    // The one-time setup fee belongs to the line ITEM: charge it once, on the
+    // last break, and honour a rep-edited amount across every break.
+    items.push(...collapseSetupFee(splitLines, hasEditedSetupFee(line) ? lineSetupFee(line) : null));
   }
   return { items, skipped };
 }
@@ -465,10 +470,16 @@ export function cartItemToLine(it, i) {
   // site: a free giveaway line, no separate discount to reconcile.
   const free = /-PROMO$/i.test(String(it.itemGuid || ''));
   if (free) price = 0;
+  // The one-time decoration setup the cart is carrying for this line. Reading
+  // it back is what lets a proposal built on the WEBSITE (or an earlier modal
+  // save) show and re-quote its "Set Up Fee" row instead of silently dropping
+  // it — and it round-trips as an EDIT so re-saving can't re-derive it away.
+  const setup = Math.round(Math.max(0, Number(it.SetupPrice) || 0) * 100) / 100;
   return {
     id: 'crmln-' + (it.itemGuid || i),
     productId: it.itemGuid || ('p' + i),
     free,
+    ...(!free && setup > 0 ? { setupFeeAuto: setup, setupFee: setup, setupFeeEdited: true } : {}),
     product: {
       id: 'crmp-' + (it.ShortCode || it.itemGuid || i),
       title: it.productTitle || it.nameFormat || 'Item',
@@ -712,18 +723,23 @@ export async function saveProposalToOpportunity(proposal, {
     promotion,
   });
   const resp = await sendBackgroundMessage('giftSaveProposal', { body });
+  // What the cart actually holds — goods PLUS the per-line-item setup fees the
+  // serializer derived from each product's own ladder. Callers that report a
+  // proposal's value (the createProposal action) must use this rather than
+  // re-summing splits, which knows nothing about setup.
+  const savedTotal = Math.round(items.reduce((sum, item) => sum + lineTotal(item), 0) * 100) / 100;
   // Saving the cart has already succeeded at this point. Treat a stage-write
   // failure as an explicit partial success so retrying cannot create a duplicate
   // proposal, while still telling the modal that the CRM needs attention.
   try {
     const opportunityStageChanged = await advanceSavedProposalOpportunity(opportunityID);
     return {
-      cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped,
+      cartID: resp.cartID, raw: resp.raw, savedLines: items.length, savedTotal, skipped,
       opportunityStageChanged,
     };
   } catch (error) {
     return {
-      cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped,
+      cartID: resp.cartID, raw: resp.raw, savedLines: items.length, savedTotal, skipped,
       opportunityStageChanged: false,
       warning: `Proposal saved, but the opportunity could not be moved to Proposed: ${error?.message || 'unknown error'}`,
     };
@@ -798,6 +814,9 @@ export async function saveProposalDraft(name, proposal, promotion = null) {
       // HAR totals net it off at the right amount on reload. (The parent link is
       // rebuilt from product identity in linesFromSaved — see there.)
       freeValue: l.freeValue != null ? l.freeValue : null,
+      // Setup fee is a LINE-level field (one per item, applied to every price
+      // break), so it snapshots beside `splits`, not inside them.
+      ...setupFeeSnapshot(l),
       splits: (l.splits || []).map((s) => ({
         qty: s.qty,
         price: s.price,
@@ -877,6 +896,9 @@ export function normalizeProposalEntry(entry = {}) {
       unavailable: !!(l && l.unavailable),
       refresh: _refreshSnapshot(l && l.refresh),
       freeValue: (l && l.freeValue != null) ? l.freeValue : null,
+      // The line's setup fee round-trips for the same reason priceEdited does:
+      // a shared/imported draft must quote the fee it was saved with.
+      ...setupFeeSnapshot(l),
       // priceEdited must round-trip: it marks a hand-quoted price, which both the
       // auto-reprice effect and the cart serializer honor as an override. Dropping
       // it here made a reloaded/shared draft silently revert to list price.
@@ -1051,6 +1073,9 @@ export function linesFromSaved(entry, ridFn) {
     unavailable: !!l.unavailable,
     refresh: _refreshSnapshot(l.refresh) || undefined,
     freeValue: l.freeValue != null ? l.freeValue : undefined,
+    // Carry the line's setup fee (derived + any rep edit) so a loaded draft
+    // quotes, emails and totals the same fee it was saved with.
+    ...setupFeeSnapshot(l),
     // Keep priceEdited so a loaded draft's hand-quoted prices survive: it stops
     // the auto-reprice effect from resetting them AND flags the cart override.
     splits: (l.splits || []).map((s) => ({

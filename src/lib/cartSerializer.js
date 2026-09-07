@@ -995,13 +995,31 @@ export function buildSelectedProductImages(images = [], child = {}) {
   return ranked.map(({ image }, index) => ({ ...image, SortValue: index + 1 }));
 }
 
+/* "Custom Logo" overlay apparel (modID 25 outsource / 84 inhouse) ALWAYS carries
+   the custom-logo modification on the site — even with no uploaded artwork —
+   which is what supplies the $ setup fee + the full price ladder + marks the line
+   imprinted. A plain add gives us engine 'none', so default it to logoOverlay for
+   these products (NOT balls, modID 1008, which use the ballLogo flow).
+
+   Shared by assembleLine (the CART) and decoratedPricingForLine (the DISPLAY):
+   when only the cart applied it, a towel added as "Stock" showed $19.99/unit and
+   no setup in the modal while the cart charged $23.99/unit plus the $50 fee. */
+export function resolveDecorationForPricing(product, decoration) {
+  const deco = decoration || { engine: 'none' };
+  if (deco.engine && deco.engine !== 'none') return deco;
+  const mods = (product && product.ProductModification) || [];
+  const hasOverlay = mods.some((x) => x.Modification && (x.Modification.modificationID === 25 || x.Modification.modificationID === 84));
+  const hasBall = mods.some((x) => x.Modification && x.Modification.modificationID === 1008);
+  return (hasOverlay && !hasBall) ? { ...deco, engine: 'logoOverlay' } : deco;
+}
+
 /* The decorated per-unit price ladder for a line, computed from the raw product
    page exactly as assembleLine does — so the in-modal proposal DISPLAY matches the
    cart the site will load. Returns { breaks:[{q,p}], setupBreaks } or null when the
    page has no fee data. */
 export function decoratedPricingForLine(product, decoration, selection) {
   const child = selectChild(product, selection);
-  const deco = decoration || { engine: 'none' };
+  const deco = resolveDecorationForPricing(product, decoration);
   let pm = null;
   if (deco.engine && deco.engine !== 'none') {
     const bg = child && child.CustomData && child.CustomData.backgroundHex;
@@ -1023,18 +1041,10 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // Towel/hat embroidery needs the chosen child's background color for the BC
   // overlay — fold it in so buildDecoration can reach it.
   const childBg = child && child.CustomData && child.CustomData.backgroundHex;
-  let decoForBuild = childBg ? { ...(decoration || { engine: 'none' }), _childBgHex: childBg } : (decoration || { engine: 'none' });
-  // "Custom Logo" overlay apparel (modID 25 outsource / 84 inhouse) ALWAYS carries
-  // the custom-logo modification on the site — even with no uploaded artwork — which
-  // is what supplies the $ setup fee + the full price ladder + marks the line
-  // imprinted. A plain add gives us engine 'none', so default it to logoOverlay for
-  // these products (NOT balls, modID 1008, which use the ballLogo flow).
-  if (!decoForBuild.engine || decoForBuild.engine === 'none') {
-    const m = product.ProductModification || [];
-    const hasOverlay = m.some((x) => x.Modification && (x.Modification.modificationID === 25 || x.Modification.modificationID === 84));
-    const hasBall = m.some((x) => x.Modification && x.Modification.modificationID === 1008);
-    if (hasOverlay && !hasBall) decoForBuild = { ...decoForBuild, engine: 'logoOverlay' };
-  }
+  const decoBase = childBg ? { ...(decoration || { engine: 'none' }), _childBgHex: childBg } : (decoration || { engine: 'none' });
+  // Overlay apparel added as "Stock" still carries the custom-logo modification
+  // on the site — see resolveDecorationForPricing, which the display path uses too.
+  const decoForBuild = resolveDecorationForPricing(product, decoBase);
   const { block: decoBlock, historyBlock: decoHistoryBlock, customUserImage } = buildDecoration(product, decoForBuild);
 
   // Price the way golfballs.com recomputes it on cart load: from the product's
@@ -1062,6 +1072,12 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
      price. Setup fees still come from the computed ladder: the override is the
      per-unit price, not the one-time decoration setup. */
   const overridePrice = pricing.override && pricing.price != null ? round2(pricing.price) : null;
+  /* A rep-edited SETUP fee is likewise an override, and a per-LINE-ITEM one:
+     `pricing.setupFee` replaces the whole ladder with that flat amount (see
+     src/lib/lineSetupFee.js). Splitting a line into price breaks must not
+     re-charge it — that's collapseSetupFee's job, below. */
+  const overrideSetup = pricing.setupFee != null && Number.isFinite(Number(pricing.setupFee))
+    ? round2(Math.max(0, Number(pricing.setupFee))) : null;
   const breaks = overridePrice != null ? [{ q: 1, p: overridePrice }]
     : giftBreaks ? giftBreaks
     : computed ? computed.breaks
@@ -1069,8 +1085,10 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   const unit = overridePrice != null ? overridePrice
     : (computed || giftBreaks) ? atQ(breaks, qty)
     : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
-  const setupBreaks = giftSet ? null : ((computed && computed.setupBreaks) || null);
-  const setupUnit = setupBreaks ? atQ(setupBreaks, qty) : 0;
+  const setupBreaks = overrideSetup != null ? [{ q: 1, p: overrideSetup }]
+    : giftSet ? null
+    : ((computed && computed.setupBreaks) || null);
+  const setupUnit = overrideSetup != null ? overrideSetup : (setupBreaks ? atQ(setupBreaks, qty) : 0);
   const childList = bundleBlock ? [child, bundleBlock.kitChild] : [child];
 
   // Resolve the cart name the way the site does: substitute the decoration's
@@ -1164,6 +1182,43 @@ const round2 = (n) => Math.round(n * 100) / 100;
    already baked into ItemPrice, e.g. poker-chip dual pole 1.99+0.50=2.49). */
 export function lineTotal(line) {
   return round2((line.ItemPrice || 0) * (line.totalQty || 0) + (line.SetupPrice || 0));
+}
+
+const setupHeader = (price) => ({
+  priceBreakHeaderID: 0,
+  PriceBreak: [{ Quantity: 1, Price: round2(price), Cost: 0 }],
+  ProductionTime: 0,
+});
+
+/* ── one setup fee per LINE ITEM, at the bottom of its price breaks ──────────
+   Each price break of a proposal line becomes its own cart line, and
+   assembleLine prices every one of them off the product's setup ladder — so a
+   towel quoted "12 @ $23.99 / 24 @ $22.99" was saving TWO $50 setup fees.
+   golfballs.com charges it once and prints it under the line, so:
+
+     • the fee is read at the line's TOTAL quantity (the ladder can step),
+     • it rides on the LAST split — the bottom of the break stack,
+     • `override` (a rep's typed fee) replaces it for the whole line item.
+
+   Takes the cart lines for ONE proposal line, in break order. */
+export function collapseSetupFee(splitLines, override = null) {
+  const lines = Array.isArray(splitLines) ? splitLines : [];
+  if (!lines.length) return lines;
+  const totalQty = lines.reduce((sum, l) => sum + (Number(l && l.totalQty) || 0), 0);
+  const ladder = lines
+    .map((l) => (l && l.SetupPriceBreak && l.SetupPriceBreak.PriceBreak) || [])
+    .find((breaks) => breaks.length) || [];
+  const derived = round2(priceAtQ(ladder, totalQty));
+  const numeric = Number(override);
+  const fee = override != null && Number.isFinite(numeric) ? round2(Math.max(0, numeric)) : derived;
+  const last = lines.length - 1;
+  return lines.map((line, i) => {
+    const own = i === last ? fee : 0;
+    if ((Number(line.SetupPrice) || 0) === own
+      && (((line.SetupPriceBreak || {}).PriceBreak || []).length === 1)
+      && round2(((line.SetupPriceBreak || {}).PriceBreak || [])[0].Price) === own) return line;
+    return { ...line, SetupPrice: own, SetupPriceBreak: setupHeader(own) };
+  });
 }
 
 /* ── custom items (ShortCode "SERVICEITEM") ──────────────────────────────────

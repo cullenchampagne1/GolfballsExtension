@@ -366,6 +366,18 @@
       "file": "tests/unit/marginReport.test.mjs"
     },
     {
+      "name": "money \u00b7 per-line-item setup fees",
+      "file": "tests/unit/lineSetupFee.test.mjs"
+    },
+    {
+      "name": "catalog \u00b7 line attribute placement (colour/size vs options)",
+      "file": "tests/unit/lineAttributes.test.mjs"
+    },
+    {
+      "name": "email \u00b7 proposal template setup-fee rows",
+      "file": "tests/unit/proposalEmailTemplates.test.mjs"
+    },
+    {
       "name": "money \u00b7 cart & preview URL serialization",
       "file": "tests/unit/cartSerializer.test.mjs"
     },

@@ -45,10 +45,14 @@ const MAX_PRODUCTS = 6000;  // safety bound, well above the live numFound (~3.1k
    category (deriveCat) on the client. Out-of-stock is excluded server-
    side via additionalFacets (-tag_ss:ExcludeStock) in the background. */
 const MAIN_QUERY = '*:*';
-// A small authoritative recovery crawl for commissionable products. The live
-// gateway only permits a non-unique sort, so tied docs can move across the deep
-// *:* page boundary while indexing. Merging this focused result guarantees that
-// listed custom-logo products (notably TP5/TP5x) cannot vanish from the catalog.
+// A small authoritative recovery crawl for commissionable products. Two things
+// make it necessary. (1) The live gateway only permits a non-unique sort, so
+// tied docs can move across the deep *:* page boundary while indexing.
+// (2) The full sweep excludes `-tag_ss:ExcludeStock`, and a specially-priced /
+// pre-order custom-logo SKU carries that tag without being dead stock — TP5
+// Custom Logo Golf Balls (P012Y9) is tagged PreOrder + ExcludeStock, which is
+// exactly why it never appeared in the modal. This crawl runs WITHOUT the
+// stock filter, so listed custom-logo products cannot vanish from the catalog.
 const CUSTOM_LOGO_QUERY = 'modificationName_ss:"Custom Logo" OR itemType_ss:Corporate';
 
 /* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
@@ -361,11 +365,11 @@ export function normalizeCatalogDocs(docs) {
   return out;
 }
 
-function fetchPage(searchTerm, start, rows) {
+function fetchPage(searchTerm, start, rows, { includeExcludedStock = false } = {}) {
   return new Promise((resolve) => {
     try {
       chrome.runtime.sendMessage(
-        { action: 'fetchGiftCatalog', searchTerm, start, rows },
+        { action: 'fetchGiftCatalog', searchTerm, start, rows, includeExcludedStock },
         (resp) => {
           if (chrome.runtime.lastError || !resp || !resp.ok) {
             resolve({ docs: [], numFound: 0, error: chrome.runtime.lastError?.message || (resp && resp.error) || 'request failed' });
@@ -444,14 +448,14 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
   const usedIds = new Set();
   const MAX_PAGE_RETRIES = 4;
   let lastError = null;
-  const crawl = async (query) => {
+  const crawl = async (query, opts = {}) => {
     let start = 0;
     let expected = 0;
     let complete = false;
     while (start < MAX_PRODUCTS) {
       let page = { docs: [], numFound: 0, error: 'not attempted' };
       for (let attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt += 1) {
-        page = await fetchPage(query, start, PAGE_ROWS);
+        page = await fetchPage(query, start, PAGE_ROWS, opts);
         if (!page.error) break;
         lastError = page.error;
         if (attempt < MAX_PAGE_RETRIES) {
@@ -471,7 +475,11 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
     return complete;
   };
   const fullComplete = await crawl(MAIN_QUERY);
-  const logoComplete = fullComplete ? await crawl(CUSTOM_LOGO_QUERY) : false;
+  // The recovery crawl also lifts the out-of-stock filter: a commissionable
+  // custom-logo SKU can carry `ExcludeStock` because it's a pre-order /
+  // specially-priced line rather than dead stock (TP5 Custom Logo Golf Balls,
+  // P012Y9), and filtering it out is what kept it from ever being cataloged.
+  const logoComplete = fullComplete ? await crawl(CUSTOM_LOGO_QUERY, { includeExcludedStock: true }) : false;
   // Only a COMPLETE pull replaces the cache — a run cut short by errors must not
   // overwrite good data with a truncated catalog (missing every product after
   // the failure). A MANUAL refresh that couldn't complete surfaces the error so

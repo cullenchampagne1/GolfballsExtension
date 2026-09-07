@@ -12,18 +12,22 @@ import { loadPriorOrderEntries } from '../lib/priorOrderEngine.js';
 import { proposalLineFromProduct } from '../lib/catalogProposalEngine.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
 import { CATALOG_FAVORITES_STORAGE_KEY, loadCatalogFavorites, setCatalogFavorite } from '../lib/catalogFavorites.js';
 // The built-in supplier ingesters are admin-only and loaded lazily (see REPO_RUN
 // below) so the served build never bundles them.
 import { getInventory, peekInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
-import { bundleSingle, setBundleCatalog } from '../lib/bundleCost.js';
+import { setBundleCatalog } from '../lib/bundleCost.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { CheckoutComposer } from './ProposalCheckout.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, supportsLogo, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
+import { proposalToEmailSource } from '../lib/proposalEmailSource.js';
+import { marginReport, unitCostOf, hasRealCost, invSkuOf, costSkuOf, COST_RATIO, ASSUMED_MARGIN } from '../lib/marginReport.js';
+import { SETUP_FEE_LABEL, lineSetupFee, setupFeeTotal, setupFeeSnapshot, offersSetupFee, hasEditedSetupFee, derivedSetupFee, editLineSetupFee, resetLineSetupFee, withDerivedSetupFee } from '../lib/lineSetupFee.js';
+import { identitySuffix, optionAttributePills, lineAttributeSubtitle } from '../lib/lineAttributes.js';
 import { reportFeatureUsage } from '../lib/usageEvents.js';
 import {
   CATALOG_ACCOUNT_CONTEXT_NOTICE,
@@ -56,10 +60,14 @@ const lineProductImg = (line) => lineGiftImg(line)
   || (line && line.variant && line.variant.image)
   || (line && line.product && line.product.img)
   || '';
-const lineVariantSubtitle = (line) => {
-  const values = Object.values((line && line.variant && line.variant.values) || {}).filter(Boolean);
-  const details = line && line.variant && line.variant.details;
-  return [...values, details].filter((value, index, all) => value && all.indexOf(value) === index).join(' · ');
+const lineVariantSubtitle = (line) => lineAttributeSubtitle(line && line.variant);
+/* The line's display title: the catalog title plus the identity attributes the
+   site itself folds into a product name ("… Magnetic Towel - White"). Colour /
+   size therefore always read next to the title, and never double as a
+   customization-option chip. See src/lib/lineAttributes.js. */
+const lineDisplayTitle = (line) => {
+  const title = (line && line.product && line.product.title) || '';
+  return title + identitySuffix(line && line.variant, title);
 };
 /* A gift-set line's display identity is the SET, not the bare ball — so the
    saved-card list, margin table, and email all read "6-Ball … Gift Set" instead
@@ -938,18 +946,52 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   );
 }
 
-function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco, onRemoveFront, onRemoveSecond, onToggleExpress }) {
+/* The line item's one-time SETUP FEE row — pinned BELOW the price breaks,
+   because that's where golfballs.com prints it and because one fee covers
+   every break (edit it once and the whole line item re-quotes; see
+   src/lib/lineSetupFee.js). `↺` restores the fee the product's own
+   setupFee ladder derives. */
+function SetupFeeRow({ line, onChange }) {
+  const fee = lineSetupFee(line);
+  const derived = derivedSetupFee(line);
+  const edited = hasEditedSetupFee(line) && Math.abs(fee - derived) > 0.005;
+  return (
+    <motion.div layout
+      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
+      style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden', paddingTop: 7, borderTop: '1px dashed var(--gb-border-subtle)', marginTop: 5 }}>
+      <span title="One-time decoration setup — charged once for this item, across every price break"
+        style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>{SETUP_FEE_LABEL}</span>
+      <PriceField value={fee} onChange={(next) => onChange(editLineSetupFee(line, next))} />
+      {edited && (
+        <span onClick={() => onChange(resetLineSetupFee(line))} title={`Reset to ${usd(derived)}`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9.5, fontWeight: 600, color: 'var(--gb-brand-label)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>↺ {usd(derived)}</span>
+      )}
+      <div style={{ flex: 1 }} />
+      <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)', minWidth: 58, textAlign: 'right', flexShrink: 0 }}>{money(fee)}</span>
+      <span style={{ width: 20, flexShrink: 0 }} />
+    </motion.div>
+  );
+}
+
+function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, onPatchLine, drag, onTagDragStart, onTagDragEnd, onDropDeco, onRemoveFront, onRemoveSecond, onToggleExpress }) {
   const p = line.product;
-  const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
+  const setupFee = lineSetupFee(line);
+  // The line's quoted total INCLUDES its one-time setup fee — leaving it out is
+  // what made the modal quote below what the cart (and the site's own proposal
+  // email) charges.
+  const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0) + setupFee;
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
   const chips = decoImprints(line.decoration);   // one draggable tag per imprint (front + 2nd pole)
   const giftSet = line.decoration && line.decoration.giftSet;   // gift-set packaging (sleeve / 6-ball / wooden)
   const canRunExpress = !!(line.decoration && line.decoration.engine === 'ballLogo' && ballish(p) && supportsLogo(p));
   // Each custom base-option (Tee Count, Set Makeup, Shaft …) becomes its own pill
   // so a long option set wraps onto new rows instead of overflowing the line.
-  const variantPills = (line.variant && line.variant.values)
-    ? Object.entries(line.variant.values).filter(([k]) => k !== 'Color').map(([k, v]) => `${k}: ${v}`)
-    : [];
+  // Colour / size are NOT options — they're product identity and read next to
+  // the title, whatever the department names them ("Apparel Color",
+  // "Accessories Color", plain "Color"). See src/lib/lineAttributes.js.
+  const variantPills = optionAttributePills(line.variant);
+  const title = lineDisplayTitle(line);
   // Drag-to-copy: a single imprint from another line is in flight — can it land here?
   const [over, setOver] = useState(false);
   const dragActive = !!(drag && drag.fromLineId !== line.id);
@@ -995,7 +1037,7 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 1 }}>
-            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+            <div title={title} style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
             <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', flexShrink: 0 }}>{money(lineTot)}</span>
           </div>
         </div>
@@ -1055,6 +1097,11 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
           {line.splits.map((s) => (
             <SplitRow key={s.id} line={line} split={s} canRemove={line.splits.length > 1} onChange={(patch) => onPatchSplit(s.id, patch)} onRemove={() => onRemoveSplit(s.id)} />
           ))}
+          {/* Always LAST, after every price break — the setup fee floats to the
+              bottom of the stack and belongs to the item, not to a break. */}
+          {offersSetupFee(line) && onPatchLine && (
+            <SetupFeeRow key="setup" line={line} onChange={onPatchLine} />
+          )}
         </AnimatePresence>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 6 }}>
@@ -1121,86 +1168,22 @@ function resolveSavedEntry(entry) {
       free: !!l.free,
       refresh: l.refresh || null,
       unavailable: !!l.unavailable,
+      // The line's setup fee must survive into the resolved entry or the saved
+      // card's subtotal and its margin breakdown both quote below the cart.
+      ...setupFeeSnapshot(l),
       srcIndex,
     });
   });
   const units = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0), 0), 0);
-  const total = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0), 0);
+  const total = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0), 0)
+    + setupFeeTotal(entries);
   return { entries, units, total };
 }
 
 /* ── Margin / cost model ──────────────────────────────────────────────────────
-   Real cost when we have it, else a flat-40% placeholder:
-     • custom items carry their own per-unit `cost`,
-     • catalog products use the per-SKU Cost cached from the inventory endpoint
-       (populated when a rep checks inventory; primed on modal mount),
-     • otherwise fall back to 60%-of-sell. */
-const COST_RATIO = 0.60;            // assumed cost as a fraction of sell price → 40% margin
-const ASSUMED_MARGIN = 1 - COST_RATIO;
-/* The SKU the Dynamics inventory endpoint keys on = the human parentSku
-   (customData.parentSku, e.g. "B3273") — NOT parentCode_s, which is an internal
-   product code ("P00G6B") the endpoint 404s on. Prefer sku, fall back to code. */
-const invSkuOf = (p) => (p && (p.sku || p.parentCode)) || '';
-/* The SKU whose synced cost actually prices this line. For a "Double Dozen"
-   (and other ball multipacks) that's its single sibling's SKU — the bundle's
-   own SKU carries no inventory cost (see bundleCost.js); everything else uses
-   its own SKU. Drives both the proactive cost fetch and the "couldn't price"
-   asterisk so both follow the SKU we really read the cost from. */
-const costSkuOf = (p) => { const b = bundleSingle(p); return b ? b.sku : invSkuOf(p); };
-const unitCostOf = (product, unitPrice, qty) => {
-  const p = product || {};
-  if (p.isCustom) {
-    // Per-qty cost from the net-cost ladder when present (most accurate), else the
-    // single cost.
-    const cb = p.costBreaks || (p.custom && p.custom.costBreaks);
-    if (cb && cb.length) { const c = costAtQty(cb, qty || p.minQty || 1, null); if (c != null && c > 0) return Math.round(c * 100) / 100; }
-    const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
-    if (c != null && c > 0) return Math.round(c * 100) / 100;
-  } else {
-    // Ball multipack → single dozen's cost × the pack count (a double dozen = 2×).
-    const b = bundleSingle(p);
-    if (b) { const c = cachedCostForSku(b.sku); if (c != null && c > 0) return Math.round(c * b.multiple * 100) / 100; }
-    const c = cachedCostForSku(invSkuOf(p));
-    if (c != null && c > 0) return Math.round(c * 100) / 100;
-  }
-  return Math.round((unitPrice || 0) * COST_RATIO * 100) / 100;
-};
-/* True when we have a real (synced / custom) cost for this product — i.e. the
-   margin isn't the 40% placeholder. Drives the breakdown's "actual vs assumed". */
-const hasRealCost = (product) => {
-  const p = product || {};
-  if (p.isCustom) {
-    const cb = p.costBreaks || (p.custom && p.custom.costBreaks);
-    if (cb && cb.length) return true;
-    const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
-    return c != null && c > 0;
-  }
-  const c = cachedCostForSku(costSkuOf(p));   // bundle → single's cost
-  return c != null && c > 0;
-};
-
-/* Per-line + blended margin for resolved entries
-   ([{ product, decoration, splits:[{qty,price}] }]). Setup/decoration fees fold
-   in here later (they're already in each split's price for the cart). */
-function marginReport(entries) {
-  let rev = 0, cost = 0, units = 0, real = 0, paidCount = 0;
-  const lines = (entries || []).map((e) => {
-    const isFree = !!e.free;
-    let lr = 0, lc = 0, u = 0;
-    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; if (!isFree) lc += q * unitCostOf(e.product, p, q); u += q; });
-    units += u;
-    // Free promotional giveaways don't count toward revenue, cost, or margin —
-    // they're a promo, not a 0%-margin sale. They still show as a line.
-    if (isFree) return { ...e, units: u, lineRev: 0, lineCost: 0, profit: 0, margin: null, free: true, costKnown: true };
-    rev += lr; cost += lc; paidCount++;
-    const known = hasRealCost(e.product);
-    if (known) real++;
-    return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0, costKnown: known };
-  });
-  // How the cost figure was sourced — over PAID lines only.
-  const costBasis = paidCount === 0 ? 'assumed' : real === paidCount ? 'actual' : real === 0 ? 'assumed' : 'mixed';
-  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0, costBasis, realCount: real, paidCount };
-}
+   Lives in src/lib/marginReport.js (imported above) so the modal's breakdown,
+   the standalone MarginBreakdown surface and the tests all share ONE model —
+   including its per-price-break rows and the per-line-item setup fee. */
 
 const marginTone = (m) => (m >= 0.45 ? 'success' : m >= 0.32 ? 'warning' : 'error');
 // Use the real design-system tokens (color-mix off the theme's status color) —
@@ -1305,7 +1288,11 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || lineDisplayTitle(e)}</span>
+            {/* Each price break is its own row (so its margin is its own) —
+                name the break so two rows of the same product don't read as a
+                duplicate. */}
+            {e.splitCount > 1 && <span title={`Price break ${e.splitIndex + 1} of ${e.splitCount}`} style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px', fontFamily: 'var(--gb-font-mono)' }}>Break {e.splitIndex + 1}/{e.splitCount}</span>}
             {e.free && <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>}
           </div>
           {refreshText && <div title={refreshText} style={{ marginTop: 2, fontSize: 9.5, fontWeight: 650, color: refreshColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{refreshText}</div>}
@@ -1317,16 +1304,15 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
           ? <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-success-fg)', fontFamily: 'var(--gb-font-mono)' }}>Promo</span>
           : <MarginBadge m={e.margin} />}</span>
       </div>
-      {/* Per-split detail — always shown when editable (so every price can be
-          edited) or when there are multiple splits / imprints. */}
-      {(editable || e.splits.length > 1 || chips.length > 0) && (
+      {/* This break's detail: qty × unit (editable) · unit cost · extended.
+          `marginReport` hands us ONE split per row, so the price editor must
+          write back to the row's OWN break index — not to position 0. */}
+      {(editable || e.setupFee > 0 || chips.length > 0) && (
         <div style={{ marginTop: 7, paddingLeft: 46, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {(editable || e.splits.length > 1) && e.splits.map((s, i) => (
+          {editable && e.splits.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>
               <span>{s.qty} × </span>
-              {editable
-                ? <EditablePrice value={s.price} onCommit={(v) => onEditPrice(i, v)} />
-                : <span>{usd(s.price)}</span>}
+              <EditablePrice value={s.price} onCommit={(v) => onEditPrice(e.splitIndex == null ? i : e.splitIndex, v)} />
               {s.priceEdited && <span title="Price edited" style={{ color: 'var(--gb-brand-label)', marginLeft: 4, fontSize: 9 }}>✎</span>}
               <span style={{ color: 'var(--gb-text-ghost)', margin: '0 7px' }}>·</span>
               <span style={{ color: 'var(--gb-text-muted)' }}>cost {usd(unitCostOf(e.product, s.price, s.qty))}</span>
@@ -1334,8 +1320,17 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
               <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{money((s.qty || 0) * (s.price || 0))}</span>
             </div>
           ))}
+          {/* The item's one-time setup fee, on the bottom break — it's part of
+              this row's revenue, so show what it contributed. */}
+          {e.setupFee > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>
+              <span style={{ color: 'var(--gb-text-muted)' }}>{SETUP_FEE_LABEL}</span>
+              <div style={{ flex: 1 }} />
+              <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{money(e.setupFee)}</span>
+            </div>
+          )}
           {chips.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: (editable || e.splits.length > 1) ? 3 : 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: editable ? 3 : 0 }}>
               {chips.map((c) => (
                 <span key={c.slot} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9, fontWeight: 700 }}>{c.label}</span>
               ))}
@@ -1628,7 +1623,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
         initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>
       {/* stat strip */}
       <div style={{ display: 'flex', gap: 10, padding: '14px 16px 6px', flexShrink: 0 }}>
-        <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}`} />
+        <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}${M.setupTotal > 0 ? ` · ${money(M.setupTotal)} setup` : ''}`} />
         <StatTile label={M.costBasis === 'actual' ? 'Cost' : 'Est. cost'} value={money(M.cost)} sub={M.costBasis === 'actual' ? 'actual' : M.costBasis === 'mixed' ? 'part actual' : 'assumed'} />
         <StatTile label="Gross profit" value={money(M.profit)} accent />
         <StatTile label="Blended margin" value={pctOf(M.margin)} tone={TONE_FG[marginTone(M.margin)]} sub="all-in" />
@@ -1649,8 +1644,11 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
                 <span style={{ width: 74, textAlign: 'right' }}>Cost</span>
                 <span style={{ width: 56, textAlign: 'right' }}>Margin</span>
               </div>
+              {/* `e.entryIndex` — NOT the row index. Rows are per price break
+                  now, so a second break would otherwise repriced the wrong
+                  proposal line. */}
               {M.lines.map((e, i) => <MarginLineRow key={e.id || i} e={e} first={i === 0} estimated={starLine(e)}
-                onEditPrice={onPatchSplit ? (splitIndex, price) => onPatchSplit(i, e.srcIndex, splitIndex, price) : undefined} />)}
+                onEditPrice={onPatchSplit ? (splitIndex, price) => onPatchSplit(e.entryIndex, e.srcIndex, splitIndex, price) : undefined} />)}
             </div>
           )}
           {M.lines.some(starLine) && (
@@ -2026,8 +2024,11 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onApplyLogoToAll, onRemoveFront, onRemoveSecond, onToggleExpress, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
-  const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onPatchLine, onClear, onSaveDraft, onMergeImprint, onApplyLogoToAll, onRemoveFront, onRemoveSecond, onToggleExpress, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
+  // Goods + the per-line-item setup fees — the same arithmetic the cart and the
+  // proposal email use, so the dock, the panel and the quote never disagree.
+  const setupTotal = setupFeeTotal(proposal);
+  const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0) + setupTotal;
   const promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
   // Free giveaway lines a FREE_QUANTITY coupon grants (shown read-only, $0).
   const freeLines = (promo && promo.promotion) ? freeLinesFromPromo(promo.promotion, proposal) : [];
@@ -2196,6 +2197,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                     onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
                     onAddSplit={() => onAddSplit(line.id)}
                     onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
+                    onPatchLine={onPatchLine ? (next) => onPatchLine(line.id, next) : undefined}
                     onRemove={() => onRemoveLine(line.id)} />
                 ))}
               </AnimatePresence>
@@ -2227,6 +2229,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
             <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Estimated total</span>
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>{units} units</span>
+              {setupTotal > 0 && <span title="One-time setup fees, included in the total" style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>+ {money(setupTotal)} setup</span>}
               <div style={{ flex: 1 }} />
               {promoDisc > 0 && <span style={{ fontSize: 12, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', textDecoration: 'line-through' }}>{money(total)}</span>}
               <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.6 }}>{money(total - promoDisc)}</span>
@@ -3324,7 +3327,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const rawCacheRef = useRef(new Map());
   const pricedSigRef = useRef('');
   useEffect(() => {
-    const decorated = proposal.filter((l) => l.decoration && l.decoration.engine && l.decoration.engine !== 'none' && l.product && l.product.url);
+    // Any line the CART will price off the product's fee ladders. That includes
+    // a custom-logo product added as "Stock": the site still carries its
+    // custom-logo modification (see resolveDecorationForPricing), so leaving it
+    // out here showed retail with no setup while the cart charged both.
+    const decorated = proposal.filter((l) => l.product && l.product.url && (
+      (l.decoration && l.decoration.engine && l.decoration.engine !== 'none') || l.product.customLogo
+    ));
     const sig = JSON.stringify(decorated.map((l) => [l.product.url, l.decoration, l.variant && l.variant.values, l.splits.map((s) => s.qty)]));
     if (!decorated.length || sig === pricedSigRef.current) return undefined;
     let alive = true;
@@ -3342,9 +3351,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         setProposal((current) => {
           let changed = false;
           const next = current.map((l) => {
-            if (!l.decoration || !l.decoration.engine || l.decoration.engine === 'none') return l;
             const raw = rawCacheRef.current.get(l.product && l.product.url);
-            if (!raw) return l;
+            if (!raw) return l;   // not one of the lines we fetched
             let pr; try { pr = decoratedPricingForLine(raw, l.decoration, { values: l.variant && l.variant.values }); } catch { pr = null; }
             if (!pr || !pr.breaks || !pr.breaks.length) return l;
             let lineChanged = false;
@@ -3354,8 +3362,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               if (unit != null && Math.abs(unit - s.price) > 0.005) { lineChanged = true; return { ...s, price: unit }; }
               return s;
             });
-            if (lineChanged) changed = true;
-            return lineChanged ? { ...l, splits } : l;
+            // The same engine returns the product's SETUP ladder (the towel's
+            // $50 "Custom Logo" setupFee_priceBreakHeader). Record what it
+            // derives so the fee row, the totals and the email all have it; a
+            // rep's typed fee still wins (withDerivedSetupFee only fills
+            // `setupFeeAuto`).
+            const withFee = withDerivedSetupFee(lineChanged ? { ...l, splits } : l, pr.setupBreaks);
+            if (lineChanged || withFee !== l) changed = true;
+            return withFee;
           });
           return changed ? next : current;
         });
@@ -3452,7 +3466,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // `productId` (not the line id) drives the "added" hint on cards, since a
   // product can now appear on multiple lines (e.g. different customizations).
   const inProposal = (id) => proposal.some((l) => l.productId === id);
-  const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
+  // Goods + one-time setup fees, matching the cart. The dock reads this.
+  const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0)
+    + setupFeeTotal(proposal);
   const addToProposal = (p, decoration = null, variant = null) => {
     reportFeatureUsage('gift_catalog_add', { source: 'gift_catalog' });
     setProposal((prev) => {
@@ -3472,6 +3488,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { ...last, id: rid() }] }; }));
   const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
   const removeLine = (lineId) => setProposal((prev) => prev.filter((l) => l.id !== lineId));
+  /* Line-level patch (as opposed to per-split): the setup-fee editor uses it,
+     since one fee covers every price break of the item. `next` is the whole
+     replacement line, so lineSetupFee's edit/reset helpers apply directly. */
+  const patchLine = (lineId, next) => setProposal((prev) => prev.map((l) => (l.id === lineId ? { ...next, id: l.id } : l)));
 
   // Drag-to-copy: stamp one line's imprint onto another. mode 'front' copies the
   // front imprint; 'full' copies both poles. Validated against what the target
@@ -3676,101 +3696,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Generate proposal HTML — maps proposal lines → the email composer's source
   // (one row per split) and opens the HTML modal (which hides the catalog).
   const [emailSource, setEmailSource] = useState(null);
-  // Describe a line's imprint(s) for the email "Imprint preview" card — type
-  // label, color (name + swatch), and a short per-pole detail line. Dual-pole
-  // lines describe BOTH poles (Front: … / Back: …) and surface text/monogram on
-  // the opposite pole; logo file names are truncated so a line never wraps.
-  const _imprintLabel = (c) => !c ? '' : (c.kind === 'monogram' ? 'Monogram' : c.kind === 'text' ? 'Personalized' : 'Custom Logo');
-  const _truncName = (s, n = 26) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, '') + '…' : s; };
-  const _chipDesc = (c) => {
-    if (!c) return '';
-    if (c.kind === 'text') { const t = (c.lines || []).map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(' / '); return t ? `“${t}”` : 'Personalized text'; }
-    if (c.kind === 'monogram') { return c.text ? `Monogram “${String(c.text).toUpperCase()}”` : 'Monogram'; }
-    return _truncName(c.fileName || (c.icon ? ('Icon · ' + c.icon) : 'Custom logo'));
-  };
-  const lineImprint = (deco) => {
-    if (!deco || !deco.engine || deco.engine === 'none') return null;
-    const chips = decoImprints(deco);
-    if (!chips.length) return null;
-    const front = chips.find((c) => c.slot === 'front') || chips[0];
-    const second = chips.find((c) => c.slot === 'second') || null;
-    const frontLabel = _imprintLabel(front);
-    let typeLabel = frontLabel, detailLines;
-    if (second) {
-      const secondLabel = _imprintLabel(second);
-      typeLabel = frontLabel === secondLabel ? frontLabel : `${frontLabel} + ${secondLabel}`;
-      detailLines = [`Front: ${_chipDesc(front)}`, `Back: ${_chipDesc(second)}`];
-    } else {
-      detailLines = [_chipDesc(front)];
-    }
-    // Color swatch only for single-color imprints (text / monogram) on the front.
-    const colorHex = (front.kind === 'text' || front.kind === 'monogram') ? (front.color || '') : '';
-    const color = colorHex ? (colorNameOf(colorHex) || '') : '';
-    // First text line (front) drives the synthetic-chip label fallback.
-    const text = front.kind === 'text' ? ((front.lines || []).filter(Boolean).join(' / ') || null)
-      : front.kind === 'monogram' ? (front.text || null) : null;
-    // `frontLabel` = the front imprint's type alone (templates that show only the
-    // first personalization, e.g. Quote, use this instead of the combined label).
-    return { type: deco.engine, typeLabel, frontLabel, color, colorHex: colorHex || null, detailLines, text };
-  };
-  const proposalToEmailSource = (lines, name, opts = {}) => {
-    const rows = []; let total = 0; let freeTotal = 0;
-    for (const l of (lines || [])) {
-      const p = l.product || {};
-      const gs = l.decoration && l.decoration.giftSet;
-      // A gift-set line is identified by the SET (name + size + the ball it wraps)
-      // and shows the boxed gift-set render — not the bare ball.
-      const title = gs ? (gs.name || 'Gift set') : (p.title || '');
-      const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : lineVariantSubtitle(l);
-      const img = lineProductImg(l);
-      const imprint = lineImprint(l.decoration);
-      const isFree = !!l.free;
-      // Retail/"was" unit = the higher of MSRP, the 1-qty ladder price, and the
-      // base price — used to show a red strike when the quoted price is below it
-      // (a sale or a volume break).
-      const brks = p.breaks || [];
-      const retailUnit = Math.max(Number(p.orig) || 0, (brks[0] && Number(brks[0].p)) || 0, Number(p.price) || 0);
-      for (const s of (l.splits || [])) {
-        const qty = s.qty || 0;
-        // HAR layout: a FREE line is shown at its FULL price (so the subtotal
-        // includes it) and the promotion nets it off at the bottom. Unit comes
-        // from the promotion's authoritative per-item value when present, else
-        // the ladder price at that qty, else the retail unit.
-        let unitPrice;
-        if (isFree) {
-          const fullVal = Number(l.freeValue) || 0;
-          unitPrice = (qty > 0 && fullVal > 0) ? Math.round((fullVal / qty) * 100) / 100
-            : (priceAtBreaks(brks, qty) ?? retailUnit ?? 0);
-        } else {
-          unitPrice = s.price || 0;
-        }
-        const lineTotal = Math.round(qty * unitPrice * 100) / 100;
-        total += lineTotal;
-        if (isFree) freeTotal += lineTotal;
-        const origUnit = (!isFree && retailUnit > unitPrice + 0.005) ? Math.round(retailUnit * 100) / 100 : null;
-        // `lineId` lets the email composer attach 3D snapshot previews back to the
-        // right rows (one line can span multiple split rows). `parentLineId` ties
-        // a free row to the line that earned it (Separated-theme grouping).
-        // `imprint` drives the preview card's spec line.
-        rows.push({ lineId: l.id, parentLineId: l.parentLineId || null, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal,
-          origUnit, origTotal: origUnit != null ? Math.round(qty * origUnit * 100) / 100 : null, free: isFree, imprint });
-      }
-    }
-    const promotion = opts.promotion || null;
-    const freePromo = !!(promotion && promotion.promoType === 'FREE_QUANTITY');
-    const savings = promotion ? promoDiscount(promotion) : 0;
-    // HAR totals: Subtotal (incl. free lines at full price) → −Promotion →
-    // Total. For FREE_QUANTITY the discount = OUR summed free-line value (+ any
-    // order-level $ off) so Subtotal − Promotion lands exactly on the paid sum
-    // even when a ladder fallback stood in for the site's number; a monetary
-    // promo keeps the site's discount as before.
-    const orderOff = freePromo ? (Number(promotion.orderLevelDiscount) || 0) : 0;
-    const discount = freePromo ? Math.round((freeTotal + orderOff) * 100) / 100 : savings;
-    // `rawLines` carries the product + decoration so the composer can render the
-    // personalization snapshots; `lines` stays the flat display rows.
-    return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [],
-      total: Math.round(total * 100) / 100, discount, savings, freePromo, promoCode: (promotion && promotion.promo) || '', cartLink: opts.cartLink || null, onSubmit: opts.onSubmit || null };
-  };
+  // The email `source` model (one row per split + a per-line-item setup-fee
+  // row) is built by the shared src/lib/proposalEmailSource.js — the same
+  // builder the opportunity page uses, so both surfaces quote identically.
   const openProposalEmail = (lines, name, opts) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name, opts)); };
   // Combined email source for several proposals at once: one `section` per
   // proposal (each rendered with the chosen template, stacked + divided), plus a
@@ -3797,9 +3725,17 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       const qty = (e.splits || []).reduce((a, x) => a + (x.qty || 0), 0);
       const goods = (e.splits || []).reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0);
       const chips = decoImprints(e.decoration);
-      return { id: (e.product.id || 'p') + '-' + i, product: e.product, qty, unitPrice: qty ? goods / qty : 0, setup: 0, goods, lineTotal: goods, decorated: chips.length > 0, imprints: chips.map(imprintRow) };
+      // The line item's one-time setup fee is part of what the customer owes —
+      // hard-coding it to 0 quoted checkout below the cart.
+      const setup = lineSetupFee(e);
+      return { id: (e.product.id || 'p') + '-' + i, product: e.product, qty, unitPrice: qty ? goods / qty : 0, setup, goods, lineTotal: goods + setup, decorated: chips.length > 0, imprints: chips.map(imprintRow) };
     });
-    return { name: name || 'Proposal', company: company || '', lines, subtotal: lines.reduce((a, l) => a + l.goods, 0), setupTotal: 0, units: lines.reduce((a, l) => a + l.qty, 0) };
+    return {
+      name: name || 'Proposal', company: company || '', lines,
+      subtotal: lines.reduce((a, l) => a + l.goods, 0),
+      setupTotal: lines.reduce((a, l) => a + l.setup, 0),
+      units: lines.reduce((a, l) => a + l.qty, 0),
+    };
   };
   const buildMultiEmailSource = (items) => {
     const sections = (items || []).map((it) => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion, cartLink: cartLinkOf(it) }));
@@ -4323,7 +4259,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 400, opacity: proposalOpen ? 1 : 0, pointerEvents: proposalOpen ? 'auto' : 'none', transition: 'opacity .24s ease' }}>
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
-              onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
+              onRemoveLine={removeLine} onPatchLine={patchLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onApplyLogoToAll={applyLogoToAllEmpty}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               onToggleExpress={toggleExpressLogo}

@@ -14,9 +14,10 @@
 import { cachedCostForSku, primeCostCache, importCosts } from './inventory.js';
 import { bundleSingle } from './bundleCost.js';
 import { costAtQty } from './customItems.js';
+import { lineSetupFee, setupFeeTotal } from './lineSetupFee.js';
 
-const COST_RATIO = 0.60;            // assumed cost as a fraction of sell price → 40% margin
-const ASSUMED_MARGIN = 1 - COST_RATIO;
+export const COST_RATIO = 0.60;     // assumed cost as a fraction of sell price → 40% margin
+export const ASSUMED_MARGIN = 1 - COST_RATIO;
 
 /* The SKU the Dynamics inventory endpoint keys on = the human parentSku
    (customData.parentSku, e.g. "B3273") — NOT parentCode_s, which is an internal
@@ -64,26 +65,63 @@ export const hasRealCost = (product) => {
 };
 
 /* Per-line + blended margin for resolved entries
-   ([{ product, decoration, splits:[{qty,price}] }]). Setup/decoration fees fold
-   in here later (they're already in each split's price for the cart). */
+   ([{ product, decoration, splits:[{qty,price}] }]).
+
+   ONE ROW PER PRICE BREAK. A proposal built in the modal holds its breaks as
+   `splits` on a single entry, while the same proposal built on the website
+   comes back as one entry per break — so the overview used to show the modal's
+   breaks as a single blended-margin row and the website's as separate rows for
+   the identical quote. Every split now becomes its own report line (carrying
+   just that break's split), which is what makes a per-break margin visible;
+   `count` still counts PRODUCTS, so the "N items" readout doesn't inflate.
+
+   The line item's one-time SETUP FEE is revenue too (the site bills it and
+   prints it under the line). It rides on the LAST break — floating to the
+   bottom, as everywhere else — with no cost attached, since a decoration setup
+   charge has no unit cost on file. */
 export function marginReport(entries) {
   let rev = 0, cost = 0, units = 0, real = 0, paidCount = 0;
-  const lines = (entries || []).map((e) => {
+  const lines = [];
+  (entries || []).forEach((e, entryIndex) => {
     const isFree = !!e.free;
-    let lr = 0, lc = 0, u = 0;
-    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; if (!isFree) lc += q * unitCostOf(e.product, p, q); u += q; });
-    units += u;
-    // Free promotional giveaways don't count toward revenue, cost, or margin —
-    // they're a promo, not a 0%-margin sale. They still show as a line.
-    if (isFree) return { ...e, units: u, lineRev: 0, lineCost: 0, profit: 0, margin: null, free: true, costKnown: true };
-    rev += lr; cost += lc; paidCount++;
-    const known = hasRealCost(e.product);
-    if (known) real++;
-    return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0, costKnown: known };
+    const splits = (e.splits || []).length ? e.splits : [{ qty: 0, price: 0 }];
+    const setup = isFree ? 0 : lineSetupFee(e);
+    const known = isFree ? true : hasRealCost(e.product);
+    splits.forEach((s, i) => {
+      const q = s.qty || 0, p = s.price || 0;
+      const last = i === splits.length - 1;
+      const rowSetup = last ? setup : 0;
+      const u = q;
+      units += u;
+      // Free promotional giveaways don't count toward revenue, cost, or margin —
+      // they're a promo, not a 0%-margin sale. They still show as a line.
+      if (isFree) {
+        lines.push({ ...e, id: rowId(e, i, splits.length), entryIndex, splits: [s], splitIndex: i, splitCount: splits.length, setupFee: 0, units: u, lineRev: 0, lineCost: 0, profit: 0, margin: null, free: true, costKnown: true });
+        return;
+      }
+      const lr = q * p + rowSetup;
+      const lc = q * unitCostOf(e.product, p, q);
+      rev += lr; cost += lc; paidCount += 1;
+      if (known) real += 1;
+      lines.push({ ...e, id: rowId(e, i, splits.length), entryIndex, splits: [s], splitIndex: i, splitCount: splits.length, setupFee: rowSetup, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0, costKnown: known });
+    });
   });
-  // How the cost figure was sourced — over PAID lines only.
+  // How the cost figure was sourced — over PAID rows only.
   const costBasis = paidCount === 0 ? 'assumed' : real === paidCount ? 'actual' : real === 0 ? 'assumed' : 'mixed';
-  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0, costBasis, realCount: real, paidCount };
+  return {
+    lines, units, count: (entries || []).length, rowCount: lines.length,
+    setupTotal: setupFeeTotal(entries),
+    rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0,
+    costBasis, realCount: real, paidCount,
+  };
+}
+
+/* A stable per-break row id. Single-break lines keep the entry's own id so
+   nothing that keys off it (React lists, the breakdown's price editor) changes
+   behaviour for the common case. */
+function rowId(entry, index, count) {
+  const base = (entry && entry.id) != null ? entry.id : 'line';
+  return count > 1 ? `${base}#${index}` : base;
 }
 
 /* The set of inventory SKUs whose synced cost prices these entries' catalog

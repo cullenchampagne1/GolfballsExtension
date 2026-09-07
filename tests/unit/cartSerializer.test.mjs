@@ -16,9 +16,10 @@ import {
   buildBallDynamicImage, buildExpressLogoDynamicImage, priceAtQ, lineTotal,
   buildDecoration, decorationFromCartItem,
   promoDiscount, freeLinesFromPromo,
-  buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine, resolveLineName,
+  buildCartData, buildSaveCartData, buildSaveCartBody, buildSaveProposalBody, assembleLine, resolveLineName, collapseSetupFee, resolveDecorationForPricing, decoratedPricingForLine,
   parseGetCart, buildCustomItemLine, buildAsCartContents,
 } from '../../src/lib/cartSerializer.js';
+import { priceAtBreaks } from '../../src/lib/giftCatalogMath.js';
 
 const CUSTOM_LOGO_PRODUCT = {
   Brand: { Name: 'Titleist' },
@@ -751,5 +752,140 @@ describe('assembleLine · price override', () => {
       product: PRODUCT, pricing: { breaks: [{ q: 1, p: 64.99 }], override: true }, qty: 1,
     });
     assert.ok(line.ItemPrice != null);
+  });
+});
+
+/* ── the one-time SETUP FEE ───────────────────────────────────────────────────
+   TOWEL is the live Venture Golf Microfiber Magnetic Towel (ShortCode P00W61),
+   trimmed to the fee ladders that matter: a $19.99 parent itemFee plus the
+   "Custom Logo" modification (modificationID 84) whose own ladders are
+   itemFee [{12,4},{24,1},{48,0},{120,-2}] and setupFee [{1,50}]. That is where
+   the "$50 Set Up Fee" in golfballs.com's own proposal email comes from, and
+   19.99 + 4.00 = the $23.99 unit that email quotes at qty 12. */
+describe('assembleLine · setup fee', () => {
+  const TOWEL = {
+    ShortCode: 'P00W61',
+    Name: 'Microfiber Magnetic Towel',
+    NameFormat: 'Microfiber Magnetic Towel',
+    Brand: { Name: 'Venture Golf' },
+    ProductChild: [{ ShortCode: 'C00B3XX', productChildID: 1, PropertyValueProduct: [] }],
+    itemFee_priceBreakHeader: { priceBreakHeaderID: 2970, PriceBreak: [{ Quantity: 1, Price: 19.99, Cost: null }] },
+    setupFee_priceBreakHeader: null,
+    ProductModification: [{
+      itemFee_priceBreakHeader: {
+        PriceBreak: [{ Quantity: 12, Price: 4 }, { Quantity: 24, Price: 1 }, { Quantity: 48, Price: 0 }, { Quantity: 120, Price: -2 }],
+      },
+      setupFee_priceBreakHeader: { PriceBreak: [{ Quantity: 1, Price: 50 }] },
+      Modification: { modificationID: 84, Name: 'Generic Inhouse Custom', FriendlyName: 'Custom Logo', ModificationOption: [] },
+    }],
+  };
+  const towelLine = (qty, pricing = {}) => assembleLine({
+    product: TOWEL, decoration: { engine: 'logoOverlay' }, qty, pricing,
+  });
+
+  it('derives the $50 setup fee (and the $23.99 unit) from the product’s own ladders', () => {
+    const line = towelLine(12);
+    assert.equal(line.ItemPrice, 23.99, '19.99 parent + 4.00 Custom Logo at qty 12');
+    assert.equal(line.SetupPrice, 50);
+    assert.deepEqual(line.SetupPriceBreak.PriceBreak, [{ Quantity: 1, Price: 50, Cost: 0 }]);
+    // The row the site's proposal email prints: $287.88 goods + $50 setup.
+    assert.equal(lineTotal(line), 337.88);
+  });
+
+  it('sends a rep-edited setup fee verbatim, flat at every quantity', () => {
+    const line = towelLine(12, { setupFee: 35 });
+    assert.equal(line.SetupPrice, 35);
+    assert.deepEqual(line.SetupPriceBreak.PriceBreak, [{ Quantity: 1, Price: 35, Cost: 0 }]);
+    assert.equal(line.ItemPrice, 23.99, 'the setup override must not touch the unit price');
+  });
+
+  it('honours a waived (0) setup fee instead of restoring the product’s $50', () => {
+    assert.equal(towelLine(12, { setupFee: 0 }).SetupPrice, 0);
+  });
+
+  it('rounds an edited setup fee to cents and floors it at 0', () => {
+    assert.equal(towelLine(12, { setupFee: 35.005 }).SetupPrice, 35.01);
+    assert.equal(towelLine(12, { setupFee: -10 }).SetupPrice, 0);
+  });
+
+  it('prices overlay apparel added as Stock the way the cart does — DISPLAY included', () => {
+    // The site carries the custom-logo modification on these products with or
+    // without artwork, so the cart charges $23.99 + $50 even for a plain add.
+    // decoratedPricingForLine (the modal's display) must agree, or the quote
+    // reads $19.99/unit with no setup while the cart charges both.
+    const cart = assembleLine({ product: TOWEL, decoration: { engine: 'none' }, qty: 12 });
+    assert.equal(cart.ItemPrice, 23.99);
+    assert.equal(cart.SetupPrice, 50);
+
+    const shown = decoratedPricingForLine(TOWEL, { engine: 'none' }, {});
+    assert.equal(priceAtBreaks(shown.breaks, 12), 23.99);
+    assert.deepEqual(shown.setupBreaks, [{ q: 1, p: 50 }]);
+  });
+
+  it('leaves a golf ball alone — balls use the ballLogo flow, not an overlay default', () => {
+    const deco = resolveDecorationForPricing(CUSTOM_LOGO_PRODUCT, { engine: 'none' });
+    assert.equal(deco.engine, 'none');
+  });
+
+  it('never overrides a decoration the rep actually chose', () => {
+    assert.equal(resolveDecorationForPricing(TOWEL, { engine: 'monogram', text: 'ABC' }).engine, 'monogram');
+    assert.equal(resolveDecorationForPricing(TOWEL, { engine: 'none' }).engine, 'logoOverlay');
+    assert.equal(resolveDecorationForPricing(TOWEL, null).engine, 'logoOverlay');
+  });
+});
+
+describe('collapseSetupFee', () => {
+  // Two cart lines for ONE proposal line quoted "12 @ $23.99 / 24 @ $22.99".
+  // assembleLine prices each break off the setup ladder, so both arrive
+  // carrying $50 — two setup charges for one imprint.
+  const splitLines = () => [
+    { itemGuid: 'a', totalQty: 12, ItemPrice: 23.99, SetupPrice: 50, SetupPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 50, Cost: 0 }], ProductionTime: 0 } },
+    { itemGuid: 'b', totalQty: 24, ItemPrice: 22.99, SetupPrice: 50, SetupPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 50, Cost: 0 }], ProductionTime: 0 } },
+  ];
+
+  it('charges the fee ONCE across a split line, on the bottom break', () => {
+    const out = collapseSetupFee(splitLines());
+    assert.deepEqual(out.map((l) => l.SetupPrice), [0, 50]);
+    assert.deepEqual(out[0].SetupPriceBreak.PriceBreak, [{ Quantity: 1, Price: 0, Cost: 0 }]);
+    assert.deepEqual(out[1].SetupPriceBreak.PriceBreak, [{ Quantity: 1, Price: 50, Cost: 0 }]);
+    // $50 total, not $100 — the double charge this function exists to stop.
+    assert.equal(out.reduce((sum, l) => sum + l.SetupPrice, 0), 50);
+    assert.equal(out.reduce((sum, l) => sum + lineTotal(l), 0), 889.64);  // 287.88 + 551.76 + 50
+  });
+
+  it('applies a rep’s edited fee to the whole line item, once', () => {
+    const out = collapseSetupFee(splitLines(), 35);
+    assert.deepEqual(out.map((l) => l.SetupPrice), [0, 35]);
+  });
+
+  it('honours a waived fee of 0 across every break', () => {
+    assert.deepEqual(collapseSetupFee(splitLines(), 0).map((l) => l.SetupPrice), [0, 0]);
+  });
+
+  it('reads a stepping setup ladder at the line’s TOTAL quantity', () => {
+    // 12 + 24 = 36 units, so the 24+ tier ($25) applies — not the 1+ tier read
+    // per break.
+    const ladder = { priceBreakHeaderID: 0, ProductionTime: 0, PriceBreak: [{ Quantity: 1, Price: 50, Cost: 0 }, { Quantity: 24, Price: 25, Cost: 0 }] };
+    const out = collapseSetupFee([
+      { totalQty: 12, ItemPrice: 5, SetupPrice: 50, SetupPriceBreak: ladder },
+      { totalQty: 24, ItemPrice: 4, SetupPrice: 25, SetupPriceBreak: ladder },
+    ]);
+    assert.deepEqual(out.map((l) => l.SetupPrice), [0, 25]);
+  });
+
+  it('leaves a single-break line’s own fee in place', () => {
+    const [line] = collapseSetupFee([splitLines()[0]]);
+    assert.equal(line.SetupPrice, 50);
+  });
+
+  it('leaves a line with no setup fee untouched', () => {
+    const plain = [{ totalQty: 12, ItemPrice: 4, SetupPrice: 0, SetupPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 0, Cost: 0 }], ProductionTime: 0 } }];
+    const out = collapseSetupFee(plain);
+    assert.equal(out[0], plain[0], 'no needless object churn');
+  });
+
+  it('tolerates an empty or missing list', () => {
+    assert.deepEqual(collapseSetupFee([]), []);
+    assert.deepEqual(collapseSetupFee(null), []);
   });
 });

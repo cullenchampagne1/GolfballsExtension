@@ -36,6 +36,11 @@ const RECOVERY_LOGO = {
   product_url_s: '/Golf-Balls/TaylorMade-TP5-Custom-Logo-Golf-Balls-2026-Model',
   itemType_ss: ['Consumer-Golf_Ball'],
   modificationName_ss: ['Custom Logo'],
+  // The live doc's real tags (P012Y9): a specially-priced pre-order line that
+  // carries ExcludeStock without being dead stock. The broad crawl's
+  // `-tag_ss:ExcludeStock` filter used to erase it, so custom-logo TP5s never
+  // appeared in the modal at all.
+  tag_ss: ['PromotionExcludePercentOff', 'PreOrder', 'ExcludeStock', 'PromotionPRINTED', '2026', 'TM2026'],
 };
 
 // The bug's fingerprint: the backend hands back at most SERVER_CAP rows per
@@ -45,6 +50,9 @@ const SERVER_CAP = 200;
 let store = {};
 let loadCatalog;
 let normalizeCatalogDocs;
+// Every fetchGiftCatalog message the "server" saw, so a test can assert the
+// custom-logo recovery crawl lifted the out-of-stock filter.
+let requests = [];
 
 before(async () => {
   store = {};
@@ -53,9 +61,15 @@ before(async () => {
       lastError: null,
       sendMessage: (msg, cb) => {
         if (msg.action !== 'fetchGiftCatalog') { cb({ ok: false }); return; }
+        requests.push({ searchTerm: msg.searchTerm, includeExcludedStock: !!msg.includeExcludedStock });
         const start = Number(msg.start) || 0;
         const rows = Math.min(SERVER_CAP, Number(msg.rows) || 60); // cap, as the old backend did
-        const source = msg.searchTerm === '*:*' ? CATALOG : [RECOVERY_LOGO];
+        let source = msg.searchTerm === '*:*' ? CATALOG : [RECOVERY_LOGO];
+        // The real gateway applies `-tag_ss:ExcludeStock` server-side unless the
+        // caller drops it, so the fake does too.
+        if (!msg.includeExcludedStock) {
+          source = source.filter((doc) => !(doc.tag_ss || []).includes('ExcludeStock'));
+        }
         const docs = source.slice(start, start + rows);
         cb({ ok: true, docs, numFound: source.length });
       },
@@ -75,6 +89,7 @@ after(() => { delete globalThis.chrome; });
 
 describe('gift catalog · pagination completeness', () => {
   it('collects every product even when the server caps pages below the client stride', async () => {
+    requests = [];
     const products = await loadCatalog({ force: true });
     assert.equal(products.length, TOTAL + 1,
       `expected all ${TOTAL} broad-crawl products plus the custom-logo recovery result`);
@@ -84,6 +99,18 @@ describe('gift catalog · pagination completeness', () => {
     assert.ok(codes.has('P00250') && codes.has('P00777'),
       'products inside the previously-skipped windows must be present');
     assert.ok(codes.has('P-TP5-LOGO'), 'the focused custom-logo crawl must recover a listing omitted by the broad crawl');
+  });
+
+  it('catalogs a specially-priced custom-logo product the stock filter excludes', () => {
+    // The broad `*:*` sweep keeps `-tag_ss:ExcludeStock` (out-of-stock retail
+    // has no business in the catalog); the custom-logo recovery crawl must NOT,
+    // or a PreOrder/ExcludeStock-tagged custom-logo SKU is never cataloged and
+    // never shows in the modal.
+    const broad = requests.filter((r) => r.searchTerm === '*:*');
+    const logo = requests.filter((r) => r.searchTerm !== '*:*');
+    assert.ok(broad.length > 0 && logo.length > 0, 'both crawls must run');
+    assert.ok(broad.every((r) => r.includeExcludedStock === false), 'the broad sweep keeps the stock filter');
+    assert.ok(logo.every((r) => r.includeExcludedStock === true), 'the custom-logo crawl lifts the stock filter');
   });
 
   it('caches the full pull so a reopen serves the complete set', async () => {

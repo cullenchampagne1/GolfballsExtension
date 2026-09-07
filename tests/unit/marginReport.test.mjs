@@ -45,6 +45,7 @@ setBundleCatalog([
   { sku: 'B100', brand: 'Titleist', title: 'Pro V1 Golf Balls', itemType: 'gbc-golf_ball' },
 ]);
 const doubleDozen = { sku: 'B9999', brand: 'Titleist', title: 'Titleist Pro V1 Golf Balls - Double Dozen', itemType: 'gbc-golf_ball' };
+const round = (n) => Math.round(n * 100) / 100;
 
 describe('invSkuOf / costSkuOf', () => {
   it('prefers the human parentSku, falls back to parentCode, then empty', () => {
@@ -168,11 +169,70 @@ describe('marginReport', () => {
     assert.equal(marginReport([entries[1]]).costBasis, 'assumed');
   });
 
-  it('sums multiple qty/price splits within one line', () => {
+  it('reports each price break as its own row so per-break margin is visible', () => {
     const r = marginReport([{ id: 'a', product: { sku: 'B100' }, splits: [{ qty: 12, price: 50 }, { qty: 24, price: 45 }] }]);
-    assert.equal(r.lines[0].lineRev, 1680);   // 600 + 1080
-    assert.equal(r.lines[0].lineCost, 360);   // 36 units × $10
-    assert.equal(r.lines[0].units, 36);
+    assert.equal(r.lines.length, 2, 'one row per break, not one blended row');
+    assert.deepEqual(r.lines.map((l) => l.id), ['a#0', 'a#1']);
+    assert.deepEqual(r.lines.map((l) => l.splitIndex), [0, 1]);
+    assert.deepEqual(r.lines.map((l) => l.splitCount), [2, 2]);
+    assert.deepEqual(r.lines.map((l) => l.entryIndex), [0, 0], 'both rows still edit the SAME proposal line');
+    // Break 1: 12 × $50 = $600 rev, 12 × $10 synced cost = $120 → 80%.
+    assert.equal(r.lines[0].lineRev, 600);
+    assert.equal(r.lines[0].lineCost, 120);
+    assert.equal(r.lines[0].units, 12);
+    assert.equal(r.lines[0].margin, 0.8);
+    // Break 2: 24 × $45 = $1,080 rev, 24 × $10 = $240 → a DIFFERENT margin,
+    // which is the whole point of splitting the rows.
+    assert.equal(r.lines[1].lineRev, 1080);
+    assert.equal(r.lines[1].lineCost, 240);
+    assert.equal(r.lines[1].units, 24);
+    assert.equal(Math.round(r.lines[1].margin * 1000) / 1000, 0.778);
+    // Blended totals are unchanged — only the row breakdown got finer.
+    assert.equal(r.rev, 1680);
+    assert.equal(r.cost, 360);
+    assert.equal(r.units, 36);
+    assert.equal(r.count, 1, 'still ONE product');
+    assert.equal(r.rowCount, 2);
+  });
+
+  it('points every row at the proposal ENTRY it came from, not the row position', () => {
+    // The breakdown's inline price editor writes back by entry index. With
+    // per-break rows the row index diverges from the entry index the moment the
+    // first product has more than one break — editing the second product then
+    // repriced the first.
+    const r = marginReport([
+      { id: 'a', product: { sku: 'B100' }, splits: [{ qty: 12, price: 50 }, { qty: 24, price: 45 }] },
+      { id: 'b', product: { sku: 'B200' }, splits: [{ qty: 6, price: 20 }] },
+    ]);
+    assert.deepEqual(r.lines.map((l) => l.entryIndex), [0, 0, 1]);
+    assert.equal(r.lines[2].id, 'b');
+  });
+
+  it('keeps the entry id on a single-break line', () => {
+    const r = marginReport([{ id: 'solo', product: { sku: 'B100' }, splits: [{ qty: 12, price: 50 }] }]);
+    assert.equal(r.lines.length, 1);
+    assert.equal(r.lines[0].id, 'solo');
+    assert.equal(r.lines[0].splitCount, 1);
+  });
+
+  it('bills a line item’s setup fee once, on its bottom price break', () => {
+    const r = marginReport([{
+      id: 'towel', product: { sku: 'B100' }, setupFeeAuto: 50,
+      splits: [{ qty: 12, price: 23.99 }, { qty: 24, price: 22.99 }],
+    }]);
+    assert.equal(r.lines[0].setupFee, 0, 'not charged on the first break');
+    assert.equal(r.lines[1].setupFee, 50, 'floats to the bottom break');
+    assert.equal(r.lines[0].lineRev, 287.88);
+    assert.equal(round(r.lines[1].lineRev), 601.76);   // 24 × 22.99 + 50
+    assert.equal(r.setupTotal, 50);
+    assert.equal(round(r.rev), 889.64);
+  });
+
+  it('never charges setup on a free promotional giveaway line', () => {
+    const r = marginReport([{ id: 'promo', free: true, product: { sku: 'B100' }, setupFeeAuto: 50, splits: [{ qty: 12, price: 0 }] }]);
+    assert.equal(r.lines[0].setupFee, 0);
+    assert.equal(r.rev, 0);
+    assert.equal(r.setupTotal, 0);
   });
 
   it('handles empty/missing entries as an assumed-basis zero report', () => {

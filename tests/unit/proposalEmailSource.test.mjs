@@ -76,6 +76,25 @@ const srixonPromotion = {
   freeItems: [{ itemGuid: 'SZ1-PROMO', amount: 4 }],
 };
 
+/* The reported towel proposal, verbatim from the site's own generated email:
+   two colours of the Venture Golf Microfiber Magnetic Towel, each 12 × $23.99
+   with a $50 "Set Up Fee" row underneath → $675.76 estimated total. */
+const towelProduct = (color) => ({
+  title: `Venture Golf Microfiber Magnetic Towel - ${color}`,
+  brand: 'Venture Golf',
+  img: `https://static.golfballs.com/towel-${color.toLowerCase()}.jpeg`,
+  price: 23.99,
+  breaks: [{ q: 12, p: 23.99 }],
+});
+const towelLine = (color, over = {}) => ({
+  id: `TW-${color}`,
+  product: towelProduct(color),
+  decoration: { engine: 'logoOverlay' },
+  setupFeeAuto: 50,
+  splits: [{ qty: 12, price: 23.99 }],
+  ...over,
+});
+
 globalThis.__gbTestProposalCarts = {
   CART1: { lines: [tp5Line] },
   CARTF: { lines: [freeLine] },
@@ -83,6 +102,18 @@ globalThis.__gbTestProposalCarts = {
   CARTS: {
     lines: [srixonPaidLine, srixonFreeLine],
     promotion: srixonPromotion,
+  },
+  CARTT: { lines: [towelLine('White'), towelLine('Black')] },
+  // The same towel, quoted as two price breaks on ONE line item.
+  CARTTB: {
+    lines: [towelLine('White', { splits: [{ qty: 12, price: 23.99 }, { qty: 24, price: 22.99 }] })],
+  },
+  // A rep waived the fee on one colour and cut it on the other.
+  CARTTE: {
+    lines: [
+      towelLine('White', { setupFee: 35, setupFeeEdited: true }),
+      towelLine('Black', { setupFee: 0, setupFeeEdited: true }),
+    ],
   },
 };
 
@@ -156,6 +187,45 @@ describe('buildEmailSourceFromCartIds — single cart', () => {
       719.88,
       'estimated total is the paid merchandise only',
     );
+  });
+});
+
+describe('buildEmailSourceFromCartIds — setup fees', () => {
+  it('reproduces the site’s towel email: a $50 fee per line item, $675.76 total', async () => {
+    const source = await buildEmailSourceFromCartIds(['CARTT']);
+    assert.equal(source.lines.length, 2);
+    assert.deepEqual(source.lines.map((l) => l.setupFee), [50, 50]);
+    assert.deepEqual(source.lines.map((l) => l.setupLabel), ['Set Up Fee', 'Set Up Fee']);
+    assert.deepEqual(source.lines.map((l) => l.lineTotal), [287.88, 287.88], 'goods only on the row itself');
+    // 287.88 + 50 + 287.88 + 50 — byte-for-byte the site's estimated total.
+    assert.equal(source.total, 675.76);
+  });
+
+  it('floats the fee to the BOTTOM break of a split line and charges it once', async () => {
+    const source = await buildEmailSourceFromCartIds(['CARTTB']);
+    assert.equal(source.lines.length, 2, 'one row per price break');
+    assert.deepEqual(source.lines.map((l) => l.setupFee), [0, 50]);
+    assert.equal(source.lines[1].setupLabel, 'Set Up Fee');
+    // 12 × 23.99 + 24 × 22.99 + one $50 fee.
+    assert.equal(source.total, 889.64);
+  });
+
+  it('quotes a rep-edited fee, including a waived one', async () => {
+    const source = await buildEmailSourceFromCartIds(['CARTTE']);
+    assert.deepEqual(source.lines.map((l) => l.setupFee), [35, 0]);
+    assert.equal(source.lines[1].setupLabel, undefined, 'no row for a waived fee');
+    assert.equal(source.total, 610.76);   // 287.88 × 2 + 35
+  });
+
+  it('leaves a line with no setup fee at zero, so plain quotes are unchanged', async () => {
+    const source = await buildEmailSourceFromCartIds(['CART1']);
+    assert.equal(source.lines[0].setupFee, 0);
+    assert.equal(source.total, 539.88);
+  });
+
+  it('sums the fees across combined proposals', async () => {
+    const source = await buildEmailSourceFromCartIds(['CARTT', 'CARTTB']);
+    assert.equal(source.total, 675.76 + 889.64);
   });
 });
 

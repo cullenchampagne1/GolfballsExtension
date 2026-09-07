@@ -2266,6 +2266,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // pull sample only the first 200 of every 500-doc window — silently dropping
     // ~60% of the catalog (3,553 → ~1,378). The gateway honors rows=500.
     const rows = Math.max(1, Math.min(500, Math.trunc(Number(msg.rows) || 60)));
+    /* `-tag_ss:ExcludeStock` drops out-of-stock retail SKUs server-side, which
+       is right for the full-catalog sweep — but it ALSO dropped commissionable
+       custom-logo products that carry the tag for a different reason. Verified
+       on the live page: TP5 Custom Logo Golf Balls (P012Y9) is tagged
+       ["PromotionExcludePercentOff","PreOrder","ExcludeStock","PromotionPRINTED",
+       "2026","TM2026"] — a specially-priced pre-order line, not dead stock —
+       so it never reached the catalog and never showed in the modal. The
+       custom-logo recovery crawl therefore asks for them (msg.includeExcludedStock). */
+    const includeExcludedStock = msg.includeExcludedStock === true;
     if (!searchTerm || searchTerm.length > 300) {
       sendResponse({ ok: false, error: 'Invalid catalog search', docs: [], numFound: 0 });
       return true;
@@ -2291,7 +2300,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         facetQueries: GIFT_FACET_QUERIES,
         filterQuery: [],
       },
-      additionalFacets: { facetFields: [], facetQueries: ['-tag_ss:ExcludeStock'] },
+      additionalFacets: { facetFields: [], facetQueries: includeExcludedStock ? [] : ['-tag_ss:ExcludeStock'] },
       pageKey: 'custom-logo',
     });
     fetch('https://master.api.icustomize.com/user/solr-refinement', {

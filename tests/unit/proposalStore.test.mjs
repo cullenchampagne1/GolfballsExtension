@@ -19,6 +19,7 @@ import {
   submitProposalEmail, expressLogoHasRenderableImage,
   PROPOSAL_STORE_FILE_KIND, PROPOSAL_STORE_FILE_VERSION,
 } from '../../src/lib/saveProposal.js';
+import { collapseSetupFee } from '../../src/lib/cartSerializer.js';
 
 describe('proposal save · Express logo readiness', () => {
   it('requires a cropped upload for Express while leaving other decorations unaffected', () => {
@@ -109,6 +110,110 @@ describe('proposal store · normalize', () => {
       saveProposalToOpportunity([restored], { opportunityID: '88', name: 'Unsafe reorder' }),
       /1 prior-order item need review/,
     );
+  });
+
+  it('keeps a line item’s setup fee — derived and edited — through save and reload', async () => {
+    const priorChrome = globalThis.chrome;
+    const data = {};
+    globalThis.chrome = {
+      storage: { local: {
+        get(key, callback) { callback({ [key]: structuredClone(data[key] || []) }); },
+        set(values, callback) { Object.assign(data, structuredClone(values)); callback?.(); },
+      } },
+    };
+    try {
+      const proposal = [
+        // The towel's derived $50 (from its Custom Logo setupFee ladder).
+        {
+          id: 'towel-white', productId: 'P00W61', product: { id: 'P00W61', title: 'Microfiber Magnetic Towel' },
+          decoration: { engine: 'logoOverlay' }, setupFeeAuto: 50,
+          splits: [{ id: 's1', qty: 12, price: 23.99 }],
+        },
+        // The same towel with the fee cut to $35 by the rep.
+        {
+          id: 'towel-black', productId: 'P00W61', product: { id: 'P00W61', title: 'Microfiber Magnetic Towel' },
+          decoration: { engine: 'logoOverlay' }, setupFeeAuto: 50, setupFee: 35, setupFeeEdited: true,
+          splits: [{ id: 's2', qty: 12, price: 23.99 }],
+        },
+      ];
+      const { entry: saved } = await saveProposalDraft('Towel setup fees', proposal);
+      assert.equal(saved.lines[0].setupFeeAuto, 50);
+      assert.equal(saved.lines[0].setupFeeEdited, undefined, 'an untouched fee is not stored as an edit');
+      assert.equal(saved.lines[1].setupFee, 35);
+      assert.equal(saved.lines[1].setupFeeEdited, true);
+
+      const restored = linesFromSaved(saved, () => 'fresh-id');
+      assert.equal(restored[0].setupFeeAuto, 50);
+      assert.equal(restored[1].setupFee, 35);
+      assert.equal(restored[1].setupFeeEdited, true);
+
+      // The allowlist a shared/imported store passes through must keep it too,
+      // or an imported proposal quotes below the cart.
+      const shared = normalizeProposalEntry(saved);
+      assert.equal(shared.lines[0].setupFeeAuto, 50);
+      assert.equal(shared.lines[1].setupFee, 35);
+      assert.equal(shared.lines[1].setupFeeEdited, true);
+    } finally {
+      if (priorChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = priorChrome;
+    }
+  });
+
+  it('stores no setup keys for a line that has no fee', async () => {
+    const n = normalizeProposalEntry(entry());
+    assert.deepEqual(Object.keys(n.lines[0]).filter((k) => k.startsWith('setup')), []);
+  });
+
+  it('saves ONE setup fee for a split line and reports the cart’s real total', async () => {
+    // The regression: buildProposalLines calls assembleLine once per price
+    // break, and each call prices the setup ladder — so a towel quoted
+    // "12 @ $23.99 / 24 @ $22.99" saved TWO $50 fees. It must save one, on the
+    // bottom break, and the returned total must include it.
+    const cartItems = [];
+    const priorChrome = globalThis.chrome;
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        // giftSaveProposal returns the cart id; the opportunity stage write
+        // that follows is a separate crmAjax call we let succeed emptily.
+        sendMessage: (msg, cb) => cb(msg.action === 'giftSaveProposal'
+          ? { ok: true, cartID: 'cart-split', raw: '' }
+          : { ok: true, text: '{}' }),
+      },
+    };
+    let saved;
+    try {
+      saved = await saveProposalToOpportunity(
+      [{
+        id: 'towel', product: { title: 'Microfiber Magnetic Towel', url: 'https://www.golfballs.com/x' },
+        decoration: { engine: 'logoOverlay' }, setupFeeAuto: 50,
+        splits: [{ id: 's1', qty: 12, price: 23.99 }, { id: 's2', qty: 24, price: 22.99 }],
+      }],
+      { opportunityID: '88', name: 'Split towel' },
+      {
+        buildLines: async () => {
+          // Stand in for assembleLine's output: BOTH breaks arrive carrying the
+          // product's $50 setup, exactly as the serializer prices them.
+          const setup = { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 50, Cost: 0 }], ProductionTime: 0 };
+          const items = [
+            { itemGuid: 's1', totalQty: 12, ItemPrice: 23.99, SetupPrice: 50, SetupPriceBreak: setup },
+            { itemGuid: 's2', totalQty: 24, ItemPrice: 22.99, SetupPrice: 50, SetupPriceBreak: setup },
+          ];
+          const collapsed = collapseSetupFee(items, null);
+          cartItems.push(...collapsed);
+          return { items: collapsed, skipped: [] };
+        },
+      },
+      );
+    } finally {
+      if (priorChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = priorChrome;
+    }
+
+    assert.deepEqual(cartItems.map((i) => i.SetupPrice), [0, 50], 'one fee, on the bottom break');
+    assert.equal(saved.cartID, 'cart-split');
+    // 12 × 23.99 + 24 × 22.99 + one $50 fee.
+    assert.equal(saved.savedTotal, 889.64);
   });
 
   it('keeps a custom-logo ball Express choice through draft normalization and reload', () => {
