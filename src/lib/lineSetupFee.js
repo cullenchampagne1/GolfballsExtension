@@ -104,19 +104,21 @@ export function resetLineSetupFee(line) {
   return next;
 }
 
-/** Should the proposal line offer a setup-fee row?
+/** Should the proposal line show a setup-fee row?
  *
- *  A decorated line always does — that's where a setup charge lives, and the
- *  rep needs the field even before the live ladder has been fetched (and for
- *  products like golf balls, whose decoration cost rides in the PriceTier
- *  ladder with no setup ladder at all, so a negotiated setup has to be typed).
- *  An undecorated retail line only shows the row once it actually has a fee,
- *  so a plain add stays a clean two-line card. */
+ *  Only when the product ACTUALLY HAS a setup fee, or the rep has taken it
+ *  over. Golf balls and poker chips carry no setup ladder (their decoration
+ *  cost rides in the modification's PriceTier), so they must not show a
+ *  "$0.00" row that reads like a real charge.
+ *
+ *  Deliberately independent of the CURRENT amount: once the row is showing it
+ *  has to stay put while the rep edits — including through an empty field or a
+ *  waive-to-zero — or the control unmounts mid-keystroke and the number can't
+ *  be retyped. `hasEditedSetupFee` is what holds it open, which is also why
+ *  waiving uses an explicit edit to 0 rather than clearing the field. */
 export function offersSetupFee(line) {
   if (!line || line.free) return false;
-  const deco = line.decoration;
-  if (deco && deco.engine && deco.engine !== 'none') return true;
-  return lineSetupFee(line) > 0;
+  return derivedSetupFee(line) > 0 || hasEditedSetupFee(line);
 }
 
 /** Fee fields to persist with a saved proposal line (empty when there's

@@ -682,12 +682,12 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
                 </div>
               </div>
             ) : null
-          ) : (p.customizable || p.customLogo) ? (
-            // Customizable products show their base options (Color, etc.) inside
-            // CustomizeBlock's BaseProperties below — don't render ProductOptions
-            // too, or the Color picker appears twice.
-            null
           ) : (
+            /* EVERY catalog product picks its required base options here, by the
+               title — colour, size, tee count. They used to move into the
+               Customization panel for anything customizable, so a t-shirt's
+               colour sat under "Customization" while other products' sat here.
+               That panel is now imprints only (custom logo, text, monogram). */
             <ProductOptions p={p} onChange={setVariant} />
           )}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
@@ -743,7 +743,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
           {/* Show the customization UI for ANY customizable product (custom
               logo, personalized, monogram, photo, ball-marker, …), not just
               custom-logo — e.g. a "Personalized Ball Marker" hat clip. */}
-          {!p.isCustom && (p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} onVariantChange={setVariant} />}
+          {!p.isCustom && (p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} baseSelection={variant && variant.values} />}
           {/* Inventory + cost for a catalog SKU (loads on press). */}
           {!p.isCustom && p.sku && <InventoryPanel sku={invSkuOf(p)} />}
           {p.isCustom && p.custom && p.custom.cost > 0 && (
@@ -949,27 +949,38 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
 /* The line item's one-time SETUP FEE row — pinned BELOW the price breaks,
    because that's where golfballs.com prints it and because one fee covers
    every break (edit it once and the whole line item re-quotes; see
-   src/lib/lineSetupFee.js). `↺` restores the fee the product's own
-   setupFee ladder derives. */
+   src/lib/lineSetupFee.js).
+
+   Shown only for products that actually carry a fee (offersSetupFee), so balls
+   and poker chips get no misleading $0 row. `×` waives it — an explicit edit to
+   zero, mirroring a price break's remove — and `↺` restores whatever the
+   product's own setupFee ladder derives. The row's visibility never depends on
+   the current amount, so editing (or clearing) the field can't unmount the
+   control out from under the rep. */
 function SetupFeeRow({ line, onChange }) {
   const fee = lineSetupFee(line);
   const derived = derivedSetupFee(line);
   const edited = hasEditedSetupFee(line) && Math.abs(fee - derived) > 0.005;
+  const waived = fee <= 0;
   return (
     <motion.div layout
       initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
       transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
       style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden', paddingTop: 7, borderTop: '1px dashed var(--gb-border-subtle)', marginTop: 5 }}>
       <span title="One-time decoration setup — charged once for this item, across every price break"
-        style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>{SETUP_FEE_LABEL}</span>
+        style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, textTransform: 'uppercase', color: waived ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: waived ? 'line-through' : 'none' }}>{SETUP_FEE_LABEL}</span>
       <PriceField value={fee} onChange={(next) => onChange(editLineSetupFee(line, next))} />
       {edited && (
         <span onClick={() => onChange(resetLineSetupFee(line))} title={`Reset to ${usd(derived)}`}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9.5, fontWeight: 600, color: 'var(--gb-brand-label)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>↺ {usd(derived)}</span>
       )}
       <div style={{ flex: 1 }} />
-      <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)', minWidth: 58, textAlign: 'right', flexShrink: 0 }}>{money(fee)}</span>
-      <span style={{ width: 20, flexShrink: 0 }} />
+      <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: waived ? 'var(--gb-text-ghost)' : 'var(--gb-text-secondary)', minWidth: 58, textAlign: 'right', flexShrink: 0 }}>{money(fee)}</span>
+      {/* Waive — same slot as a price break's remove. It zeroes the fee instead
+          of hiding the row, so the rep can still see and restore it. */}
+      <span onClick={waived ? undefined : () => onChange(editLineSetupFee(line, 0))}
+        title={waived ? 'Setup fee waived' : 'Waive this setup fee'}
+        style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: waived ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', cursor: waived ? 'default' : 'pointer', opacity: waived ? .35 : 1 }}><I.close size={11} /></span>
     </motion.div>
   );
 }

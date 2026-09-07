@@ -155,20 +155,28 @@ describe('withDerivedSetupFee', () => {
 });
 
 describe('offersSetupFee', () => {
-  it('offers the row on any decorated line, even before the fee is known', () => {
-    assert.equal(offersSetupFee({ decoration: { engine: 'ballLogo' }, splits: [{ qty: 12, price: 50 }] }), true);
+  it('shows the row when the product’s own ladder derives a fee', () => {
+    assert.equal(offersSetupFee(towelLine()), true);
   });
 
-  it('offers the row on an undecorated line that already carries a fee', () => {
-    assert.equal(offersSetupFee({ decoration: { engine: 'none' }, setupFeeAuto: 39.99, splits: [] }), true);
-  });
-
-  it('keeps a plain retail line clean', () => {
+  it('shows NO row for a product with no setup fee — no misleading $0 line', () => {
+    // Golf balls and poker chips price their decoration through the
+    // modification's PriceTier and carry no setup ladder at all.
+    assert.equal(offersSetupFee({ decoration: { engine: 'ballLogo' }, setupFeeAuto: 0, splits: [{ qty: 12, price: 50 }] }), false);
+    assert.equal(offersSetupFee({ decoration: { engine: 'ballLogo' }, splits: [{ qty: 12, price: 50 }] }), false);
     assert.equal(offersSetupFee({ decoration: { engine: 'none' }, splits: [{ qty: 12, price: 4 }] }), false);
-    assert.equal(offersSetupFee({ splits: [{ qty: 1, price: 4 }] }), false);
   });
 
-  it('never offers it on a free giveaway line', () => {
+  it('STAYS shown once the rep takes the fee over, whatever the amount', () => {
+    // Visibility must not track the value: a row that vanishes when the field
+    // reads 0 unmounts the input mid-edit, so a backspaced fee can't be retyped.
+    assert.equal(offersSetupFee(editLineSetupFee(towelLine(), 0)), true);
+    assert.equal(offersSetupFee(editLineSetupFee(towelLine(), 35)), true);
+    // Even on a product whose ladder derives nothing — a waive stays visible.
+    assert.equal(offersSetupFee(editLineSetupFee({ setupFeeAuto: 0, splits: [] }, 0)), true);
+  });
+
+  it('never shows it on a free giveaway line', () => {
     assert.equal(offersSetupFee({ free: true, decoration: { engine: 'ballLogo' }, setupFeeAuto: 50, splits: [] }), false);
   });
 });

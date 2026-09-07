@@ -10,6 +10,7 @@ import { giftSetSizeLabel } from '../lib/giftSets.js';
 import { giftSetLayout } from '../lib/giftSetLayout.js';
 import { useSurfaceUsage } from '../lib/usageTelemetry.js';
 import { giftSetPreviewUrl } from '../lib/cartSerializer.js';
+import { cleanAttributeLabel } from '../lib/lineAttributes.js';
 import {
   clientDeltaToLocal,
   clientPointToLocal,
@@ -252,7 +253,6 @@ function ballTitleTint(title) {
   }
   return undefined;
 }
-
 
 const UploadI = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>;
 const SparkI = (props) => <Icon {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></Icon>;
@@ -1568,21 +1568,6 @@ function useProductConfig(p) {
   return state;
 }
 
-/* base product color — labelled buttons, exactly like the live site */
-function BaseColorPicker({ label = 'Color', colors, value, onChange }) {
-  if (!colors || colors.length < 1) return null;
-  return (
-    <Field label={label}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {colors.map((c) => {
-          const on = value === c;
-          return <button key={c} onClick={() => onChange(c)} style={{ padding: '6px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{c}</button>;
-        })}
-      </div>
-    </Field>
-  );
-}
-
 /* Custom Logo decoration — logo upload + (second imprint only where the product
    actually has a second pole) + commercial block. */
 function CustomLogoFlow({ p, config, dualPole }) {
@@ -1729,59 +1714,27 @@ function IDAlignFlow() {
   );
 }
 
-/* one base-product input (Color, Size, Metal Finish, Imprint side, …) — from data */
-function PropertyInput({ label, options }) {
-  // Local state drives the UI so it's always clickable (accessories aren't
-  // wrapped in a PrintTypeProvider, so the __base context setter is a no-op
-  // there — using it for the value made towels/shirts unselectable). We ALSO
-  // mirror the pick into the __base slot when a context exists (balls) so the
-  // cart's widgetSelections reflect it.
+/* Feed the base picks made BY THE TITLE (<ProductOptions />) into the print-type
+   context's `__base` slot. The customizer reads `__base` for the live 3D preview's
+   base colour, for `deriveBallDecoration`'s `baseSelection`, and ultimately for
+   the cart's widgetSelections — all of which used to be populated by rendering
+   the colour/size pickers inside the Customization panel. Moving those pickers
+   out to the title needed this one-way bridge in their place.
+
+   One-way and identity-guarded on purpose: writing on every render (each parent
+   render hands down a fresh `values` object) would loop through the provider's
+   state and back. */
+function BaseSelectionSync({ values }) {
   const ctx = usePT();
-  const [v, setV] = useState(options[0]);
+  const sig = JSON.stringify(values || {});
+  const lastRef = useRef(null);
   useEffect(() => {
-    setV(options[0]);
-    try { ctx.update && ctx.update('__base', { [label]: options[0] }); } catch { /* no ctx */ }
-  }, [label, options[0]]);
-  const onChange = (val) => { setV(val); try { ctx.update && ctx.update('__base', { [label]: val }); } catch { /* no ctx */ } };
-  const clean = (label || 'Option').replace(/^(Accessories|Apparel|Product)\s+/i, '');
-  return <BaseColorPicker label={clean} colors={options} value={v} onChange={onChange} />;
-}
-
-/* all of a product's base-product inputs (PropertyProduct / property_*_ss) —
-   shared by the golf-ball and accessory paths so e.g. Ball Color always shows. */
-function BaseProperties({ p, config }) {
-  // The product page (PropertyProduct) is authoritative; the catalog facet is an
-  // incomplete fallback (some products, e.g. Devant towels, have no facet at all).
-  const all = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
-  const isChip = isPokerChipProduct(p);
-  // Skip single-value properties (e.g. "Colors in Logo: [1 Color]") — not a real picker.
-  const properties = all
-    .filter((prop) => (prop.options || []).length > 1)
-    .map((prop) => {
-      // The 3D chip preview defaults to black clay; default its color picker to
-      // Black too (move it first) so the swatch selection and the live preview
-      // agree the moment customization opens.
-      if (isChip && /colou?r/i.test(prop.label || '')) {
-        const black = (prop.options || []).find((o) => /^black$/i.test(o));
-        if (black) return { ...prop, options: [black, ...prop.options.filter((o) => o !== black)] };
-      }
-      return prop;
-    });
-  return <>{properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}</>;
-}
-
-/* Publish the selected child back to DetailPanel. BaseProperties writes the
-   visible picks into __base; this bridge adds the matching SKU, price and photo
-   from the product page's normalized variant config. */
-function VariantBridge({ config, onChange }) {
-  const { data } = usePT();
-  const values = (data && data.__base) || {};
-  const variants = (config && config.variants) || [];
-  const match = variants.find((variant) => Object.entries(values)
-    .every(([label, value]) => variant.values && variant.values[label] === value)) || variants[0] || null;
-  useEffect(() => {
-    if (match && onChange) onChange({ values: { ...match.values }, price: match.price, sku: match.sku, image: match.image || null });
-  }, [match, onChange]);
+    if (lastRef.current === sig) return;
+    lastRef.current = sig;
+    const picks = values && typeof values === 'object' ? values : null;
+    if (!picks || !Object.keys(picks).length) return;
+    try { ctx.update && ctx.update('__base', picks); } catch { /* no ctx */ }
+  }, [sig]);   // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -1910,7 +1863,8 @@ function AccessoryCustomizer({ p, config, loading }) {
       {isDivot && !bundleItems && <LivePreview3D shape="divot" p={p} />}
       {isBartender && !bundleItems && <LivePreview3D shape="bartender" p={p} />}
       {isMarker && !bundleItems && <LivePreview3D shape="marker" p={p} />}
-      <BaseProperties p={p} config={config} />
+      {/* Colour / size are picked by the TITLE (<ProductOptions />) — this panel
+          is only what we put ON the product. */}
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
         : <DecorationArea mods={mods} p={p} config={config} dualPole={dualPole} />}
@@ -2248,48 +2202,104 @@ function LivePreview3D({ shape = 'ball', p }) {
    purchasable option set from config.variants and reports the selected variant
    (values + price + sku) up via onChange, so the detail panel can price it.
    Shows only options that actually vary; renders nothing otherwise. */
+/* ── the product's REQUIRED base options (colour, size, tee count, …) ─────────
+   These live next to the TITLE on every product, not inside the Customization
+   panel: a towel's colour or a shirt's size is what the product IS, whereas
+   Customization is for what we put ON it (custom logo, personalized text,
+   monogram). They used to appear in either place depending on the product —
+   `CustomizeBlock`'s BaseProperties for anything customizable, this component
+   for everything else — which is why a t-shirt's colour showed up under
+   Customization while other products' showed by the title.
+
+   Two data sources, in order of authority:
+     1. `config.variants` — one entry per ProductChild, so a pick also resolves
+        the child's SKU, price and photo (the reason this is preferred).
+     2. `config.properties` / the catalog's `p.properties` facets — label +
+        options only, for products whose children carry no property values.
+   Emits the same `{ values, price, sku, image }` shape either way; the values
+   are keyed by the site's RAW property name ("Accessories Color") because the
+   cart's child resolution matches on it — only the LABEL is cleaned up. */
 export function ProductOptions({ p, onChange }) {
   const { config, loading } = useProductConfig(p);
   const variants = (config && config.variants) || [];
   // Labels that represent a real choice (more than one distinct value).
-  const propLabels = useMemo(() => {
+  const variantLabels = useMemo(() => {
     const labels = [];
     for (const v of variants) for (const k of Object.keys(v.values || {})) if (!labels.includes(k)) labels.push(k);
     return labels.filter((lbl) => new Set(variants.map((v) => v.values[lbl])).size > 1);
   }, [variants]);
-  const optionsFor = (lbl) => {
-    const seen = [];
-    for (const v of variants) { const val = v.values[lbl]; if (val != null && !seen.includes(val)) seen.push(val); }
-    return seen;
-  };
-  // Default to the cheapest in-stock variant — matches the catalog "from" price.
+  // Fallback: the product page's own PropertyProduct groups, else the catalog
+  // facets. Single-value groups ("Colors in Logo: [1 Color]") aren't a choice.
+  const fallbackProps = useMemo(() => {
+    if (variantLabels.length) return [];
+    const all = (config && config.properties && config.properties.length) ? config.properties : ((p && p.properties) || []);
+    return all.filter((prop) => prop && (prop.options || []).length > 1);
+  }, [config, p, variantLabels.length]);
+  // Poker chips: the 3D preview renders black clay, so default the colour pick
+  // to Black rather than whatever the feed happens to list first.
+  const chipFirst = useMemo(() => {
+    if (!isPokerChipProduct(p)) return (opts) => opts;
+    return (opts, label) => {
+      if (!/colou?r/i.test(label || '')) return opts;
+      const black = opts.find((o) => /^black$/i.test(o));
+      return black ? [black, ...opts.filter((o) => o !== black)] : opts;
+    };
+  }, [p]);
+
+  const groups = useMemo(() => {
+    if (variantLabels.length) {
+      return variantLabels.map((label) => {
+        const seen = [];
+        for (const v of variants) { const val = v.values[label]; if (val != null && !seen.includes(val)) seen.push(val); }
+        return { label, options: chipFirst(seen, label) };
+      });
+    }
+    return fallbackProps.map((prop) => ({ label: prop.label, options: chipFirst(prop.options, prop.label) }));
+  }, [variants, variantLabels, fallbackProps, chipFirst]);
+
+  // Default selection: the cheapest in-stock variant (matches the catalog's
+  // "from" price), else each group's first option.
   const cheapest = useMemo(
     () => variants.filter((v) => v.available && v.price != null).sort((a, b) => a.price - b.price)[0] || variants[0] || null,
     [variants],
   );
+  const defaults = useMemo(() => {
+    if (variantLabels.length) return cheapest ? { ...cheapest.values } : null;
+    if (!groups.length) return null;
+    const out = {};
+    groups.forEach((g) => { out[g.label] = g.options[0]; });
+    return out;
+  }, [variantLabels.length, cheapest, groups]);
+
   const [sel, setSel] = useState(null);
-  useEffect(() => { setSel(cheapest ? { ...cheapest.values } : null); }, [cheapest]);
+  useEffect(() => { setSel(defaults); }, [defaults]);
   const match = useMemo(
     () => (sel && variants.find((v) => Object.keys(sel).every((k) => v.values[k] === sel[k]))) || cheapest,
     [variants, sel, cheapest],
   );
-  useEffect(() => { if (match && onChange) onChange({ values: match.values, price: match.price, sku: match.sku, image: match.image || null }); }, [match, onChange]);
+  // With variants we emit the matched child (SKU/price/photo); on the fallback
+  // path there is no child to resolve, so the picks travel on their own.
+  const emitted = useMemo(() => {
+    if (match) return { values: match.values, price: match.price, sku: match.sku, image: match.image || null };
+    return sel ? { values: sel, price: null, sku: null, image: null } : null;
+  }, [match, sel]);
+  useEffect(() => { if (emitted && onChange) onChange(emitted); }, [emitted, onChange]);
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', color: 'var(--gb-text-muted)', fontSize: 11.5 }}>
       <Spinner size={12} thickness={1.5} variant="brand" /> Loading options…
     </div>
   );
-  if (!propLabels.length) return null;
+  if (!groups.length) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-      {propLabels.map((lbl) => (
-        <Field label={lbl} key={lbl}>
+      {groups.map(({ label, options }) => (
+        <Field label={cleanAttributeLabel(label)} key={label}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {optionsFor(lbl).map((val) => {
-              const on = sel && sel[lbl] === val;
+            {options.map((val) => {
+              const on = sel && sel[label] === val;
               return (
-                <button key={val} onClick={() => setSel((s) => ({ ...(s || {}), [lbl]: val }))}
+                <button key={val} onClick={() => setSel((s) => ({ ...(s || {}), [label]: val }))}
                   style={{
                     padding: '5px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit',
                     fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
@@ -2525,7 +2535,7 @@ function GiftSetPicker({ p }) {
   );
 }
 
-export function CustomizeBlock({ p, onChange, onVariantChange }) {
+export function CustomizeBlock({ p, onChange, baseSelection }) {
   // A "Custom Accessory Bundle" (e.g. a Sleeve/Chip/Tee Kit) is a bundle, not a
   // plain ball — route it to the bundle path even though it's filed under Golf Balls.
   const isBundle = (p.modNames || []).includes('Custom Accessory Bundle');
@@ -2548,7 +2558,8 @@ export function CustomizeBlock({ p, onChange, onVariantChange }) {
       </div>
     );
   }
-  const subtitle = isBall ? `${mods.length} print ${mods.length === 1 ? 'type' : 'types'}` : 'Color & imprint options';
+  // Colour / size are chosen by the title now, so this panel is imprints only.
+  const subtitle = isBall ? `${mods.length} print ${mods.length === 1 ? 'type' : 'types'}` : 'Imprint options';
   return (
     <div style={{ marginTop: 16 }}>
       <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 12px', cursor: 'pointer', background: open ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)', borderRadius: open ? 'var(--gb-r-md) var(--gb-r-md) 0 0' : 'var(--gb-r-md)', border: '1px solid ' + (open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)') }}>
@@ -2569,10 +2580,9 @@ export function CustomizeBlock({ p, onChange, onVariantChange }) {
               {isBall ? (
                 <PrintTypeProvider mods={mods} onStateChange={publishBallState}>
                   <DecorationEmitter p={p} onChange={onChange} />
-                  <VariantBridge config={config} onChange={onVariantChange} />
+                  <BaseSelectionSync values={baseSelection} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <LivePreview3D p={p} />
-                    <BaseProperties p={p} config={config} />
                     {p.customLogo && <GiftSetPicker p={p} />}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
@@ -2586,7 +2596,7 @@ export function CustomizeBlock({ p, onChange, onVariantChange }) {
                   {/* Captures the attached logo (+ base picks) into the decoration —
                       accessories otherwise had no context to store the upload. */}
                   <AccessoryDecorationEmitter p={p} onChange={onChange} />
-                  <VariantBridge config={config} onChange={onVariantChange} />
+                  <BaseSelectionSync values={baseSelection} />
                   <AccessoryCustomizer p={p} config={config} loading={loading} />
                 </PrintTypeProvider>
               )}

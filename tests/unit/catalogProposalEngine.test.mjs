@@ -17,6 +17,10 @@ const backgroundSource = await readFile(
   new URL('../../background.js', import.meta.url),
   'utf8',
 );
+const customizeSource = await readFile(
+  new URL('../../src/modals/giftCustomize.jsx', import.meta.url),
+  'utf8',
+);
 
 function product(overrides = {}) {
   return {
@@ -55,7 +59,26 @@ describe('catalog proposal engine · current SKU resolution', () => {
   it('refreshes image-capable variant configs and displays the selected image in the sidebar', () => {
     assert.match(backgroundSource, /GB_CONFIG_CACHE_KEY\s*=\s*['"]gbProductConfigCache_v2['"]/);
     assert.match(giftCatalogSource, /giftImg \|\| \(variant && variant\.image\) \|\| p\.img/);
-    assert.match(giftCatalogSource, /onVariantChange=\{setVariant\}/);
+    // ProductOptions — the base-options block BY THE TITLE — owns the variant
+    // pick for every product now, and hands the chosen child (SKU, price,
+    // photo) to the sidebar. CustomizeBlock only receives it, so colour/size
+    // can't drift back into the Customization panel.
+    assert.match(giftCatalogSource, /<ProductOptions p=\{p\} onChange=\{setVariant\} \/>/);
+    assert.match(giftCatalogSource, /<CustomizeBlock p=\{p\} onChange=\{setDecoration\} baseSelection=\{variant && variant\.values\} \/>/);
+    assert.doesNotMatch(giftCatalogSource, /onVariantChange=/);
+  });
+
+  it('keeps required base options out of the Customization panel', () => {
+    // "Customization" is what we put ON the product (custom logo, personalized
+    // text, monogram) — not a towel's colour or a shirt's size. Rendering the
+    // base pickers there for customizable products is what made a t-shirt's
+    // colour appear under Customization while other products' sat by the title.
+    assert.doesNotMatch(customizeSource, /<BaseProperties/);
+    assert.doesNotMatch(customizeSource, /<VariantBridge/);
+    // The one-way bridge that replaced them: the title's picks still reach the
+    // print-type context, which the 3D preview and the cart's selections read.
+    assert.match(customizeSource, /<BaseSelectionSync values=\{baseSelection\} \/>/);
+    assert.match(customizeSource, /subtitle = isBall \? [^;]*: 'Imprint options'/);
   });
 
   it('prefers a current commissionable product but can explicitly select stock', () => {
