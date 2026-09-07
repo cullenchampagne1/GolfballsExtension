@@ -22,6 +22,7 @@ import {
   trackerForTemplate,
 } from '../lib/emailSubjectTracking.js';
 import { importedEmailShare, isImportedEmailTemplate } from '../lib/templateImport.js';
+import { normalizeCcField, parseCcEntries } from '../lib/emailCc.js';
 import {
   emailTemplateIsBucketEnrolled,
   managedEmailTemplate,
@@ -320,6 +321,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   const [presetTaskId,   setPresetTaskId]   = useState(tpl.presetTaskId || '');
   const [presetTaskOpts, setPresetTaskOpts] = useState([]);
   const [followUpActionId,   setFollowUpActionId]   = useState(tpl.followUpActionId || '');
+  const [cc,                 setCc]                 = useState(tpl.cc || '');
   const [followUpActionOpts, setFollowUpActionOpts] = useState([]);
   // Default to reply mode for new templates — matches legacy editor's
   // "checked unless explicitly 'standalone'" load behavior.
@@ -405,6 +407,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     setRecipientResolved(null);
     setPresetTaskId(tpl.presetTaskId || '');
     setFollowUpActionId(tpl.followUpActionId || '');
+    setCc(tpl.cc || '');
     setReplyMode(tpl.replyMode !== 'standalone');
     setBucketEnrolled(emailTemplateIsBucketEnrolled(tpl));
     setSenderAccount(tpl.senderAccount || 'golfballs');
@@ -635,6 +638,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       // ordinary email template. Case templates use a separate reply flow.
       presetTaskId: typeId !== 'case' ? (presetTaskId || '') : undefined,
       followUpActionId: typeId !== 'case' ? (followUpActionId || '') : undefined,
+      cc: typeId !== 'case' ? normalizeCcField(cc) : undefined,
       // Reply-mode toggle: case templates always thread as replies (the
       // user opens them inside an existing case), so we omit the field
       // for case to match the legacy editor's behavior.
@@ -699,6 +703,11 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
     ownPendingVersion.current = Math.max(ownPendingVersion.current, lastKnownVersion.current) + 1;
   }
 
+  /* Entries the rep typed that will NOT be copied. Surfaced in the CC field's
+     hint so a mistyped address is visible rather than silently dropped at the
+     delivery boundary. */
+  const ccInvalid = useMemo(() => parseCcEntries(cc).invalid, [cc]);
+
   const subjectTracker = useMemo(() => {
     const draft = buildTemplate();
     return trackerForTemplate(
@@ -720,7 +729,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(next);
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, followUpActionId, replyMode, bucketEnrolled, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, followUpActionId, cc, replyMode, bucketEnrolled, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
      spring is keyed on tpl.type, so we save the new type immediately and
@@ -920,9 +929,25 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         </LockedRegion>
       )}
 
-      {/* ── Successful-delivery follow-ups (all non-case email templates) ── */}
+      {/* ── Successful-delivery follow-ups (all non-case email templates) ──
+          Deliberately OUTSIDE LockedRegion: like the follow-ups, the CC list is
+          recipient-owned, so it stays editable on imported and managed
+          templates and never travels in a share. */}
       {typeId !== 'case' && (
         <div style={{ ...S.mb12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field
+            label="CC"
+            hint={ccInvalid.length
+              ? `Not a valid address — will not be copied: ${ccInvalid.join(', ')}`
+              : 'Comma-separated addresses copied on every send from this template. Stays local to this installation.'}
+          >
+            <Input
+              size="sm"
+              value={cc}
+              placeholder="manager@golfballs.com, orders@golfballs.com"
+              onChange={setCc}
+            />
+          </Field>
           <Field
             label="Follow-up task"
             hint="Creates the selected CRM task after a successful send or Outlook handoff."

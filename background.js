@@ -939,6 +939,17 @@ function gbValidateEmailPayload(payload) {
     if (typeof email.to !== 'string' || email.to.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.to)) {
       return 'Invalid recipient address';
     }
+    /* Template CC. Same address rule and ceiling as `to` above, applied per
+       entry — the sender already parsed and validated this list, so anything
+       malformed arriving here means the payload did not come from it. */
+    if (email.cc != null) {
+      if (!Array.isArray(email.cc) || email.cc.length > 25) return 'Invalid email cc list';
+      for (const address of email.cc) {
+        if (typeof address !== 'string' || address.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+          return 'Invalid email cc address';
+        }
+      }
+    }
     if (typeof email.subject !== 'string' || email.subject.length > 998) return 'Invalid email subject';
     if (typeof email.htmlBody !== 'string' || email.htmlBody.length > 2_000_000) return 'Email body exceeds 2 MB limit';
     for (const [key, maximum] of Object.entries({

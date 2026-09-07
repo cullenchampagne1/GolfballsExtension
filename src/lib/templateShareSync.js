@@ -12,6 +12,10 @@ const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/;
 const LOCAL_FIELDS = new Set([
   'id', 'folderId', 'shareImport', 'shareSync',
   'managedTemplate', 'managedTemplateEnrollment',
+  // The CC list is this installation's own routing choice — whose manager or
+  // shared inbox gets copied is never the share author's business, so it stays
+  // out of the snapshot the way folders and provenance do.
+  'cc',
   'createdAt', 'updatedAt',
 ]);
 

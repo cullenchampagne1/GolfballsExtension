@@ -113,6 +113,25 @@ describe('buildPaPayload', () => {
     assert.equal(p.emails[0].htmlBody, '<p style="line-height:1.6;margin:0px">Body</p>');
   });
 
+  it('puts a template CC list on the wire as a validated address array', () => {
+    const p = buildPaPayload({
+      from: 'a@b.com', to: 'c@d.com', subject: 's', htmlBody: '<p>x</p>',
+      cc: 'manager@golfballs.com, orders@golfballs.com',
+    });
+    assert.deepEqual(p.emails[0].cc, ['manager@golfballs.com', 'orders@golfballs.com']);
+  });
+
+  it('omits the cc key entirely when the list is empty or all invalid', () => {
+    const empty = buildPaPayload({
+      from: 'a@b.com', to: 'c@d.com', subject: 's', htmlBody: '<p>x</p>', cc: '',
+    });
+    assert.equal('cc' in empty.emails[0], false);
+    const junk = buildPaPayload({
+      from: 'a@b.com', to: 'c@d.com', subject: 's', htmlBody: '<p>x</p>', cc: 'not-an-email',
+    });
+    assert.equal('cc' in junk.emails[0], false);
+  });
+
   it('appends the signature to the html body when one is provided', () => {
     const p = buildPaPayload({
       from: 'a@b', to: 'c@d', subject: 's',

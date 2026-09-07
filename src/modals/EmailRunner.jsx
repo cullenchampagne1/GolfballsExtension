@@ -753,7 +753,7 @@ export function EmailRunner({
           if (!(await pauseGateRef.current.waitUntilResumed(isRunActive))) return;
           const res = await sendEmailTemplateWithFollowUps({
             email: {
-              from, to: toEmail, subject, htmlBody, replyMode, signature,
+              from, to: toEmail, cc: selectedTpl.cc || '', subject, htmlBody, replyMode, signature,
               config: { paReady, templates: [selectedTpl] },
               templateId: selectedTpl.id || '',
               templateName: selectedTpl.name || '',
@@ -979,15 +979,12 @@ export function EmailRunner({
                       </div>
                     )}
                   />
+                  <SkipRow
+                    on={matchedOnly} onChange={setMatchedOnly} disabled={status === 'running'}
+                    title="Require a rule match"
+                    desc="Skip when the selected template's match rules don't evaluate true against the row's page — a row that can't be verified is skipped too."
+                  />
                 </div>
-              </Field>
-
-              <Field label="Matched only" hint="Re-checks the template's own match rules against each row's page right before sending — rows that don't (or can't be) verified are skipped instead.">
-                <SkipRow
-                  on={matchedOnly} onChange={setMatchedOnly} disabled={status === 'running'}
-                  title="Require a rule match"
-                  desc="Skip a row when the selected template's match rules don't evaluate true against its page."
-                />
               </Field>
             </div>
           )}

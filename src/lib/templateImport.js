@@ -225,6 +225,9 @@ function importedOverrideSource(template) {
 const IMPORT_OVERRIDE_FIELDS = Object.freeze([
   'presetTaskId',
   'followUpActionId',
+  // Recipient-owned like the follow-ups above: an imported or managed template
+  // still copies whoever THIS installation needs on its sends.
+  'cc',
   'senderAccount',
   'senderRandomize',
 ]);
@@ -233,6 +236,7 @@ function importOverrideValues(template) {
   const values = {
     presetTaskId: String(template?.presetTaskId || ''),
     followUpActionId: String(template?.followUpActionId || ''),
+    cc: String(template?.cc || ''),
     replyMode: template?.replyMode === 'reply' ? 'reply' : 'standalone',
     senderAccount: String(template?.senderAccount || 'golfballs'),
     senderRandomize: template?.senderRandomize === true,
@@ -269,9 +273,16 @@ export function applyImportedEmailTemplateOverrides(template, draft) {
     ? source.overrideDefaults
     : importOverrideValues(template);
   const candidate = importOverrideValues(draft || template);
+  /* A defaults snapshot captured before an override field existed carries no
+     key for it, so a bare comparison reads `undefined` vs that field's empty
+     baseline as a real edit and retro-records an override on every already
+     imported template. Filling the gaps from the same baseline
+     importOverrideValues() produces keeps adding a field to
+     IMPORT_OVERRIDE_FIELDS a no-op for existing imports. */
+  const effectiveDefaults = { ...importOverrideValues({}), ...defaults };
   const overrides = {};
   for (const field of IMPORT_OVERRIDE_FIELDS) {
-    if (!sameOverrideValue(candidate[field], defaults[field])) {
+    if (!sameOverrideValue(candidate[field], effectiveDefaults[field])) {
       overrides[field] = candidate[field];
     }
   }
@@ -304,6 +315,7 @@ export function applyImportedEmailTemplateOverrides(template, draft) {
     ...template,
     presetTaskId: candidate.presetTaskId,
     followUpActionId: candidate.followUpActionId,
+    cc: candidate.cc,
     replyMode: defaults.replyMode === 'reply' ? 'reply' : 'standalone',
     senderAccount: candidate.senderAccount,
     senderRandomize: candidate.senderRandomize,

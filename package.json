@@ -98,6 +98,10 @@
       "file": "tests/unit/templateShareSync.test.mjs"
     },
     {
+      "name": "email \u00b7 template CC list parsing & override boundary",
+      "file": "tests/unit/emailCc.test.mjs"
+    },
+    {
       "name": "email \u00b7 legacy template migration",
       "file": "tests/unit/templateMigration.test.mjs"
     },

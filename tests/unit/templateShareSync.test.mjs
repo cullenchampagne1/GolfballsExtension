@@ -40,6 +40,15 @@ describe('owned email-template share synchronization', () => {
     });
   });
 
+  it('keeps the local CC list out of the shared snapshot', () => {
+    assert.deepEqual(templateShareSnapshot({
+      name: 'Follow up', type: 'order', body: '<p>Hello</p>',
+      cc: 'manager@golfballs.com',
+    }), {
+      name: 'Follow up', type: 'order', body: '<p>Hello</p>',
+    });
+  });
+
   it('creates a nested merge diff with deletions instead of re-uploading the template', () => {
     assert.deepEqual(templateShareDiff(
       { name: 'Before', vars: { greeting: { type: 'literal', value: 'Hi' } }, variations: [1] },

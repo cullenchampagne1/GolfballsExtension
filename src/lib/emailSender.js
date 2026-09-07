@@ -7,6 +7,7 @@ import {
   resolveEmailTemplateCapabilities,
 } from './emailTemplateCapabilities.js';
 import { emailUsageDimensions, reportFeatureUsage } from './usageEvents.js';
+import { parseCcList } from './emailCc.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -128,11 +129,16 @@ function trackingFields(message = {}) {
   };
 }
 
-export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMode, attachments, templateId, templateName, variationId, templateVariationId, trackingContext }) {
+export function buildPaPayload({ from, to, cc, subject, htmlBody, signature, replyMode, attachments, templateId, templateName, variationId, templateVariationId, trackingContext }) {
+  /* The template stores what the rep typed; the wire carries only addresses
+     that passed validation. An all-invalid CC list sends with no cc key at
+     all rather than an empty one the PA flow would have to special-case. */
+  const ccList = parseCcList(cc);
   return {
     emails: [{
       from,
       to,
+      ...(ccList.length ? { cc: ccList } : {}),
       subject,
       htmlBody: normalizeEmailHtml(signature != null ? withSignature(htmlBody, signature) : htmlBody),
       replyMode,
@@ -192,7 +198,7 @@ function classifyPaResult(r) {
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
  * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
  */
-export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, trackingContext, usageSource = 'other', trackUsage = true }, opts = {}) {
+export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, trackingContext, usageSource = 'other', trackUsage = true }, opts = {}) {
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
   const cfg = config || await readEmailConfig();
@@ -210,7 +216,7 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
       return { state: 'failed', transport: 'pa', error: 'Configure Email account host in Settings before sending' };
     }
     const payload = buildPaPayload({
-      from, to, subject, htmlBody, signature, replyMode, attachments,
+      from, to, cc, subject, htmlBody, signature, replyMode, attachments,
       templateId, templateName, variationId, templateVariationId, trackingContext,
     });
     const r = await dispatch({ action: 'paAutomate', payload });

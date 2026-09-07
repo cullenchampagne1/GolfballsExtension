@@ -59,6 +59,9 @@ export async function sendEmailTemplateFromPage(input = {}, deps = {}) {
     email: {
       from,
       to: input.to || '',
+      // Template-level CC. Local to this installation and editable even on an
+      // imported/managed template (see templateImport's override allowlist).
+      cc: template.cc || '',
       subject: input.subject || '',
       htmlBody: input.htmlBody || '',
       replyMode: input.replyMode || template.replyMode || 'standalone',
