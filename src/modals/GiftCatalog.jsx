@@ -946,41 +946,59 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   );
 }
 
-/* The line item's one-time SETUP FEE row — pinned BELOW the price breaks,
-   because that's where golfballs.com prints it and because one fee covers
-   every break (edit it once and the whole line item re-quotes; see
-   src/lib/lineSetupFee.js).
+/* The line item's one-time SETUP FEE — a quiet grey card at the BOTTOM of the
+   line, below every price break, because one fee covers them all (edit it once
+   and the whole item re-quotes; see src/lib/lineSetupFee.js).
+
+   It's a SECONDARY option, so it wears the same treatment as "Run as Express"
+   above: fill-subtle on a hairline border, with <Checkbox size="sm">'s
+   label + hint typography. The amount lives in the one control on the right and
+   isn't repeated, and the restore link rides in the hint line where there's
+   room for it — so the card reads as one calm object next to the dense,
+   mono-typed price-break rows rather than competing with them.
 
    Shown only for products that actually carry a fee (offersSetupFee), so balls
    and poker chips get no misleading $0 row. `×` waives it — an explicit edit to
    zero, mirroring a price break's remove — and `↺` restores whatever the
-   product's own setupFee ladder derives. The row's visibility never depends on
-   the current amount, so editing (or clearing) the field can't unmount the
-   control out from under the rep. */
+   product's own setupFee ladder derives. Visibility never depends on the
+   current amount, so editing (or clearing) the field can't unmount the control
+   out from under the rep. */
 function SetupFeeRow({ line, onChange }) {
   const fee = lineSetupFee(line);
   const derived = derivedSetupFee(line);
-  const edited = hasEditedSetupFee(line) && Math.abs(fee - derived) > 0.005;
   const waived = fee <= 0;
+  // Only offer a restore when there's a DIFFERENT product-derived fee to go
+  // back to — otherwise "↺ restore $0.00" is a link to nowhere.
+  const canRestore = hasEditedSetupFee(line) && derived > 0 && Math.abs(fee - derived) > 0.005;
+  const restore = (verb) => (
+    <span role="button" onClick={() => onChange(resetLineSetupFee(line))}
+      title={`Restore the ${usd(derived)} fee this product's setup ladder derives`}
+      style={{ color: 'var(--gb-brand-label)', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>↺ {verb} {usd(derived)}</span>
+  );
   return (
-    <motion.div layout
-      initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+    <motion.div
+      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+      animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+      exit={{ opacity: 0, height: 0, marginTop: 0 }}
       transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
-      style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden', paddingTop: 7, borderTop: '1px dashed var(--gb-border-subtle)', marginTop: 5 }}>
-      <span title="One-time decoration setup — charged once for this item, across every price break"
-        style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .3, textTransform: 'uppercase', color: waived ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: waived ? 'line-through' : 'none' }}>{SETUP_FEE_LABEL}</span>
-      <PriceField value={fee} onChange={(next) => onChange(editLineSetupFee(line, next))} />
-      {edited && (
-        <span onClick={() => onChange(resetLineSetupFee(line))} title={`Reset to ${usd(derived)}`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9.5, fontWeight: 600, color: 'var(--gb-brand-label)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>↺ {usd(derived)}</span>
-      )}
-      <div style={{ flex: 1 }} />
-      <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: waived ? 'var(--gb-text-ghost)' : 'var(--gb-text-secondary)', minWidth: 58, textAlign: 'right', flexShrink: 0 }}>{money(fee)}</span>
-      {/* Waive — same slot as a price break's remove. It zeroes the fee instead
-          of hiding the row, so the rep can still see and restore it. */}
-      <span onClick={waived ? undefined : () => onChange(editLineSetupFee(line, 0))}
-        title={waived ? 'Setup fee waived' : 'Waive this setup fee'}
-        style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: waived ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', cursor: waived ? 'default' : 'pointer', opacity: waived ? .35 : 1 }}><I.close size={11} /></span>
+      style={{ overflow: 'hidden' }}>
+      <div style={{ padding: '7px 8px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, lineHeight: 1.4, color: 'var(--gb-text-secondary)', textDecoration: waived ? 'line-through' : 'none' }}>{SETUP_FEE_LABEL}</span>
+          <span style={{ display: 'block', fontSize: 10.5, marginTop: 2, lineHeight: 1.45, color: 'var(--gb-text-muted)' }}>
+            {waived
+              ? <>Not charged{canRestore ? <> · {restore('restore')}</> : null}</>
+              : canRestore ? <>One-time · {restore('reset to')}</>
+                : 'One-time · applies to every price break'}
+          </span>
+        </div>
+        <PriceField value={fee} onChange={(next) => onChange(editLineSetupFee(line, next))} />
+        {/* Waive — the same affordance a price break has. It zeroes the fee
+            rather than hiding the card, so it stays visible and restorable. */}
+        <span role="button" onClick={waived ? undefined : () => onChange(editLineSetupFee(line, 0))}
+          title={waived ? 'Setup fee waived' : 'Waive this setup fee'}
+          style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: waived ? 'default' : 'pointer', opacity: waived ? .3 : 1 }}><I.close size={11} /></span>
+      </div>
     </motion.div>
   );
 }
@@ -1108,11 +1126,6 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
           {line.splits.map((s) => (
             <SplitRow key={s.id} line={line} split={s} canRemove={line.splits.length > 1} onChange={(patch) => onPatchSplit(s.id, patch)} onRemove={() => onRemoveSplit(s.id)} />
           ))}
-          {/* Always LAST, after every price break — the setup fee floats to the
-              bottom of the stack and belongs to the item, not to a break. */}
-          {offersSetupFee(line) && onPatchLine && (
-            <SetupFeeRow key="setup" line={line} onChange={onPatchLine} />
-          )}
         </AnimatePresence>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 6 }}>
@@ -1122,6 +1135,14 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{lineUnits} units</span>
       </div>
+      {/* The one-time setup fee sits at the very BOTTOM of the card — below
+          every price break, since one fee covers them all — as a quiet grey
+          box, the same secondary treatment "Run as Express" gets above. */}
+      <AnimatePresence initial={false}>
+        {offersSetupFee(line) && onPatchLine && (
+          <SetupFeeRow key="setup" line={line} onChange={onPatchLine} />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

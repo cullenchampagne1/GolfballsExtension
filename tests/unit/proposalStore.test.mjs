@@ -236,6 +236,47 @@ describe('proposal line · Express logo control', () => {
   });
 });
 
+describe('proposal line · setup-fee card', () => {
+  /* The setup fee is a SECONDARY option, so it wears the same quiet grey
+     treatment as "Run as Express" instead of competing with the mono-typed
+     price-break rows. Both surfaces are pinned here because the shared look is
+     the requirement — one drifting away from the other is the regression. */
+  const SECONDARY_BOX = /padding: '7px 8px', borderRadius: 'var\(--gb-r-md\)', background: 'var\(--gb-fill-subtle\)', border: '1px solid var\(--gb-border-subtle\)'/g;
+
+  it('shares the Express box treatment — fill-subtle on a hairline border', () => {
+    const boxes = giftCatalogSource.match(SECONDARY_BOX) || [];
+    assert.equal(boxes.length, 2, 'the Express box and the setup-fee card, styled identically');
+  });
+
+  it('uses the Checkbox label + hint typography, not the price-row mono style', () => {
+    const card = giftCatalogSource.slice(
+      giftCatalogSource.indexOf('function SetupFeeRow'),
+      giftCatalogSource.indexOf('function ProposalLine'),
+    );
+    assert.ok(card, 'SetupFeeRow must precede ProposalLine');
+    // Matches <Checkbox size="sm">: 11.5/500/text-secondary over 10.5/text-muted.
+    assert.match(card, /fontSize: 11\.5, fontWeight: 500, lineHeight: 1\.4, color: 'var\(--gb-text-secondary\)'/);
+    assert.match(card, /fontSize: 10\.5, marginTop: 2, lineHeight: 1\.45, color: 'var\(--gb-text-muted\)'/);
+    // The amount appears once, in the editable control — not duplicated as a
+    // right-hand readout the way a price-break row does it.
+    assert.equal((card.match(/<PriceField/g) || []).length, 1);
+    assert.doesNotMatch(card, /money\(fee\)/);
+  });
+
+  it('renders at the BOTTOM of the line, after the price breaks and split control', () => {
+    const splits = giftCatalogSource.indexOf('<SplitRow key={s.id}');
+    const addSplit = giftCatalogSource.indexOf('onClick={onAddSplit}');
+    const card = giftCatalogSource.indexOf('<SetupFeeRow key="setup"');
+    assert.ok(splits > 0 && addSplit > splits && card > addSplit,
+      'one fee covers every break, so it sits below all of them');
+    // And OUTSIDE the split rows' AnimatePresence, so it is not a break row.
+    assert.doesNotMatch(
+      giftCatalogSource.slice(splits, addSplit),
+      /<SetupFeeRow/,
+    );
+  });
+});
+
 describe('proposal store · working draft ordering', () => {
   it('serializes rapid writes so reopening reads the newest price', async () => {
     const priorChrome = globalThis.chrome;
