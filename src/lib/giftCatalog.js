@@ -45,6 +45,30 @@ const MAX_PRODUCTS = 6000;  // safety bound, well above the live numFound (~3.1k
    category (deriveCat) on the client. Out-of-stock is excluded server-
    side via additionalFacets (-tag_ss:ExcludeStock) in the background. */
 const MAIN_QUERY = '*:*';
+
+/* Commissionable product pages to import DIRECTLY, in addition to the crawl.
+   A specially-priced custom-logo SKU is its own product at its own URL (not the
+   usual "<slug>_1" variant of a stock item), and when the feed doesn't return
+   it no crawl can find it — so it's fetched from its page instead. Extend this
+   through the `giftCatalog.extraProductUrls` dev setting (newline- or
+   comma-separated) rather than editing code. */
+export const CATALOG_IMPORT_URLS = [
+  // TP5 Custom Logo Golf Balls — 2026 Model (P012Y9 / SKU B5951).
+  'https://www.golfballs.com/Golf-Balls/TaylorMade-TP5-Custom-Logo-Golf-Balls-2026-Model/TP5-Custom-Logo-Golf-Balls-2026-Model.htm',
+];
+
+/** The import list: the built-ins plus any URLs from the dev setting. */
+export async function catalogImportUrls() {
+  let extra = [];
+  try {
+    const d = await loadDevSettings();
+    extra = String((d && d['giftCatalog.extraProductUrls']) || '')
+      .split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+  } catch { /* settings unavailable — built-ins only */ }
+  return [...new Set([...CATALOG_IMPORT_URLS, ...extra])]
+    .filter((u) => /^https:\/\/(?:www\.)?golfballs\.com\//i.test(u));
+}
+
 // A small authoritative recovery crawl for commissionable products. Two things
 // make it necessary. (1) The live gateway only permits a non-unique sort, so
 // tied docs can move across the deep *:* page boundary while indexing.
@@ -75,7 +99,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v10'; // bumped: merge a focused custom-logo recovery crawl into the full catalog
+const CACHE_KEY = 'gbGiftCatalogCache_v11'; // bumped: sortDefault field + specially-priced URL imports
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -297,6 +321,11 @@ export function normalizeDoc(doc) {
     urlPath: doc.product_url_s || '',
     rating:  doc.review_d ? Math.round(num(doc.review_d) * 10) / 10 : null,
     reviews: doc.reviewCount_i || 0,
+    // golfballs.com's own merchandising order — the field its category pages
+    // sort by (`sort_default_i desc`, the sort this crawl requests). Most of
+    // the catalog has no reviews, so this is what gives the long tail a
+    // sensible popularity order instead of an arbitrary one.
+    sortDefault: num(doc.sort_default_i) || 0,
     mods:    Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss.length : 0,
     modNames: Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss : [],
     properties: extractProperties(doc),     // common base inputs (color/size) from the catalog facets
@@ -315,6 +344,73 @@ export function normalizeDoc(doc) {
     minQty:  (breaks[0] && breaks[0].q) || 1,
     breaks,
     promo:   parsePromo(doc.tag_ss),
+  };
+}
+
+/* ── URL import: catalog a product the Solr feed doesn't hand us ─────────────
+   Specially-priced commissionable items live at their OWN product page rather
+   than the usual "<slug>_1" commissionable variant of a stock product — e.g.
+   TP5 Custom Logo Golf Balls (P012Y9) sits at
+   /Golf-Balls/TaylorMade-TP5-Custom-Logo-Golf-Balls-2026-Model/… , a separate
+   product from the retail TP5. When such a SKU doesn't come back from the feed,
+   no amount of crawling finds it and a rep simply can't quote it.
+
+   So we can import one straight from its product page. `rawProductToDoc` maps
+   the page's __NEXT_DATA__ product onto the Solr doc fields normalizeDoc already
+   consumes — deliberately, so an imported product goes through the SAME
+   normalization (category/department bucketing, custom-logo detection, ladder
+   parsing) as a crawled one and can't drift into a second shape.
+
+   Field mapping verified against the live pages for P012Y9 and P00W61. */
+const CATALOG_IMG_BASE = 'https://static.golfballs.com/C/465x465/';
+
+/** The site's itemType path ("Consumer-Golf_Balls") rebuilt from the product
+ *  page's nested ItemType chain, root first — the string deriveCat/deriveDept
+ *  bucket on. */
+function itemTypePath(itemType) {
+  const names = [];
+  for (let node = itemType; node; node = node.ItemTypeParent) {
+    if (node.Name) names.unshift(String(node.Name).trim().replace(/\s+/g, '_'));
+  }
+  return names.join('-');
+}
+
+export function rawProductToDoc(raw, url = '') {
+  const p = raw || {};
+  if (!p.ShortCode) return null;
+  const mods = (p.ProductModification || [])
+    .map((pm) => (pm.Modification || {}).FriendlyName || (pm.Modification || {}).Name)
+    .filter(Boolean);
+  // The commissionable ladder. On these pages the parent itemFee ladder IS the
+  // quote ladder (P012Y9: 1→$60.99 … 500→$53.99), so it maps onto the field
+  // normalizeDoc reads the custom-logo break ladder from.
+  const ladder = ((p.itemFee_priceBreakHeader || {}).PriceBreak || [])
+    .filter((b) => b && b.Quantity != null)
+    .map((b) => ({ Quantity: b.Quantity, Price: b.Price }));
+  const reviews = (p.ProductReview || []).map((r) => num(r.Rating)).filter((n) => n != null && n > 0);
+  // Site-relative canonical path: prefer the page's own child URL (the one the
+  // site links to), else the path of whatever URL we fetched.
+  const urls = Array.isArray(p.ProductUrl) ? p.ProductUrl : [];
+  let path = (urls.find((u) => u && u.productChildID) || urls[0] || {}).URL || '';
+  if (!path && url) { try { path = new URL(url, 'https://www.golfballs.com').pathname; } catch { path = ''; } }
+  const image = ((p.ProductImage || [])[0] || {}).URL || '';
+  return {
+    id: p.ShortCode,
+    parentCode_s: p.ShortCode,
+    title_s: p.Name || p.NameFormat || '',
+    brand_s: (p.Brand && p.Brand.Name) || '',
+    itemType_s: itemTypePath(p.ItemType),
+    tag_ss: (p.ProductTagDetail || []).map((t) => t && t.Name).filter(Boolean),
+    modificationName_ss: mods,
+    customData_s: JSON.stringify(p.CustomData || {}),
+    customLogoPriceBreak_s: ladder.length ? JSON.stringify({ PriceBreak: ladder }) : '',
+    price_d: (ladder[0] && ladder[0].Price) != null ? ladder[0].Price : null,
+    product_url_s: path,
+    image_s: image ? (/^https?:/i.test(image) ? image : CATALOG_IMG_BASE + image) : '',
+    reviewCount_i: num(p.ReviewCount) || reviews.length || 0,
+    review_d: reviews.length ? reviews.reduce((s, n) => s + n, 0) / reviews.length : null,
+    // No merchandising rank on a page import; commissionRank already floats it.
+    sort_default_i: 0,
   };
 }
 
@@ -382,6 +478,18 @@ function fetchPage(searchTerm, start, rows, { includeExcludedStock = false } = {
   });
 }
 
+/* One product page's raw __NEXT_DATA__ product, via the background's cached
+   fetchProductRaw (the same relay the proposal pricing uses). Null off-extension. */
+function fetchProductPage(url) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: 'fetchProductRaw', url }, (resp) => {
+        resolve((!chrome.runtime.lastError && resp && resp.ok && resp.product) || null);
+      });
+    } catch { resolve(null); }
+  });
+}
+
 function getCache() {
   return new Promise((resolve) => {
     try { chrome.storage.local.get(CACHE_KEY, (d) => resolve((d && d[CACHE_KEY]) || null)); }
@@ -397,7 +505,7 @@ function setCache(payload) {
  *  rebuild truly clears stale data instead of falling back to the old cache. */
 export function clearCatalogCache() {
   return new Promise((resolve) => {
-    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5', 'gbGiftCatalogCache_v6', 'gbGiftCatalogCache_v7', 'gbGiftCatalogCache_v8', 'gbGiftCatalogCache_v9'], resolve); }
+    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3', 'gbGiftCatalogCache_v4', 'gbGiftCatalogCache_v5', 'gbGiftCatalogCache_v6', 'gbGiftCatalogCache_v7', 'gbGiftCatalogCache_v8', 'gbGiftCatalogCache_v9', 'gbGiftCatalogCache_v10'], resolve); }
     catch { resolve(); }
   });
 }
@@ -480,6 +588,18 @@ export async function loadCatalog({ force = false, onProgress } = {}) {
   // specially-priced line rather than dead stock (TP5 Custom Logo Golf Balls,
   // P012Y9), and filtering it out is what kept it from ever being cataloged.
   const logoComplete = fullComplete ? await crawl(CUSTOM_LOGO_QUERY, { includeExcludedStock: true }) : false;
+  /* Finally, import the specially-priced commissionable pages the feed doesn't
+     return. Added AFTER the crawls so a product that DID come back from Solr
+     wins (addCatalogProduct dedupes on sourceId + path), and non-fatal: a page
+     that won't load must not fail an otherwise complete catalog pull. */
+  if (fullComplete && logoComplete) {
+    for (const url of await catalogImportUrls()) {
+      try {
+        const raw = await fetchProductPage(url);
+        if (raw) addCatalogProduct(out, normalizeDoc(rawProductToDoc(raw, url)), seenKeys, usedIds);
+      } catch { /* page unavailable — the crawled catalog still stands */ }
+    }
+  }
   // Only a COMPLETE pull replaces the cache — a run cut short by errors must not
   // overwrite good data with a truncated catalog (missing every product after
   // the failure). A MANUAL refresh that couldn't complete surfaces the error so

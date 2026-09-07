@@ -198,3 +198,55 @@ export function catalogDealBadge(product) {
 export function catalogSidebarLabel(label) {
   return label === 'Promotional Products' ? 'Promotional' : label;
 }
+
+/* ── catalog ordering ────────────────────────────────────────────────────────
+   Commissionable product first, everywhere. A rep's job is to quote decorated
+   goods, so the grid should never bury a custom-logo SKU under retail stock
+   that happens to sort earlier. This is the PRIMARY key on every catalog page
+   and under every sort option; the chosen sort orders items WITHIN each tier.
+
+   Three tiers rather than two, because the catalog already distinguishes them
+   and they are not equally quotable:
+     0 — a real commissionable ladder (customLogoPriceBreak_s with prices), the
+         SKUs that actually earn commission,
+     1 — custom-logo capable but no ladder of its own (priced off stock, or the
+         ladder hasn't been published yet),
+     2 — retail. */
+export function commissionRank(product) {
+  const p = product || {};
+  if (p.customLogo && p.hasCustomLogoPriceBreaks) return 0;
+  if (p.customLogo) return 1;
+  return 2;
+}
+
+/* Popularity, from the fields the Solr feed actually gives us — no invented
+   metric. Review COUNT leads (it is the demand signal, and the one the sort
+   was already named for), then the star rating breaks ties among equally
+   reviewed items, then `sort_default_i`: the site's own merchandising order,
+   which is what carries the long tail where nothing has reviews yet. Title
+   last so the order is total and stable across renders.
+   Returns <0 / 0 / >0 for use as a comparator. */
+export function comparePopularity(a, b) {
+  const x = a || {}, y = b || {};
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return (n(y.reviews) - n(x.reviews))
+    || (n(y.rating) - n(x.rating))
+    || (n(y.sortDefault) - n(x.sortDefault))
+    || String(x.title || '').localeCompare(String(y.title || ''));
+}
+
+/** The within-tier comparators the sort dropdown selects between. */
+export const CATALOG_SORTS = Object.freeze({
+  popular: comparePopularity,
+  priceLow: (a, b) => ((a.price || 0) - (b.price || 0)) || comparePopularity(a, b),
+  priceHigh: (a, b) => ((b.price || 0) - (a.price || 0)) || comparePopularity(a, b),
+  name: (a, b) => String(a.title || '').localeCompare(String(b.title || '')),
+});
+
+/* Order a result set for display: commissionable tier first, then `sort`.
+   Returns a NEW array (the caller's list is a memo input). */
+export function sortCatalogResults(products, sort = 'popular') {
+  const within = CATALOG_SORTS[sort] || CATALOG_SORTS.popular;
+  return (Array.isArray(products) ? [...products] : [])
+    .sort((a, b) => (commissionRank(a) - commissionRank(b)) || within(a, b));
+}

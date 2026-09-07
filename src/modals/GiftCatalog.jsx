@@ -36,6 +36,7 @@ import {
   CATALOG_PROPOSAL_WIDTH,
   catalogDealBadge,
   catalogSidebarLabel,
+  sortCatalogResults,
   canOfferProposalCheckout,
   fitCatalogScale,
   normalizeCatalogScale,
@@ -298,7 +299,9 @@ function SearchBox({ value, onChange, commands, onPick, filtersActive, onClearAl
   );
 }
 
-const SORTS = { popular: 'Most reviewed', priceLow: 'Price: low → high', priceHigh: 'Price: high → low', name: 'Name A–Z' };
+/* Every option keeps commissionable product on top (sortCatalogResults) and
+   orders within that tier — so the labels describe the WITHIN-tier ordering. */
+const SORTS = { popular: 'Most popular', priceLow: 'Price: low → high', priceHigh: 'Price: high → low', name: 'Name A–Z' };
 function SortSelect({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -3904,12 +3907,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         || (p.dept && p.dept.toLowerCase().includes(q))
         || p.cat.toLowerCase().includes(q));
     }
-    r = [...r];
-    if (sort === 'popular') r.sort((a, b) => b.reviews - a.reviews);
-    else if (sort === 'priceLow') r.sort((a, b) => (a.price || 0) - (b.price || 0));
-    else if (sort === 'priceHigh') r.sort((a, b) => (b.price || 0) - (a.price || 0));
-    else if (sort === 'name') r.sort((a, b) => a.title.localeCompare(b.title));
-    return r;
+    // Commissionable first on every page and under every sort; the chosen sort
+    // orders within each tier. See sortCatalogResults.
+    return sortCatalogResults(r, sort);
   }, [inCat, catalog, searchingAll, selBrands, query, sort, special]);
 
   /* Incremental rendering — the full catalog is ~3,100 items; mounting that

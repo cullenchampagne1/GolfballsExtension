@@ -5901,11 +5901,18 @@ export const HELP_CONTENT = {
                 "How long the catalog (products + pricing) is cached before a fresh live pull. Lower it if prices change often; 0 = always pull fresh on open."
               ],
               [
+                "Gifting Catalog: extra product URLs",
+                "string",
+                "(empty)",
+                "",
+                "golfballs.com product pages to import into the catalog on top of the live crawl, comma- or newline-separated. For specially-priced commissionable items that sit at their own URL rather than the usual \"_1\" variant, which the product feed does not always return — without this a rep cannot quote them at all."
+              ],
+              [
                 "Gifting Catalog: default sort",
                 "select",
                 "popular",
                 "popular / priceLow / priceHigh / name",
-                "Which sort the catalog opens on."
+                "Which sort the catalog opens on. Commissionable product stays on top under every option; this orders items within that group."
               ],
               [
                 "Gifting Catalog: card density",
@@ -5926,6 +5933,7 @@ export const HELP_CONTENT = {
                 "giftCatalog.giftSetPreviewRotX",
                 "giftCatalog.giftSetPreviewRotY",
                 "giftCatalog.cacheHours",
+                "giftCatalog.extraProductUrls",
                 "giftCatalog.defaultSort",
                 "giftCatalog.density"
               ]
@@ -10316,13 +10324,23 @@ export const HELP_CONTENT = {
       "article": "developer-settings"
     },
     {
+      "id": "devSetting:giftCatalog.extraProductUrls",
+      "category": "Settings",
+      "title": "Gifting Catalog: extra product URLs",
+      "keywords": [
+        "giftCatalog.extraProductUrls"
+      ],
+      "description": "golfballs.com product pages to import into the catalog on top of the live crawl, comma- or newline-separated. For specially-priced commissionable items that sit at their own URL rather than the usual \"_1\" variant, which the product feed does not always return — without this a rep cannot quote them at all.",
+      "article": "developer-settings"
+    },
+    {
       "id": "devSetting:giftCatalog.defaultSort",
       "category": "Settings",
       "title": "Gifting Catalog: default sort",
       "keywords": [
         "giftCatalog.defaultSort"
       ],
-      "description": "Which sort the catalog opens on.",
+      "description": "Which sort the catalog opens on. Commissionable product stays on top under every option; this orders items within that group.",
       "article": "developer-settings"
     },
     {

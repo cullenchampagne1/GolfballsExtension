@@ -509,6 +509,12 @@
       "min": 0,
       "max": 168
     },
+    "giftCatalog.extraProductUrls": {
+      "type": "string",
+      "default": "",
+      "label": "Gifting Catalog: extra product URLs",
+      "managedDefault": true
+    },
     "giftCatalog.defaultSort": {
       "type": "select",
       "default": "popular",

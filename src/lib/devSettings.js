@@ -639,13 +639,21 @@ export const DEV_SETTINGS = [
     unit:    'h',
   },
   {
+    key:     'giftCatalog.extraProductUrls',
+    label:   'Gifting Catalog: extra product URLs',
+    desc:    'golfballs.com product pages to import into the catalog on top of the live crawl, comma- or newline-separated. For specially-priced commissionable items that sit at their own URL rather than the usual "_1" variant, which the product feed does not always return — without this a rep cannot quote them at all.',
+    type:    'string',
+    default: '',
+    placeholder: 'https://www.golfballs.com/Golf-Balls/…',
+  },
+  {
     key:     'giftCatalog.defaultSort',
     label:   'Gifting Catalog: default sort',
-    desc:    'Which sort the catalog opens on.',
+    desc:    'Which sort the catalog opens on. Commissionable product stays on top under every option; this orders items within that group.',
     type:    'select',
     default: 'popular',
     options: [
-      { value: 'popular',   label: 'Most reviewed' },
+      { value: 'popular',   label: 'Most popular' },
       { value: 'priceLow',  label: 'Price: low → high' },
       { value: 'priceHigh', label: 'Price: high → low' },
       { value: 'name',      label: 'Name A–Z' },
