@@ -199,6 +199,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
                 "_console_reliability_trend", "_console_reliability_integrity",
                 "_bucket_samples", "_level_curve", "_latency_range",
+                "_windowed_ranges", "_TREND_WINDOWS",
                 "_LATENCY_BUCKETS", "_LATENCY_WINDOWS", "_WINDOW_LABEL",
                 "_LATENCY_OUTLIER_MS", "_LEADERBOARD_SORTS", "_console_usage_concurrency",
                 "_presence_hourly_buckets", "_console_usage_kpi_strip", "_KPI_PROVENANCE",
@@ -355,6 +356,55 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                                           layers["new"]["values"]):
             self.assertEqual(returning, max(0, active - new))
             self.assertGreaterEqual(returning, 0)
+
+    def test_a_count_trend_drops_the_span_before_anything_was_tracked(self):
+        """The other half of "showing a time frame there's no data".
+
+        A daily COUNT is genuinely zero on a day with no events, so an interior
+        zero stays — but the leading run of them is the span before this
+        project had any telemetry at all, and on a young install that run is
+        most of a 90-day axis. Trimmed, so the curve gets the plot.
+        """
+        windowed = self.routes["_windowed_ranges"]
+        keys = [f"2026-09-{day:02d}" for day in range(1, 31)]
+        times = list(range(30))
+        # Nothing until the 21st, then three real days.
+        values = [0] * 20 + [4, 7, 5] + [0] * 7
+        ranges = windowed(keys, times, [{"id": "a", "label": "A", "values": values}])
+        for window in ranges:
+            self.assertEqual(window["series"][0], 4, "the first point is the first real day")
+            self.assertEqual(len(window["times"]), len(window["series"]))
+        # The 7-day window holds only zeroes, so it is not offered at all.
+        self.assertNotIn("7d", [window["id"] for window in ranges])
+
+    def test_a_count_trend_keeps_an_interior_zero_because_it_is_a_measurement(self):
+        windowed = self.routes["_windowed_ranges"]
+        keys = [f"2026-09-{day:02d}" for day in range(1, 31)]
+        values = [0] * 27 + [3, 0, 5]
+        ranges = windowed(keys, list(range(30)), [{"id": "a", "label": "A", "values": values}])
+        seven = next(window for window in ranges if window["id"] == "7d")
+        self.assertEqual(seven["series"], [3, 0, 5], "nobody used it that day IS the answer")
+
+    def test_every_offered_window_states_its_span_and_label(self):
+        windowed = self.routes["_windowed_ranges"]
+        keys = [f"d{index}" for index in range(90)]
+        ranges = windowed(keys, list(range(90)),
+                          [{"id": "a", "label": "A", "values": [1] * 90}])
+        self.assertEqual([window["id"] for window in ranges], ["7d", "30d", "90d"])
+        for window in ranges:
+            self.assertEqual(window["label"], self.routes["_WINDOW_LABEL"][window["days"]])
+            self.assertEqual(len(window["series"]), window["days"])
+
+    def test_a_window_recomputes_the_headline_it_shows(self):
+        # Switching to 7D must not leave a 90-day delta sitting over a
+        # seven-day curve — the whole reason the figures ride the RANGE.
+        payload = self.routes["_console_usage_adoption_trend"](30)
+        for window in payload["ranges"]:
+            self.assertIn("value", window)
+            self.assertIn("delta", window)
+        if len(payload["ranges"]) > 1:
+            texts = {window["delta"]["text"] for window in payload["ranges"]}
+            self.assertTrue(texts, "each window carries its own delta text")
 
     def test_adoption_trend_holds_the_headline_on_the_range(self):
         # `installActive`/`installDelta` were bound by a hand-built header row

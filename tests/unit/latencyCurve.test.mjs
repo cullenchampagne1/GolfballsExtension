@@ -115,7 +115,7 @@ describe('the adoption chart has the third curve the design draws', () => {
     // Dashed because derived — the design's own choice (`inst`).
     assert.match(body, /"values": \[max\(0, active - new\)[\s\S]{0,140}"dashed": True/);
     // And New is solid now: it is measured, so it does not get the dash.
-    assert.match(body, /"id": "new", "label": "New", "color": _USAGE_COLORS\[1\],\s*\n\s*"values": new_installs\},/);
+    assert.match(body, /"id": "new", "label": "New", "color": _USAGE_COLORS\[1\], "values": new_installs\},/);
   });
 
   it('clamps the derived curve at zero, because two queries have two floors', () => {
