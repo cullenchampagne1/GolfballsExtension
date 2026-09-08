@@ -112,7 +112,15 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(cls.engine)
-        cls.now = datetime(2026, 9, 4, 12, 0, 0)
+        # Relative to the real clock, not a hardcoded date. Every endpoint
+        # here windows against `datetime.utcnow()`, so a fixture pinned to a
+        # fixed day drifts out of its own windows as time passes — the
+        # percentile trend's 7-day window quietly lost its oldest sample and
+        # the p95 assertion started failing on a calendar boundary rather than
+        # on a code change.
+        cls.now = datetime.utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
+        if cls.now > datetime.utcnow():
+            cls.now -= timedelta(days=1)
         with Session(cls.engine) as session:
             # Rep A: registered, high activity — 5 feature events/day for 3 days,
             # touches 2 surfaces, reaches 3 of the 7 catalog funnel stages.
@@ -571,26 +579,33 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
 
     def test_integrity_rates_stay_numeric_and_carry_their_window_peak(self):
         payload = self.routes["_console_reliability_integrity"](30)
-        rows = {row["id"]: row for row in payload["rows"]}
+        # `items`, and each row carries `series`/`fmt` — `stat.trend`'s own
+        # field names for a metric, since a row IS one of this view's bodies.
+        rows = {row["id"]: row for row in payload["items"]}
         errors, dropped = rows["errors"], rows["dropped"]
         # The rate is org-wide per day, not per install: the seeded day carries
         # 9 `feature` events across every install and exactly 1 of them failed
         # → 1/9; 2 of that session's 8 events dropped → 25%. Asserted as the
         # window PEAK, not the last bucket, so the test cannot flip on a UTC
         # day rollover.
-        self.assertAlmostEqual(max(errors["values"]), 100 / 9, places=6)
-        self.assertEqual(max(dropped["values"]), 25.0)
+        self.assertAlmostEqual(max(errors["series"]), 100 / 9, places=6)
+        self.assertEqual(max(dropped["series"]), 25.0)
         # The headline value is the window's latest bucket, always.
-        self.assertEqual(errors["value"], round(errors["values"][-1], 2))
-        self.assertEqual(dropped["value"], round(dropped["values"][-1], 2))
+        self.assertEqual(errors["value"], round(errors["series"][-1], 2))
+        self.assertEqual(dropped["value"], round(dropped["series"][-1], 2))
         # Numeric + `pct` (not a pre-baked "50.0%" string), so the card can
         # animate the value and swap in the hovered day while scrubbing.
-        self.assertEqual(errors["format"], "pct")
+        self.assertEqual(errors["fmt"], "pct")
         self.assertIsInstance(errors["value"], float)
         self.assertEqual(errors["label"], "error rate · ok = false")
         self.assertEqual(dropped["label"], "dropped events per session")
         self.assertEqual(errors["note"], "30d peak 11.1%")
-        self.assertEqual(len(errors["values"]), 30)  # one point per window day
+        self.assertEqual(len(errors["series"]), 30)  # one point per window day
+        # The set's shared facts ride the envelope rather than every row: two
+        # rates in the same units repeating `fmt` is how two of them end up
+        # disagreeing.
+        self.assertEqual(payload["fmt"], "pct")
+        self.assertEqual(payload["window_days"], 30)
 
     def test_activity_heatmap_lists_sunday_first_and_buckets_by_real_hour(self):
         payload = self.routes["_console_usage_activity_heatmap"](30)
