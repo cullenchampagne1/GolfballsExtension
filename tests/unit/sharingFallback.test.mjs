@@ -225,6 +225,74 @@ describe('sharing fallback · preset scopes', () => {
     assert.equal(storageState.templates.some((item) => item.id === 'new-local'), true);
   });
 
+  it('keeps the universal bucket out of settings links and removes local share ownership', async () => {
+    const storageState = {
+      templates: [
+        {
+          id: 'local-order', type: 'order', name: 'Local shared source',
+          body: '<p>Independent copy</p>',
+          shareSync: {
+            kind: 'revstack-owned-email-template-shares',
+            owned: [{ shareId: 'S'.repeat(32), version: 3 }],
+          },
+          managedTemplateEnrollment: { kind: 'revstack-managed-email-template' },
+        },
+        {
+          id: 'managed-order', type: 'order', name: 'Approved bucket template',
+          body: '<p>Delivered by bucket sync</p>',
+          managedTemplate: {
+            kind: 'revstack-managed-email-template',
+            bucketId: 'B'.repeat(32), editable: true,
+          },
+        },
+      ],
+      templateFolders: [],
+    };
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            const list = Array.isArray(keys) ? keys : [keys];
+            callback(Object.fromEntries(
+              list.filter((key) => key in storageState).map((key) => [key, storageState[key]]),
+            ));
+          },
+          set(value, callback) { Object.assign(storageState, value); callback?.(); },
+        },
+      },
+    };
+
+    const gathered = await gatherScopes(['tpl-order']);
+    assert.deepEqual(gathered['tpl-order'].templates.map((item) => item.id), ['local-order']);
+    assert.equal(gathered['tpl-order'].templates[0].shareSync, undefined);
+    assert.equal(gathered['tpl-order'].templates[0].managedTemplateEnrollment, undefined);
+
+    storageState.templates = [];
+    await applyScopes({
+      'tpl-order': {
+        templates: [
+          ...gathered['tpl-order'].templates,
+          {
+            id: 'legacy-managed', type: 'order', name: 'Old copied bucket row',
+            managedTemplate: {
+              kind: 'revstack-managed-email-template', bucketId: 'C'.repeat(32), editable: true,
+            },
+          },
+          {
+            id: 'legacy-local', type: 'order', name: 'Old local share',
+            shareSync: {
+              kind: 'revstack-owned-email-template-shares',
+              owned: [{ shareId: 'T'.repeat(32), version: 1 }],
+            },
+          },
+        ],
+      },
+    });
+
+    assert.deepEqual(storageState.templates.map((item) => item.id), ['local-order', 'legacy-local']);
+    assert.equal(storageState.templates[1].shareSync, undefined);
+  });
+
   it('round-trips popup, shelf, page, and custom-link feature placement', async () => {
     const sourcePlacement = {
       crmSearchEnabled: {

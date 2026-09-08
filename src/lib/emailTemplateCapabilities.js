@@ -44,10 +44,11 @@ export function canSubmitEmailTemplate(capabilities) {
 export function filterLocalEmailTemplates(templates, devSettings = {}) {
   const all = Array.isArray(templates) ? templates : [];
   const capabilities = resolveEmailTemplateCapabilities(devSettings);
-  if (capabilities.allowParentAccount) return all;
-  if (capabilities.allowLocalTemplateUsage) {
-    return all.filter((template) => !isManagedEmailTemplate(template));
-  }
+  // The approved bucket is universal: every authenticated installation may
+  // use its locked mirrors. Local-library policy only governs the user's own
+  // templates; managed rows remain visible and editability is decided below
+  // by emailTemplateIsEditable.
+  if (capabilities.allowParentAccount || capabilities.allowLocalTemplateUsage) return all;
   return all.filter((template) => isManagedEmailTemplate(template) || !!template?.shareImport);
 }
 

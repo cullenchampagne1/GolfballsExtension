@@ -56,7 +56,7 @@ describe('managed email-template capabilities', () => {
     assert.equal(canSubmitEmailTemplate(parent), false);
   });
 
-  it('projects local templates out without mutating or deleting the stored library', () => {
+  it('gives ordinary installations the approved bucket without mutating the stored library', () => {
     const stored = [
       { id: 'welcome' },
       { id: 'direct', shareImport: { shareId: 'share' } },
@@ -68,7 +68,10 @@ describe('managed email-template capabilities', () => {
 
     assert.deepEqual(hidden.map((row) => row.id), ['direct', 'managed']);
     assert.deepEqual(stored.map((row) => row.id), ['welcome', 'direct', 'managed']);
-    assert.deepEqual(filterLocalEmailTemplates(stored, {}).map((row) => row.id), ['welcome', 'direct']);
+    assert.deepEqual(filterLocalEmailTemplates(stored, {}).map((row) => row.id), [
+      'welcome', 'direct', 'managed',
+    ]);
+    assert.equal(emailTemplateIsEditable(stored[2], {}), false);
   });
 
   it('gives parent accounts one editable merged catalog', () => {

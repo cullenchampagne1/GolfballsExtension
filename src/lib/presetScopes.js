@@ -2,12 +2,39 @@ import {
   REMOTE_POLICY_KEY,
   enforceManagedStorageWrites,
 } from './managedSettingsPolicy.js';
+import { isManagedEmailTemplate } from './emailTemplateCapabilities.js';
 import { isImportedEmailTemplate } from './templateImport.js';
 
 const localTemplateOfType = (type) => (template) => (
   !isImportedEmailTemplate(template)
+  && !isManagedEmailTemplate(template)
   && (template?.type || 'order') === type
 );
+
+// A settings link copies an ordinary local template as an independent local
+// document. Distribution/enrollment metadata belongs to the source browser:
+// copying it would make the recipient look like a share owner or bucket
+// editor. Managed rows themselves never ride inside a settings link because
+// every authenticated installation receives the approved bucket directly.
+const EMAIL_TEMPLATE_LOCAL_STATE_KEYS = Object.freeze([
+  'shareImport',
+  'shareSync',
+  'managedTemplate',
+  'managedTemplateEnrollment',
+  'templateSubmission',
+  '__gbShareMeta',
+]);
+
+function withoutEmailTemplateLocalState(template) {
+  if (!template || typeof template !== 'object' || Array.isArray(template)) return template;
+  const safe = { ...template };
+  for (const key of EMAIL_TEMPLATE_LOCAL_STATE_KEYS) delete safe[key];
+  return safe;
+}
+
+function shareableLocalEmailTemplate(template) {
+  return !isImportedEmailTemplate(template) && !isManagedEmailTemplate(template);
+}
 
 /* ───────────────────────────────────────────────────────────────
    presetScopes.js — what a shared settings template can carry.
@@ -171,7 +198,9 @@ function scopesFromStorageData(data, wanted = PRESET_SCOPES) {
       if (pred && Array.isArray(data[k])) {
         const subset = data[k].filter(pred);
         filteredCount = subset.length;
-        bag[k] = subset;
+        bag[k] = k === 'templates'
+          ? subset.map(withoutEmailTemplateLocalState)
+          : subset;
       } else {
         bag[k] = k === 'featureFlags'
           ? withoutCredentials(data[k])
@@ -245,7 +274,9 @@ export async function applyScopes(scopes) {
     const current = await readKeys(def.keys);
     for (const k of def.keys) {
       const inc = k === 'templates' && Array.isArray(incoming[k])
-        ? incoming[k].filter((item) => !isImportedEmailTemplate(item))
+        ? incoming[k]
+          .filter(shareableLocalEmailTemplate)
+          .map(withoutEmailTemplateLocalState)
         : incoming[k];
       if (!Array.isArray(inc)) continue;
       const have = Array.isArray(writes[k])

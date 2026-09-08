@@ -495,7 +495,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
     def _managed_body(templates, removed_ids=None):
         return SimpleNamespace(templates=templates, removed_ids=removed_ids or [])
 
-    def test_managed_bucket_requires_parent_and_is_readable_by_managed_users(self):
+    def test_managed_bucket_requires_parent_and_is_readable_by_every_installation(self):
         template = {
             "name": "Approved welcome", "type": "order",
             "subject": "Welcome", "body": "<p>Hello</p>",
@@ -534,9 +534,9 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             invalidation["credential_ids"],
             [
                 "parent-two", "recipient-install",
-                "creation-disabled-install",
+                "creation-disabled-install", "unmanaged-install",
             ],
-            "only other parents and restricted users need bucket invalidations",
+            "every other active installation needs universal bucket invalidations",
         )
 
         bucket_id = created["templates"][0]["id"]
