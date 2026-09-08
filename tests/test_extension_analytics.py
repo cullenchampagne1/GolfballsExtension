@@ -284,6 +284,39 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # what the sort pills and the row count already say.
         self.assertNotIn("summary", payload)
 
+    def test_leaderboard_sizes_its_figure_columns_in_pixels_not_fractions(self):
+        # `0.55fr` for `9.5` grew with the card: at three columns the figure
+        # floated in twice the width it needs while `rep` — the only column
+        # with anything to say at length — was still ellipsized. Every figure
+        # column has a KNOWN width, so it states it and `rep` takes the slack.
+        columns = {column["key"]: column
+                   for column in self.routes["_console_usage_leaderboard"]()["columns"]}
+        self.assertEqual(
+            [columns[key]["width"] for key in
+             ("rank", "actions", "tools", "funnel", "dev", "trend")],
+            ["20px", "62px", "54px", "58px", "92px", "96px"],
+            "the design's own rail: 20 / 1fr / 62 / 54 / 58 / 92 / 96")
+        self.assertNotIn("width", columns["rep"])
+        self.assertTrue(columns["rep"]["grow"])
+        for key, column in columns.items():
+            self.assertNotIn("fr", str(column.get("width", "")), f"{key} is not a fraction")
+
+    def test_leaderboard_drops_columns_in_order_of_what_the_card_is_for(self):
+        # Who and at what rate, always. The trend that explains it from two
+        # responsive units. The three comparison columns from three.
+        columns = {column["key"]: column
+                   for column in self.routes["_console_usage_leaderboard"]()["columns"]}
+        for key in ("rank", "rep", "actions"):
+            self.assertNotIn("min_w", columns[key], f"{key} has no floor")
+        self.assertEqual(columns["trend"]["min_w"], 2)
+        for key in ("tools", "funnel", "dev"):
+            self.assertEqual(columns[key]["min_w"], 3, key)
+        # And the full rail fits the 550px the block now asks for: the fixed
+        # tracks, six 8px gaps, and 120px of rep name.
+        fixed = sum(int(columns[key]["width"][:-2]) for key in columns if "width" in columns[key])
+        self.assertEqual(fixed, 382)
+        self.assertLessEqual(fixed + 6 * 8 + 120, 550)
+
     def test_leaderboard_row_click_selection_feeds_the_scorecard(self):
         leaderboard_top = self.routes["_console_usage_leaderboard"]()["rows"][0]["_select"]
         scorecard = self.routes["_console_usage_rep_scorecard"](leaderboard_top)
@@ -298,7 +331,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # The ring IS the funnel; a tile repeating it spends a quarter of the
         # grid saying the same thing twice. These four answer what it can't.
         scorecard = self.routes["_console_usage_rep_scorecard"]("cred-a")
-        stats = {stat["label"]: stat["value"] for stat in scorecard["stats"]}
+        # `{"items": [...]}` because that IS `stat.grid`'s payload: the block's
+        # `stats` part binds `${data.stats}` and the view validates its own
+        # contract against what it was handed, with nothing reshaping between.
+        stats = {stat["label"]: stat["value"] for stat in scorecard["stats"]["items"]}
         self.assertEqual(list(stats), ["Active hours", "Actions / hr", "Tools touched", "Time to 1st action"])
         self.assertEqual(stats["Tools touched"], "2/3")
         # sess-a's first feature event lands on its own start instant.
@@ -309,8 +345,49 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # cred-c held a session open and did nothing. "0m" would read as the
         # fastest rep on the team; the truth is there is no sample.
         stats = {stat["label"]: stat["value"]
-                 for stat in self.routes["_console_usage_rep_scorecard"]("cred-c")["stats"]}
+                 for stat in self.routes["_console_usage_rep_scorecard"]("cred-c")["stats"]["items"]}
         self.assertEqual(stats["Time to 1st action"], "—")
+
+    def test_scorecard_payload_is_nested_one_sub_object_per_stack_part(self):
+        """One fetch, four contracts.
+
+        `analytics-scorecard.block.yaml` is a `layout: stack`: the header's
+        figure binds `${data.funnel}`, and the three parts bind
+        `${data.stats}` / `${data.chart}` / `${data.dwell}`. Each of those is
+        a READY-SHAPED payload for the view that reads it, so nothing between
+        the endpoint and the view reshapes anything — which is the whole reason
+        this is one block and not four on the `rep` channel.
+        """
+        scorecard = self.routes["_console_usage_rep_scorecard"]("cred-a")
+        # chart.gauge · radial
+        self.assertEqual(sorted(scorecard["funnel"]), ["label", "percent", "severity"])
+        # stat.grid
+        self.assertEqual(list(scorecard["stats"]), ["items"])
+        self.assertEqual(len(scorecard["stats"]["items"]), 4)
+        # chart.line · inline
+        self.assertEqual(sorted(scorecard["chart"]), ["fmt", "ranges"])
+        self.assertEqual(sorted(scorecard["chart"]["ranges"][0]),
+                         ["id", "label", "series", "times"])
+        # chart.gauge · deviation
+        self.assertEqual(sorted(scorecard["dwell"]), ["bars", "note"])
+
+    def test_scorecard_keeps_its_shape_when_there_are_no_reps_at_all(self):
+        # `stat.grid` requires at least one item, and more to the point a card
+        # that keeps its shape while it waits tells the reader WHAT it is
+        # waiting for — an empty grid collapsing to nothing reads as broken.
+        empty = self.routes["_rep_aggregates"]
+        try:
+            self.routes["_rep_aggregates"] = lambda: {
+                "reps": {}, "day_keys": [], "tool_catalog": 0}
+            payload = self.routes["_console_usage_rep_scorecard"](None)
+        finally:
+            self.routes["_rep_aggregates"] = empty
+        self.assertEqual(payload["name"], "No reps yet", "the empty branch ran")
+        self.assertEqual([item["value"] for item in payload["stats"]["items"]],
+                         ["—", "—", "—", "—"])
+        self.assertEqual(len(payload["stats"]["items"]), 4)
+        self.assertEqual(payload["dwell"]["bars"], [])
+        self.assertIn("empty", payload["chart"])
 
     def test_scorecard_funnel_ring_severity_tracks_the_designs_thresholds(self):
         # 3 of 7 stages = 43% — at or above the design's 40% "healthy" mark, so
