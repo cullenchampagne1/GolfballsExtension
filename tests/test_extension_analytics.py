@@ -14,6 +14,7 @@ directly, so this test has no cross-repo import dependency.
 import ast
 import math
 import unittest
+from bisect import bisect_left
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -206,14 +207,15 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_console_usage_adoption_trend", "_console_usage_adoption",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
                 "_console_reliability_trend", "_console_reliability_integrity",
-                "_bucket_samples", "_level_curve", "_latency_range",
+                "_bucket_samples", "_level_curve", "_level_curves", "_latency_range",
+                "_percentile_of_sorted", "_percentiles",
                 "_windowed_ranges", "_TREND_WINDOWS",
                 "_LATENCY_BUCKETS", "_LATENCY_WINDOWS", "_WINDOW_LABEL",
                 "_LATENCY_OUTLIER_MS", "_LEADERBOARD_SORTS", "_console_usage_concurrency",
                 "_presence_hourly_buckets", "_console_usage_kpi_strip", "_KPI_PROVENANCE",
             },
             extra_globals={
-                "math": math,
+                "math": math, "bisect_left": bisect_left,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
                 "select": select, "Session": Session, "Optional": Optional,
                 "auth_manager": type("Auth", (), {"engine": cls.engine})(),
@@ -709,3 +711,133 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConsoleFetchCacheTests(unittest.TestCase):
+    """The console data bridge is read-through cached, and why it had to be.
+
+    Every block on this page polls at 60s or slower, so no endpoint here is a
+    live reading — and the console draws ~20 cards whose builders are pure
+    reads of the same few tables. Nothing was cached but `header.chips`.
+
+    Measured against the real 255,000-row events table, one page load ran
+    ~1.7s of builder CPU, serialized because each arrives on its own thread and
+    holds the GIL. A row click (91ms of work) or a sort switch (67ms) then
+    queued behind whatever poll cycle was in flight, which is why a click felt
+    like it hung: the work was small and the wait in front of it was a second.
+
+    These tests pin the CACHE, not the timings — the key, the TTL policy, and
+    the bound. The timings are in the commit that added it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.routes = _load_routes_functions(
+            {"_endpoint_cache_key", "_console_ttl", "_CONSOLE_TTL",
+             "_SLOW_HISTORICAL_TTL", "_SLOW_HISTORICAL", "_CONSOLE_CACHE_MAX",
+             "_cached", "_cache_put"},
+            # `_CONSOLE_CACHE: dict = {}` is an annotated assignment, which the
+            # AST selector above does not pick up — injected instead.
+            extra_globals={"Optional": Optional, "Dict": dict, "Any": object,
+                           "_time": __import__("time"), "_CONSOLE_CACHE": {}},
+        )
+
+    def test_the_key_separates_two_placements_asking_different_questions(self):
+        key = self.routes["_endpoint_cache_key"]
+        # The scorecard for one rep must never be served for another, and a
+        # 30-day window must never be served to a card asking for 90.
+        self.assertNotEqual(key("usage.rep-scorecard", {"rep_id": "cred-a"}),
+                            key("usage.rep-scorecard", {"rep_id": "cred-b"}))
+        self.assertNotEqual(key("usage.latency", {"days": "30"}),
+                            key("usage.latency", {"days": "90"}))
+        self.assertNotEqual(key("usage.leaderboard", {"sort": "funnel"}),
+                            key("usage.leaderboard", {"sort": "actions"}))
+
+    def test_the_key_is_order_independent_so_one_answer_serves_both_callers(self):
+        key = self.routes["_endpoint_cache_key"]
+        self.assertEqual(key("usage.latency", {"days": "90", "rep_id": "a"}),
+                         key("usage.latency", {"rep_id": "a", "days": "90"}))
+        self.assertEqual(key("usage.identity", {}), key("usage.identity", None))
+
+    def test_a_parameter_shape_it_cannot_serialize_is_not_cached(self):
+        # Guessing would be worse than recomputing: a key that collides serves
+        # one card's answer to a card that asked something else.
+        class Hostile:
+            def __str__(self): raise RuntimeError("no")
+        self.assertIsNone(self.routes["_endpoint_cache_key"]("x", {"k": Hostile()}))
+
+    def test_the_two_expensive_historical_cards_are_held_far_longer(self):
+        ttl = self.routes["_console_ttl"]
+        # `latency` events are 88% of the events table, so both of these read
+        # ~212,000 rows to draw twenty buckets — and a percentile trend over 90
+        # days does not change meaningfully in a minute.
+        self.assertEqual(ttl("reliability.trend"), self.routes["_SLOW_HISTORICAL_TTL"])
+        self.assertEqual(ttl("usage.latency"), self.routes["_SLOW_HISTORICAL_TTL"])
+        self.assertGreaterEqual(self.routes["_SLOW_HISTORICAL_TTL"], 300.0)
+        # Everything else keeps the short TTL, so a card polling on the minute
+        # still sees fresh numbers.
+        for endpoint in ("usage.leaderboard", "usage.rep-scorecard", "usage.presence"):
+            self.assertEqual(ttl(endpoint), self.routes["_CONSOLE_TTL"])
+        self.assertLessEqual(self.routes["_CONSOLE_TTL"], 30.0)
+
+    def test_a_hit_inside_the_ttl_is_served_and_a_stale_one_is_not(self):
+        cache, put, cached = (self.routes["_CONSOLE_CACHE"], self.routes["_cache_put"],
+                              self.routes["_cached"])
+        cache.clear()
+        put("probe", {"rows": 1})
+        self.assertEqual(cached("probe", 30.0), {"rows": 1})
+        # Zero TTL: every entry is already stale, so nothing is served.
+        self.assertIsNone(cached("probe", 0.0))
+        self.assertIsNone(cached("never-stored", 30.0))
+
+    def test_the_cache_is_bounded_so_an_unforeseen_parameter_cannot_grow_it(self):
+        self.assertLessEqual(self.routes["_CONSOLE_CACHE_MAX"], 1000)
+        source = ROUTES.read_text()
+        self.assertIn("if len(_CONSOLE_CACHE) >= _CONSOLE_CACHE_MAX:", source)
+
+
+class LatencyTrendCostTests(unittest.TestCase):
+    """The response-time trend reads the largest table on the page.
+
+    `latency` is 88% of `extension_usage_events`. These pin the two structural
+    reasons it was slower than it needed to be, both of which are pure work
+    de-duplication — the numbers are unchanged, and the suite above proves it.
+    """
+
+    def test_percentiles_of_one_sample_sort_it_once(self):
+        routes = _load_routes_functions(
+            {"_percentile", "_percentiles", "_percentile_of_sorted", "_level_curve",
+             "_level_curves"},
+            extra_globals={"math": math})
+        samples = [90, 10, 50, 30, 70]
+        # Identical to three separate `_percentile` calls, which is the point:
+        # this is the same answer for a third of the work.
+        self.assertEqual(routes["_percentiles"](samples, (0.5, 0.95, 0.99)),
+                         tuple(routes["_percentile"](samples, f) for f in (0.5, 0.95, 0.99)))
+        self.assertEqual(routes["_percentiles"]([], (0.5,)), (None,))
+
+    def test_level_curves_match_the_single_curve_it_replaces(self):
+        routes = _load_routes_functions(
+            {"_percentile", "_percentiles", "_percentile_of_sorted", "_level_curve",
+             "_level_curves"},
+            extra_globals={"math": math})
+        # Including the gap in the middle and the leading Nones, which the
+        # caller relies on to trim the axis.
+        buckets = [[], [12, 40], [], [8], [], [100, 200, 300], []]
+        self.assertEqual(routes["_level_curves"](buckets, (0.5, 0.95)),
+                         (routes["_level_curve"](buckets, 0.5),
+                          routes["_level_curve"](buckets, 0.95)))
+
+    def test_the_trend_slices_each_window_instead_of_re_filtering_every_row(self):
+        source = ROUTES.read_text()
+        builder = source[source.index("def _console_reliability_trend"):]
+        body = builder[:builder.index("\ndef ", 1)]
+        # Ordered in SQL, so the narrower windows are suffixes of one list:
+        # the 24-hour window touches its own thousand rows rather than all
+        # 212,000 four times over.
+        self.assertIn(".order_by(ExtensionUsageEvent.occurred_at)", body)
+        self.assertIn("bisect_left(at_values, floor)", body)
+        # And the two scalar columns come back as rows, not as ORM objects —
+        # a third of this card's cost was building 212,000 wrappers that the
+        # next line unpacks into tuples.
+        self.assertIn("session.connection().execute(", body)
