@@ -470,16 +470,28 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         for sort in ("actions", "funnel", "tools"):
             payload = self.routes["_console_usage_leaderboard"](sort)
             aggregate = self.routes["_LEADERBOARD_SORTS"][sort][0]
-            self.assertEqual(payload["sort"]["key"], aggregate)
+            # `sort.key` is the REQUEST value, not the internal aggregate
+            # field: it has to round-trip through the card's control, so it
+            # must be one of the choices that control offers.
+            self.assertEqual(payload["sort"]["key"], sort)
+            self.assertEqual(payload["sort"]["label"],
+                             self.routes["_LEADERBOARD_SORTS"][sort][1])
+            offered = [choice["value"] for choice in payload["sort"]["options"]]
+            self.assertEqual(offered, list(self.routes["_LEADERBOARD_SORTS"]))
+            self.assertIn(payload["sort"]["key"], offered)
             # The rows really are ordered by THAT aggregate, descending — a
             # label alone would still pass if the ranking never changed.
             self.assertEqual([row["_select"] for row in payload["rows"]],
                              sorted(reps, key=lambda owner: -reps[owner][aggregate]))
             self.assertEqual([int(row["rank"]["text"]) for row in payload["rows"]],
                              list(range(1, len(payload["rows"]) + 1)))
-        # An unknown sort falls back to the rate ranking instead of erroring.
-        self.assertEqual(self.routes["_console_usage_leaderboard"]("nonsense")["rows"][0]["_select"],
+        # An unknown sort falls back to the rate ranking instead of erroring —
+        # and the control reports the choice it actually HONOURED, so a stale
+        # option cannot leave a pill lit that describes a different ranking.
+        fallback = self.routes["_console_usage_leaderboard"]("nonsense")
+        self.assertEqual(fallback["rows"][0]["_select"],
                          self.routes["_console_usage_leaderboard"]("actions")["rows"][0]["_select"])
+        self.assertEqual(fallback["sort"]["key"], "actions")
 
     def test_concurrency_chart_labels_every_hour_it_plots(self):
         payload = self.routes["_console_usage_concurrency"]()
