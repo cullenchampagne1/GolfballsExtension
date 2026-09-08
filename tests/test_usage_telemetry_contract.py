@@ -222,7 +222,7 @@ class ExtensionAnalyticsContractTests(unittest.TestCase):
     def setUpClass(cls):
         routes_tree = ast.parse((ROOT / ".revstack" / "routes.py").read_text())
         names = {
-            "_presence_hourly_buckets", "_console_backlog", "_BACKLOG_ITEMS",
+            "_presence_hourly_buckets",
             "_CATALOG_FUNNEL", "_WORKFLOW_STAGES",
         }
         selected = []
@@ -260,16 +260,18 @@ class ExtensionAnalyticsContractTests(unittest.TestCase):
         self.assertEqual(buckets[5], 1)
         self.assertEqual(sum(buckets), 4)
 
-    def test_backlog_mirrors_the_metrics_catalog_priority_order(self):
-        payload = self.routes["_console_backlog"]()
-        self.assertEqual(len(payload["rows"]), len(self.routes["_BACKLOG_ITEMS"]))
-        first, last = payload["rows"][0], payload["rows"][-1]
-        self.assertEqual(first["status"]["tone"], "ok")  # "shipped"
-        self.assertEqual(last["status"]["tone"], "warning")  # "not started"
-        self.assertEqual(first["n"], 1)
-        self.assertEqual(last["n"], len(payload["rows"]))
-        column_keys = {column["key"] for column in payload["columns"]}
-        self.assertEqual(column_keys, {"n", "title", "unlocks", "status", "effort"})
+    def test_nothing_here_serves_a_hardcoded_backlog_any_more(self):
+        """`backlog` was a card whose content was a list of GAPS.
+
+        Not a telemetry aggregate at all: a hardcoded transcription of
+        `uploads/analytics-metrics-catalog.md` §7, ranked by value over cost. A
+        card that lists what the console cannot show yet is a document, and it
+        belongs in the document it was copied from.
+        """
+        self.assertNotIn("_console_backlog", self.routes)
+        self.assertNotIn("_BACKLOG_ITEMS", self.routes)
+        source = (ROOT / ".revstack" / "routes.py").read_text()
+        self.assertNotIn('endpoint == "backlog"', source)
 
     def test_catalog_funnel_stages_are_the_seven_tracked_gift_catalog_features(self):
         features = [feature for feature, _label in self.routes["_CATALOG_FUNNEL"]]

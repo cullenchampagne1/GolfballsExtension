@@ -24,6 +24,10 @@ from sqlalchemy.orm import DeclarativeBase, Session
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES = ROOT / ".revstack" / "routes.py"
 
+#: A span the trimming tests place samples inside, wide enough that its
+#: buckets are days rather than hours.
+_TRIM_SPAN = 30
+
 
 class Base(DeclarativeBase):
     pass
@@ -142,10 +146,16 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             # Latency events (kind=latency) — the Response time percentile
             # trend's only source. Four samples on one day, deliberately
             # spread so p50 and p95/p99 cannot coincide.
-            for duration in (100, 200, 900, 1500):
+            # Spread across days, not all at one instant: the trend needs two
+            # measured buckets to be a trend at all, and a single bucket
+            # carried forward as a flat line is the fabrication the card was
+            # fixed to stop drawing. The window percentiles are unchanged —
+            # they read every sample in the window regardless of when.
+            for offset, duration in enumerate((100, 200, 900, 1500)):
                 session.add(ExtensionUsageEvent(
                     owner_credential_id="cred-a", session_id="sess-a", kind="latency",
-                    duration_ms=duration, ok=True, occurred_at=cls.now))
+                    duration_ms=duration, ok=True,
+                    occurred_at=cls.now - timedelta(days=offset, hours=1)))
 
             # Rep B: unregistered, low activity — 1 feature event, 1 surface.
             # Its session carries the dropped/total counters the Integrity
@@ -183,13 +193,15 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_COLORS", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
-                "_USAGE_TRANSPORT_LABELS", "_MOCK_SEED", "_REP_WINDOW_DAYS", "_rep_aggregates", "_ago",
+                "_USAGE_TRANSPORT_LABELS", "_REP_WINDOW_DAYS", "_rep_aggregates", "_ago",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
-                "_console_usage_adoption_trend", "_console_usage_top_surfaces_list",
+                "_console_usage_adoption_trend", "_console_usage_adoption",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
                 "_console_reliability_trend", "_console_reliability_integrity",
+                "_bucket_samples", "_level_curve", "_latency_range",
+                "_LATENCY_BUCKETS", "_LATENCY_WINDOWS", "_WINDOW_LABEL",
                 "_LATENCY_OUTLIER_MS", "_LEADERBOARD_SORTS", "_console_usage_concurrency",
-                "_presence_hourly_buckets", "_console_usage_kpi_strip",
+                "_presence_hourly_buckets", "_console_usage_kpi_strip", "_KPI_PROVENANCE",
             },
             extra_globals={
                 "math": math,
@@ -319,39 +331,78 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(ago(now - timedelta(hours=5), now), "5h ago")
         self.assertEqual(ago(now - timedelta(days=5), now), "5d ago")
 
-    def test_adoption_trend_counts_active_installs_and_marks_the_new_line_dashed(self):
-        payload = self.routes["_console_usage_adoption_trend"](30)
-        layers = payload["ranges"][0]["layers"]
-        active_layer = next(layer for layer in layers if layer["id"] == "active")
-        new_layer = next(layer for layer in layers if layer["id"] == "new")
-        self.assertFalse(active_layer.get("dashed"))  # not set at all -> falsy, same as False
-        self.assertTrue(new_layer["dashed"])
-        # all three installs' sessions started within the last 2 days
-        self.assertEqual(sum(new_layer["values"]), 3)
+    def test_adoption_trend_draws_active_returning_and_new(self):
+        """Three curves, as the design does — and the third is the point.
 
-    def test_top_surfaces_list_ranks_by_open_count_with_a_normalized_bar(self):
-        payload = self.routes["_console_usage_top_surfaces_list"](30)
-        rows = payload["rows"]
-        self.assertEqual(rows[0]["id"], "Gifting Catalog")  # 3 opens, the most
-        self.assertEqual(rows[0]["opens"]["value"], 1.0)  # normalized against itself
-        self.assertEqual(rows[0]["opens"]["text"], "3")
+        `Returning` is active minus new, so the GAP between Active and
+        Returning is the day's new installs and the reader can see whether a
+        busy day was growth or the same people coming back. It shipped with two
+        curves and left that subtraction to the eye.
+        """
+        payload = self.routes["_console_usage_adoption_trend"](30)
+        layers = {layer["id"]: layer for layer in payload["ranges"][0]["layers"]}
+        self.assertEqual(list(layers), ["active", "returning", "new"])
+        # Dashed because DERIVED, which is the design's own choice: measured
+        # curves are solid, the one worked out from them is not.
+        self.assertFalse(layers["active"].get("dashed"))
+        self.assertFalse(layers["new"].get("dashed"))
+        self.assertTrue(layers["returning"]["dashed"])
+        # all three installs' sessions started within the last 2 days
+        self.assertEqual(sum(layers["new"]["values"]), 3)
+        # And the arithmetic holds point by point, never below zero.
+        for active, returning, new in zip(layers["active"]["values"],
+                                          layers["returning"]["values"],
+                                          layers["new"]["values"]):
+            self.assertEqual(returning, max(0, active - new))
+            self.assertGreaterEqual(returning, 0)
+
+    def test_adoption_trend_holds_the_headline_on_the_range(self):
+        # `installActive`/`installDelta` were bound by a hand-built header row
+        # above the chart. The view draws the headline itself, off the RANGE, so
+        # the figure cannot disagree with the curve under it.
+        active_range = self.routes["_console_usage_adoption_trend"](30)["ranges"][0]
+        self.assertIn("value", active_range)
+        self.assertIn("text", active_range["delta"])
+        self.assertIsInstance(active_range["delta"]["up"], bool)
+
+    def test_top_surfaces_is_the_adoption_endpoint_because_it_was_one_query(self):
+        # `usage.top-surfaces-list` was the SAME query as `usage.adoption` —
+        # surface, opens, average dwell, ordered by opens — shaped twice
+        # because the design drew one as a table and the other as meters. The
+        # duplicate is gone; this is the survivor, and it is the richer of the
+        # two (it carries the surface KIND and the window's own footer trend).
+        self.assertNotIn("_console_usage_top_surfaces_list", self.routes)
+        payload = self.routes["_console_usage_adoption"](30)
+        rows = payload["items"]
+        self.assertEqual(rows[0]["label"], "Gifting Catalog")  # 3 opens, the most
+        self.assertEqual(rows[0]["ratio"], 1.0)  # against the TOP surface, not the total
+        self.assertEqual(rows[0]["value"], 3)
+        self.assertTrue(rows[0]["state"], "the surface kind the list version dropped")
+        self.assertTrue(payload["footer"]["series"])
 
     def test_kpi_strip_annotates_every_cell_and_never_fakes_an_untracked_one(self):
         payload = self.routes["_console_usage_kpi_strip"](30)
-        cells = {cell["label"]: cell for cell in payload["kpis"]}
-        self.assertEqual(len(payload["kpis"]), 8)  # the design's eight cells
-        # Every cell states where its number comes from, the way the design does.
-        self.assertTrue(all(cell["note"] for cell in payload["kpis"]))
+        cells = {cell["label"]: cell for cell in payload["items"]}
+        # SEVEN, not eight: "Time to first action" read "—" in every window
+        # because it has no read-side path, and a cell that says "not measured"
+        # is clutter on a strip whose job is to state seven real numbers.
+        self.assertEqual(len(payload["items"]), 7)
+        self.assertEqual(len(self.routes["_KPI_PROVENANCE"]), 7)
+        self.assertNotIn("Time to first action", cells)
+        # Every cell states where its number comes from, the way the design
+        # does. `sub`, because that is `stat.grid`'s name for the line under a
+        # figure — it was `note`, which was a `Metric` prop.
+        self.assertTrue(all(cell["sub"] for cell in payload["items"]))
         self.assertEqual(cells["New installs"]["value"], "3")  # all three seeded installs
-        self.assertEqual(cells["New installs"]["note"], "SESSION min")
+        self.assertEqual(cells["New installs"]["sub"], "SESSION min")
         # The strip's error rate spans the WHOLE window (1 of 19 feature
         # events), unlike the Integrity block's per-day series — same column,
         # different grain, and both are stated in their own note.
         self.assertEqual(cells["Error rate"]["value"], "5.3%")
-        # The one metric with no read-side path today says so instead of
-        # rendering a plausible-looking zero.
-        self.assertEqual(cells["Time to first action"]["value"], "—")
-        self.assertEqual(cells["Time to first action"]["note"], "NOT TRACKED")
+        # A cell with no samples still reads "—" rather than 0 — the rule that
+        # kept "Time to first action" honest for as long as it was on the
+        # strip. It is the cells that can NEVER have samples that are gone.
+        self.assertTrue(all(cell["value"] for cell in payload["items"]))
 
     def test_leaderboard_sort_control_reranks_server_side_with_the_rank_column(self):
         # cred-a leads on volume; cred-b touched a funnel stage cred-a's own
@@ -372,16 +423,24 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(self.routes["_console_usage_leaderboard"]("nonsense")["rows"][0]["_select"],
                          self.routes["_console_usage_leaderboard"]("actions")["rows"][0]["_select"])
 
-    def test_concurrency_chart_carries_the_designs_footer_rail(self):
+    def test_concurrency_chart_labels_every_hour_it_plots(self):
         payload = self.routes["_console_usage_concurrency"]()
         window = payload["ranges"][0]
-        self.assertEqual(len(window["series"]), 24)  # one bucket per hour
-        rail = [entry["value"] for entry in window["stats"]]
-        # The card header owns the live count; the rail owns the 24h bounds
-        # and the peak/median summary between them.
-        self.assertEqual(rail[0], "00:00")
-        self.assertEqual(rail[2], "23:00")
-        self.assertEqual(rail[1], f"peak {payload['peak']} · median {payload['median']}")
+        # `points: [{label, value}]`, because that is what `chart.line` reads
+        # and labels its time axis from. It used to send `times` (epoch millis)
+        # beside a bare `series` of counts — `times` went to a `LineChart` prop
+        # that no longer exists, and bare counts left the card with no axis at
+        # all: a concurrency curve whose spike had no hour on it.
+        self.assertEqual(len(window["points"]), 24)  # one bucket per hour
+        self.assertTrue(all(point["label"].endswith(":00") for point in window["points"]))
+        # The headline is the range's own, so it cannot disagree with the curve.
+        self.assertIn("value", window)
+        rail = {entry["label"]: entry["value"] for entry in window["stats"]}
+        self.assertIn("peak", rail)
+        self.assertIn("median", rail)
+        # And the install total rides along for the header tag the block
+        # publishes — the design's "27 live / 128 installs" denominator.
+        self.assertIn("installTotal", payload)
 
     def test_percentile_trend_leads_with_p95_dashes_p99_and_names_its_slo_line(self):
         payload = self.routes["_console_reliability_trend"](30)
@@ -402,7 +461,63 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(stats["p50"], "200ms")
         self.assertEqual(stats["p95"], "1.50s")
         self.assertEqual(stats["p99"], "1.50s")
-        self.assertEqual(stats[""], "4 latency events")
+        self.assertEqual(stats[""], "4 samples")
+
+    def test_percentile_trend_offers_its_own_windows_and_leads_with_a_full_one(self):
+        """The window is this card's control, not the page's.
+
+        A 90-day default on a week-old install is mostly empty axis, and
+        showing a span with no data in it was half of why this card could not
+        be read. It offers 24H/7D/30D/90D, drops the ones with nothing in them,
+        and leads with the narrowest that survives.
+        """
+        payload = self.routes["_console_reliability_trend"](30)
+        ids = [window["id"] for window in payload["ranges"]]
+        self.assertTrue(ids, "the seeded samples fall in at least one window")
+        self.assertEqual(payload["default"], ids[0])
+        # Narrowest first, and each states its span so the view can animate a
+        # switch as a camera move rather than morphing unrelated points.
+        spans = [window["days"] for window in payload["ranges"]]
+        self.assertEqual(spans, sorted(spans))
+        for window in payload["ranges"]:
+            self.assertEqual(window["label"], self.routes["_WINDOW_LABEL"][window["days"]])
+
+    def test_a_quiet_bucket_holds_the_last_level_instead_of_claiming_zero(self):
+        """The bug that pinned the curve to the axis.
+
+        A latency percentile is a LEVEL: "no requests in this bucket" means the
+        number is unknown, not that the service answered instantly. The
+        endpoint used `_percentile(...) or 0` — exactly what that function's
+        docstring warns against — so on real telemetry most buckets read 0ms
+        and the few with samples read as outliers standing over a floor of
+        zeroes.
+        """
+        curve = self.routes["_level_curve"]([[10, 20], [], [], [90, 100]], 0.95)
+        self.assertEqual(curve, [20, 20, 20, 100])
+        # Nothing before the first sample is invented; the caller trims those.
+        self.assertEqual(self.routes["_level_curve"]([[], [5]], 0.5), [None, 5])
+
+    def test_a_window_is_trimmed_to_its_first_and_last_real_measurement(self):
+        now = datetime.utcnow()
+        window = timedelta(days=_TRIM_SPAN)
+        floor = now - window
+        # Samples only in the middle of the window.
+        scoped = [(120, floor + window * fraction) for fraction in (0.45, 0.5, 0.55)]
+        built = self.routes["_latency_range"](_TRIM_SPAN, scoped, floor, window)
+        self.assertIsNotNone(built)
+        buckets = self.routes["_LATENCY_BUCKETS"]
+        self.assertLess(len(built["series"]), buckets, "the empty ends are not drawn")
+        self.assertEqual(len(built["times"]), len(built["series"]))
+        for layer in built["layers"]:
+            self.assertEqual(len(layer["values"]), len(built["series"]))
+
+    def test_a_window_with_one_lonely_bucket_is_not_offered_as_a_trend(self):
+        now = datetime.utcnow()
+        window = timedelta(days=_TRIM_SPAN)
+        floor = now - window
+        single = [(120, floor + window * 0.5)]
+        self.assertIsNone(self.routes["_latency_range"](_TRIM_SPAN, single, floor, window))
+        self.assertIsNone(self.routes["_latency_range"](_TRIM_SPAN, [], floor, window))
 
     def test_integrity_rates_stay_numeric_and_carry_their_window_peak(self):
         payload = self.routes["_console_reliability_integrity"](30)
@@ -429,8 +544,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
 
     def test_activity_heatmap_lists_sunday_first_and_buckets_by_real_hour(self):
         payload = self.routes["_console_usage_activity_heatmap"](30)
-        self.assertEqual(payload["col_labels"][0], "0")
-        self.assertEqual(len(payload["col_labels"]), 24)
+        # `colLabels`, which is the spelling `chart.heatmap`'s payload contract
+        # declares; `Matrix` took the snake_case prop.
+        self.assertEqual(payload["colLabels"][0], "0")
+        self.assertEqual(len(payload["colLabels"]), 24)
         self.assertEqual([row["label"] for row in payload["rows"]][0], self.routes["_HEATMAP_DAYS"][6])
         total_events = sum(sum(row["cells"]) for row in payload["rows"])
         self.assertGreater(total_events, 0)

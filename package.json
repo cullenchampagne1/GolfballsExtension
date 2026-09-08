@@ -848,6 +848,10 @@
     {
       "name": "flow \u00b7 support ticket request builder & idempotency key",
       "file": "tests/unit/supportTicketRequest.test.mjs"
+    },
+    {
+      "name": "flow \u00b7 latency curve buckets, gaps and rejected outliers",
+      "file": "tests/unit/latencyCurve.test.mjs"
     }
   ],
   "devDependencies": {

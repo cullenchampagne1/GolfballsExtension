@@ -94,10 +94,19 @@ describe('usage telemetry', () => {
     assert.equal(reporter.record(null), false);
     assert.equal(reporter.pending(), 0, 'nothing rejected may reach the buffer');
 
-    // A surface name is truncated rather than dropped, and an out-of-range
-    // duration is clamped — a stalled request must not skew a percentile.
+    // A surface name is truncated rather than dropped.
     assert.equal(reporter.record({ kind: 'surface_open', surface: 'x'.repeat(200) }), true);
-    assert.equal(reporter.record({ kind: 'latency', ms: 9_999_999 }), true);
+
+    // An out-of-range latency is REJECTED, not clamped. It used to be clamped
+    // to LATENCY_MS_MAX, which is the same mistake as recording it: a 25s
+    // notification hold became a five-second backend call that never happened,
+    // and those samples piled up in a dense line at exactly the ceiling and
+    // dragged p95 and p99 above it. "A stalled request must not skew a
+    // percentile" is the reason the cap exists, and clamping skewed it.
+    assert.equal(reporter.record({ kind: 'latency', ms: 9_999_999 }), false);
+    assert.equal(reporter.record({ kind: 'latency', ms: 5_001 }), false);
+    assert.equal(reporter.record({ kind: 'latency', ms: 5_000 }), true, 'the cap itself is a real sample');
+    assert.equal(reporter.record({ kind: 'latency', ms: -1 }), false);
   });
 
   it('coalesces email dimensions by source and transport before the backend', async () => {
