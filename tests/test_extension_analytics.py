@@ -482,6 +482,99 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             self.assertEqual(window["label"], self.routes["_WINDOW_LABEL"][window["days"]])
             self.assertEqual(len(window["series"]), window["days"])
 
+    def test_a_previous_period_reference_follows_the_window_it_compares(self):
+        """The bug: "Previous period" was only correct on the widest window.
+
+        A layer is sliced `[-span:]`, which is right for a series on this
+        window's own timeline and wrong for one deliberately offset. The email
+        volume card passed its prior window as a LAYER, so 90D compared against
+        the 90 days before it (correct) while 30D and 7D compared against a
+        stretch of history with no relationship to what was on screen — at 7D,
+        the week ending 83 days earlier, labelled "Previous period".
+
+        A comparison is re-derived per window instead: for a span of N days it
+        is the N days ending where the current window starts.
+        """
+        windowed = self.routes["_windowed_ranges"]
+        # Encode each day's identity in its value so the slices are readable.
+        current = list(range(1000, 1090))       # day i of the current window
+        previous = list(range(1, 91))           # day i of the window before it
+        keys = [f"d{index}" for index in range(90)]
+        ranges = windowed(keys, list(range(90)),
+                          [{"id": "now", "label": "This period", "values": current}],
+                          compare={"id": "prior", "label": "Previous period",
+                                   "values": previous})
+        self.assertEqual([window["id"] for window in ranges], ["7d", "30d", "90d"])
+        for window in ranges:
+            span = window["days"]
+            now_layer, prior_layer = window["layers"]
+            self.assertEqual(now_layer["values"], current[-span:])
+            self.assertEqual(len(prior_layer["values"]), span,
+                             "the reference is as long as the window it references")
+            # CONTIGUOUS: the reference must end exactly where the current
+            # window begins, on one continuous timeline.
+            timeline = previous + current
+            start = timeline.index(now_layer["values"][0])
+            self.assertEqual(prior_layer["values"], timeline[start - span:start],
+                             f"{span}d compared against the wrong period")
+            self.assertTrue(prior_layer["dashed"], "a reference is drawn dashed")
+
+    def test_the_volume_rail_reads_as_label_value_like_every_other_card(self):
+        """It was three UNLABELLED values used as an axis strip.
+
+        `89d ago`, the transport mix, `today` — no labels, so this card's
+        footer looked like a different instrument next to the percentile
+        trend's `p50 200ms · p95 1.50s · p99 …` and got switched off. The two
+        figures a "this period vs previous" chart owes the reader are the two
+        periods' totals.
+        """
+        builder = ROUTES.read_text()
+        body = builder[builder.index("def _console_email_volume"):]
+        body = body[:body.index("\ndef ", 1)]
+        self.assertIn('{"label": "this period"', body)
+        self.assertIn('{"label": "previous"', body)
+        # The pseudo-axis captions are gone.
+        self.assertNotIn('f"{span}d ago"', body)
+        self.assertNotIn('"value": "today"', body)
+
+    def test_the_volume_rail_follows_the_window_the_reader_picked(self):
+        # Both the totals AND the transport split. The split used to be grouped
+        # by transport alone, so it answered for the longest window whatever
+        # was selected — the same defect the prior-period curve had, one row
+        # down in the same footer.
+        builder = ROUTES.read_text()
+        body = builder[builder.index("def _console_email_volume"):]
+        body = body[:body.index("\ndef ", 1)]
+        self.assertIn("func.date(ExtensionUsageEvent.occurred_at).label(\"day\"),\n"
+                      "                   ExtensionUsageEvent.transport", body)
+        self.assertIn("def transport_note(window_keys)", body)
+        self.assertIn("transport_note(_keys)", body)
+
+    def test_a_reference_curve_cannot_hold_the_lead_in_open(self):
+        # `first` (the first day anything was recorded) is measured on the
+        # CURRENT layers only. A reference is not evidence that this project
+        # had telemetry yet, so letting it vote would keep an empty span on
+        # the axis on the strength of the window before it.
+        windowed = self.routes["_windowed_ranges"]
+        keys = [f"d{index}" for index in range(30)]
+        current = [0] * 27 + [3, 4, 5]
+        ranges = windowed(keys, list(range(30)),
+                          [{"id": "now", "label": "Now", "values": current}],
+                          compare={"id": "prior", "label": "Prev", "values": [9] * 30})
+        seven = next(window for window in ranges if window["id"] == "7d")
+        self.assertEqual(seven["series"], [3, 4, 5])
+        self.assertEqual(len(seven["layers"][1]["values"]), 3,
+                         "the reference is trimmed to the same lead-in")
+
+    def test_the_email_card_passes_its_prior_window_as_a_comparison(self):
+        builder = ROUTES.read_text()
+        body = builder[builder.index("def _console_email_volume"):]
+        body = body[:body.index("\ndef ", 1)]
+        # NOT a second layer — that is what made every narrow window wrong.
+        self.assertIn("compare = {", body)
+        self.assertIn("compare=compare", body)
+        self.assertNotIn('"values": prior_series, "dashed": True', body)
+
     def test_a_window_recomputes_the_headline_it_shows(self):
         # Switching to 7D must not leave a 90-day delta sitting over a
         # seven-day curve — the whole reason the figures ride the RANGE.
