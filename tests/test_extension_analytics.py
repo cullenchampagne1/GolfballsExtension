@@ -287,38 +287,42 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # what the sort pills and the row count already say.
         self.assertNotIn("summary", payload)
 
-    def test_leaderboard_sizes_its_figure_columns_in_pixels_not_fractions(self):
-        # `0.55fr` for `9.5` grew with the card: at three columns the figure
-        # floated in twice the width it needs while `rep` — the only column
-        # with anything to say at length — was still ellipsized. Every figure
-        # column has a KNOWN width, so it states it and `rep` takes the slack.
+    def test_leaderboard_states_no_column_width_at_all(self):
+        # This column set has been sized three ways. `0.55fr` for `9.5` grew
+        # with the card, so a figure floated in twice the width it needed while
+        # `rep` ellipsized. Fixed pixels fixed that and introduced the opposite
+        # defect: `92px` is the room `vs median`'s widest label needs TODAY,
+        # and wrong the day a deviation prints one glyph wider.
+        #
+        # The view measures the real content now
+        # (`runtime/listColumns.layoutColumns`), so a width here — in ANY unit —
+        # is the payload guessing at pixels for values it cannot see.
+        columns = {column["key"]: column
+                   for column in self.routes["_console_usage_leaderboard"]()["columns"]}
+        for key, column in columns.items():
+            self.assertNotIn("width", column, f"{key} pins a track the view measures")
+        self.assertTrue(columns["rep"]["grow"], "the subject is still the subject")
+
+    def test_leaderboard_drops_columns_in_order_of_what_the_card_is_for(self):
+        # Who, and at what rate — the two things the card exists to answer, so
+        # neither is ever dropped or squeezed. The three comparison columns and
+        # the trend that explains them are context: they shrink first and go
+        # first, and `min_w` survives only to order them against each other.
         columns = {column["key"]: column
                    for column in self.routes["_console_usage_leaderboard"]()["columns"]}
         self.assertEqual(
-            [columns[key]["width"] for key in
-             ("rank", "actions", "tools", "funnel", "dev", "trend")],
-            ["20px", "62px", "54px", "58px", "92px", "96px"],
-            "the design's own rail: 20 / 1fr / 62 / 54 / 58 / 92 / 96")
-        self.assertNotIn("width", columns["rep"])
-        self.assertTrue(columns["rep"]["grow"])
-        for key, column in columns.items():
-            self.assertNotIn("fr", str(column.get("width", "")), f"{key} is not a fraction")
-
-    def test_leaderboard_drops_columns_in_order_of_what_the_card_is_for(self):
-        # Who and at what rate, always. The trend that explains it from two
-        # responsive units. The three comparison columns from three.
-        columns = {column["key"]: column
-                   for column in self.routes["_console_usage_leaderboard"]()["columns"]}
-        for key in ("rank", "rep", "actions"):
-            self.assertNotIn("min_w", columns[key], f"{key} has no floor")
+            [columns[key]["priority"] for key in ("rep", "actions")], ["high", "high"],
+            "the subject and its rate are load-bearing")
+        for key in ("tools", "funnel", "dev", "trend"):
+            self.assertEqual(columns[key]["priority"], "low", key)
+        # `rank` is a 3-character rail: worth keeping at every width, and not
+        # worth protecting ahead of the figures it numbers.
+        self.assertEqual(columns["rank"]["priority"], "medium")
+        # Within `low`, the trend is the one that explains the figures, so it
+        # outranks them as a tie-break and is the last of the four to go.
         self.assertEqual(columns["trend"]["min_w"], 2)
         for key in ("tools", "funnel", "dev"):
             self.assertEqual(columns[key]["min_w"], 3, key)
-        # And the full rail fits the 550px the block now asks for: the fixed
-        # tracks, six 8px gaps, and 120px of rep name.
-        fixed = sum(int(columns[key]["width"][:-2]) for key in columns if "width" in columns[key])
-        self.assertEqual(fixed, 382)
-        self.assertLessEqual(fixed + 6 * 8 + 120, 550)
 
     def test_leaderboard_row_click_selection_feeds_the_scorecard(self):
         leaderboard_top = self.routes["_console_usage_leaderboard"]()["rows"][0]["_select"]
