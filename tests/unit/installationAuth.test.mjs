@@ -20,10 +20,11 @@ let requests;
 let installedListeners;
 let startupListeners;
 let client;
+let installationAuthSource;
 
 before(async () => {
   manifest = JSON.parse(await readFile(new URL('manifest.json', root), 'utf8'));
-  const source = await readFile(new URL('lib/installation-auth.js', root), 'utf8');
+  installationAuthSource = await readFile(new URL('lib/installation-auth.js', root), 'utf8');
   expectedId = createHash('sha256')
     .update(Buffer.from(manifest.key, 'base64'))
     .digest('hex')
@@ -72,7 +73,7 @@ before(async () => {
     Object, Promise, String, Number, JSON, TextDecoder, setTimeout, clearTimeout,
   });
   context.globalThis = context;
-  new vm.Script(source, { filename: 'installation-auth.js' }).runInContext(context);
+  new vm.Script(installationAuthSource, { filename: 'installation-auth.js' }).runInContext(context);
   client = context.GBInstallationAuth;
 });
 
@@ -258,6 +259,74 @@ describe('installation auth · authenticated requests', () => {
     });
     assert.equal(large.status, 200, 'multi-megabyte settings must reach fetch');
     assert.equal(requests.at(-1).options.body.length, 2_000_000);
+  });
+
+  it('removes request and response byte ceilings only from share transports', async () => {
+    // Shrink the ordinary transport guard in an isolated runtime so the test
+    // exercises both sides of the boundary without allocating a 110 MB string.
+    const guardedSource = installationAuthSource.replace(
+      'const EXTENSION_JSON_LIMIT = 110 * 1024 * 1024;',
+      'const EXTENSION_JSON_LIMIT = 64;',
+    );
+    const isolatedStored = {
+      gbApiInstallation: {
+        installationId: INSTALLATION_ID,
+        apiKey: API_KEY,
+        keyPrefix: 'rsk_aaaaaaaaaaaa_…',
+        enrolledAt: Date.now(),
+        extensionId: expectedId,
+        extensionVersion: manifest.version,
+      },
+    };
+    const isolatedRequests = [];
+    const isolatedChrome = {
+      runtime: {
+        id: expectedId, lastError: null,
+        getManifest: () => ({ version: manifest.version }),
+      },
+      storage: {
+        local: {
+          get(key, callback) { callback({ [key]: isolatedStored[key] }); },
+          set(values, callback) { Object.assign(isolatedStored, values); callback?.(); },
+        },
+      },
+    };
+    const isolatedFetch = async (url, options = {}) => {
+      isolatedRequests.push({ url: String(url), options });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          // Deliberately above the isolated 64-byte transport ceiling. The
+          // body is small; this header is sufficient to exercise the guard.
+          'Content-Length': '65',
+        },
+      });
+    };
+    const context = vm.createContext({
+      chrome: isolatedChrome, console, fetch: isolatedFetch, Headers, Response,
+      URL, Date, Error, Object, Promise, String, Number, JSON, TextDecoder,
+      setTimeout, clearTimeout,
+    });
+    context.globalThis = context;
+    new vm.Script(guardedSource, { filename: 'installation-auth-unbounded-shares.js' })
+      .runInContext(context);
+    const isolated = context.GBInstallationAuth;
+
+    await isolated.apiFetch(`${isolated.CLIENT_BASE}/settings-shares`, {
+      method: 'POST', body: 'x'.repeat(65),
+    });
+    assert.equal(isolatedRequests.at(-1).options.body.length, 65);
+    assert.deepEqual(
+      await isolated.apiJson(`${isolated.CLIENT_BASE}/product-stores/${'p'.repeat(32)}`),
+      { ok: true },
+    );
+    await assert.rejects(
+      isolated.apiFetch(`${isolated.CLIENT_BASE}/tickets`, {
+        method: 'POST', body: 'x'.repeat(65),
+      }),
+      /bounded serialized string/,
+    );
   });
 });
 

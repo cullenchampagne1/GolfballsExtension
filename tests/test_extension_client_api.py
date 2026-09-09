@@ -549,6 +549,20 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         ))
         self.assertEqual(restored["templates"][0]["template"]["name"], "Approved welcome")
 
+    def test_managed_bucket_contract_has_no_collection_size_quota(self):
+        template = {
+            "name": "Approved welcome", "type": "order",
+            "subject": "Welcome", "body": "<p>Hello</p>",
+        }
+        client_api_module.ManagedEmailBucketUpdate.model_rebuild(
+            _types_namespace=vars(client_api_module),
+        )
+        body = client_api_module.ManagedEmailBucketUpdate(templates=[
+            self._managed_write(template, client_template_id=f"template-{index}")
+            for index in range(501)
+        ])
+        self.assertEqual(len(body.templates), 501)
+
     def test_parent_disjoint_edits_merge_and_overlap_names_the_conflicting_parent(self):
         original = {
             "name": "Approved welcome", "type": "order",
@@ -590,6 +604,51 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertEqual(merged["sync_conflicts"], [])
         self.assertEqual(merged["templates"][0]["template"]["subject"], "Hello from parent two")
         self.assertEqual(merged["templates"][0]["template"]["body"], "<p>Owner changed the body</p>")
+
+    def test_overlapping_owner_autosaves_cannot_self_conflict_or_strand_partial_html(self):
+        original = {
+            "name": "Bridgestone Promo Buyer", "type": "order",
+            "subject": "Promo follow-up",
+            "body": "<p>Available in xs &amp; standard.</p>",
+        }
+        created = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(original)]),
+            self._request(self.owner),
+        ))
+        row = created["templates"][0]
+
+        partial = {**original, "body": "&"}
+        first = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(
+                partial, bucket_id=row["id"], base_version=row["version"],
+                base_template=original,
+            )]), self._request(self.owner),
+        ))
+        self.assertEqual(first["templates"][0]["template"]["body"], "&")
+
+        finished = {**original, "body": "<p>Available in xr &amp; standard.</p>"}
+        recovered = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(
+                finished, bucket_id=row["id"], base_version=row["version"],
+                base_template=original,
+            )]), self._request(self.owner),
+        ))
+        self.assertEqual(recovered["sync_conflicts"], [])
+        self.assertEqual(
+            recovered["templates"][0]["template"]["body"], finished["body"],
+        )
+        self.assertNotIn("Template Owner", recovered["templates"][0]["conflict_with"])
+
+        # A second parent making the same xs -> xr edit from the original base
+        # converges without a conflict and without changing the HTML payload.
+        converged = self._payload(self.api.update_managed_email_bucket(
+            self._managed_body([self._managed_write(
+                finished, bucket_id=row["id"], base_version=row["version"],
+                base_template=original, client_template_id="parent-two-copy",
+            )]), self._request(self.parent_two),
+        ))
+        self.assertEqual(converged["sync_conflicts"], [])
+        self.assertEqual(converged["templates"][0]["template"]["body"], finished["body"])
 
     def test_restricted_submission_requires_parent_approval_before_bucket_use(self):
         draft = {

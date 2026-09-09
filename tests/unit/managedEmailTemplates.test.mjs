@@ -164,6 +164,68 @@ describe('managed email-template bucket cache', () => {
     );
   });
 
+  it('serializes overlapping publishes and never replaces a finished edit with an in-flight partial body', async () => {
+    const originalBody = '<p>Bridgestone Promo Buyer xs &amp; saved copy</p>';
+    const partialBody = '&';
+    const finalBody = '<p>Bridgestone Promo Buyer xr &amp; saved copy</p>';
+    const originalItem = item({
+      created_by_current: true,
+      template: { ...item().template, name: 'Bridgestone Promo Buyer', body: originalBody },
+    });
+    const [parent] = bucket.reconcile([], { templates: [originalItem] }, {
+      'emailTemplates.allowParentAccount': true,
+    });
+    parent.body = partialBody;
+
+    let releaseFirst;
+    const calls = [];
+    const h = syncHarness({
+      templates: [parent],
+      devSettings: { 'emailTemplates.allowParentAccount': true },
+      gbManagedEmailTemplateBucket: {
+        schemaVersion: 2, revision: 'before', isParent: true,
+        templates: [originalItem],
+      },
+    }, (path, options = {}) => {
+      calls.push({ path, options });
+      const request = JSON.parse(options.body);
+      if (calls.length === 1) {
+        return new Promise((resolve) => {
+          releaseFirst = () => resolve({
+            revision: 'partial', is_parent: true, sync_conflicts: [],
+            templates: [item({
+              created_by_current: true, version: 2,
+              template: { ...originalItem.template, body: partialBody },
+            })],
+          });
+        });
+      }
+      assert.equal(request.templates[0].template.body, finalBody);
+      return Promise.resolve({
+        revision: 'finished', is_parent: true, sync_conflicts: [],
+        templates: [item({
+          created_by_current: true, version: 3,
+          template: { ...originalItem.template, body: finalBody },
+        })],
+      });
+    });
+
+    const partialPublish = h.bucket.publish();
+    for (let turn = 0; turn < 5 && calls.length < 1; turn += 1) await Promise.resolve();
+    h.stored.templates[0].body = finalBody;
+    const finalPublish = h.bucket.publish();
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+    const callsBeforeFirstCompleted = calls.length;
+    releaseFirst();
+    await Promise.all([partialPublish, finalPublish]);
+
+    assert.equal(callsBeforeFirstCompleted, 1, 'this installation may have only one bucket write in flight');
+    assert.equal(calls.length, 2);
+    assert.equal(h.stored.templates[0].body, finalBody);
+    assert.equal(h.stored.templates[0].managedTemplate.version, 3);
+    assert.equal(h.stored.templates[0].managedTemplate.snapshot.body, finalBody);
+  });
+
   it('publishes only explicitly enrolled local templates', () => {
     const privateTemplate = {
       id: 'private', type: 'order', name: 'Private', subject: 'Local only', body: '<p>Hi</p>',

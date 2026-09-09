@@ -11,6 +11,7 @@ import { JSDOM } from 'jsdom';
 
 import {
   normalizeProposalEntry, buildProposalStoreFile, parseProposalStoreFile,
+  createProposalStore,
   saveProposalDraft, removeSavedProposal, savedProposalsForSelection,
   linesFromSaved, saveCurrentProposal, loadCurrentProposal,
   saveProposalToOpportunity,
@@ -603,5 +604,31 @@ describe('proposal store · file transport', () => {
   it('requires a name and at least one proposal to build', () => {
     assert.throws(() => buildProposalStoreFile('', [entry()]), /name is required/);
     assert.throws(() => buildProposalStoreFile('Set', []), /at least one/);
+  });
+});
+
+describe('proposal store · endpoint transport', () => {
+  it('sends more than the offline-file entry limit without cutting off the shared store', async () => {
+    const previousChrome = globalThis.chrome;
+    let sent;
+    globalThis.chrome = { runtime: {
+      lastError: null,
+      sendMessage(message, callback) {
+        sent = structuredClone(message);
+        callback({ ok: true, store: { id: 'store', item_count: message.items.length } });
+      },
+    } };
+    try {
+      const entries = Array.from({ length: 501 }, (_, index) => ({
+        ...entry(), id: `proposal-${index}`,
+      }));
+      const store = await createProposalStore('Complete team library', entries);
+      assert.equal(sent.action, 'productStoreCreate');
+      assert.equal(sent.items.length, 501);
+      assert.equal(store.item_count, 501);
+    } finally {
+      if (previousChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = previousChrome;
+    }
   });
 });

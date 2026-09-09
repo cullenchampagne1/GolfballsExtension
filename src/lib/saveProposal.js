@@ -867,7 +867,7 @@ export async function updateSavedProposal(entry) {
 
 export const PROPOSAL_STORE_FILE_KIND = 'golfballs-proposal-store';
 export const PROPOSAL_STORE_FILE_VERSION = 1;
-export const PROPOSAL_STORE_MAX_ENTRIES = 500;
+export const PROPOSAL_STORE_FILE_MAX_ENTRIES = 500;
 const PROPOSAL_STORE_FILE_MAX_BYTES = 4 * 1024 * 1024;
 
 const _clip = (value, max) => String(value == null ? '' : value).slice(0, max);
@@ -938,9 +938,6 @@ async function _mergeSavedProposals(entries) {
 export async function createProposalStore(name, entries) {
   const items = (entries || []).map(normalizeProposalEntry);
   if (!items.length) throw new Error('Select at least one saved proposal');
-  if (items.length > PROPOSAL_STORE_MAX_ENTRIES) {
-    throw new Error(`A proposal store holds at most ${PROPOSAL_STORE_MAX_ENTRIES.toLocaleString('en-US')} proposals`);
-  }
   const res = await sendBackgroundMessage('productStoreCreate', { name: (name || '').trim(), items });
   if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to create the proposal store');
   return res.store;
@@ -965,8 +962,8 @@ export function buildProposalStoreFile(name, entries) {
   if (!safeName) throw new Error('A proposal store name is required');
   const items = (entries || []).map(normalizeProposalEntry);
   if (!items.length) throw new Error('Select at least one saved proposal');
-  if (items.length > PROPOSAL_STORE_MAX_ENTRIES) {
-    throw new Error(`A proposal store holds at most ${PROPOSAL_STORE_MAX_ENTRIES.toLocaleString('en-US')} proposals`);
+  if (items.length > PROPOSAL_STORE_FILE_MAX_ENTRIES) {
+    throw new Error(`A proposal store file holds at most ${PROPOSAL_STORE_FILE_MAX_ENTRIES.toLocaleString('en-US')} proposals`);
   }
   return {
     schemaVersion: PROPOSAL_STORE_FILE_VERSION,
