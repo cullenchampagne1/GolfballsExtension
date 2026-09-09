@@ -533,6 +533,12 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         body = body[:body.index("\ndef ", 1)]
         self.assertIn('{"label": "this period"', body)
         self.assertIn('{"label": "previous"', body)
+        # The transport split is two labelled figures, not a sentence in the
+        # value slot: `PA 68% · HANDOFF 32%`.
+        self.assertIn('{"label": "pa", "value": f"{pa_share}%"}', body)
+        self.assertIn('{"label": "handoff", "value": f"{100 - pa_share}%"}', body)
+        # No assertion on the ABSENCE of the old sentence: it survives in the
+        # docstring that explains why it is gone.
         # The pseudo-axis captions are gone.
         self.assertNotIn('f"{span}d ago"', body)
         self.assertNotIn('"value": "today"', body)
@@ -547,8 +553,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         body = body[:body.index("\ndef ", 1)]
         self.assertIn("func.date(ExtensionUsageEvent.occurred_at).label(\"day\"),\n"
                       "                   ExtensionUsageEvent.transport", body)
-        self.assertIn("def transport_note(window_keys)", body)
-        self.assertIn("transport_note(_keys)", body)
+        self.assertIn("def transport_stats(window_keys)", body)
+        self.assertIn("transport_stats(_keys)", body)
 
     def test_a_reference_curve_cannot_hold_the_lead_in_open(self):
         # `first` (the first day anything was recorded) is measured on the
