@@ -201,7 +201,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
-                "_presence_hourly_buckets", "_USAGE_COLORS", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
+                "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
+                "_SEV_OK", "_SEV_WARN", "_SEV_BAD",
                 "_USAGE_TRANSPORT_LABELS", "_REP_WINDOW_DAYS", "_rep_aggregates", "_ago",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_adoption",
