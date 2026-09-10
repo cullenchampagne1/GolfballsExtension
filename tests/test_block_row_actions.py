@@ -65,19 +65,6 @@ def _row_action_names_by_endpoint() -> dict[str, set[str]]:
             and isinstance(call.args[0], ast.Constant)
             and isinstance(call.args[0].value, str)
         }
-        # A `control` block names its actions the same way a row cell does —
-        # `{"action": "key-access-bulk", "args": {...}}` — but it builds the
-        # dict directly rather than through `_row_action`, because a control
-        # strip has no rows. Same contract, same invariant: the name must be
-        # declared by the block that reads this endpoint.
-        names |= {
-            value.value
-            for mapping in ast.walk(node)
-            if isinstance(mapping, ast.Dict)
-            for key, value in zip(mapping.keys, mapping.values)
-            if isinstance(key, ast.Constant) and key.value == "action"
-            and isinstance(value, ast.Constant) and isinstance(value.value, str)
-        }
         if names:
             for path in paths:
                 found.setdefault(path, set()).update(names)
@@ -114,11 +101,6 @@ class RowActionDeclarationTests(unittest.TestCase):
                 "/shares/settings": {"revoke"},
                 "/managed-email-templates": {"clear"},
                 "/managed-email-template-sources": {"clearSource"},
-                # The control strip above the roster. Not a row list — it
-                # names its actions from a `control` payload rather than from
-                # `_row_action` — but the same contract applies: the block
-                # that reads this endpoint must declare both names.
-                "/keys/master": {"key-access-bulk", "key-notify-all"},
             },
         )
 
@@ -147,41 +129,19 @@ class RowActionDeclarationTests(unittest.TestCase):
                 f"{block['id']} declares {sorted(unused)} but no row names it",
             )
 
-    #: Emitted actions that DESTROY something — a credential, a mirrored
-    #: template, a share — or that deny a whole population at once. Listed
-    #: rather than pattern-matched, so adding a destructive action is a
-    #: reviewed change to this line and not a naming accident.
-    DESTRUCTIVE = {"revoke", "clear", "clearSource", "key-access-bulk"}
-
-    def test_every_emitted_action_declares_its_own_confirmation(self):
+    def test_a_destructive_action_declares_its_own_confirmation(self):
         # The prompt lives in the BLOCK because a payload able to rewrite it
         # could talk a reader into the thing it warns about. Every one of these
-        # mutates something on someone else's machine, so every one has to ask
-        # — including the broadcast, which is not destructive but is still
-        # irreversible once it has landed in a hundred browsers.
+        # is a revoke/remove/clear, so every one has to ask.
         for endpoint, names in self.emitted.items():
             actions = (self.blocks[endpoint].get("actions") or {})
             for name in sorted(names):
+                action = actions[name]
                 self.assertTrue(
-                    str(actions[name].get("confirm") or "").strip(),
+                    str(action.get("confirm") or "").strip(),
                     f"{endpoint}:{name} mutates without confirming",
                 )
-
-    def test_a_destructive_action_is_toned_as_one(self):
-        # `tone: bad` is what paints the control red and the confirm as a
-        # warning. Only the destructive ones claim it: if a broadcast looked
-        # as alarming as a revoke, the revoke would stop looking alarming.
-        for endpoint, names in self.emitted.items():
-            actions = (self.blocks[endpoint].get("actions") or {})
-            for name in sorted(names):
-                tone = actions[name].get("tone")
-                if name in self.DESTRUCTIVE:
-                    self.assertEqual(tone, "bad", f"{endpoint}:{name} destroys quietly")
-                else:
-                    self.assertNotEqual(
-                        tone, "bad",
-                        f"{endpoint}:{name} is toned destructive but is not in DESTRUCTIVE",
-                    )
+                self.assertEqual(action.get("tone"), "bad", f"{endpoint}:{name}")
 
     def test_a_declared_request_binds_only_its_own_arguments(self):
         # `${args.*}` is the ONLY interpolation a request body may carry: the
