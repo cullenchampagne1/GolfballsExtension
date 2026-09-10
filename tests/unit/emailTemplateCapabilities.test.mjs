@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMAIL_TEMPLATE_CAPABILITY_KEYS,
+  canCustomizeImportedEmailTemplate,
+  canDuplicateEmailTemplateShare,
   canSubmitEmailTemplate,
   emailTemplateCanOwnShare,
   emailTemplateIsBucketEnrolled,
@@ -54,6 +56,27 @@ describe('managed email-template capabilities', () => {
     assert.equal(canSubmitEmailTemplate(allowedByLocalLibraryPolicy), true);
     assert.equal(canSubmitEmailTemplate(unrestricted), false);
     assert.equal(canSubmitEmailTemplate(parent), false);
+  });
+
+  it('allows share duplication only when creation and local-template usage are both enabled', () => {
+    assert.equal(canDuplicateEmailTemplateShare(resolveEmailTemplateCapabilities()), true);
+    assert.equal(canDuplicateEmailTemplateShare(resolveEmailTemplateCapabilities({
+      'emailTemplates.allowCreation': false,
+    })), false);
+    assert.equal(canDuplicateEmailTemplateShare(resolveEmailTemplateCapabilities({
+      'emailTemplates.allowLocalTemplateUsage': false,
+    })), false);
+    assert.equal(canDuplicateEmailTemplateShare(resolveEmailTemplateCapabilities({
+      'emailTemplates.allowParentAccount': true,
+      'emailTemplates.allowCreation': false,
+    })), false, 'parent status does not bypass explicit local creation policy');
+  });
+
+  it('allows retained-share customization only with local-template usage', () => {
+    assert.equal(canCustomizeImportedEmailTemplate(resolveEmailTemplateCapabilities()), true);
+    assert.equal(canCustomizeImportedEmailTemplate(resolveEmailTemplateCapabilities({
+      'emailTemplates.allowLocalTemplateUsage': false,
+    })), false);
   });
 
   it('gives ordinary installations the approved bucket without mutating the stored library', () => {

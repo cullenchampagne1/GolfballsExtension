@@ -22,6 +22,7 @@
 import { migrateTemplates } from '../lib/templateMigration.js';
 import { blankCustomAction, normalizeCustomAction } from '../lib/customActions.js';
 import {
+  canCustomizeImportedEmailTemplate,
   canSubmitEmailTemplate,
   emailTemplateIsEditable,
   filterLocalEmailTemplates,
@@ -508,7 +509,8 @@ async function applyTemplatePatch(tpl) {
   setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
   const storedTemplate = idx >= 0 ? templates[idx] : null;
-  const lockedImport = isImportedEmailTemplate(storedTemplate)
+  const importedTemplate = isImportedEmailTemplate(storedTemplate);
+  const lockedImport = importedTemplate
     || (isManagedEmailTemplate(storedTemplate)
       && !emailTemplateCapabilities.allowParentAccount);
   if (lockedImport) {
@@ -516,6 +518,8 @@ async function applyTemplatePatch(tpl) {
       toast('Imported email template overrides could not be saved.', true);
       return;
     }
+    if (importedTemplate
+        && !canCustomizeImportedEmailTemplate(emailTemplateCapabilities)) return;
     templates[idx] = applyImportedEmailTemplateOverrides(storedTemplate, tpl);
     await saveTemplates();
     return;

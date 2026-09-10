@@ -291,6 +291,7 @@ export function TemplateEditor({ tpl, onDelete }) {
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
 function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '', managed = false, submission = null }) {
+  const imported = isImportedEmailTemplate(tpl);
   const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
   const importRevision = (readOnly || submission)
     ? Math.max(1, Number(
@@ -472,11 +473,15 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
   // ~1 frame longer to appear but renders in its final shape.
   const [paEnabled, setPaEnabled] = useState(false);
   const [parentAccount, setParentAccount] = useState(false);
+  const [allowLocalTemplateUsage, setAllowLocalTemplateUsage] = useState(false);
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get(['featureFlags', 'devSettings'], ({ featureFlags, devSettings }) => {
       setPaEnabled(!!(featureFlags && featureFlags.powerAutomateEnabled));
       setParentAccount(devSettings?.['emailTemplates.allowParentAccount'] === true);
+      setAllowLocalTemplateUsage(
+        devSettings?.['emailTemplates.allowLocalTemplateUsage'] !== false,
+      );
       setPaReady(true);
     });
     function onChanged(changes) {
@@ -488,11 +493,19 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         setParentAccount(
           changes.devSettings.newValue?.['emailTemplates.allowParentAccount'] === true,
         );
+        setAllowLocalTemplateUsage(
+          changes.devSettings.newValue?.['emailTemplates.allowLocalTemplateUsage'] !== false,
+        );
       }
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
+  const shareOverridesLocked = imported && !allowLocalTemplateUsage;
+
+  useEffect(() => {
+    if (shareOverridesLocked) setSmartTarget(null);
+  }, [shareOverridesLocked]);
 
   // Recipient DOM picker — fires when user clicks the Pick button on
   // the recipient selector input. Namespaced by 'pick_recipient' so it
@@ -836,6 +849,12 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         </Callout>
       )}
 
+      {shareOverridesLocked && (
+        <Callout tone="neutral" style={{ marginBottom: 12 }}>
+          Local template usage is disabled for this account, so this shared template is fully read-only.
+        </Callout>
+      )}
+
       {/* Retained shares keep the production editor layout. LockedRegion dims
           and disables source-owned sections, while recipient-owned overrides
           remain normal controls and are enforced again by the save bridge. */}
@@ -856,17 +875,19 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
         </LockedRegion>
         <div style={{ flex: 1 }} />
         {paEnabled && (
-          <Segmented
-            value={senderRandomize ? '__random' : senderAccount}
-            onChange={(v) => {
-              if (v === '__random') setSenderRandomize(true);
-              else { setSenderRandomize(false); setSenderAccount(v); }
-            }}
-            options={[
-              ...SENDER_OPTIONS,
-              { id: '__random', label: 'Random', icon: <I.shuffle /> },
-            ]}
-          />
+          <LockedRegion locked={shareOverridesLocked}>
+            <Segmented
+              value={senderRandomize ? '__random' : senderAccount}
+              onChange={(v) => {
+                if (v === '__random') setSenderRandomize(true);
+                else { setSenderRandomize(false); setSenderAccount(v); }
+              }}
+              options={[
+                ...SENDER_OPTIONS,
+                { id: '__random', label: 'Random', icon: <I.shuffle /> },
+              ]}
+            />
+          </LockedRegion>
         )}
       </div>
 
@@ -930,11 +951,11 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
       )}
 
       {/* ── Successful-delivery follow-ups (all non-case email templates) ──
-          Deliberately OUTSIDE LockedRegion: like the follow-ups, the CC list is
-          recipient-owned, so it stays editable on imported and managed
-          templates and never travels in a share. */}
+          These values are recipient-owned and never travel in a share. They
+          remain editable on retained shares only while local-template usage
+          is enabled for this installation. */}
       {typeId !== 'case' && (
-        <div style={{ ...S.mb12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <LockedRegion locked={shareOverridesLocked} style={{ ...S.mb12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field
             label="CC"
             hint={ccInvalid.length
@@ -973,7 +994,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
               searchable={followUpActionOpts.length > 8}
             />
           </Field>
-        </div>
+        </LockedRegion>
       )}
 
       {/* ── Reply mode (non-case only — case templates always thread).
@@ -1185,7 +1206,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
 
       {/* ── Variables — VariableTable manages its own inline add form
            now, so we just pass the create callback directly. ── */}
-      <div style={S.mb12}>
+      <LockedRegion locked={shareOverridesLocked} style={S.mb12}>
         <VariableTable
           typeId={typeId}
           vars={displayVars}
@@ -1197,7 +1218,7 @@ function EditableTemplateEditor({ tpl, onDelete, readOnly = false, ownerName = '
           onExport={exportVarsJson}
           literalOverridesOnly={readOnly}
         />
-      </div>
+      </LockedRegion>
 
       <AnimatePresence>
         {smartTarget && (

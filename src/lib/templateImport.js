@@ -12,6 +12,11 @@
    sloppy blob can't poison storage.
    ─────────────────────────────────────────────────────────────────────────── */
 
+import {
+  canDuplicateEmailTemplateShare,
+  readEmailTemplateCapabilities,
+} from './emailTemplateCapabilities.js';
+
 const VALID_TYPES = ['order', 'account', 'case'];
 const VAR_TYPES   = ['schema', 'path', 'code', 'literal', 'regex', 'builtin', 'selector', 'attachment'];
 
@@ -397,6 +402,19 @@ export function importTemplates(templates) {
       });
     } catch (e) { reject(e); }
   });
+}
+
+/** Copy a shared template into the recipient's local library. Normalization
+ * deliberately issues fresh template/variation ids and drops share provenance,
+ * leaving an independent local document that never follows owner updates. */
+export async function duplicateSharedEmailTemplate(template, capabilities) {
+  const effectiveCapabilities = capabilities || await readEmailTemplateCapabilities();
+  if (!canDuplicateEmailTemplateShare(effectiveCapabilities)) {
+    throw new Error('Local template creation is disabled for this account');
+  }
+  const duplicate = normalizeTemplate(template, 0);
+  await importTemplates([duplicate]);
+  return { added: 1, template: duplicate };
 }
 
 /** Persist one server share once. Re-opening the same link is idempotent and

@@ -10,6 +10,7 @@ import {
 } from '../ui/index.js';
 import {
   buildEmailTemplateFile,
+  duplicateSharedEmailTemplate,
   importSharedEmailTemplate,
   importTemplates,
   importedEmailShare,
@@ -22,6 +23,7 @@ import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { ownedTemplateShares } from '../lib/templateShareSync.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
+  canDuplicateEmailTemplateShare,
   canSubmitEmailTemplate,
   emailTemplateCanOwnShare,
   emailTemplateIsEditable,
@@ -684,9 +686,9 @@ function FolderGroup({ folder, tpls, isNote, trackerById, summaryById, currentId
 }
 
 /* ── Root ───────────────────────────────────────────────────────── */
-/* Import one persistent email-template link, preview it, then retain its
-   server identity so the local copy remains read-only and removable. */
-function ImportTemplatesModal({ onClose, onDone }) {
+/* Preview one persistent email-template link, then either retain its server
+   identity or create a policy-gated independent local duplicate. */
+function ImportTemplatesModal({ capabilities, onClose, onDone }) {
   const fileInputRef = useRef(null);
   const [visible, setVisible] = useState(false);
   const closingRef = useRef(false);
@@ -694,6 +696,7 @@ function ImportTemplatesModal({ onClose, onDone }) {
   const [share, setShare] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const canDuplicate = canDuplicateEmailTemplateShare(capabilities);
   useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
   const finishClose = (callback = onClose) => {
     if (closingRef.current) return;
@@ -708,7 +711,9 @@ function ImportTemplatesModal({ onClose, onDone }) {
       const response = await sendBackgroundMessage('emailTemplateShareGet', { url: url.trim() });
       setShare({ ...response.share, template: normalizeTemplate(response.share?.template, 0) });
     } catch (e) {
-      setError(`${e.message}. You can import a JSON template file instead.`);
+      setError(canDuplicate
+        ? `${e.message}. You can import a JSON template file instead.`
+        : e.message);
     }
     finally { setBusy(false); }
   };
@@ -728,6 +733,9 @@ function ImportTemplatesModal({ onClose, onDone }) {
     setBusy(true);
     try {
       if (share.transport === 'json') {
+        if (!canDuplicate) {
+          throw new Error('Local template creation is disabled for this account');
+        }
         await importTemplates([share.template]);
         finishClose(() => onDone(1));
         return;
@@ -749,6 +757,18 @@ function ImportTemplatesModal({ onClose, onDone }) {
       finishClose(() => onDone(imported.added, null, imported.alreadyImported));
     } catch (e) { finishClose(() => onDone(0, e.message)); }
   };
+  const doDuplicate = async () => {
+    if (!share?.template || share.transport === 'json' || busy) return;
+    if (!canDuplicate) {
+      finishClose(() => onDone(0, 'Local template creation is disabled for this account'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const duplicated = await duplicateSharedEmailTemplate(share.template, capabilities);
+      finishClose(() => onDone(duplicated.added, null, false, 'duplicate'));
+    } catch (e) { finishClose(() => onDone(0, e.message)); }
+  };
   return createPortal(
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: visible ? 1 : 0 }} transition={SNAP}
@@ -764,7 +784,11 @@ function ImportTemplatesModal({ onClose, onDone }) {
           <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImportIcon size={14} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import shared email template</div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Load a persistent share link or JSON file to review it before importing.</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+              {canDuplicate
+                ? 'Load a persistent share link or JSON file to review it before importing.'
+                : 'Load a persistent share link to review it before importing.'}
+            </div>
           </div>
           <IconBtn size="sm" icon={<I.close />} onClick={() => finishClose()} />
         </div>
@@ -781,14 +805,16 @@ function ImportTemplatesModal({ onClose, onDone }) {
             style={{ flex: 1 }}
           />
           <Btn variant="tinted" size="md" onClick={load} disabled={!url.trim() || busy}>Load link</Btn>
-          <IconBtn
-            size="md"
-            icon={<I.upload />}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={busy}
-            title="Import JSON file"
-            aria-label="Import JSON file"
-          />
+          {canDuplicate && (
+            <IconBtn
+              size="md"
+              icon={<I.upload />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+              title="Import JSON file"
+              aria-label="Import JSON file"
+            />
+          )}
           </div>
           {share && (
               <div style={{ padding: '11px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
@@ -803,6 +829,14 @@ function ImportTemplatesModal({ onClose, onDone }) {
                 <div style={{ maxHeight: 180, overflow: 'auto', padding: 9, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-1)', color: 'var(--gb-text-secondary)', fontSize: 11, whiteSpace: 'pre-wrap' }}>
                   {String(share.template.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || 'Empty body'}
                 </div>
+                {share.transport !== 'json' && (
+                  <div style={{ marginTop: 9, paddingTop: 9, borderTop: '1px solid var(--gb-border-subtle)', fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+                    <strong style={{ color: 'var(--gb-text-secondary)' }}>Import</strong> keeps this template linked and read-only so owner changes continue to arrive.
+                    {canDuplicate
+                      ? <> <strong style={{ color: 'var(--gb-text-secondary)' }}>Duplicate locally</strong> creates a separate editable copy that will not track owner changes.</>
+                      : ' Local duplication is disabled for this account.'}
+                  </div>
+                )}
               </div>
           )}
           {error && (
@@ -813,8 +847,13 @@ function ImportTemplatesModal({ onClose, onDone }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
           <Btn variant="ghost" size="sm" onClick={() => finishClose()}>Cancel</Btn>
+          {share?.transport !== 'json' && canDuplicate && (
+            <Btn variant="tinted" size="sm" icon={<I.copy />} disabled={busy} onClick={doDuplicate}>
+              Duplicate locally
+            </Btn>
+          )}
           <Btn variant="primary" size="sm" icon={<ImportIcon />} disabled={!share || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>
-            Import template
+            {share?.transport === 'json' ? 'Import template' : 'Import shared'}
           </Btn>
         </div>
       </motion.div>
@@ -1238,11 +1277,13 @@ function TemplateSidebar() {
 
       {importOpen && capabilities.allowLinkImport && (
         <ImportTemplatesModal
+          capabilities={capabilities}
           onClose={() => setImportOpen(false)}
-          onDone={(n, err, alreadyImported = false) => {
+          onDone={(n, err, alreadyImported = false, operation = 'import') => {
             setImportOpen(false);
             if (err) notify.notify('Import failed — ' + err, { tone: 'warning' });
             else if (alreadyImported) notify.notify('This shared template is already imported.');
+            else if (operation === 'duplicate') notify.notify(`Duplicated ${n} template${n === 1 ? '' : 's'}.`);
             else notify.notify(`Imported ${n} template${n === 1 ? '' : 's'}.`);
           }}
         />

@@ -129,6 +129,15 @@ describe('settings menus', () => {
     assert.match(settingsPanelSource, /removeRetainedEmailTemplate\([\s\S]*?link\.id/);
   });
 
+  it('makes retained shares fully read-only when local-template usage is disabled', () => {
+    assert.match(templateEditorSource, /const shareOverridesLocked = imported && !allowLocalTemplateUsage/);
+    assert.match(templateEditorSource, /Local template usage is disabled for this account/);
+    assert.match(templateEditorSource, /<LockedRegion locked=\{shareOverridesLocked\}>[\s\S]*?<Segmented[\s\S]*?senderRandomize/);
+    assert.match(templateEditorSource, /<LockedRegion locked=\{shareOverridesLocked\} style=\{\{ \.\.\.S\.mb12[\s\S]*?label="CC"/);
+    assert.match(templateEditorSource, /<LockedRegion locked=\{shareOverridesLocked\} style=\{S\.mb12\}>[\s\S]*?<VariableTable/);
+    assert.match(editorBridgeSource, /importedTemplate[\s\S]*?!canCustomizeImportedEmailTemplate\(emailTemplateCapabilities\)\) return/);
+  });
+
   it('uses quiet icon-only provenance for managed template rows', () => {
     assert.doesNotMatch(templateRowSource, /managed && !managedEditable \? 'var\(--gb-fill-subtle\)/);
     assert.match(templateRowSource, /ownerShared[\s\S]*?var\(--gb-warning-tint-soft\)[\s\S]*?: 'transparent'/);
@@ -197,6 +206,16 @@ describe('settings menus', () => {
     assert.match(importTemplatesModalSource, /<IconBtn[\s\S]*?icon=\{<I\.upload \/>\}/);
     assert.match(importTemplatesModalSource, /aria-label="Import JSON file"/);
     assert.doesNotMatch(importTemplatesModalSource, />Open JSON<|>Import JSON</);
+  });
+
+  it('offers eligible link recipients tracked import or an independent local duplicate', () => {
+    assert.match(importTemplatesModalSource, /const canDuplicate = canDuplicateEmailTemplateShare\(capabilities\)/);
+    assert.match(importTemplatesModalSource, /Import[\s\S]*keeps this template linked and read-only/);
+    assert.match(importTemplatesModalSource, /Duplicate locally[\s\S]*separate editable copy/);
+    assert.match(importTemplatesModalSource, /duplicateSharedEmailTemplate\(share\.template, capabilities\)/);
+    assert.match(importTemplatesModalSource, /emailTemplateShareImport/);
+    assert.match(importTemplatesModalSource, /share\?\.transport !== 'json' && canDuplicate/);
+    assert.match(sidebarSource, /<ImportTemplatesModal[\s\S]*?capabilities=\{capabilities\}/);
   });
 
   it('refreshes an already-open Settings share table after a remote mutation', () => {

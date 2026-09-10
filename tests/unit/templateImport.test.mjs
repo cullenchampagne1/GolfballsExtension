@@ -25,7 +25,8 @@ globalThis.chrome = {
 
 const {
   normalizeTemplate, parseTemplateBlob, buildEmailTemplateFile, parseEmailTemplateFile,
-  applyImportedEmailTemplateOverrides, importTemplates, importSharedEmailTemplate, importedEmailShare,
+  applyImportedEmailTemplateOverrides, duplicateSharedEmailTemplate, importTemplates,
+  importSharedEmailTemplate, importedEmailShare,
   isImportedEmailTemplate, markImportedEmailTemplate, removeImportedEmailTemplate,
   removeRetainedEmailTemplate,
   EMAIL_TEMPLATE_FILE_KIND, EMAIL_TEMPLATE_FILE_VERSION,
@@ -275,6 +276,53 @@ describe('retained shared email templates', () => {
     assert.deepEqual({ added: second.added, alreadyImported: second.alreadyImported }, { added: 0, alreadyImported: true });
     assert.equal(store.templates.length, 1);
     assert.equal(store.templates[0].body, minimal.body, 're-import does not overwrite the retained snapshot');
+  });
+
+  it('duplicates a share into independent local templates with fresh identities', async () => {
+    store.templates = [];
+    const retained = markImportedEmailTemplate(normalizeTemplate({
+      ...minimal,
+      subject: 'Original subject',
+      variations: [{ label: 'Alternate', body: 'Alternate body' }],
+    }), share);
+
+    const allowed = { allowCreation: true, allowLocalTemplateUsage: true };
+    const first = await duplicateSharedEmailTemplate(retained, allowed);
+    const second = await duplicateSharedEmailTemplate(retained, allowed);
+
+    assert.equal(first.added, 1);
+    assert.equal(store.templates.length, 2);
+    assert.equal(store.templates[0].name, retained.name);
+    assert.equal(store.templates[0].subject, retained.subject);
+    assert.equal(store.templates[0].body, retained.body);
+    assert.equal(store.templates[0].shareImport, undefined);
+    assert.equal(isImportedEmailTemplate(store.templates[0]), false);
+    assert.notEqual(store.templates[0].id, retained.id);
+    assert.notEqual(store.templates[0].id, store.templates[1].id);
+    assert.notEqual(store.templates[0].variations[0].id, retained.variations[0].id);
+    assert.notEqual(store.templates[0].variations[0].id, store.templates[1].variations[0].id);
+    assert.equal(second.template.id, store.templates[1].id);
+  });
+
+  it('rejects duplication when creation or local-template usage is disabled', async () => {
+    store.templates = [];
+    const source = normalizeTemplate(minimal);
+
+    await assert.rejects(
+      duplicateSharedEmailTemplate(source, {
+        allowCreation: false,
+        allowLocalTemplateUsage: true,
+      }),
+      /Local template creation is disabled/,
+    );
+    await assert.rejects(
+      duplicateSharedEmailTemplate(source, {
+        allowCreation: true,
+        allowLocalTemplateUsage: false,
+      }),
+      /Local template creation is disabled/,
+    );
+    assert.deepEqual(store.templates, []);
   });
 
   it('persists only recipient-owned overrides on an imported template', () => {

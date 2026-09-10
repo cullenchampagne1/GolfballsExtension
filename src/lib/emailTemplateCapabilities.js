@@ -41,6 +41,22 @@ export function canSubmitEmailTemplate(capabilities) {
       || resolved.allowLocalTemplateUsage === false);
 }
 
+/** A detached copy creates a new local template, so both authoring policy and
+ * access to the local template library must be open. Link import itself is a
+ * separate capability because retained shares stay governed by their owner. */
+export function canDuplicateEmailTemplateShare(capabilities) {
+  const resolved = capabilities || resolveEmailTemplateCapabilities();
+  return resolved.allowCreation === true
+    && resolved.allowLocalTemplateUsage === true;
+}
+
+/** Retained-share overrides live only on this installation. Managed accounts
+ * without local-template usage may consume the share, but cannot customize it. */
+export function canCustomizeImportedEmailTemplate(capabilities) {
+  const resolved = capabilities || resolveEmailTemplateCapabilities();
+  return resolved.allowLocalTemplateUsage === true;
+}
+
 export function filterLocalEmailTemplates(templates, devSettings = {}) {
   const all = Array.isArray(templates) ? templates : [];
   const capabilities = resolveEmailTemplateCapabilities(devSettings);
