@@ -51,8 +51,10 @@ const projectManifest = present('revstack.project.json')
 
 const backendRoot = new URL('../revstack-backend/', root);
 const hasBackend = existsSync(backendRoot);
-const extensionPy = hasBackend ? await read('routes/extension.py', backendRoot) : '';
-const authPy = hasBackend ? await read('routes/auth.py', backendRoot) : '';
+const hasExtensionRoute = present('routes/extension.py', backendRoot);
+const hasAuthRoute = present('routes/auth.py', backendRoot);
+const extensionPy = hasExtensionRoute ? await read('routes/extension.py', backendRoot) : '';
+const authPy = hasAuthRoute ? await read('routes/auth.py', backendRoot) : '';
 
 const relayRoot = new URL('../revstack-system-services/revstack-email-relay/', root);
 const hasRelayService = existsSync(relayRoot);
@@ -117,7 +119,7 @@ describe('backend contract · enrollment', () => {
       'extension must enroll via POST /auth/extension-installation');
   });
 
-  it('is served by the core auth route', { skip: !hasBackend }, () => {
+  it('is served by the core auth route', { skip: !hasAuthRoute }, () => {
     assert.ok(backendServes(authPy, 'post', '/extension-installation'),
       'backend routes/auth.py must serve POST /extension-installation');
   });
@@ -125,7 +127,7 @@ describe('backend contract · enrollment', () => {
   it('agrees on the enrollment response fields', () => {
     for (const key of ['installation_id', 'api_key', 'key_prefix']) {
       assert.ok(installationAuth.includes(key), `extension must read enrollment field "${key}"`);
-      if (hasBackend) {
+      if (hasAuthRoute) {
         assert.ok(new RegExp(`["']${key}["']\\s*:`).test(authPy), `backend enrollment must return "${key}"`);
       }
     }
@@ -176,9 +178,11 @@ describe('backend contract · project client endpoints', () => {
     )), 'PUT client routes must be registered or parent merges fail with 403 before routing');
   });
 
-  it('keeps core /extension compatibility redirect-only', { skip: !hasBackend }, () => {
-    assert.ok(extensionPy.includes('deprecated_extension_forwarder'),
-      'core /extension compatibility must be redirect-only');
+  it('keeps any remaining core /extension compatibility redirect-only', {
+    skip: !hasBackend,
+  }, () => {
+    assert.ok(!hasExtensionRoute || extensionPy.includes('deprecated_extension_forwarder'),
+      'a remaining core /extension route may only forward to the project-owned API');
   });
 });
 

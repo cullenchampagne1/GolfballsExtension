@@ -255,7 +255,7 @@ describe('extension API guard', () => {
     assert.equal(requests.length, 0, 'blocked paths must never reach fetch');
   });
 
-  it('rejects disallowed methods and GET requests that carry a body', async () => {
+  it('rejects disallowed methods, GET bodies, and unserialized bodies', async () => {
     const { client, requests } = makeSandbox();
     await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'PUT' }), /Blocked non-extension API path/);
     await assert.rejects(client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'DELETE' }), /Blocked non-extension API path/);
@@ -269,7 +269,7 @@ describe('extension API guard', () => {
     );
     await assert.rejects(
       client.apiFetch(`${CLIENT_BASE}/ping`, { method: 'POST', body: { not: 'a string' } }),
-      /Extension API body must be a bounded serialized string/,
+      /Extension API body must be a serialized string/,
     );
     assert.equal(requests.length, 0, 'blocked methods must never reach fetch');
   });

@@ -42,6 +42,11 @@ const helpCompanion = localRuntimeAvailable
   ? readFileSync(resolve(root, 'src/ui/components/HelpCompanion.jsx'), 'utf8') : '';
 const project = localRuntimeAvailable
   ? JSON.parse(readFileSync(resolve(root, 'revstack.project.json'), 'utf8')) : {};
+const blockSource = (name) => localRuntimeAvailable
+  ? readFileSync(resolve(root, `blocks/${name}.block.yaml`), 'utf8') : '';
+const emailLinksBlock = blockSource('email-links');
+const managedTemplatesBlock = blockSource('managed-email-templates');
+const managedSourcesBlock = blockSource('managed-email-template-sources');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
@@ -53,12 +58,9 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
   });
 
   it('uses the editable block-shell title as the only email-share heading', () => {
-    const listHelper = blocks.match(/def _list_block[\s\S]*?# --- secondary surfaces/)?.[0] || '';
-    const emailLinks = listHelper.match(/_list_block\("email-links"[\s\S]*?until revoked"\)/)?.[0] || '';
-
-    assert.match(listHelper, /ConsoleList is never handed a `title`/);
-    assert.match(listHelper, /hide_title=False/);
-    assert.match(emailLinks, /"Shared email templates"/);
+    assert.match(emailLinksBlock, /^title: Shared email templates$/m);
+    assert.match(emailLinksBlock, /^view: table$/m);
+    assert.match(emailLinksBlock, /^header:[\s\S]*?eyebrow: SHARES/m);
     assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
   });
 
@@ -73,19 +75,20 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
     assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
     assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
-    assert.match(sourceColumns, /"key": "source", "label": "Source account", "width": "1fr"/);
-    assert.doesNotMatch(sourceColumns, /"key": "source"[^\n]*"grow": True/);
-    assert.match(sourceColumns, /"key": "templates", "label": "Count"[^\n]*"width": "44px"[^\n]*"min_w": 2/);
-    assert.match(sourceColumns, /"key": "updated"[^\n]*"width": "0\.9fr"[^\n]*"min_w": 2/);
-    assert.match(sourceColumns, /"key": "act"[^\n]*"width": "58px"/);
+    assert.match(sourceColumns, /"key": "source", "label": "Source account", "grow": True, "priority": "high"/);
+    assert.match(sourceColumns, /"key": "templates", "label": "Count", "priority": "medium"/);
+    assert.match(sourceColumns, /"key": "updated", "label": "Last update", "priority": "low"/);
+    assert.match(sourceColumns, /"key": "act", "label": "Clear", "type": "action", "priority": "high"/);
+    assert.doesNotMatch(sourceColumns, /"width"/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
   });
 
   it('keeps override status and named actions proportionate', () => {
-    assert.match(overridesRoute, /"key": "managed", "label": "Managed", "width": "88px", "min_w": 2/);
-    assert.match(overridesRoute, /"key": "settings", "label": "Edit"[^\n]*"width": "50px"/);
-    assert.match(overridesRoute, /"key": "clear", "label": "Clear"[^\n]*"width": "50px"/);
+    assert.match(overridesRoute, /"key": "managed", "label": "Managed", "min_w": 2/);
+    assert.match(overridesRoute, /"key": "settings", "label": "Edit", "type": "action"/);
+    assert.match(overridesRoute, /"key": "clear", "label": "Clear", "type": "action"/);
+    assert.doesNotMatch(overridesRoute, /"width"/);
     assert.doesNotMatch(overridesRoute, /"key": "(?:settings|clear)", "label": ""/);
   });
 
@@ -113,14 +116,13 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
   });
 
   it('exposes managed-template inventory and former-parent cleanup blocks', () => {
-    assert.match(
-      blocks,
-      /_list_block\("managed-email-templates", "Managed email templates"[\s\S]*?"managed-email-templates", 4, 4,[\s\S]*?universal bucket"\)/,
-    );
-    assert.match(
-      blocks,
-      /_list_block\("managed-email-template-sources", "Template bucket sources"[\s\S]*?"managed-email-template-sources", 4, 3,[\s\S]*?min_w=1\)/,
-    );
+    assert.match(managedTemplatesBlock, /^id: managed-email-templates$/m);
+    assert.match(managedTemplatesBlock, /^title: Managed email templates$/m);
+    assert.match(managedTemplatesBlock, /^size: \{ w: 4, h: 4, min: \{ w: 1, h: 2 \} \}$/m);
+    assert.match(managedTemplatesBlock, /sub: Approved templates in the universal bucket/);
+    assert.match(managedSourcesBlock, /^id: managed-email-template-sources$/m);
+    assert.match(managedSourcesBlock, /^title: Template bucket sources$/m);
+    assert.match(managedSourcesBlock, /^size: \{ w: 4, h: 3, min: \{ w: 1, h: 2 \} \}$/m);
     assert.match(routes, /@router\.get\("\/managed-email-templates"\)/);
     assert.match(routes, /"editor": _owner_cell\(editor\)/);
     assert.match(routes, /"updated": updated/);
@@ -153,11 +155,12 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"key": "level"[\s\S]*?"type": "select"/);
   });
 
-  it('closes per-user settings rows with a narrow, visible reset column', () => {
+  it('closes per-user settings rows with a visible named reset column', () => {
     assert.match(keyOverridesRoute, /"clear": _clear_override_action[\s\S]*?if override else "—"/);
-    assert.match(keyOverridesRoute, /"key": "setting", "label": "Setting", "width": "1\.8fr"/);
-    assert.match(keyOverridesRoute, /"key": "act", "label": "Edit"[\s\S]*?"width": "58px"/);
-    assert.match(keyOverridesRoute, /"key": "clear", "label": "Reset"[\s\S]*?"width": "62px"/);
+    assert.match(keyOverridesRoute, /"key": "setting", "label": "Setting"/);
+    assert.match(keyOverridesRoute, /"key": "act", "label": "Edit", "type": "action"/);
+    assert.match(keyOverridesRoute, /"key": "clear", "label": "Reset", "type": "action"/);
+    assert.doesNotMatch(keyOverridesRoute, /"width"/);
     assert.doesNotMatch(keyOverridesRoute, /"key": "clear", "label": ""/);
   });
 
