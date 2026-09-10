@@ -24,11 +24,13 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const TELEMETRY = read('lib/usage-telemetry.js');
-const ROUTES = read('.revstack/routes.py');
+const ROUTES_URL = new URL('../../.revstack/routes.py', import.meta.url);
+const HAS_LOCAL_RUNTIME = existsSync(ROUTES_URL);
+const ROUTES = HAS_LOCAL_RUNTIME ? read('.revstack/routes.py') : '';
 
 // The reporter's own accept/reject behaviour is exercised for real in
 // `tests/integration/usage-telemetry.test.mjs`, which already loads it with
@@ -60,7 +62,11 @@ describe('an over-cap latency sample is dropped, not clamped', () => {
   });
 });
 
-describe('the endpoint excludes the samples that were already recorded', () => {
+describe('the endpoint excludes the samples that were already recorded', {
+  // `.revstack` is generated locally and intentionally absent from the clean
+  // source checkout used by the production publisher.
+  skip: !HAS_LOCAL_RUNTIME,
+}, () => {
   it('drops the ceiling itself, where the fabricated ones sit', () => {
     // Every clamped sample landed on exactly `_LATENCY_OUTLIER_MS`, so `<`
     // rather than `<=` removes that whole population and nothing else.
@@ -94,7 +100,9 @@ describe('the endpoint excludes the samples that were already recorded', () => {
   });
 });
 
-describe('the adoption chart has the third curve the design draws', () => {
+describe('the adoption chart has the third curve the design draws', {
+  skip: !HAS_LOCAL_RUNTIME,
+}, () => {
   it('sends Active, Returning and New', () => {
     // The gap between Active and Returning IS the day's new installs, which is
     // what makes the card answer "was this growth or the same people back".
