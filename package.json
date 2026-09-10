@@ -110,6 +110,10 @@
       "file": "tests/unit/chargeModal.test.mjs"
     },
     {
+      "name": "modal \u00b7 submit-proof gift-set naming",
+      "file": "tests/unit/submitProofNames.test.mjs"
+    },
+    {
       "name": "modal \u00b7 order-edit math & cart iframe",
       "file": "tests/unit/orderEditModal.test.mjs"
     },
