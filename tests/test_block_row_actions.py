@@ -94,7 +94,11 @@ class RowActionDeclarationTests(unittest.TestCase):
         self.assertEqual(
             self.emitted,
             {
+                # The three share tables — email templates, product stores and
+                # settings bundles — plus the managed bucket's two clears.
                 "/shares/email": {"revoke"},
+                "/shares/products": {"revoke"},
+                "/shares/settings": {"revoke"},
                 "/managed-email-templates": {"clear"},
                 "/managed-email-template-sources": {"clearSource"},
             },
@@ -183,7 +187,8 @@ class MigratedRegistrarTests(unittest.TestCase):
         # the v3 descriptor and the card would render on the old primitive.
         registrar = (ROOT / ".revstack" / "blocks.py").read_text()
         for block_id in ("email-links", "managed-email-templates",
-                         "managed-email-template-sources"):
+                         "managed-email-template-sources",
+                         "product-stores", "settings-shares"):
             self.assertNotRegex(
                 registrar, rf'_list_block\(\s*"{re.escape(block_id)}"',
                 f"{block_id} is registered twice")
