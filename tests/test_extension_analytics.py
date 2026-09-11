@@ -29,6 +29,45 @@ ROUTES = ROOT / ".revstack" / "routes.py"
 #: buckets are days rather than hours.
 _TRIM_SPAN = 30
 
+#: The scope `_is_golfballs_key` looks for. Its real value comes from the
+#: backend's auth module; only the matching matters here.
+_CLIENT_SCOPE = "extension:client"
+
+
+def _key(credential_id: str, prefix: str, **overrides) -> dict:
+    """One row of `auth_manager.list_api_keys()`.
+
+    The keyring is a dict API, not an ORM one — `_keys_facts` reads it for
+    lifecycle (revoked / expired / role / last used) and reads the DATABASE for
+    the two access switches. Both halves have to be real for the leaderboard's
+    columns to mean anything, so this mirrors the dict shape rather than being
+    stubbed away.
+    """
+    row = {
+        "id": credential_id,
+        "name": f"Golfballs Toolkit · {prefix}",
+        "prefix": prefix,
+        "scopes": [_CLIENT_SCOPE, "/projects/golfballs-extension/keys"],
+        "role": "installation",
+        "created_at": "2026-01-01T00:00:00",
+        "expires_at": None,
+        "revoked_at": None,
+        "last_used_at": datetime.utcnow(),
+    }
+    row.update(overrides)
+    return row
+
+
+#: Five installations: three with usage, one enrolled and never used, one
+#: revoked. The last two are what the leaderboard's new reach is measured by.
+_KEYRING = [
+    _key("cred-a", "aaaa"),
+    _key("cred-b", "bbbb"),
+    _key("cred-c", "cccc", last_used_at=datetime.utcnow() - timedelta(days=1)),
+    _key("cred-d", "dddd", last_used_at=None),
+    _key("cred-z", "zzzz", revoked_at="2026-02-01T00:00:00"),
+]
+
 
 class Base(DeclarativeBase):
     pass
@@ -77,6 +116,24 @@ class AuthApiKey(Base):
     __tablename__ = "auth_api_keys"
     id = Column(String(36), primary_key=True)
     key_prefix = Column(String(32), nullable=True)
+    #: Not a column: `_access_state` reads `key.scopes` to find the legacy
+    #: assistant grant, and the mirror models only carry what the SQL touches.
+    scopes = ()
+
+
+class ExtensionInstallationAccess(Base):
+    """The two reversible switches the leaderboard's columns now flip.
+
+    `subject_id` is a credential id, or the reserved `*` global subject — the
+    override that denies everybody at once. Both rows have to coexist, which
+    is the distinction the roster's STATE column drew and the leaderboard's
+    switch title states.
+    """
+
+    __tablename__ = "extension_installation_access"
+    subject_id = Column(String(36), primary_key=True)
+    extension_enabled = Column(Boolean, nullable=True)
+    assistant_enabled = Column(Boolean, nullable=True)
 
 
 def _load_routes_functions(names, extra_globals=None):
@@ -195,6 +252,23 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             session.add(AuthApiKey(id="cred-a", key_prefix="aaaa"))
             session.add(AuthApiKey(id="cred-b", key_prefix="bbbb"))
             session.add(AuthApiKey(id="cred-c", key_prefix="cccc"))
+            # Install D: enrolled and never used. It has no usage events at
+            # all, so `_rep_aggregates` cannot see it — and it is exactly the
+            # install somebody opens this card to switch ON, so the leaderboard
+            # has to list it anyway (see `_rep_subjects`).
+            session.add(AuthApiKey(id="cred-d", key_prefix="dddd"))
+            # Install Z: revoked. Nothing left to flip and nothing to rank, so
+            # it must not be a row at all.
+            session.add(AuthApiKey(id="cred-z", key_prefix="zzzz"))
+
+            # The access switches themselves. A missing row means "on" — the
+            # default is granted — so only the exceptions are seeded:
+            #   cred-a  help companion explicitly granted
+            #   cred-b  toolkit switched off for this install alone
+            session.add(ExtensionInstallationAccess(
+                subject_id="cred-a", extension_enabled=True, assistant_enabled=True))
+            session.add(ExtensionInstallationAccess(
+                subject_id="cred-b", extension_enabled=False))
             session.commit()
 
         cls.routes = _load_routes_functions(
@@ -204,6 +278,13 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
                 "_SEV_OK", "_SEV_WARN", "_SEV_BAD",
                 "_USAGE_TRANSPORT_LABELS", "_REP_WINDOW_DAYS", "_rep_aggregates", "_ago",
+                # The credential half of the pair. The leaderboard carries the
+                # access switches now and the scorecard's footer gates on the
+                # same facts, so both endpoints reach the keyring — and a test
+                # that stubbed it would be testing the stub's idea of who is
+                # switched on.
+                "_rep_subjects", "_keys_facts", "_key_status", "_is_golfballs_key",
+                "_access_state", "_row_action", "_row_toggle", "_KEYS_DORMANT_HOURS",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_adoption",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
@@ -219,9 +300,16 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "math": math, "bisect_left": bisect_left,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
                 "select": select, "Session": Session, "Optional": Optional,
-                "auth_manager": type("Auth", (), {"engine": cls.engine})(),
+                "auth_manager": type("Auth", (), {
+                    "engine": cls.engine,
+                    "list_api_keys": staticmethod(lambda: list(_KEYRING)),
+                })(),
                 "ExtensionUsageSession": ExtensionUsageSession, "ExtensionUsageEvent": ExtensionUsageEvent,
                 "ExtensionInstallationIdentity": ExtensionInstallationIdentity, "AuthApiKey": AuthApiKey,
+                "ExtensionInstallationAccess": ExtensionInstallationAccess,
+                "EXTENSION_CLIENT_SCOPE": _CLIENT_SCOPE,
+                "_PROJECT_SCOPE_PREFIX": "/projects/golfballs-extension/",
+                "_KEY_NAME_PREFIXES": ("Golfballs Toolkit",),
                 "_USAGE_LIVE_MINUTES": 5,
             },
         )
@@ -235,8 +323,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
     def test_leaderboard_ranks_the_busier_rep_first_and_names_it_by_identity(self):
         payload = self.routes["_console_usage_leaderboard"]()
         rows = payload["rows"]
-        self.assertEqual(len(rows), 3)
-        self.assertEqual(rows[0]["_select"], "cred-a")
+        # Four: the three installs with usage, plus the enrolled-but-unused
+        # cred-d. cred-z is revoked and is not a row at all.
+        self.assertEqual([row["_select"] for row in rows],
+                         ["cred-a", "cred-b", "cred-c", "cred-d"])
         # Zero-padded so the rank column is a fixed-width rail past ten.
         self.assertEqual(rows[0]["rank"], {"kind": "mono", "text": "01"})
         self.assertEqual(rows[0]["rep"]["text"], "Alex Rep")
@@ -245,6 +335,58 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # finite rate, never a crash from a divide-by-zero denominator.
         idle_row = next(row for row in rows if row["_select"] == "cred-c")
         self.assertEqual(idle_row["actions"]["text"], "0.0")
+
+    def test_leaderboard_lists_the_install_that_has_never_been_used(self):
+        # The roster this card absorbed listed every installation; this one
+        # ranked only the ones with telemetry. An install enrolled this morning
+        # is exactly the one somebody opens the card to switch ON, so it has to
+        # be a row — ranked last, which is the truth about it.
+        rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
+        unused = rows["cred-d"]
+        self.assertEqual(unused["actions"]["text"], "0.0")
+        self.assertEqual(unused["rep"]["sub"], "dddd · never seen · 0 sessions")
+        # Never seen is the warning dot, not the healthy one.
+        self.assertEqual(unused["rep"]["dot"], "warn")
+        # And it carries the switch, which is the whole point of listing it.
+        self.assertEqual(unused["toolkit"]["action"], "key-access")
+        self.assertNotIn("cred-z", rows, "a revoked install has nothing to flip")
+
+    def test_leaderboard_rows_carry_the_two_access_switches(self):
+        rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
+        # The knob shows the install's OWN position, not the effective one —
+        # that is what the click changes.
+        self.assertTrue(rows["cred-a"]["toolkit"]["checked"])
+        self.assertFalse(rows["cred-b"]["toolkit"]["checked"], "cred-b is switched off")
+        # The switch posts the OPPOSITE of where it sits, as its own argument.
+        self.assertEqual(rows["cred-b"]["toolkit"]["args"],
+                         {"key_id": "cred-b", "enabled": True})
+        self.assertEqual(rows["cred-a"]["toolkit"]["kind"], "toggle")
+        # Help Companion: granted for cred-a, off but offered for cred-c…
+        self.assertTrue(rows["cred-a"]["help"]["checked"])
+        self.assertFalse(rows["cred-c"]["help"]["checked"])
+        self.assertEqual(rows["cred-a"]["help"]["action"], "key-chat")
+        # …and ABSENT for cred-b, which is not enrolled in the extension at
+        # all: granting the companion to it would grant nothing.
+        self.assertIsNone(rows["cred-b"]["help"])
+
+    def test_a_switch_denied_by_the_global_override_says_so_on_itself(self):
+        # Two facts, one control. The knob has to keep showing this install's
+        # own setting — that is what the click changes — so the reason nobody
+        # is working when the GLOBAL switch is off is carried by the label.
+        # This was the roster's STATE column; the roster is gone.
+        with Session(self.engine) as session:
+            session.add(ExtensionInstallationAccess(
+                subject_id="*", extension_enabled=False))
+            session.commit()
+        try:
+            rows = {row["_select"]: row
+                    for row in self.routes["_console_usage_leaderboard"]()["rows"]}
+            self.assertTrue(rows["cred-a"]["toolkit"]["checked"], "its own switch is still on")
+            self.assertIn("GLOBAL", rows["cred-a"]["toolkit"]["label"])
+        finally:
+            with Session(self.engine) as session:
+                session.delete(session.get(ExtensionInstallationAccess, "*"))
+                session.commit()
 
     def test_leaderboard_rep_cell_qualifies_the_name_with_its_install(self):
         # A display name alone can't be acted on — two reps can share one, and
@@ -279,9 +421,13 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
 
     def test_leaderboard_footer_states_the_baseline_the_bars_are_drawn_against(self):
         payload = self.routes["_console_usage_leaderboard"]()
+        # The baseline is over the MEASURED reps — `_rep_aggregates`, not the
+        # padded subject list — so enrolling a laptop nobody has opened cannot
+        # move the line every `vs median` bar is drawn against. The count in
+        # front of it is the whole list, which is why it says `installs`.
         rates = sorted(entry["actions_per_hour"] for entry in self.routes["_rep_aggregates"]()["reps"].values())
         median = rates[len(rates) // 2]
-        self.assertEqual(payload["footer"]["note"], f"3 reps · median {median:.1f} act/hr")
+        self.assertEqual(payload["footer"]["note"], f"4 installs · median {median:.1f} act/hr")
         self.assertIn("scorecard", payload["footer"]["hint"])
         # `summary` would draw a second rail above the column labels restating
         # what the sort pills and the row count already say.
@@ -297,9 +443,17 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # The view measures the real content now
         # (`runtime/listColumns.layoutColumns`), so a width here — in ANY unit —
         # is the payload guessing at pixels for values it cannot see.
+        #
+        # The two ACTION columns are the exception, and for the opposite
+        # reason: a switch is 34px whatever is in the row, so there is no
+        # content to measure — it is the HEADING that needs the track. That is
+        # the width the roster stated for the same two switches.
         columns = {column["key"]: column
                    for column in self.routes["_console_usage_leaderboard"]()["columns"]}
         for key, column in columns.items():
+            if column.get("type") == "action":
+                self.assertIn("width", column, f"{key} is a control with nothing to measure")
+                continue
             self.assertNotIn("width", column, f"{key} pins a track the view measures")
         self.assertTrue(columns["rep"]["grow"], "the subject is still the subject")
 
@@ -382,19 +536,42 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # `stat.grid` requires at least one item, and more to the point a card
         # that keeps its shape while it waits tells the reader WHAT it is
         # waiting for — an empty grid collapsing to nothing reads as broken.
-        empty = self.routes["_rep_aggregates"]
+        subjects = self.routes["_rep_subjects"]
         try:
-            self.routes["_rep_aggregates"] = lambda: {
-                "reps": {}, "day_keys": [], "tool_catalog": 0}
+            self.routes["_rep_subjects"] = lambda: {
+                "reps": {}, "day_keys": [], "tool_catalog": 0, "facts": {}}
             payload = self.routes["_console_usage_rep_scorecard"](None)
         finally:
-            self.routes["_rep_aggregates"] = empty
+            self.routes["_rep_subjects"] = subjects
         self.assertEqual(payload["name"], "No reps yet", "the empty branch ran")
         self.assertEqual([item["value"] for item in payload["stats"]["items"]],
                          ["—", "—", "—", "—"])
         self.assertEqual(len(payload["stats"]["items"]), 4)
         self.assertEqual(payload["dwell"]["bars"], [])
         self.assertIn("empty", payload["chart"])
+        # The footer gates, all shut: with no subject there is nothing to
+        # open settings for, message, or revoke — so the shelf opens onto
+        # nothing rather than offering a revoke with no key_id behind it.
+        self.assertEqual(payload["id"], "")
+        self.assertFalse(payload["alive"])
+        self.assertFalse(payload["can_message"])
+
+    def test_scorecard_carries_the_gates_its_footer_shelf_acts_through(self):
+        # The `keys-detail` card's three controls live on this card's footer
+        # now, and each one's `when:` is a field the SERVER answers — only it
+        # knows whether the credential is still there to act on.
+        scorecard = self.routes["_console_usage_rep_scorecard"]("cred-a")
+        # The id the footer posts. Bound from the payload rather than from a
+        # cell, so the card cannot act on a rep other than the one it names.
+        self.assertEqual(scorecard["id"], "cred-a")
+        self.assertTrue(scorecard["alive"])
+        self.assertTrue(scorecard["can_message"])
+        # cred-b's own switch is off, so it is not enrolled in the extension:
+        # a notification to it goes nowhere and the control is absent rather
+        # than present and inert. It is still alive, so it can still be revoked.
+        switched_off = self.routes["_console_usage_rep_scorecard"]("cred-b")
+        self.assertTrue(switched_off["alive"])
+        self.assertFalse(switched_off["can_message"])
 
     def test_scorecard_funnel_ring_severity_tracks_the_designs_thresholds(self):
         # 3 of 7 stages = 43% — at or above the design's 40% "healthy" mark, so
@@ -649,7 +826,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # cred-a leads on volume; cred-b touched a funnel stage cred-a's own
         # count can't beat on breadth, so the two orderings must differ in
         # SOME sortable dimension — and rank must always follow the order.
-        reps = self.routes["_rep_aggregates"]()["reps"]
+        # `_rep_subjects`, not `_rep_aggregates`: the ranking covers every
+        # living install now, including the ones with nothing measured, and
+        # they rank last rather than being left out.
+        reps = self.routes["_rep_subjects"]()["reps"]
         for sort in ("actions", "funnel", "tools"):
             payload = self.routes["_console_usage_leaderboard"](sort)
             aggregate = self.routes["_LEADERBOARD_SORTS"][sort][0]

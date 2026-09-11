@@ -141,10 +141,10 @@ class RowActionDeclarationTests(unittest.TestCase):
                 "/shares/settings": {"revoke"},
                 "/managed-email-templates": {"clear"},
                 "/managed-email-template-sources": {"clearSource"},
-                # The installations roster. Not revokes — two reversible
-                # switches, which is the first time this file has seen a row
-                # action that is not destructive.
-                "/keys/roster": {"key-access", "key-chat"},
+                # The rep leaderboard, which absorbed the installations roster
+                # and its two switches. Not revokes — two reversible controls,
+                # the only row actions in this file that are not destructive.
+                "/usage/leaderboard": {"key-access", "key-chat"},
             },
         )
 
@@ -163,8 +163,8 @@ class RowActionDeclarationTests(unittest.TestCase):
     def test_no_block_declares_an_action_nothing_names(self):
         # `rowClick` is the view's own gesture, not a row action, so it is not
         # expected to appear in any cell. A card's FOOTER is the other place a
-        # block may name one — see `keys-detail`, whose actions are all
-        # footer-named because the card has no rows at all.
+        # block may name one — see `analytics-scorecard`, whose three actions
+        # are all footer-named because the card has no rows at all.
         for endpoint, block in self.blocks.items():
             declared = set((block.get("actions") or {})) - {"rowClick"}
             if not declared:
@@ -196,7 +196,7 @@ class RowActionDeclarationTests(unittest.TestCase):
                 self.assertEqual(action.get("tone"), "bad", f"{endpoint}:{name}")
 
     def test_a_reversible_control_does_not_ask(self):
-        # The roster's access switches are the everyday gesture and undo
+        # The leaderboard's access switches are the everyday gesture and undo
         # themselves in one click. Confirming those is how an operator learns
         # to click through the confirm on the revoke.
         for endpoint, names in self.emitted.items():
