@@ -31,18 +31,51 @@ BLOCKS = ROOT / "blocks"
 PROJECT_ID = "golfballs-extension"
 
 
+#: Calls whose first argument NAMES a declared action.
+#:
+#: `_row_toggle` is the switch form of `_row_action` — same contract, same
+#: first argument — so a roster's access column has to be scanned exactly like
+#: a share table's revoke button.
+_EMITTERS = ("_row_action", "_row_toggle")
+
+
+def _named_actions(node: ast.AST) -> set[str]:
+    """Action names emitted inside one function body."""
+    return {
+        call.args[0].value
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id in _EMITTERS
+        and call.args
+        and isinstance(call.args[0], ast.Constant)
+        and isinstance(call.args[0].value, str)
+    }
+
+
 def _row_action_names_by_endpoint() -> dict[str, set[str]]:
-    """Every `_row_action("name", ...)` call, grouped by the route it sits in.
+    """Every emitted action name, grouped by the route that serves it.
 
     Parsed rather than grepped: the call is nested inside a dict literal inside
     a loop inside an async def, and the enclosing route is the only thing that
     says which BLOCK is supposed to declare the name.
+
+    A route may build its payload in a `_console_*` helper rather than inline —
+    most of the newer ones do, because the builder is testable on its own and
+    the route is then three lines. So helper bodies are scanned too and folded
+    into whichever routes CALL them. Without that, moving a payload into a
+    helper would silently empty this invariant for that endpoint, which is the
+    one failure mode a guard like this must not have.
     """
     tree = ast.parse(ROUTES.read_text())
+    functions = {
+        node.name: node for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    emitted = {name: _named_actions(node) for name, node in functions.items()}
+
     found: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
+    for node in functions.values():
         paths = [
             decorator.args[0].value
             for decorator in node.decorator_list
@@ -55,20 +88,27 @@ def _row_action_names_by_endpoint() -> dict[str, set[str]]:
         ]
         if not paths:
             continue
-        names = {
-            call.args[0].value
-            for call in ast.walk(node)
-            if isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Name)
-            and call.func.id == "_row_action"
-            and call.args
-            and isinstance(call.args[0], ast.Constant)
-            and isinstance(call.args[0].value, str)
-        }
+        names = set(emitted.get(node.name) or set())
+        # …plus whatever the helpers this route calls emit. One level deep is
+        # the shape in use; a builder that called a second builder would want
+        # this widened rather than worked around.
+        for call in ast.walk(node):
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
+                names |= emitted.get(call.func.id) or set()
         if names:
             for path in paths:
                 found.setdefault(path, set()).update(names)
     return found
+
+
+def _footer_action_names(block: dict) -> set[str]:
+    """Actions a card's footer names — the other place a block may use one."""
+    footer = ((block.get("layout") or {}).get("footer") or {})
+    return {
+        str(entry.get("action"))
+        for entry in (footer.get("actions") or [])
+        if isinstance(entry, dict) and entry.get("action")
+    }
 
 
 def _blocks_by_data_path() -> dict[str, dict]:
@@ -101,6 +141,10 @@ class RowActionDeclarationTests(unittest.TestCase):
                 "/shares/settings": {"revoke"},
                 "/managed-email-templates": {"clear"},
                 "/managed-email-template-sources": {"clearSource"},
+                # The installations roster. Not revokes — two reversible
+                # switches, which is the first time this file has seen a row
+                # action that is not destructive.
+                "/keys/roster": {"key-access", "key-chat"},
             },
         )
 
@@ -116,32 +160,57 @@ class RowActionDeclarationTests(unittest.TestCase):
                 f"{sorted(declared)} — the row would draw no button",
             )
 
-    def test_no_block_declares_a_row_action_nothing_emits(self):
+    def test_no_block_declares_an_action_nothing_names(self):
         # `rowClick` is the view's own gesture, not a row action, so it is not
-        # expected to appear in any cell.
+        # expected to appear in any cell. A card's FOOTER is the other place a
+        # block may name one — see `keys-detail`, whose actions are all
+        # footer-named because the card has no rows at all.
         for endpoint, block in self.blocks.items():
             declared = set((block.get("actions") or {})) - {"rowClick"}
             if not declared:
                 continue
-            unused = declared - self.emitted.get(endpoint, set())
+            used = self.emitted.get(endpoint, set()) | _footer_action_names(block)
+            unused = declared - used
             self.assertFalse(
                 unused,
-                f"{block['id']} declares {sorted(unused)} but no row names it",
+                f"{block['id']} declares {sorted(unused)} but nothing names it",
             )
+
+    #: Emitted actions that DESTROY something — a credential, a mirrored
+    #: template, a share. Listed rather than pattern-matched, so adding a
+    #: destructive action is a reviewed change to this line and not a naming
+    #: accident.
+    DESTRUCTIVE = {"revoke", "clear", "clearSource"}
 
     def test_a_destructive_action_declares_its_own_confirmation(self):
         # The prompt lives in the BLOCK because a payload able to rewrite it
-        # could talk a reader into the thing it warns about. Every one of these
-        # is a revoke/remove/clear, so every one has to ask.
+        # could talk a reader into the thing it warns about.
         for endpoint, names in self.emitted.items():
             actions = (self.blocks[endpoint].get("actions") or {})
-            for name in sorted(names):
+            for name in sorted(names & self.DESTRUCTIVE):
                 action = actions[name]
                 self.assertTrue(
                     str(action.get("confirm") or "").strip(),
-                    f"{endpoint}:{name} mutates without confirming",
+                    f"{endpoint}:{name} destroys without confirming",
                 )
                 self.assertEqual(action.get("tone"), "bad", f"{endpoint}:{name}")
+
+    def test_a_reversible_control_does_not_ask(self):
+        # The roster's access switches are the everyday gesture and undo
+        # themselves in one click. Confirming those is how an operator learns
+        # to click through the confirm on the revoke.
+        for endpoint, names in self.emitted.items():
+            actions = (self.blocks[endpoint].get("actions") or {})
+            for name in sorted(names - self.DESTRUCTIVE):
+                action = actions[name]
+                self.assertFalse(
+                    str(action.get("confirm") or "").strip(),
+                    f"{endpoint}:{name} is reversible but asks anyway",
+                )
+                self.assertNotEqual(
+                    action.get("tone"), "bad",
+                    f"{endpoint}:{name} is toned destructive but is not in DESTRUCTIVE",
+                )
 
     def test_a_declared_request_binds_only_its_own_arguments(self):
         # `${args.*}` is the ONLY interpolation a request body may carry: the
