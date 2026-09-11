@@ -27,7 +27,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES = ROOT / ".revstack" / "routes.py"
-BLOCKS = ROOT / "blocks"
+BLOCKS = ROOT / ".revstack" / "blocks"
 PROJECT_ID = "golfballs-extension"
 
 
