@@ -12,9 +12,11 @@ directly, so this test has no cross-repo import dependency.
 """
 
 import ast
+import json
 import math
 import unittest
 from bisect import bisect_left
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -285,6 +287,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 # switched on.
                 "_rep_subjects", "_keys_facts", "_key_status", "_is_golfballs_key",
                 "_access_state", "_row_action", "_row_toggle", "_KEYS_DORMANT_HOURS",
+                "_avg_by_surface",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_adoption",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
@@ -600,6 +603,36 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(ago(now - timedelta(minutes=12), now), "12m ago")
         self.assertEqual(ago(now - timedelta(hours=5), now), "5h ago")
         self.assertEqual(ago(now - timedelta(days=5), now), "5d ago")
+
+    def test_a_database_average_reaches_the_payload_as_a_plain_float(self):
+        """The scorecard's 500, and the reason no test saw it coming.
+
+        `func.avg` is not one type. SQLite — what every test here runs on —
+        answers a Python float. Postgres, what this actually runs on, answers
+        a `Decimal`, and `json.dumps` has no encoder for one: the whole card
+        500s on a number that is otherwise perfectly correct.
+
+        So this asserts the CAST rather than the query, with the type the
+        tests' own database will never produce. Every dwell figure is derived
+        from these averages, and only one of them has to reach the payload.
+        """
+        avg = self.routes["_avg_by_surface"]
+        converted = avg([("Toolbar Popup", Decimal("1462.5")), ("Composer", Decimal(900))])
+        self.assertEqual(converted, {"Toolbar Popup": 1462.5, "Composer": 900.0})
+        for value in converted.values():
+            self.assertIsInstance(value, float)
+        # It is JSON now, which is the whole point.
+        json.dumps(converted)
+        # A surface with no samples at all is not a zero-millisecond dwell.
+        self.assertEqual(avg([("Composer", None)]), {})
+
+    def test_the_whole_scorecard_payload_survives_json_encoding(self):
+        # The guard above pins the one type that broke; this pins the payload
+        # as a whole, so the next `datetime` or `Decimal` that creeps into a
+        # field is a failure here rather than a 500 on the card. It passes on
+        # SQLite either way — its job is to catch the NEXT one.
+        json.dumps(self.routes["_console_usage_rep_scorecard"]("cred-a"))
+        json.dumps(self.routes["_console_usage_leaderboard"]())
 
     def test_adoption_trend_draws_active_returning_and_new(self):
         """Three curves, as the design does — and the third is the point.
