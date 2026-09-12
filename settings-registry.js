@@ -4,155 +4,205 @@
   root.GB_SETTINGS_REGISTRY = Object.freeze({
   "schemaVersion": 1,
   "features": {
-    "copyIdsEnabled": {
+    "emailTemplatesEnabled": {
       "type": "bool",
       "default": true,
-      "label": "Copy IDs",
-      "managedDefault": true
+      "label": "Email Templates",
+      "managedDefault": true,
+      "section": "Email & Templates",
+      "description": "Template dropdown, resolved variables, and Send button in the popup."
     },
     "chargeEnabled": {
       "type": "bool",
       "default": true,
       "label": "Charge Card",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Email & Templates",
+      "description": "Charge / Refund button in the email popup."
     },
     "orderEditEnabled": {
       "type": "bool",
       "default": true,
       "label": "Order Edit",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Email & Templates",
+      "description": "Order Edit button in the email popup."
     },
     "emailPreviewEnabled": {
       "type": "bool",
       "default": true,
       "label": "Email Preview",
-      "managedDefault": true
-    },
-    "imagePreviewEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Image Viewer",
-      "managedDefault": true
-    },
-    "calendarEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Order Dates",
-      "managedDefault": true
-    },
-    "watchListEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Watchlist",
-      "managedDefault": true
-    },
-    "autoPushEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Auto Push",
-      "managedDefault": true
-    },
-    "signifydGlowEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Signifyd Glow",
-      "managedDefault": true
-    },
-    "taskListEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Task List",
-      "managedDefault": true
-    },
-    "marginCalcEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Margin Calculator",
-      "managedDefault": true
-    },
-    "crmSearchEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "CRM Search",
-      "managedDefault": true
-    },
-    "phoneFinderEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Phone Finder",
-      "managedDefault": true
-    },
-    "emailTemplatesEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Email Templates",
-      "managedDefault": true
-    },
-    "powerAutomateEnabled": {
-      "type": "bool",
-      "default": false,
-      "label": "Power Automate",
-      "managedDefault": true
-    },
-    "actionsShelfEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Quick Actions Shelf",
-      "managedDefault": true
-    },
-    "giftCatalogEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Gifting Catalog",
-      "managedDefault": true
-    },
-    "mockupStudioEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Mockup Studio",
-      "managedDefault": true
-    },
-    "callLogEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Call Log",
-      "managedDefault": true
-    },
-    "quickTaskEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "Quick Task",
-      "managedDefault": true
-    },
-    "crmNewContactEnabled": {
-      "type": "bool",
-      "default": true,
-      "label": "New Contact",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Email & Templates",
+      "description": "Click email rows in Case Email History to open the full thread."
     },
     "textPreviewEnabled": {
       "type": "bool",
       "default": true,
       "label": "Text Preview",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Email & Templates",
+      "description": "Hover preview of case notes / chat transcripts."
     },
     "workflowManagerEnabled": {
       "type": "bool",
       "default": true,
       "label": "Workflow Manager",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "Run one reusable set of steps for each selected account or contact."
     },
     "notificationsEnabled": {
       "type": "bool",
       "default": true,
       "label": "Notifications",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "Receive targeted messages and completion alerts in the toolbar notification center."
     },
     "trackersEnabled": {
       "type": "bool",
       "default": false,
       "label": "Trackers",
-      "managedDefault": true
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "Track opportunities, proposals, and recent orders in the background as you work."
+    },
+    "crmSearchEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "CRM Search",
+      "managedDefault": true,
+      "section": "CRM & Contacts",
+      "description": "Quick search for customers and orders (Ctrl+K)."
+    },
+    "crmNewContactEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "New Contact",
+      "managedDefault": true,
+      "section": "CRM & Contacts",
+      "description": "Quick-create a CRM contact (Ctrl+Q)."
+    },
+    "callLogEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Call Log",
+      "managedDefault": true,
+      "section": "CRM & Contacts",
+      "description": "Log calls from contact / account pages."
+    },
+    "quickTaskEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Quick Task",
+      "managedDefault": true,
+      "section": "CRM & Contacts",
+      "description": "Create a quick task for a contact."
+    },
+    "taskListEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Task List",
+      "managedDefault": true,
+      "section": "CRM & Contacts",
+      "description": "Full task list for order todos (Ctrl+X)."
+    },
+    "marginCalcEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Margin Calculator",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Margin + profit metrics on order pages (Ctrl+M)."
+    },
+    "watchListEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Watchlist",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Track orders across sessions."
+    },
+    "calendarEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Order Dates",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Ship dates + production timeline calendar."
+    },
+    "autoPushEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Auto Push",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Auto-push order date/note updates to the order."
+    },
+    "copyIdsEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Copy IDs",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Copy all order IDs on the index page."
+    },
+    "signifydGlowEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Signifyd Glow",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Glow orders by Signifyd score."
+    },
+    "phoneFinderEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Phone Finder",
+      "managedDefault": true,
+      "section": "Orders & Pricing",
+      "description": "Scan a contact’s orders for a phone number."
+    },
+    "imagePreviewEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Image Viewer",
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "View / extract logo images, the 3D ball preview, and Submit Proof (popup)."
+    },
+    "giftCatalogEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Gifting Catalog",
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "Gifting catalog, customization, and monograms."
+    },
+    "mockupStudioEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Mockup Studio",
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "Generate product mockups in durable image batches."
+    },
+    "actionsShelfEnabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Quick Actions Shelf",
+      "managedDefault": true,
+      "section": "Tools",
+      "description": "Floating bottom-right quick-actions shelf (Shift×2)."
+    },
+    "powerAutomateEnabled": {
+      "type": "bool",
+      "default": false,
+      "label": "Power Automate",
+      "managedDefault": true,
+      "section": "Integration",
+      "description": "Route emails through your Power Automate flow for silent sending. Off = pre-filled Outlook windows."
     }
   },
   "developerSettings": {
@@ -160,12 +210,14 @@
       "type": "bool",
       "default": true,
       "label": "Animated number displays",
+      "description": "Counts up to the value over time. Turn off for instant snap.",
       "managedDefault": true
     },
     "numberDisplay.durationMs": {
       "type": "number",
       "default": 400,
       "label": "Number display duration",
+      "description": "How long the count-up animation takes.",
       "managedDefault": true,
       "min": 0,
       "max": 5000
@@ -174,84 +226,98 @@
       "type": "bool",
       "default": false,
       "label": "Popup: ignore page context",
+      "description": "Show all order + account templates in the popup regardless of the current page. Variables resolve as unmatched.",
       "managedDefault": true
     },
     "salesFantasy.enabled": {
       "type": "bool",
       "default": false,
       "label": "Sales Fantasy",
+      "description": "Show the temporary Sales Fantasy event launcher in the extension popup.",
       "managedDefault": true
     },
     "proposalDebug.enabled": {
       "type": "bool",
       "default": false,
       "label": "Proposal Debug: intercept submit requests",
+      "description": "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.",
       "managedDefault": true
     },
     "trackers.debugLog": {
       "type": "bool",
       "default": false,
       "label": "Trackers: log every sweep",
+      "description": "Narrate background tracking in the console: the window each sweep asks the CRM for, the rows it read, what it stored, and why any row was passed over. The searching half logs in the CRM tab; the storing half in the service worker (chrome://extensions → Inspect views: service worker). Off = silent, which is how Trackers normally run.",
       "managedDefault": true
     },
     "pageEngine.indexingEnabled": {
       "type": "bool",
       "default": false,
       "label": "Engine Indexing",
+      "description": "Build an encrypted local Page Engine index whenever an Account or Contact in the configured territory is extracted. Order and Opportunity pages are never stored. Off by default.",
       "managedDefault": false
     },
     "pageEngine.territory": {
       "type": "string",
       "default": "",
       "label": "Engine Territory",
+      "description": "Exact Territory value used to admit Account and Contact snapshots into the local index. The numeric Territory ID is preferred; the exact visible name is also accepted.",
       "managedDefault": false
     },
     "golfballViewer.showDebugHud": {
       "type": "bool",
       "default": false,
       "label": "Golfball viewer: camera debug HUD",
+      "description": "Overlay the 3D viewer with a live camera-position / orbit-angle readout plus a copy button. Use it to dial in a default camera framing.",
       "managedDefault": true
     },
     "golfballViewer.renderDebug": {
       "type": "bool",
       "default": false,
       "label": "Golfball viewer: render diagnostics",
+      "description": "Overlay a live render-debug panel — WebGL tier, GPU/driver string, decal geometry + material flags, shader-compile errors, draw calls — with a copy button. Use it to capture exactly why the print is or is not rendering on a given machine.",
       "managedDefault": true
     },
     "imageViewer.ballChipOnly": {
       "type": "bool",
       "default": false,
       "label": "Image Viewer: ball & chip only",
+      "description": "Hide the full model dropdown in the Image Viewer 3D strip and replace it with a small ball/chip toggle next to the color swatch. For reps who only need a ball or a poker-chip render. Export photos (copy/download) still work for both models.",
       "managedDefault": true
     },
     "emailTemplates.allowCreation": {
       "type": "bool",
       "default": true,
       "label": "Email Template Creation",
+      "description": "Show email-template creation controls and permit new local email templates. Note-template creation is unaffected.",
       "managedDefault": true
     },
     "emailTemplates.allowParentAccount": {
       "type": "bool",
       "default": false,
       "label": "Email Template Parent Account",
+      "description": "Make this installation a collaborative manager of the universal approved-template bucket. Existing local templates merge into the bucket; edits sync to other parents and managed users.",
       "managedDefault": true
     },
     "emailTemplates.allowLinkImport": {
       "type": "bool",
       "default": true,
       "label": "Email Template Link Import",
+      "description": "Show the template import control and permit loading persistent, read-only shared-template links.",
       "managedDefault": true
     },
     "emailTemplates.allowLocalTemplateUsage": {
       "type": "bool",
       "default": true,
       "label": "Allow Local Template Usage",
+      "description": "Allow this installation to use its private local library. Turning this off preserves those rows but shows only management-approved templates and retained user shares.",
       "managedDefault": true
     },
     "emailTemplates.maxDailyBulkSend": {
       "type": "number",
       "default": 0,
       "label": "Max Daily Bulk Send",
+      "description": "Maximum number of bulk-send deliveries allowed per day. 0 means unlimited. Runtime enforcement is implemented by the bulk-send feature.",
       "managedDefault": true,
       "min": 0
     },
@@ -259,18 +325,21 @@
       "type": "bool",
       "default": true,
       "label": "Allow Bulk Sending",
+      "description": "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces.",
       "managedDefault": true
     },
     "email.localPart": {
       "type": "string",
       "default": "",
       "label": "Email account host",
+      "description": "Required for Power Automate delivery. Enter the local part of your sender address (the portion before @), for example \"alex\".",
       "managedDefault": false
     },
     "golfballViewer.ballScale": {
       "type": "number",
       "default": 1,
       "label": "Golfball viewer: default ball scale",
+      "description": "Initial scale of the ball when 3D opens (1 = native size). Wheel zoom still overrides during use.",
       "managedDefault": true,
       "min": 0.4,
       "max": 2.5
@@ -279,6 +348,7 @@
       "type": "number",
       "default": 0.9,
       "label": "Golfball viewer: default gift-set scale",
+      "description": "Initial scale of the assembled gift box (balls + chips + tees) when shown in the Image Viewer 3D mode. The box frames larger than a ball, so this defaults below 1. Wheel zoom still overrides.",
       "managedDefault": true,
       "min": 0.3,
       "max": 2.5
@@ -287,6 +357,7 @@
       "type": "number",
       "default": 0,
       "label": "Golfball viewer: default ball rotation X (deg)",
+      "description": "Initial pitch rotation of the ball around the X axis at first 3D open. Drag-to-rotate still overrides during use.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -295,6 +366,7 @@
       "type": "number",
       "default": 0,
       "label": "Golfball viewer: default ball rotation Y (deg)",
+      "description": "Initial yaw rotation of the ball around the Y axis at first 3D open.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -303,6 +375,7 @@
       "type": "number",
       "default": 0,
       "label": "Golfball viewer: default ball rotation Z (deg)",
+      "description": "Initial roll rotation of the ball around the Z axis at first 3D open.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -311,6 +384,7 @@
       "type": "number",
       "default": 0.5208,
       "label": "Golfball viewer: print area scale",
+      "description": "Size of the printed logo on the ball, as a fraction of the ball DIAMETER (the visible face). Spec: 0.875\" imprint on a regulation 1.680\" ball = 0.875/1.680 ≈ 0.5208 (52.08% of the face). Higher = larger print.",
       "managedDefault": true,
       "min": 0.1,
       "max": 1
@@ -319,6 +393,7 @@
       "type": "number",
       "default": 0.01,
       "label": "Golfball viewer: auto-spin speed",
+      "description": "Radians per frame the model turns when the ↻ auto-rotate button is on (shows both poles/sides). Default 0.01 (~0.6°/frame).",
       "managedDefault": true,
       "min": 0,
       "max": 0.1
@@ -327,96 +402,112 @@
       "type": "bool",
       "default": false,
       "label": "Golfball viewer: preview export pose",
+      "description": "Lock the live 3D view to the export-photo pose (the per-model Snapshot position/scale/rotation below) so you can see and dial in exactly how Copy/Download will frame each model. Disables drag/zoom/spin while on.",
       "managedDefault": true
     },
     "marginCalc.draggable": {
       "type": "bool",
       "default": true,
       "label": "Margin Calculator: draggable mode",
+      "description": "When on, the Margin Calculator is a draggable tool window with a click-through backdrop. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "imageViewer.draggable": {
       "type": "bool",
       "default": false,
       "label": "Image Viewer: draggable mode",
+      "description": "When on, the Image Viewer is a draggable tool window. When off, it sits centered and closes on outside-click.",
       "managedDefault": true
     },
     "watchList.draggable": {
       "type": "bool",
       "default": false,
       "label": "Watch List: draggable mode",
+      "description": "When on, the Watch List is a draggable tool window. When off, it sits centered and closes on outside-click.",
       "managedDefault": true
     },
     "crmCreateContact.draggable": {
       "type": "bool",
       "default": true,
       "label": "CRM New Contact: draggable mode",
+      "description": "When on, the New Contact modal is a draggable tool window. When off, it sits centered and closes on outside-click.",
       "managedDefault": true
     },
     "crmCreateContact.useMock": {
       "type": "bool",
       "default": false,
       "label": "CRM New Contact: force mock mode",
+      "description": "Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for local previews or when the API is down. The modal auto-mocks when not in an extension context.",
       "managedDefault": true
     },
     "crmSearch.draggable": {
       "type": "bool",
       "default": false,
       "label": "CRM Search: draggable mode",
+      "description": "When on, the CRM Search modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "taskList.draggable": {
       "type": "bool",
       "default": false,
       "label": "Task List: draggable mode",
+      "description": "When on, the Task List modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "submitProof.draggable": {
       "type": "bool",
       "default": true,
       "label": "Submit Proof: draggable mode",
+      "description": "When on, the Submit Proof modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "calendar.draggable": {
       "type": "bool",
       "default": false,
       "label": "Order Dates: draggable mode",
+      "description": "When on, the Order Dates calendar is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "callLog.draggable": {
       "type": "bool",
       "default": false,
       "label": "Call Log: draggable mode",
+      "description": "When on, the Call Log modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "emailPreview.draggable": {
       "type": "bool",
       "default": false,
       "label": "Email Preview: draggable mode",
+      "description": "When on, the Email Preview modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "quickTask.draggable": {
       "type": "bool",
       "default": false,
       "label": "Quick Task: draggable mode",
+      "description": "When on, the Quick Task modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "textPreview.draggable": {
       "type": "bool",
       "default": false,
       "label": "Text Preview: draggable mode",
+      "description": "When on, the Text Preview modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.",
       "managedDefault": true
     },
     "crmCreateContact.requireAccount": {
       "type": "bool",
       "default": true,
       "label": "CRM New Contact: require account",
+      "description": "When on, the New Contact modal blocks submit until an account is selected (or typed). Creating a contact without an account is allowed by the API but is bad practice. Turn off to override.",
       "managedDefault": true
     },
     "watchList.autoDeleteCompletedDays": {
       "type": "number",
       "default": 5,
       "label": "Watch list: auto-delete completed items after (days)",
+      "description": "Completed watch-list items are quietly purged after this many days. Counted from when the item was marked done. 0 disables auto-delete (keep forever).",
       "managedDefault": true,
       "min": 0,
       "max": 365
@@ -425,6 +516,7 @@
       "type": "number",
       "default": 30,
       "label": "Margin calculator: minimum allowed margin",
+      "description": "Threshold for the low-margin warning in the Margin Calculator. The warning shows when the entered margin is positive but below this value. 0 disables the warning entirely.",
       "managedDefault": true,
       "min": 0,
       "max": 100
@@ -433,6 +525,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Gifting Catalog: zoom scale",
+      "description": "Magnification of the Corporate Gifting Catalog modal (1 = 100%). Default 1.8 reads large on screen; lower it if the modal overflows.",
       "managedDefault": true,
       "min": 1,
       "max": 3
@@ -441,6 +534,7 @@
       "type": "number",
       "default": 1.2,
       "label": "Workflow Manager: zoom scale",
+      "description": "Independent magnification of the Workflow Manager modal (1 = 100%). Supports 0.5× for dense sites and smaller screens without multiplying the shared Modals scale.",
       "managedDefault": true,
       "min": 0.5,
       "max": 2
@@ -449,6 +543,7 @@
       "type": "number",
       "default": 2,
       "label": "Gifting Catalog: live preview ball scale",
+      "description": "Initial zoom of the ball in the catalog customization preview (separate from the Image Viewer). Wheel zoom still overrides during use.",
       "managedDefault": true,
       "min": 0.5,
       "max": 5
@@ -457,6 +552,7 @@
       "type": "number",
       "default": 1.58,
       "label": "Gifting Catalog: live preview poker-chip scale",
+      "description": "Initial zoom of the poker chip in the catalog preview (chips are small ball-markers, so they frame smaller than the ball). Wheel zoom still overrides.",
       "managedDefault": true,
       "min": 0.5,
       "max": 5
@@ -465,6 +561,7 @@
       "type": "number",
       "default": 1,
       "label": "Gifting Catalog: live preview divot-tool scale",
+      "description": "Initial zoom of the divot tool in the catalog preview (it is elongated, so it frames smaller than the ball/chip). Wheel zoom still overrides.",
       "managedDefault": true,
       "min": 0.3,
       "max": 5
@@ -473,6 +570,7 @@
       "type": "number",
       "default": 1.1,
       "label": "Gifting Catalog: live preview bartender-tool scale",
+      "description": "Initial zoom of the bartender divot tool (with bottle opener) in the catalog preview. Wheel zoom still overrides.",
       "managedDefault": true,
       "min": 0.3,
       "max": 5
@@ -481,6 +579,7 @@
       "type": "number",
       "default": 1,
       "label": "Gifting Catalog: live preview gift-set scale",
+      "description": "Initial zoom of the assembled gift box (balls + chips + tees in the box) in the catalog preview. Wheel zoom still overrides.",
       "managedDefault": true,
       "min": 0.3,
       "max": 5
@@ -489,6 +588,7 @@
       "type": "number",
       "default": -22,
       "label": "Gifting Catalog: gift-set view tilt (X)",
+      "description": "Top-down tilt of the gift box in the catalog preview — how far you look down INTO the box. 0 = straight-on (flat top view), more negative = steeper 3/4 angle.",
       "managedDefault": true,
       "min": -80,
       "max": 20
@@ -497,6 +597,7 @@
       "type": "number",
       "default": 0,
       "label": "Gifting Catalog: gift-set view tilt (Y)",
+      "description": "Side tilt of the gift box in the catalog preview (turn slightly off head-on). 0 = front-on.",
       "managedDefault": true,
       "min": -45,
       "max": 45
@@ -505,6 +606,7 @@
       "type": "number",
       "default": 24,
       "label": "Gifting Catalog: re-index interval (hours)",
+      "description": "How long the catalog (products + pricing) is cached before a fresh live pull. Lower it if prices change often; 0 = always pull fresh on open.",
       "managedDefault": true,
       "min": 0,
       "max": 168
@@ -513,12 +615,14 @@
       "type": "string",
       "default": "",
       "label": "Gifting Catalog: extra product URLs",
+      "description": "golfballs.com product pages to import into the catalog on top of the live crawl, comma- or newline-separated. For specially-priced commissionable items that sit at their own URL rather than the usual \"_1\" variant, which the product feed does not always return — without this a rep cannot quote them at all.",
       "managedDefault": true
     },
     "giftCatalog.defaultSort": {
       "type": "select",
       "default": "popular",
       "label": "Gifting Catalog: default sort",
+      "description": "Which sort the catalog opens on. Commissionable product stays on top under every option; this orders items within that group.",
       "managedDefault": true,
       "options": [
         "popular",
@@ -531,6 +635,7 @@
       "type": "select",
       "default": "comfortable",
       "label": "Gifting Catalog: card density",
+      "description": "Comfortable shows larger product cards; compact fits more per row.",
       "managedDefault": true,
       "options": [
         "comfortable",
@@ -541,6 +646,7 @@
       "type": "select",
       "default": "Live Order",
       "label": "Submit Proof: default order type",
+      "description": "Which order type the Submit Proof modal pre-selects.",
       "managedDefault": true,
       "options": [
         "Live Order",
@@ -552,6 +658,7 @@
       "type": "number",
       "default": 0,
       "label": "Popup: force matched count",
+      "description": "Force the first N templates in the popup dropdown to render with the matched-template styling (brand dot + Matched group). 0 = off.",
       "managedDefault": true,
       "min": 0,
       "max": 50
@@ -560,36 +667,42 @@
       "type": "bool",
       "default": false,
       "label": "Force mock data",
+      "description": "When on, modals read mock fixtures instead of live CRM data. The extension also auto-mocks when running outside an extension context (e.g. tests), so this is mainly for previewing mock data on a live page.",
       "managedDefault": true
     },
     "popup.ignoreContext.charge": {
       "type": "bool",
       "default": false,
       "label": "Popup: ignore context — Charge Card",
+      "description": "Keeps the Charge Card button enabled even with no order context.",
       "managedDefault": true
     },
     "popup.ignoreContext.orderEdit": {
       "type": "bool",
       "default": false,
       "label": "Popup: ignore context — Order Edit",
+      "description": "Keeps the Order Edit button enabled even with no message id.",
       "managedDefault": true
     },
     "popup.ignoreContext.watch": {
       "type": "bool",
       "default": false,
       "label": "Popup: ignore context — Watch Order",
+      "description": "Keeps the Watch button enabled even with no detected entity (order / contact / account).",
       "managedDefault": true
     },
     "popup.ignoreContext.submitProof": {
       "type": "bool",
       "default": false,
       "label": "Popup: ignore context — Submit Proof",
+      "description": "Keeps the Submit Proof button enabled even with no order / contact / account context.",
       "managedDefault": true
     },
     "golfballViewer.snap.ball.x": {
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball: position X",
+      "description": "Export-photo position X for the Ball render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -598,6 +711,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball: position Y",
+      "description": "Export-photo position Y for the Ball render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -606,6 +720,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball: position Z",
+      "description": "Export-photo position Z for the Ball render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -614,6 +729,7 @@
       "type": "number",
       "default": 1.7,
       "label": "Snapshot Ball: scale",
+      "description": "Export-photo scale for the Ball render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -622,6 +738,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Ball render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -630,6 +747,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Ball render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -638,6 +756,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Ball render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -646,6 +765,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Poker chip: position X",
+      "description": "Export-photo position X for the Poker chip render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -654,6 +774,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Poker chip: position Y",
+      "description": "Export-photo position Y for the Poker chip render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -662,6 +783,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Poker chip: position Z",
+      "description": "Export-photo position Z for the Poker chip render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -670,6 +792,7 @@
       "type": "number",
       "default": 1.65,
       "label": "Snapshot Poker chip: scale",
+      "description": "Export-photo scale for the Poker chip render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -678,6 +801,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Poker chip: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Poker chip render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -686,6 +810,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Poker chip: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Poker chip render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -694,6 +819,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Poker chip: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Poker chip render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -702,6 +828,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Divot tool: position X",
+      "description": "Export-photo position X for the Divot tool render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -710,6 +837,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Divot tool: position Y",
+      "description": "Export-photo position Y for the Divot tool render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -718,6 +846,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Divot tool: position Z",
+      "description": "Export-photo position Z for the Divot tool render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -726,6 +855,7 @@
       "type": "number",
       "default": 1.6,
       "label": "Snapshot Divot tool: scale",
+      "description": "Export-photo scale for the Divot tool render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -734,6 +864,7 @@
       "type": "number",
       "default": -10,
       "label": "Snapshot Divot tool: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Divot tool render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -742,6 +873,7 @@
       "type": "number",
       "default": 20,
       "label": "Snapshot Divot tool: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Divot tool render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -750,6 +882,7 @@
       "type": "number",
       "default": 30,
       "label": "Snapshot Divot tool: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Divot tool render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -758,6 +891,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Bartender tool: position X",
+      "description": "Export-photo position X for the Bartender tool render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -766,6 +900,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Bartender tool: position Y",
+      "description": "Export-photo position Y for the Bartender tool render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -774,6 +909,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Bartender tool: position Z",
+      "description": "Export-photo position Z for the Bartender tool render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -782,6 +918,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Snapshot Bartender tool: scale",
+      "description": "Export-photo scale for the Bartender tool render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -790,6 +927,7 @@
       "type": "number",
       "default": -10,
       "label": "Snapshot Bartender tool: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Bartender tool render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -798,6 +936,7 @@
       "type": "number",
       "default": 20,
       "label": "Snapshot Bartender tool: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Bartender tool render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -806,6 +945,7 @@
       "type": "number",
       "default": 30,
       "label": "Snapshot Bartender tool: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Bartender tool render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -814,6 +954,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball marker: position X",
+      "description": "Export-photo position X for the Ball marker render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -822,6 +963,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball marker: position Y",
+      "description": "Export-photo position Y for the Ball marker render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -830,6 +972,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball marker: position Z",
+      "description": "Export-photo position Z for the Ball marker render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -838,6 +981,7 @@
       "type": "number",
       "default": 1.65,
       "label": "Snapshot Ball marker: scale",
+      "description": "Export-photo scale for the Ball marker render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -846,6 +990,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball marker: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Ball marker render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -854,6 +999,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball marker: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Ball marker render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -862,6 +1008,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Ball marker: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Ball marker render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -870,6 +1017,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — poker chip: position X",
+      "description": "Export-photo position X for the Gift set — poker chip render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -878,6 +1026,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — poker chip: position Y",
+      "description": "Export-photo position Y for the Gift set — poker chip render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -886,6 +1035,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — poker chip: position Z",
+      "description": "Export-photo position Z for the Gift set — poker chip render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -894,6 +1044,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Snapshot Gift set — poker chip: scale",
+      "description": "Export-photo scale for the Gift set — poker chip render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -902,6 +1053,7 @@
       "type": "number",
       "default": 22,
       "label": "Snapshot Gift set — poker chip: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Gift set — poker chip render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -910,6 +1062,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — poker chip: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Gift set — poker chip render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -918,6 +1071,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — poker chip: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Gift set — poker chip render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -926,6 +1080,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — lever: position X",
+      "description": "Export-photo position X for the Gift set — lever render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -934,6 +1089,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — lever: position Y",
+      "description": "Export-photo position Y for the Gift set — lever render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -942,6 +1098,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — lever: position Z",
+      "description": "Export-photo position Z for the Gift set — lever render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -950,6 +1107,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Snapshot Gift set — lever: scale",
+      "description": "Export-photo scale for the Gift set — lever render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -958,6 +1116,7 @@
       "type": "number",
       "default": 22,
       "label": "Snapshot Gift set — lever: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Gift set — lever render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -966,6 +1125,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — lever: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Gift set — lever render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -974,6 +1134,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — lever: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Gift set — lever render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -982,6 +1143,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — bartender: position X",
+      "description": "Export-photo position X for the Gift set — bartender render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -990,6 +1152,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — bartender: position Y",
+      "description": "Export-photo position Y for the Gift set — bartender render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -998,6 +1161,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — bartender: position Z",
+      "description": "Export-photo position Z for the Gift set — bartender render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1006,6 +1170,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Snapshot Gift set — bartender: scale",
+      "description": "Export-photo scale for the Gift set — bartender render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -1014,6 +1179,7 @@
       "type": "number",
       "default": 22,
       "label": "Snapshot Gift set — bartender: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Gift set — bartender render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1022,6 +1188,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — bartender: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Gift set — bartender render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1030,6 +1197,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — bartender: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Gift set — bartender render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1038,6 +1206,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood poker: position X",
+      "description": "Export-photo position X for the Gift set — wood poker render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1046,6 +1215,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood poker: position Y",
+      "description": "Export-photo position Y for the Gift set — wood poker render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1054,6 +1224,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood poker: position Z",
+      "description": "Export-photo position Z for the Gift set — wood poker render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1062,6 +1233,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Snapshot Gift set — wood poker: scale",
+      "description": "Export-photo scale for the Gift set — wood poker render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -1070,6 +1242,7 @@
       "type": "number",
       "default": 22,
       "label": "Snapshot Gift set — wood poker: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Gift set — wood poker render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1078,6 +1251,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood poker: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Gift set — wood poker render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1086,6 +1260,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood poker: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Gift set — wood poker render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1094,6 +1269,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood lever: position X",
+      "description": "Export-photo position X for the Gift set — wood lever render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1102,6 +1278,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood lever: position Y",
+      "description": "Export-photo position Y for the Gift set — wood lever render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1110,6 +1287,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood lever: position Z",
+      "description": "Export-photo position Z for the Gift set — wood lever render (transparent copy/download). Fixed, so every export frames identically.",
       "managedDefault": true,
       "min": -300,
       "max": 300
@@ -1118,6 +1296,7 @@
       "type": "number",
       "default": 1.8,
       "label": "Snapshot Gift set — wood lever: scale",
+      "description": "Export-photo scale for the Gift set — wood lever render.",
       "managedDefault": true,
       "min": 0.2,
       "max": 12
@@ -1126,6 +1305,7 @@
       "type": "number",
       "default": 22,
       "label": "Snapshot Gift set — wood lever: rotation X",
+      "description": "Export-photo rotation X (degrees) for the Gift set — wood lever render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1134,6 +1314,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood lever: rotation Y",
+      "description": "Export-photo rotation Y (degrees) for the Gift set — wood lever render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180
@@ -1142,6 +1323,7 @@
       "type": "number",
       "default": 0,
       "label": "Snapshot Gift set — wood lever: rotation Z",
+      "description": "Export-photo rotation Z (degrees) for the Gift set — wood lever render — layered on its initial pose.",
       "managedDefault": true,
       "min": -180,
       "max": 180

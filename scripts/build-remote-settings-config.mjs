@@ -36,7 +36,12 @@ const INSTALLATION_LOCAL_KEYS = new Set([
 ]);
 
 const featureMeta = Object.fromEntries(FEATURE_FLAG_META.map((item) => [item.key, item]));
-const featureDefaultEntries = Object.entries(FEATURE_DEFAULTS).filter(([key]) => keep(key));
+// Use the Settings page's metadata order, not object insertion order from the
+// defaults map. The remote installation editor can then present the exact same
+// groups and row sequence as the extension without maintaining a second list.
+const featureDefaultEntries = FEATURE_FLAG_META
+  .filter(({ key }) => keep(key) && Object.hasOwn(FEATURE_DEFAULTS, key))
+  .map(({ key }) => [key, FEATURE_DEFAULTS[key]]);
 const developerRows = DEV_SETTINGS.filter((item) => isValueSetting(item) && keep(item.key));
 const developerDefaults = defaultDevSettings();
 const scalar = (value) => JSON.stringify(value);
@@ -73,11 +78,14 @@ const registry = {
   features: Object.fromEntries(featureDefaultEntries.map(([key, value]) => [key, {
     type: 'bool', default: value, label: featureMeta[key]?.name || key,
     managedDefault: true,
+    section: featureMeta[key]?.section || 'Other',
+    description: featureMeta[key]?.desc || '',
   }])),
   developerSettings: Object.fromEntries(developerRows.map((row) => [row.key, {
     type: row.type,
     default: developerDefaults[row.key],
     label: row.label,
+    description: row.desc || '',
     managedDefault: !INSTALLATION_LOCAL_KEYS.has(row.key),
     ...(row.min === undefined ? {} : { min: row.min }),
     ...(row.max === undefined ? {} : { max: row.max }),

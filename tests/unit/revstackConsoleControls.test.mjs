@@ -156,23 +156,25 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"key": "level"[\s\S]*?"type": "select"/);
   });
 
-  it('keeps per-user settings readable by grouping policy and row actions', () => {
-    assert.match(keyOverridesRoute, /"policy": policy/);
-    assert.match(keyOverridesRoute, /"sub": hidden_mode\.replace\("inherit", "Inherited"\)/);
-    assert.match(keyOverridesRoute, /"actions": \{"kind": "action_group", "items": row_actions\}/);
-    assert.match(keyOverridesRoute, /"key": "setting", "label": "Setting"/);
-    assert.match(keyOverridesRoute, /"key": "policy", "label": "Effective policy"/);
-    assert.match(keyOverridesRoute, /"key": "visibility", "label": "Visibility"/);
-    assert.match(keyOverridesRoute, /"key": "actions", "label": "Actions", "align": "right"/);
-    assert.doesNotMatch(keyOverridesRoute, /"width"/);
-    assert.doesNotMatch(keyOverridesRoute, /"key": "(?:global|effective|management|vis|act|clear)"/);
+  it('serves one in-place installation settings document with every policy axis', () => {
+    assert.match(keyOverridesRoute, /settings = \[\]/);
+    assert.match(keyOverridesRoute, /"section": entry\["section"\]/);
+    assert.match(keyOverridesRoute, /"group": spec\.get\("section"\)/);
+    assert.match(keyOverridesRoute, /"description": spec\.get\("description", ""\)/);
+    assert.match(keyOverridesRoute, /"global_value": entry\["value"\]/);
+    assert.match(keyOverridesRoute, /"effective_value": effective\["value"\]/);
+    assert.match(keyOverridesRoute, /"value_mode": value_mode/);
+    assert.match(keyOverridesRoute, /"hidden_mode": hidden_mode/);
+    assert.match(keyOverridesRoute, /"managed_mode": managed_mode/);
+    assert.match(keyOverridesRoute, /"settings": settings/);
   });
 
   it('uses spacious notification and revoke modals from the scorecard drawer', () => {
     assert.match(scorecardBlock, /send-message:[\s\S]*?size: lg/);
     assert.match(scorecardBlock, /id: level[\s\S]*?type: segmented[\s\S]*?span: 8/);
     assert.match(scorecardBlock, /id: notification_type[\s\S]*?type: radio_cards/);
-    assert.match(scorecardBlock, /open-settings:[\s\S]*?name: console-records/);
+    assert.match(scorecardBlock, /open-settings:[\s\S]*?name: installation-settings/);
+    assert.match(scorecardBlock, /open-settings:[\s\S]*?maxWidth: 1100/);
     assert.match(scorecardBlock, /revoke:[\s\S]*?kind: form[\s\S]*?tone: danger/);
     assert.doesNotMatch(scorecardBlock.slice(scorecardBlock.indexOf('  revoke:')), /confirm:/);
   });

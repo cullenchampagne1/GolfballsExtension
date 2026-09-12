@@ -40,6 +40,8 @@ describe('settings registry · extension/backend parity', () => {
         default: FEATURE_DEFAULTS[key],
         label: featureMeta[key].name,
         managedDefault: true,
+        section: featureMeta[key].section,
+        description: featureMeta[key].desc,
       });
     }
     assert.equal(Object.hasOwn(registry.features, 'campaignManagerEnabled'), false);
@@ -57,6 +59,7 @@ describe('settings registry · extension/backend parity', () => {
       assert.equal(actual.type, row.type, row.key);
       assert.equal(actual.default, defaults[row.key], row.key);
       assert.equal(actual.label, row.label, row.key);
+      assert.equal(actual.description, row.desc || '', row.key);
       assert.equal(actual.managedDefault, !installationLocalKeys.has(row.key), row.key);
       if (row.min !== undefined) assert.equal(actual.min, row.min, row.key);
       if (row.max !== undefined) assert.equal(actual.max, row.max, row.key);
@@ -73,10 +76,12 @@ describe('settings registry · extension/backend parity', () => {
 
   it('places Sales Fantasy only in the backend-managed developer policy', () => {
     assert.equal(Object.hasOwn(registry.features, 'salesFantasyEnabled'), false);
+    const salesFantasy = DEV_SETTINGS.find((row) => row.key === 'salesFantasy.enabled');
     assert.deepEqual(registry.developerSettings['salesFantasy.enabled'], {
       type: 'bool',
       default: false,
       label: 'Sales Fantasy',
+      description: salesFantasy.desc,
       managedDefault: true,
     });
   });
@@ -104,7 +109,9 @@ describe('settings registry · extension/backend parity', () => {
     };
 
     for (const [key, policy] of Object.entries(expected)) {
-      assert.deepEqual(registry.developerSettings[key], policy, key);
+      const { description, ...actualPolicy } = registry.developerSettings[key];
+      assert.equal(description, DEV_SETTINGS.find((row) => row.key === key).desc, `${key} description`);
+      assert.deepEqual(actualPolicy, policy, key);
       assert.equal(defaults[key], policy.default, `${key} extension default`);
     }
   });
