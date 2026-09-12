@@ -172,7 +172,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(scorecardBlock, /id: notification_type[\s\S]*?type: radio_cards/);
     assert.match(scorecardBlock, /open-settings:[\s\S]*?kind: form/);
     assert.match(scorecardBlock, /url: \/projects\/golfballs-extension\/installation-settings/);
-    assert.match(scorecardBlock, /id: installation_settings[\s\S]*?shell: drawer/);
+    assert.match(scorecardBlock, /id: installation_settings[\s\S]*?shell: modal/);
     assert.match(scorecardBlock, /tabs: \["Email & Templates", "CRM & Contacts", "Orders & Pricing", "Tools & Integration", "Developer"\]/);
     assert.match(scorecardBlock, /id: developer[\s\S]*?type: setting_grid/);
     assert.match(scorecardBlock, /key: developer_section[\s\S]*?value_type: select/);

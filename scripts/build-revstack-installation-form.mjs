@@ -93,7 +93,7 @@ const action = [
   '    invalidates: [primary]',
   '    form:',
   '      id: installation_settings',
-  '      shell: drawer',
+  '      shell: modal',
   '      size: xl',
   '      tone: accent',
   '      eyebrow: INSTALLATION SETTINGS',

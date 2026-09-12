@@ -21,6 +21,7 @@ describe('RevStack installation form generator', { skip: !existsSync(blockPath) 
 
     assert.match(action, /kind: form/);
     assert.match(action, /id: installation_settings/);
+    assert.match(action, /shell: modal/);
     assert.equal([...action.matchAll(/type: setting_grid/g)].length, 5);
     assert.equal([...action.matchAll(/value_type: boolean/g)].length >= 25, true);
     assert.match(action, /key: "numberDisplay\.durationMs"[\s\S]*?value_type: number/);
