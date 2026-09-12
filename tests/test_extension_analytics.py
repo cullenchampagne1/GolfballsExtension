@@ -322,11 +322,17 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                             "path": ["features", f"feature{index}"],
                             "path_key": f"feature-{index}",
                             "value": index % 2 == 0,
+                            "spec": {"section": (
+                                "Email & Templates" if index < 5 else
+                                "CRM & Contacts" if index < 10 else
+                                "Orders & Pricing" if index < 17 else "Tools"
+                            )},
                         }
                         for index in range(25)
                     ] + [{
                         "path": ["developer_section"],
                         "path_key": "developer-section",
+                        "hidden": False,
                     }]),
                     "overrides": staticmethod(lambda _key_id: []),
                 })(),
@@ -585,10 +591,18 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(scorecard["id"], "cred-a")
         self.assertTrue(scorecard["alive"])
         self.assertTrue(scorecard["can_message"])
-        self.assertEqual(scorecard["settings"]["feature_01"], "inherit")
-        self.assertEqual(scorecard["settings"]["feature_25"], "inherit")
-        self.assertEqual(scorecard["settings"]["developer_section"], "inherit")
-        self.assertEqual(scorecard["settings"]["developer_overrides"], [])
+        self.assertEqual(
+            scorecard["settings"]["features_email"]["feature0"],
+            {"mode": "inherit", "value": True},
+        )
+        self.assertEqual(
+            scorecard["settings"]["features_tools"]["feature24"],
+            {"mode": "inherit", "value": True},
+        )
+        self.assertEqual(
+            scorecard["settings"]["developer"]["developer_section"],
+            {"mode": "inherit", "value": "shown"},
+        )
         # cred-b's own switch is off, so it is not enrolled in the extension:
         # a notification to it goes nowhere and the control is absent rather
         # than present and inert. It is still alive, so it can still be revoked.
@@ -603,6 +617,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(parse({"type": "select", "options": ["dense", "roomy"]}, "dense"), "dense")
         with self.assertRaises(RuntimeError):
             parse({"type": "number", "min": 0, "max": 10}, "11")
+        with self.assertRaises(RuntimeError):
+            parse({"type": "number"}, "nan")
         with self.assertRaises(RuntimeError):
             parse({"type": "select", "options": ["dense", "roomy"]}, "other")
 

@@ -160,7 +160,8 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /def _installation_settings_form_args\(key_id: str\)/);
     assert.match(routes, /@router\.post\("\/installation-settings"\)/);
     assert.match(routes, /class InstallationSettingsUpdateRequest\(BaseModel\)/);
-    assert.match(routes, /developer_overrides: List\[List\[Any\]\]/);
+    assert.match(routes, /class InstallationSettingChoice\(BaseModel\)/);
+    assert.match(routes, /developer: Dict\[str, InstallationSettingChoice\]/);
     assert.match(routes, /settings_policy\.set_override/);
     assert.doesNotMatch(keyOverridesRoute, /"settings": settings/);
   });
@@ -173,8 +174,9 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(scorecardBlock, /url: \/projects\/golfballs-extension\/installation-settings/);
     assert.match(scorecardBlock, /id: installation_settings[\s\S]*?shell: drawer/);
     assert.match(scorecardBlock, /tabs: \["Email & Templates", "CRM & Contacts", "Orders & Pricing", "Tools & Integration", "Developer"\]/);
-    assert.match(scorecardBlock, /id: developer_section[\s\S]*?type: segmented/);
-    assert.match(scorecardBlock, /id: developer_overrides[\s\S]*?type: kv_editor/);
+    assert.match(scorecardBlock, /id: developer[\s\S]*?type: setting_grid/);
+    assert.match(scorecardBlock, /key: developer_section[\s\S]*?value_type: select/);
+    assert.match(scorecardBlock, /key: "numberDisplay\.durationMs"[\s\S]*?value_type: number/);
     assert.doesNotMatch(scorecardBlock, /name: installation-settings/);
     assert.match(scorecardBlock, /revoke:[\s\S]*?kind: form[\s\S]*?tone: danger/);
     assert.doesNotMatch(scorecardBlock.slice(scorecardBlock.indexOf('  revoke:')), /confirm:/);

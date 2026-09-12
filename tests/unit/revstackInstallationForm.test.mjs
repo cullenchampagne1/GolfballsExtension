@@ -21,8 +21,11 @@ describe('RevStack installation form generator', { skip: !existsSync(blockPath) 
 
     assert.match(action, /kind: form/);
     assert.match(action, /id: installation_settings/);
-    assert.match(action, /type: kv_editor/);
-    assert.equal([...action.matchAll(/- id: feature_\d{2}/g)].length, 25);
+    assert.equal([...action.matchAll(/type: setting_grid/g)].length, 5);
+    assert.equal([...action.matchAll(/value_type: boolean/g)].length >= 25, true);
+    assert.match(action, /key: "numberDisplay\.durationMs"[\s\S]*?value_type: number/);
+    assert.match(action, /key: developer_section[\s\S]*?value_type: select/);
+    assert.doesNotMatch(action, /type: kv_editor/);
     assert.doesNotMatch(action, /name: installation-settings|remote_table|maxWidth/);
   });
 });

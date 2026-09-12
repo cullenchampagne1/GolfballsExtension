@@ -1,12 +1,13 @@
 /**
  * Generate Golfballs' installation-settings action inside the local RevStack
- * block. The dashboard renders only the generic YAML form vocabulary; this
- * project owns the registry-to-field mapping and the request contract.
+ * block. The dashboard renders the generic `setting_grid`; this project owns
+ * its registry keys, labels, types, defaults, and request contract.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { FEATURE_DEFAULTS, FEATURE_FLAG_META } from '../src/lib/flags.js';
+import { DEV_SETTINGS, defaultDevSettings, isValueSetting } from '../src/lib/devSettings.js';
 import { ADMIN_ONLY } from './strip-admin.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -16,23 +17,42 @@ const adminKeys = new Set(ADMIN_ONLY.configKeys || []);
 const features = FEATURE_FLAG_META.filter(
   ({ key }) => !adminKeys.has(key) && Object.hasOwn(FEATURE_DEFAULTS, key),
 );
-
-const tabFor = (section) => (
-  section === 'Tools' || section === 'Integration' ? 'Tools & Integration' : section
+const developerDefaults = defaultDevSettings();
+const developerSettings = DEV_SETTINGS.filter(
+  (setting) => isValueSetting(setting) && !adminKeys.has(setting.key),
 );
-const tabs = [
-  'Email & Templates', 'CRM & Contacts', 'Orders & Pricing',
-  'Tools & Integration', 'Developer',
+
+const groups = [
+  { id: 'features_email', tab: 'Email & Templates', sections: ['Email & Templates'] },
+  { id: 'features_crm', tab: 'CRM & Contacts', sections: ['CRM & Contacts'] },
+  { id: 'features_orders', tab: 'Orders & Pricing', sections: ['Orders & Pricing'] },
+  { id: 'features_tools', tab: 'Tools & Integration', sections: ['Tools', 'Integration'] },
 ];
 const yamlText = (value) => JSON.stringify(String(value));
-const fieldId = (index) => `feature_${String(index + 1).padStart(2, '0')}`;
+const yamlScalar = (value) => JSON.stringify(value);
 
-const footerArgs = features.map((_, index) => (
-  [
-    `          ${fieldId(index)}: \"\${data.settings.${fieldId(index)}}\"`,
-    `          ${fieldId(index)}_global: \"\${data.settings.${fieldId(index)}_global}\"`,
-  ]
-)).flat();
+function settingLines(setting, { feature = false } = {}) {
+  const type = feature ? 'boolean' : setting.type === 'bool' ? 'boolean' : setting.type;
+  const lines = [
+    `          - key: ${yamlText(setting.key)}`,
+    `            label: ${yamlText(feature ? (setting.name || setting.key) : setting.label)}`,
+    `            description: ${yamlText(feature ? (setting.desc || '') : (setting.desc || ''))}`,
+    `            value_type: ${type}`,
+    `            default: ${yamlScalar(feature ? FEATURE_DEFAULTS[setting.key] : developerDefaults[setting.key])}`,
+  ];
+  if (setting.min !== undefined) lines.push(`            min: ${setting.min}`);
+  if (setting.max !== undefined) lines.push(`            max: ${setting.max}`);
+  if (setting.step !== undefined) lines.push(`            step: ${setting.step}`);
+  if (setting.unit) lines.push(`            unit: ${yamlText(setting.unit)}`);
+  if (setting.options) {
+    lines.push('            options:');
+    for (const option of setting.options) {
+      lines.push(`              - { value: ${yamlScalar(option.value)}, label: ${yamlText(option.label || option.value)} }`);
+    }
+  }
+  return lines;
+}
+
 const footer = [
   '      - action: open-settings',
   '        label: Open per-user settings',
@@ -40,28 +60,24 @@ const footer = [
   '        args:',
   '          key_id: "${data.id}"',
   '          name: "${data.name}"',
-  ...footerArgs,
-  '          developer_section: "${data.settings.developer_section}"',
-  '          developer_overrides: "${data.settings.developer_overrides}"',
+  ...groups.map(({ id }) => `          ${id}: "\${data.settings.${id}}"`),
+  '          developer: "${data.settings.developer}"',
   '        when: ${data.alive}',
 ].join('\n');
 
-const fields = features.flatMap((feature, index) => [
-  `      - id: ${fieldId(index)}`,
-  '        type: segmented',
-  `        label: ${yamlText(feature.name || feature.key)}`,
-  `        description: ${yamlText(`${feature.desc || ''} Global value: \${args.${fieldId(index)}_global}.`)}`,
+const fields = groups.flatMap((group) => [
+  `      - id: ${group.id}`,
+  '        type: setting_grid',
   '        span: 12',
-  `        default: \${args.${fieldId(index)}}`,
-  '        options:',
-  '          - { value: inherit, label: Inherit }',
-  '          - { value: on, label: On }',
-  '          - { value: off, label: Off }',
-  `        tab: ${yamlText(tabFor(feature.section || 'Tools'))}`,
+  '        columns: 2',
+  `        default: \${args.${group.id}}`,
+  `        tab: ${yamlText(group.tab)}`,
+  '        settings:',
+  ...features
+    .filter((feature) => group.sections.includes(feature.section))
+    .flatMap((feature) => settingLines(feature, { feature: true })),
 ]);
-const featureBody = features.map((feature, index) => (
-  `          ${feature.key}: \${form.${fieldId(index)}}`
-));
+
 const action = [
   '  open-settings:',
   '    kind: form',
@@ -72,9 +88,8 @@ const action = [
   '      body:',
   '        key_id: ${args.key_id}',
   '        features:',
-  ...featureBody,
-  '        developer_section: ${form.developer_section}',
-  '        developer_overrides: ${form.developer_overrides}',
+  ...groups.map(({ id }) => `          ${id}: \${form.${id}}`),
+  '        developer: ${form.developer}',
   '    invalidates: [primary]',
   '    form:',
   '      id: installation_settings',
@@ -85,28 +100,25 @@ const action = [
   '      title: ${args.name}',
   '      description: Set explicit differences from global policy. Inherit follows future global changes.',
   '      submit_label: Save changes',
-  `      tabs: [${tabs.map(yamlText).join(', ')}]`,
+  `      tabs: [${[...groups.map(({ tab }) => tab), 'Developer'].map(yamlText).join(', ')}]`,
   '      fields:',
   ...fields,
-  '      - id: developer_section',
-  '        type: segmented',
-  '        label: Developer settings section',
-  '        description: Show or hide the Developer Settings section for this installation.',
+  '      - id: developer',
+  '        type: setting_grid',
   '        span: 12',
-  '        default: ${args.developer_section}',
-  '        options:',
-  '          - { value: inherit, label: Inherit }',
-  '          - { value: shown, label: Shown }',
-  '          - { value: hidden, label: Hidden }',
+  '        columns: 2',
+  '        default: ${args.developer}',
   '        tab: Developer',
-  '      - id: developer_overrides',
-  '        type: kv_editor',
-  '        label: Developer setting overrides',
-  '        description: Only explicit overrides are listed. Remove a row to inherit that setting again.',
-  '        span: 12',
-  '        default: ${args.developer_overrides}',
-  '        add_label: + Add developer override',
-  '        tab: Developer',
+  '        settings:',
+  '          - key: developer_section',
+  '            label: Developer settings section',
+  '            description: Show or hide the Developer Settings section for this installation.',
+  '            value_type: select',
+  '            default: shown',
+  '            options:',
+  '              - { value: shown, label: Shown }',
+  '              - { value: hidden, label: Hidden }',
+  ...developerSettings.flatMap((setting) => settingLines(setting)),
 ].join('\n');
 
 let source = await readFile(blockPath, 'utf8');
@@ -115,8 +127,8 @@ const actionPattern = /  open-settings:\n[\s\S]*?(?=\n  # The first `form` actio
 if (!footerPattern.test(source) || !actionPattern.test(source)) {
   throw new Error('Could not locate the installation settings action in analytics-scorecard.block.yaml');
 }
-const next = source
+source = source
   .replace(footerPattern, `${footer}\n`)
   .replace(actionPattern, action);
-await writeFile(blockPath, next, 'utf8');
-console.log(`Wrote ${features.length} feature controls and the developer override editor.`);
+await writeFile(blockPath, source, 'utf8');
+console.log(`Wrote ${features.length} features and ${developerSettings.length} developer settings.`);
