@@ -43,10 +43,11 @@ const helpCompanion = localRuntimeAvailable
 const project = localRuntimeAvailable
   ? JSON.parse(readFileSync(resolve(root, 'revstack.project.json'), 'utf8')) : {};
 const blockSource = (name) => localRuntimeAvailable
-  ? readFileSync(resolve(root, `blocks/${name}.block.yaml`), 'utf8') : '';
+  ? readFileSync(resolve(root, `.revstack/blocks/${name}.block.yaml`), 'utf8') : '';
 const emailLinksBlock = blockSource('email-links');
 const managedTemplatesBlock = blockSource('managed-email-templates');
 const managedSourcesBlock = blockSource('managed-email-template-sources');
+const scorecardBlock = blockSource('analytics-scorecard');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
@@ -155,13 +156,25 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"key": "level"[\s\S]*?"type": "select"/);
   });
 
-  it('closes per-user settings rows with a visible named reset column', () => {
-    assert.match(keyOverridesRoute, /"clear": _clear_override_action[\s\S]*?if override else "—"/);
+  it('keeps per-user settings readable by grouping policy and row actions', () => {
+    assert.match(keyOverridesRoute, /"policy": policy/);
+    assert.match(keyOverridesRoute, /"sub": hidden_mode\.replace\("inherit", "Inherited"\)/);
+    assert.match(keyOverridesRoute, /"actions": \{"kind": "action_group", "items": row_actions\}/);
     assert.match(keyOverridesRoute, /"key": "setting", "label": "Setting"/);
-    assert.match(keyOverridesRoute, /"key": "act", "label": "Edit", "type": "action"/);
-    assert.match(keyOverridesRoute, /"key": "clear", "label": "Reset", "type": "action"/);
+    assert.match(keyOverridesRoute, /"key": "policy", "label": "Effective policy"/);
+    assert.match(keyOverridesRoute, /"key": "visibility", "label": "Visibility"/);
+    assert.match(keyOverridesRoute, /"key": "actions", "label": "Actions", "align": "right"/);
     assert.doesNotMatch(keyOverridesRoute, /"width"/);
-    assert.doesNotMatch(keyOverridesRoute, /"key": "clear", "label": ""/);
+    assert.doesNotMatch(keyOverridesRoute, /"key": "(?:global|effective|management|vis|act|clear)"/);
+  });
+
+  it('uses spacious notification and revoke modals from the scorecard drawer', () => {
+    assert.match(scorecardBlock, /send-message:[\s\S]*?size: lg/);
+    assert.match(scorecardBlock, /id: level[\s\S]*?type: segmented[\s\S]*?span: 8/);
+    assert.match(scorecardBlock, /id: notification_type[\s\S]*?type: radio_cards/);
+    assert.match(scorecardBlock, /open-settings:[\s\S]*?name: console-records/);
+    assert.match(scorecardBlock, /revoke:[\s\S]*?kind: form[\s\S]*?tone: danger/);
+    assert.doesNotMatch(scorecardBlock.slice(scorecardBlock.indexOf('  revoke:')), /confirm:/);
   });
 
   it('publishes one switchable multi-line utilization chart and its aggregate table', () => {
