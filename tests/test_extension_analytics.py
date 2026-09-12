@@ -19,7 +19,7 @@ from bisect import bisect_left
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, func, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Session
@@ -287,7 +287,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 # switched on.
                 "_rep_subjects", "_keys_facts", "_key_status", "_is_golfballs_key",
                 "_access_state", "_row_action", "_row_toggle", "_KEYS_DORMANT_HOURS",
-                "_avg_by_surface",
+                "_avg_by_surface", "_installation_settings_form_args",
+                "_developer_override_value",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_adoption",
                 "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
@@ -302,7 +303,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             extra_globals={
                 "math": math, "bisect_left": bisect_left,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
-                "select": select, "Session": Session, "Optional": Optional,
+                "select": select, "Session": Session, "Any": Any, "Optional": Optional,
                 "auth_manager": type("Auth", (), {
                     "engine": cls.engine,
                     "list_api_keys": staticmethod(lambda: list(_KEYRING)),
@@ -314,6 +315,21 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_PROJECT_SCOPE_PREFIX": "/projects/golfballs-extension/",
                 "_KEY_NAME_PREFIXES": ("Golfballs Toolkit",),
                 "_USAGE_LIVE_MINUTES": 5,
+                "SettingsPolicyError": RuntimeError,
+                "settings_policy": type("SettingsPolicy", (), {
+                    "entries": staticmethod(lambda: [
+                        {
+                            "path": ["features", f"feature{index}"],
+                            "path_key": f"feature-{index}",
+                            "value": index % 2 == 0,
+                        }
+                        for index in range(25)
+                    ] + [{
+                        "path": ["developer_section"],
+                        "path_key": "developer-section",
+                    }]),
+                    "overrides": staticmethod(lambda _key_id: []),
+                })(),
             },
         )
 
@@ -569,12 +585,26 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(scorecard["id"], "cred-a")
         self.assertTrue(scorecard["alive"])
         self.assertTrue(scorecard["can_message"])
+        self.assertEqual(scorecard["settings"]["feature_01"], "inherit")
+        self.assertEqual(scorecard["settings"]["feature_25"], "inherit")
+        self.assertEqual(scorecard["settings"]["developer_section"], "inherit")
+        self.assertEqual(scorecard["settings"]["developer_overrides"], [])
         # cred-b's own switch is off, so it is not enrolled in the extension:
         # a notification to it goes nowhere and the control is absent rather
         # than present and inert. It is still alive, so it can still be revoked.
         switched_off = self.routes["_console_usage_rep_scorecard"]("cred-b")
         self.assertTrue(switched_off["alive"])
         self.assertFalse(switched_off["can_message"])
+
+    def test_yaml_developer_override_cells_follow_the_registry_type(self):
+        parse = self.routes["_developer_override_value"]
+        self.assertIs(parse({"type": "bool"}, "On"), True)
+        self.assertEqual(parse({"type": "number", "min": 0, "max": 10}, "4.5"), 4.5)
+        self.assertEqual(parse({"type": "select", "options": ["dense", "roomy"]}, "dense"), "dense")
+        with self.assertRaises(RuntimeError):
+            parse({"type": "number", "min": 0, "max": 10}, "11")
+        with self.assertRaises(RuntimeError):
+            parse({"type": "select", "options": ["dense", "roomy"]}, "other")
 
     def test_scorecard_funnel_ring_severity_tracks_the_designs_thresholds(self):
         # 3 of 7 stages = 43% — at or above the design's 40% "healthy" mark, so

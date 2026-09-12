@@ -11,6 +11,7 @@
     "audit": "node scripts/audit-source.mjs",
     "help-content": "node scripts/build-help-content.mjs",
     "remote-config": "node scripts/build-remote-settings-config.mjs",
+    "revstack:installation-form": "node scripts/build-revstack-installation-form.mjs",
     "remote-config:legacy-seed": "node scripts/build-remote-settings-config.mjs --legacy-seed",
     "pack:store": "GB_ADMIN=0 node --max-old-space-size=4096 scripts/package-store.mjs",
     "pack:safari": "node --max-old-space-size=4096 scripts/pack-safari.mjs",
@@ -820,6 +821,10 @@
     {
       "name": "ui \u00b7 dashboard control actions stay modal",
       "file": "tests/unit/revstackConsoleControls.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 project-owned installation settings form",
+      "file": "tests/unit/revstackInstallationForm.test.mjs"
     },
     {
       "name": "remote \u00b7 update-channel integrity",

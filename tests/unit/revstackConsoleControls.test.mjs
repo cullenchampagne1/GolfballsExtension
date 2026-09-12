@@ -156,26 +156,26 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"key": "level"[\s\S]*?"type": "select"/);
   });
 
-  it('serves one in-place installation settings document with every policy axis', () => {
-    assert.match(keyOverridesRoute, /settings = \[\]/);
-    assert.match(keyOverridesRoute, /"Developer settings" if entry\["section"\] == "Interface"/);
-    assert.match(keyOverridesRoute, /"section": modal_section/);
-    assert.match(keyOverridesRoute, /"group": "Interface" if entry\["section"\] == "Interface"/);
-    assert.match(keyOverridesRoute, /Show or hide the Developer Settings section in the extension/);
-    assert.match(keyOverridesRoute, /"global_value": entry\["value"\]/);
-    assert.match(keyOverridesRoute, /"effective_value": effective\["value"\]/);
-    assert.match(keyOverridesRoute, /"value_mode": value_mode/);
-    assert.match(keyOverridesRoute, /"hidden_mode": hidden_mode/);
-    assert.match(keyOverridesRoute, /"managed_mode": managed_mode/);
-    assert.match(keyOverridesRoute, /"settings": settings/);
+  it('keeps installation form data in the project route instead of a frontend document', () => {
+    assert.match(routes, /def _installation_settings_form_args\(key_id: str\)/);
+    assert.match(routes, /@router\.post\("\/installation-settings"\)/);
+    assert.match(routes, /class InstallationSettingsUpdateRequest\(BaseModel\)/);
+    assert.match(routes, /developer_overrides: List\[List\[Any\]\]/);
+    assert.match(routes, /settings_policy\.set_override/);
+    assert.doesNotMatch(keyOverridesRoute, /"settings": settings/);
   });
 
   it('uses spacious notification and revoke modals from the scorecard drawer', () => {
     assert.match(scorecardBlock, /send-message:[\s\S]*?size: lg/);
     assert.match(scorecardBlock, /id: level[\s\S]*?type: segmented[\s\S]*?span: 8/);
     assert.match(scorecardBlock, /id: notification_type[\s\S]*?type: radio_cards/);
-    assert.match(scorecardBlock, /open-settings:[\s\S]*?name: installation-settings/);
-    assert.match(scorecardBlock, /open-settings:[\s\S]*?maxWidth: 1100/);
+    assert.match(scorecardBlock, /open-settings:[\s\S]*?kind: form/);
+    assert.match(scorecardBlock, /url: \/projects\/golfballs-extension\/installation-settings/);
+    assert.match(scorecardBlock, /id: installation_settings[\s\S]*?shell: drawer/);
+    assert.match(scorecardBlock, /tabs: \["Email & Templates", "CRM & Contacts", "Orders & Pricing", "Tools & Integration", "Developer"\]/);
+    assert.match(scorecardBlock, /id: developer_section[\s\S]*?type: segmented/);
+    assert.match(scorecardBlock, /id: developer_overrides[\s\S]*?type: kv_editor/);
+    assert.doesNotMatch(scorecardBlock, /name: installation-settings/);
     assert.match(scorecardBlock, /revoke:[\s\S]*?kind: form[\s\S]*?tone: danger/);
     assert.doesNotMatch(scorecardBlock.slice(scorecardBlock.indexOf('  revoke:')), /confirm:/);
   });
