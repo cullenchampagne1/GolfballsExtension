@@ -158,9 +158,10 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
 
   it('serves one in-place installation settings document with every policy axis', () => {
     assert.match(keyOverridesRoute, /settings = \[\]/);
-    assert.match(keyOverridesRoute, /"section": entry\["section"\]/);
-    assert.match(keyOverridesRoute, /"group": spec\.get\("section"\)/);
-    assert.match(keyOverridesRoute, /"description": spec\.get\("description", ""\)/);
+    assert.match(keyOverridesRoute, /"Developer settings" if entry\["section"\] == "Interface"/);
+    assert.match(keyOverridesRoute, /"section": modal_section/);
+    assert.match(keyOverridesRoute, /"group": "Interface" if entry\["section"\] == "Interface"/);
+    assert.match(keyOverridesRoute, /Show or hide the Developer Settings section in the extension/);
     assert.match(keyOverridesRoute, /"global_value": entry\["value"\]/);
     assert.match(keyOverridesRoute, /"effective_value": effective\["value"\]/);
     assert.match(keyOverridesRoute, /"value_mode": value_mode/);
