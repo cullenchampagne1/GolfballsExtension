@@ -469,18 +469,26 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # (`runtime/listColumns.layoutColumns`), so a width here — in ANY unit —
         # is the payload guessing at pixels for values it cannot see.
         #
-        # The two ACTION columns are the exception, and for the opposite
-        # reason: a switch is 34px whatever is in the row, so there is no
-        # content to measure — it is the HEADING that needs the track. That is
-        # the width the roster stated for the same two switches.
+        # The two editable toggle columns are the exception: their labelled
+        # On/Off controls need a stable track rather than content measurement.
         columns = {column["key"]: column
                    for column in self.routes["_console_usage_leaderboard"]()["columns"]}
         for key, column in columns.items():
-            if column.get("type") == "action":
+            if column.get("editor") in {"key-access", "key-chat"}:
                 self.assertIn("width", column, f"{key} is a control with nothing to measure")
                 continue
             self.assertNotIn("width", column, f"{key} pins a track the view measures")
         self.assertTrue(columns["rep"]["grow"], "the subject is still the subject")
+
+    def test_leaderboard_uses_native_grid_toggle_and_deviation_controls(self):
+        payload = self.routes["_console_usage_leaderboard"]()
+        columns = {column["id"]: column for column in payload["columns"]}
+        self.assertEqual(columns["toolkit"]["editor"], "key-access")
+        self.assertEqual(columns["help"]["editor"], "key-chat")
+        self.assertEqual(columns["dev"]["renderer"], "positive_negative_bar")
+        first = payload["rows"][0]
+        self.assertIsInstance(first["toolkit_value"], bool)
+        self.assertIsInstance(first["dev_value"], float)
 
     def test_leaderboard_drops_columns_in_order_of_what_the_card_is_for(self):
         # Who, and at what rate — the two things the card exists to answer, so
