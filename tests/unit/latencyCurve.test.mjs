@@ -88,7 +88,7 @@ describe('the endpoint excludes the samples that were already recorded', {
 
   it('offers its own windows and leads with the narrowest that has data', () => {
     assert.match(ROUTES, /_LATENCY_WINDOWS = \(1, 7, 30, 90\)/);
-    assert.match(ROUTES, /"default": ranges\[0\]\["id"\]/);
+    assert.match(ROUTES, /"default_range": ranges\[0\]\["id"\]/);
     // Each range states its span, which is what lets the view animate a
     // switch as a camera move rather than morphing unrelated points.
     assert.match(ROUTES, /"days": span_days,/);

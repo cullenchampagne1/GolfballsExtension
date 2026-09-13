@@ -546,10 +546,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # stat.grid
         self.assertEqual(list(scorecard["stats"]), ["items"])
         self.assertEqual(len(scorecard["stats"]["items"]), 4)
-        # chart.line · inline
-        self.assertEqual(sorted(scorecard["chart"]), ["fmt", "ranges"])
-        self.assertEqual(sorted(scorecard["chart"]["ranges"][0]),
-                         ["id", "label", "series", "times"])
+        # chart.cartesian · compact
+        self.assertEqual(sorted(scorecard["chart"]), ["rows", "series"])
+        self.assertEqual(scorecard["chart"]["series"][0]["mark"], "line")
         # chart.gauge · deviation
         self.assertEqual(sorted(scorecard["dwell"]), ["bars", "note"])
 
@@ -685,19 +684,19 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         curves and left that subtraction to the eye.
         """
         payload = self.routes["_console_usage_adoption_trend"](30)
-        layers = {layer["id"]: layer for layer in payload["ranges"][0]["layers"]}
+        window = payload["ranges"][0]
+        layers = {layer["id"]: layer for layer in window["series"]}
         self.assertEqual(list(layers), ["active", "returning", "new"])
         # Dashed because DERIVED, which is the design's own choice: measured
         # curves are solid, the one worked out from them is not.
-        self.assertFalse(layers["active"].get("dashed"))
-        self.assertFalse(layers["new"].get("dashed"))
-        self.assertTrue(layers["returning"]["dashed"])
+        self.assertEqual(layers["active"]["strokeStyle"], "solid")
+        self.assertEqual(layers["new"]["strokeStyle"], "solid")
+        self.assertEqual(layers["returning"]["strokeStyle"], "dashed")
         # all three installs' sessions started within the last 2 days
-        self.assertEqual(sum(layers["new"]["values"]), 3)
+        self.assertEqual(sum(row["new"] for row in window["rows"]), 3)
         # And the arithmetic holds point by point, never below zero.
-        for active, returning, new in zip(layers["active"]["values"],
-                                          layers["returning"]["values"],
-                                          layers["new"]["values"]):
+        for active, returning, new in ((row["active"], row["returning"], row["new"])
+                                       for row in window["rows"]):
             self.assertEqual(returning, max(0, active - new))
             self.assertGreaterEqual(returning, 0)
 
@@ -716,8 +715,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         values = [0] * 20 + [4, 7, 5] + [0] * 7
         ranges = windowed(keys, times, [{"id": "a", "label": "A", "values": values}])
         for window in ranges:
-            self.assertEqual(window["series"][0], 4, "the first point is the first real day")
-            self.assertEqual(len(window["times"]), len(window["series"]))
+            self.assertEqual(window["rows"][0]["a"], 4, "the first point is the first real day")
         # The 7-day window holds only zeroes, so it is not offered at all.
         self.assertNotIn("7d", [window["id"] for window in ranges])
 
@@ -727,7 +725,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         values = [0] * 27 + [3, 0, 5]
         ranges = windowed(keys, list(range(30)), [{"id": "a", "label": "A", "values": values}])
         seven = next(window for window in ranges if window["id"] == "7d")
-        self.assertEqual(seven["series"], [3, 0, 5], "nobody used it that day IS the answer")
+        self.assertEqual([row["a"] for row in seven["rows"]], [3, 0, 5],
+                         "nobody used it that day IS the answer")
 
     def test_every_offered_window_states_its_span_and_label(self):
         windowed = self.routes["_windowed_ranges"]
@@ -737,7 +736,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual([window["id"] for window in ranges], ["7d", "30d", "90d"])
         for window in ranges:
             self.assertEqual(window["label"], self.routes["_WINDOW_LABEL"][window["days"]])
-            self.assertEqual(len(window["series"]), window["days"])
+            self.assertEqual(len(window["rows"]), window["days"])
 
     def test_a_previous_period_reference_follows_the_window_it_compares(self):
         """The bug: "Previous period" was only correct on the widest window.
@@ -764,17 +763,20 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual([window["id"] for window in ranges], ["7d", "30d", "90d"])
         for window in ranges:
             span = window["days"]
-            now_layer, prior_layer = window["layers"]
-            self.assertEqual(now_layer["values"], current[-span:])
-            self.assertEqual(len(prior_layer["values"]), span,
+            now_values = [row["now"] for row in window["rows"]]
+            prior_values = [row["prior"] for row in window["rows"]]
+            self.assertEqual(now_values, current[-span:])
+            self.assertEqual(len(prior_values), span,
                              "the reference is as long as the window it references")
             # CONTIGUOUS: the reference must end exactly where the current
             # window begins, on one continuous timeline.
             timeline = previous + current
-            start = timeline.index(now_layer["values"][0])
-            self.assertEqual(prior_layer["values"], timeline[start - span:start],
+            start = timeline.index(now_values[0])
+            self.assertEqual(prior_values, timeline[start - span:start],
                              f"{span}d compared against the wrong period")
-            self.assertTrue(prior_layer["dashed"], "a reference is drawn dashed")
+            prior_series = next(layer for layer in window["series"] if layer["id"] == "prior")
+            self.assertEqual(prior_series["strokeStyle"], "dashed",
+                             "a reference is drawn dashed")
 
     def test_the_volume_rail_reads_as_label_value_like_every_other_card(self):
         """It was three UNLABELLED values used as an axis strip.
@@ -825,8 +827,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                           [{"id": "now", "label": "Now", "values": current}],
                           compare={"id": "prior", "label": "Prev", "values": [9] * 30})
         seven = next(window for window in ranges if window["id"] == "7d")
-        self.assertEqual(seven["series"], [3, 4, 5])
-        self.assertEqual(len(seven["layers"][1]["values"]), 3,
+        self.assertEqual([row["now"] for row in seven["rows"]], [3, 4, 5])
+        self.assertEqual(len([row["prior"] for row in seven["rows"]]), 3,
                          "the reference is trimmed to the same lead-in")
 
     def test_the_email_card_passes_its_prior_window_as_a_comparison(self):
@@ -843,10 +845,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # seven-day curve — the whole reason the figures ride the RANGE.
         payload = self.routes["_console_usage_adoption_trend"](30)
         for window in payload["ranges"]:
-            self.assertIn("value", window)
-            self.assertIn("delta", window)
+            self.assertIn("value", window["stat"])
+            self.assertIn("delta", window["stat"])
         if len(payload["ranges"]) > 1:
-            texts = {window["delta"]["text"] for window in payload["ranges"]}
+            texts = {window["stat"]["delta"]["text"] for window in payload["ranges"]}
             self.assertTrue(texts, "each window carries its own delta text")
 
     def test_adoption_trend_holds_the_headline_on_the_range(self):
@@ -854,9 +856,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # above the chart. The view draws the headline itself, off the RANGE, so
         # the figure cannot disagree with the curve under it.
         active_range = self.routes["_console_usage_adoption_trend"](30)["ranges"][0]
-        self.assertIn("value", active_range)
-        self.assertIn("text", active_range["delta"])
-        self.assertIsInstance(active_range["delta"]["up"], bool)
+        self.assertIn("value", active_range["stat"])
+        self.assertIn("text", active_range["stat"]["delta"])
+        self.assertIsInstance(active_range["stat"]["delta"]["up"], bool)
 
     def test_top_surfaces_is_the_adoption_endpoint_because_it_was_one_query(self):
         # `usage.top-surfaces-list` was the SAME query as `usage.adoption` —
@@ -937,10 +939,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # beside a bare `series` of counts — `times` went to a `LineChart` prop
         # that no longer exists, and bare counts left the card with no axis at
         # all: a concurrency curve whose spike had no hour on it.
-        self.assertEqual(len(window["points"]), 24)  # one bucket per hour
-        self.assertTrue(all(point["label"].endswith(":00") for point in window["points"]))
+        self.assertEqual(len(window["rows"]), 24)  # one bucket per hour
+        self.assertTrue(all(row["period"].endswith(":00") for row in window["rows"]))
         # The headline is the range's own, so it cannot disagree with the curve.
-        self.assertIn("value", window)
+        self.assertIn("value", window["stat"])
         rail = {entry["label"]: entry["value"] for entry in window["stats"]}
         self.assertIn("peak", rail)
         self.assertIn("median", rail)
@@ -953,14 +955,14 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # `ms`, not `int`: the chart renders 1500 as "1.50s", never "$1,500.00".
         self.assertEqual(payload["fmt"], "ms")
         window = payload["ranges"][0]
-        self.assertEqual(window["threshold"], 800)
-        self.assertEqual(window["thresholdLabel"], "SLO 800ms")
-        layers = window["layers"]
+        self.assertEqual(window["reference_lines"][0]["value"], 800)
+        self.assertEqual(window["reference_lines"][0]["label"], "SLO 800ms")
+        layers = window["series"]
         # p95 leads so it is the filled curve, exactly as the design fills it.
         self.assertEqual([layer["id"] for layer in layers], ["p95", "p50", "p99"])
-        self.assertFalse(layers[0].get("dashed"))
-        self.assertFalse(layers[1].get("dashed"))
-        self.assertTrue(layers[2]["dashed"])  # the p99 tail is a reference line
+        self.assertEqual(layers[0].get("strokeStyle", "solid"), "solid")
+        self.assertEqual(layers[1].get("strokeStyle", "solid"), "solid")
+        self.assertEqual(layers[2]["strokeStyle"], "dashed")
         # Percentiles never sum, so the card reads from this rail instead of a
         # headline: nearest-rank over the window's own 100/200/900/1500 samples.
         stats = {entry["label"]: entry["value"] for entry in window["stats"]}
@@ -980,7 +982,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         payload = self.routes["_console_reliability_trend"](30)
         ids = [window["id"] for window in payload["ranges"]]
         self.assertTrue(ids, "the seeded samples fall in at least one window")
-        self.assertEqual(payload["default"], ids[0])
+        self.assertEqual(payload["default_range"], ids[0])
         # Narrowest first, and each states its span so the view can animate a
         # switch as a camera move rather than morphing unrelated points.
         spans = [window["days"] for window in payload["ranges"]]
@@ -1012,10 +1014,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         built = self.routes["_latency_range"](_TRIM_SPAN, scoped, floor, window)
         self.assertIsNotNone(built)
         buckets = self.routes["_LATENCY_BUCKETS"]
-        self.assertLess(len(built["series"]), buckets, "the empty ends are not drawn")
-        self.assertEqual(len(built["times"]), len(built["series"]))
-        for layer in built["layers"]:
-            self.assertEqual(len(layer["values"]), len(built["series"]))
+        self.assertLess(len(built["rows"]), buckets, "the empty ends are not drawn")
+        for layer in built["series"]:
+            self.assertIn(layer["roles"]["y"], built["rows"][0])
 
     def test_a_window_with_one_lonely_bucket_is_not_offered_as_a_trend(self):
         now = datetime.utcnow()
