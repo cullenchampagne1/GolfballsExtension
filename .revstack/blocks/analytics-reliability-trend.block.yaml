@@ -1,0 +1,71 @@
+# Response time — p50 / p95 / p99 per day, against an 800ms SLO.
+#
+# Replaces the `_block("analytics-reliability-trend", …)` registrar, a
+# `LineChart` with the legend props and `interactive`. The endpoint is
+# UNTOUCHED — including the SLO rule, which it sends as `threshold` +
+# `thresholdColor` + `thresholdLabel` on the range.
+#
+# ## Three curves, no total
+#
+# Percentiles share an axis and never a sum, so this card leads with the stat
+# rail rather than a headline: a headline over p50/p95/p99 would have to add
+# them, and the result means nothing. The rail summarises the WHOLE window
+# from the same samples the curves are drawn from, so the two cannot disagree.
+#
+# Layer order is the endpoint's and it is deliberate: p95 first, because the
+# leading curve is the filled one and the design fills under p95. p99 is
+# dashed and shares the SLO rule's red — a tail is a reference, not a promise.
+apiVersion: revstack.blocks/v1
+
+id: analytics-reliability-trend
+title: Percentile trend
+description: Daily p50, p95 and p99 backend response time against the 800ms SLO.
+icon: zap
+scopes: [provider:golfballs-extension, project:golfballs-extension, custom]
+category: reliability
+size: { w: 2, h: 4, min: { w: 1, h: 2 } }
+
+# `Response time` is `usage-latency`'s title — the meter card that reads the
+# three percentiles against p99 for one window. This is the same three numbers
+# over TIME, which is a different question and needs a different name in the
+# picker; the card still reads RESPONSE TIME / Percentile trend, exactly as the
+# design draws it, because the eyebrow carries the shared half.
+header:
+  eyebrow: RESPONSE TIME
+
+data:
+  url: /projects/golfballs-extension/data/reliability.trend
+  # No `days` parameter: the window is this card's OWN control. The endpoint
+  # sends every window it offers, each with its own buckets, stats and
+  # timestamps, so switching is a local read of data already in hand and the
+  # rail can never disagree with the curve above it.
+  refresh:
+    every: 60s
+  shape: chart.cartesian
+
+view: chart.cartesian
+
+options:
+  chartShowStat: false
+  chartShowStats: true
+  xTitleVisible: false
+  yTitleVisible: false
+  xLabels: true
+  yLabels: true
+  xScale: time
+  xFormat: adaptive_time
+  yFormat: milliseconds
+  horizontalGrid: true
+  # The tags sit on the card's own first line, at the trailing edge — where the
+  # header's note and chips go — rather than in a band of their own above the
+  # plot.
+  chartShowLegend: true
+  # On the card's header line, beside the published tags — the placement
+  # that costs the plot no height. Drawn in the body the chips took a band
+  # at every width.
+  chartLegendPlacement: header
+  chartLegendToggle: true
+  # And the window switcher goes DOWN, into the statistics rail, so the two
+  # right-aligned strips are not stacked on top of each other.
+  showRanges: true
+  rangePosition: footer

@@ -48,8 +48,18 @@ const emailLinksBlock = blockSource('email-links');
 const managedTemplatesBlock = blockSource('managed-email-templates');
 const managedSourcesBlock = blockSource('managed-email-template-sources');
 const scorecardBlock = blockSource('analytics-scorecard');
+const reliabilityTrendBlock = blockSource('analytics-reliability-trend');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
+  it('keeps the reliability trend in milliseconds on an adaptive time axis', () => {
+    assert.match(reliabilityTrendBlock, /^view: chart\.cartesian$/m);
+    assert.match(reliabilityTrendBlock, /^\s+xScale: time$/m);
+    assert.match(reliabilityTrendBlock, /^\s+xFormat: adaptive_time$/m);
+    assert.match(reliabilityTrendBlock, /^\s+yFormat: milliseconds$/m);
+    assert.match(reliabilityTrendBlock, /^\s+chartShowStats: true$/m);
+    assert.doesNotMatch(reliabilityTrendBlock, /^\s+yFormat: duration$/m);
+  });
+
   it('renders support tickets through the modal-capable ConsoleList contract', () => {
     const ticketBlock = blocks.match(/# --- support tickets[\s\S]*?\n\)\n\n# --- list surfaces/)?.[0] || '';
     assert.match(ticketBlock, /"endpoint": f"\{BASE\}\/tickets"/);
