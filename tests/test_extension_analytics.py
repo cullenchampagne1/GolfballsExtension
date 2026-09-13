@@ -352,14 +352,12 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # cred-d. cred-z is revoked and is not a row at all.
         self.assertEqual([row["_select"] for row in rows],
                          ["cred-a", "cred-b", "cred-c", "cred-d"])
-        # Zero-padded so the rank column is a fixed-width rail past ten.
-        self.assertEqual(rows[0]["rank"], {"kind": "mono", "text": "01"})
-        self.assertEqual(rows[0]["rep"]["text"], "Alex Rep")
-        self.assertEqual(rows[0]["rep"]["face"], "sans")
+        self.assertEqual(rows[0]["rep_name"], "Alex Rep")
+        self.assertEqual(rows[0]["rep_id"], "rsk_aaaa_…")
         # cred-c did nothing but hold a session open — must still show a
         # finite rate, never a crash from a divide-by-zero denominator.
         idle_row = next(row for row in rows if row["_select"] == "cred-c")
-        self.assertEqual(idle_row["actions"]["text"], "0.0")
+        self.assertEqual(idle_row["actions_value"], 0.0)
 
     def test_leaderboard_lists_the_install_that_has_never_been_used(self):
         # The roster this card absorbed listed every installation; this one
@@ -368,37 +366,28 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # be a row — ranked last, which is the truth about it.
         rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
         unused = rows["cred-d"]
-        self.assertEqual(unused["actions"]["text"], "0.0")
-        self.assertEqual(unused["rep"]["sub"], "dddd · never seen · 0 sessions")
-        # Never seen is the warning dot, not the healthy one.
-        self.assertEqual(unused["rep"]["dot"], "warn")
-        # And it carries the switch, which is the whole point of listing it.
-        self.assertEqual(unused["toolkit"]["action"], "key-access")
+        self.assertEqual(unused["actions_value"], 0.0)
+        self.assertEqual(unused["rep_id"], "dddd")
+        # It carries the native switch value, which is the point of listing it.
+        self.assertIsInstance(unused["toolkit_value"], bool)
         self.assertNotIn("cred-z", rows, "a revoked install has nothing to flip")
 
     def test_leaderboard_rows_carry_the_two_access_switches(self):
         rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
         # The knob shows the install's OWN position, not the effective one —
         # that is what the click changes.
-        self.assertTrue(rows["cred-a"]["toolkit"]["checked"])
-        self.assertFalse(rows["cred-b"]["toolkit"]["checked"], "cred-b is switched off")
-        # The switch posts the OPPOSITE of where it sits, as its own argument.
-        self.assertEqual(rows["cred-b"]["toolkit"]["args"],
-                         {"key_id": "cred-b", "enabled": True})
-        self.assertEqual(rows["cred-a"]["toolkit"]["kind"], "toggle")
+        self.assertTrue(rows["cred-a"]["toolkit_value"])
+        self.assertFalse(rows["cred-b"]["toolkit_value"], "cred-b is switched off")
         # Help Companion: granted for cred-a, off but offered for cred-c…
-        self.assertTrue(rows["cred-a"]["help"]["checked"])
-        self.assertFalse(rows["cred-c"]["help"]["checked"])
-        self.assertEqual(rows["cred-a"]["help"]["action"], "key-chat")
+        self.assertTrue(rows["cred-a"]["help_value"])
+        self.assertFalse(rows["cred-c"]["help_value"])
         # …and ABSENT for cred-b, which is not enrolled in the extension at
         # all: granting the companion to it would grant nothing.
-        self.assertIsNone(rows["cred-b"]["help"])
+        self.assertTrue(rows["cred-b"]["_cells"]["help"]["hidden"])
 
-    def test_a_switch_denied_by_the_global_override_says_so_on_itself(self):
-        # Two facts, one control. The knob has to keep showing this install's
-        # own setting — that is what the click changes — so the reason nobody
-        # is working when the GLOBAL switch is off is carried by the label.
-        # This was the roster's STATE column; the roster is gone.
+    def test_a_global_override_does_not_replace_the_native_cell_value(self):
+        # The cell edits the install's own setting, so its raw value remains
+        # truthful even while the separate global policy denies everyone.
         with Session(self.engine) as session:
             session.add(ExtensionInstallationAccess(
                 subject_id="*", extension_enabled=False))
@@ -406,8 +395,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         try:
             rows = {row["_select"]: row
                     for row in self.routes["_console_usage_leaderboard"]()["rows"]}
-            self.assertTrue(rows["cred-a"]["toolkit"]["checked"], "its own switch is still on")
-            self.assertIn("GLOBAL", rows["cred-a"]["toolkit"]["label"])
+            self.assertTrue(rows["cred-a"]["toolkit_value"], "its own switch is still on")
         finally:
             with Session(self.engine) as session:
                 session.delete(session.get(ExtensionInstallationAccess, "*"))
@@ -418,31 +406,27 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # an unregistered install has none at all. The sub line is what makes
         # the row identify a specific installation.
         rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
-        registered = rows["cred-a"]["rep"]
-        self.assertTrue(registered["sub"].startswith("rsk_aaaa_… · "))
-        self.assertTrue(registered["sub"].endswith(" · 1 session"))
-        self.assertIsNone(registered["tone"])
-        # An unregistered install reads as a quieter name, never as a person.
-        self.assertEqual(rows["cred-c"]["rep"]["tone"], "muted")
+        self.assertEqual(rows["cred-a"]["rep_name"], "Alex Rep")
+        self.assertEqual(rows["cred-a"]["rep_id"], "rsk_aaaa_…")
+        self.assertIn("cred-a", rows["cred-a"]["rep_search"])
 
     def test_leaderboard_measures_breadth_against_the_orgs_own_tool_catalog(self):
         # "2/19" hard-coded next to the UI goes stale the day a surface ships;
         # the denominator is how many distinct tools anyone actually opened.
         rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
         # Gifting Catalog + CRM Search + Toolbar Popup across the whole org.
-        self.assertEqual(rows["cred-a"]["tools"]["text"], "2/3")
-        self.assertEqual(rows["cred-c"]["tools"]["text"], "0/3")
+        self.assertEqual(rows["cred-a"]["tools_display"], "2/3")
+        self.assertEqual(rows["cred-c"]["tools_display"], "0/3")
 
     def test_leaderboard_deviation_cell_is_signed_around_the_team_median(self):
         # A 0→1 fill can't say "behind the team" — the median has to be the
         # ZERO of this column, with the sign carrying the direction.
         rows = {row["_select"]: row for row in self.routes["_console_usage_leaderboard"]()["rows"]}
-        self.assertEqual(rows["cred-a"]["dev"]["kind"], "diverge")
-        self.assertGreater(rows["cred-a"]["dev"]["value"], 0)   # busiest rep
-        self.assertLess(rows["cred-c"]["dev"]["value"], 0)      # idle install
+        self.assertGreater(rows["cred-a"]["dev_value"], 0)   # busiest rep
+        self.assertLess(rows["cred-c"]["dev_value"], 0)      # idle install
         for row in rows.values():
-            self.assertGreaterEqual(row["dev"]["value"], -1.0)
-            self.assertLessEqual(row["dev"]["value"], 1.0)
+            self.assertGreaterEqual(row["dev_value"], -1.0)
+            self.assertLessEqual(row["dev_value"], 1.0)
 
     def test_leaderboard_footer_states_the_baseline_the_bars_are_drawn_against(self):
         payload = self.routes["_console_usage_leaderboard"]()
@@ -486,9 +470,16 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(columns["toolkit"]["editor"], "key-access")
         self.assertEqual(columns["help"]["editor"], "key-chat")
         self.assertEqual(columns["dev"]["renderer"], "positive_negative_bar")
+        self.assertEqual(columns["rep"]["renderer"], "composite")
+        self.assertEqual(columns["rep"]["children"][0]["type"], "initials")
+        self.assertEqual(columns["rep"]["children"][1]["children"][0]["type"], "title")
+        self.assertEqual(columns["rep"]["children"][1]["children"][1]["type"], "subtitle")
         first = payload["rows"][0]
         self.assertIsInstance(first["toolkit_value"], bool)
         self.assertIsInstance(first["dev_value"], float)
+        self.assertFalse(any(isinstance(value, dict) and "kind" in value
+                             for value in first.values()),
+                         "legacy cell descriptors must not survive beside native primitives")
 
     def test_leaderboard_drops_columns_in_order_of_what_the_card_is_for(self):
         # Who, and at what rate — the two things the card exists to answer, so
@@ -502,9 +493,6 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             "the subject and its rate are load-bearing")
         for key in ("tools", "funnel", "dev", "trend"):
             self.assertEqual(columns[key]["priority"], "low", key)
-        # `rank` is a 3-character rail: worth keeping at every width, and not
-        # worth protecting ahead of the figures it numbers.
-        self.assertEqual(columns["rank"]["priority"], "medium")
         # Within `low`, the trend is the one that explains the figures, so it
         # outranks them as a tie-break and is the last of the four to go.
         self.assertEqual(columns["trend"]["min_w"], 2)
@@ -909,10 +897,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # strip. It is the cells that can NEVER have samples that are gone.
         self.assertTrue(all(cell["value"] for cell in payload["items"]))
 
-    def test_leaderboard_sort_control_reranks_server_side_with_the_rank_column(self):
+    def test_leaderboard_sort_control_reranks_server_side(self):
         # cred-a leads on volume; cred-b touched a funnel stage cred-a's own
         # count can't beat on breadth, so the two orderings must differ in
-        # SOME sortable dimension — and rank must always follow the order.
+        # SOME sortable dimension.
         # `_rep_subjects`, not `_rep_aggregates`: the ranking covers every
         # living install now, including the ones with nothing measured, and
         # they rank last rather than being left out.
@@ -933,8 +921,6 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             # label alone would still pass if the ranking never changed.
             self.assertEqual([row["_select"] for row in payload["rows"]],
                              sorted(reps, key=lambda owner: -reps[owner][aggregate]))
-            self.assertEqual([int(row["rank"]["text"]) for row in payload["rows"]],
-                             list(range(1, len(payload["rows"]) + 1)))
         # An unknown sort falls back to the rate ranking instead of erroring —
         # and the control reports the choice it actually HONOURED, so a stale
         # option cannot leave a pill lit that describes a different ranking.
