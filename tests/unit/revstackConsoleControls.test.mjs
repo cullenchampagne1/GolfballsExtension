@@ -103,13 +103,14 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.deepEqual(ids(emailColumns), ['name', 'owner', 'type', 'updated', 'act']);
     assert.match(emailColumns, /"id": "name", "field": "name", "header": "Name", "primitive": "text"/);
     assert.match(emailColumns, /"id": "act", "field": "act", "header": "Revoke", "primitive": "button"/);
-    assert.match(emailColumns, /"renderer_options": \{"color": "var\(--rs-bad, #E5484D\)"\}/);
+    assert.match(emailColumns, /"renderer_options": \{"actionType": "revoke", "cellInset": 5,/);
     assert.doesNotMatch(emailColumns, /"id": "imports"|"id": "status"/);
     assert.deepEqual(ids(sourceColumns), ['source', 'standing', 'templates', 'updated', 'act']);
     assert.match(sourceColumns, /"id": "source", "field": "source\.text", "header": "Source account"/);
     assert.match(sourceColumns, /"id": "standing", "field": "source\.sub", "header": "Standing",\n\s+"primitive": "enum"/);
     assert.match(sourceColumns, /"id": "templates", "field": "templates", "header": "Count",\n\s+"primitive": "integer"/);
     assert.match(sourceColumns, /"id": "act", "field": "act", "header": "Clear",\n\s+"primitive": "button"/);
+    assert.match(sourceColumns, /"renderer_options": \{"actionType": "clear", "cellInset": 5,/);
     assert.match(sourceColumns, /"responsive": \{"priority": 100, "canHide": False\}/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
@@ -169,7 +170,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(managedTemplatesRoute, /"id": "conflict", "field": "conflict\.color", "header": "Merge",\n\s+"primitive": "status_indicator"/);
     assert.match(managedTemplatesRoute, /"renderer_options": \{"labelField": "conflict\.text"\}/);
     assert.match(managedTemplatesRoute, /"id": "act", "field": "act", "header": "Remove",\n\s+"primitive": "button"/);
-    assert.match(managedTemplatesRoute, /"renderer_options": \{"color": "var\(--rs-bad, #E5484D\)"\}/);
+    assert.match(managedTemplatesRoute, /"renderer_options": \{"actionType": "remove", "cellInset": 5,/);
     assert.match(routes, /@router\.get\("\/managed-email-template-sources"\)/);
     assert.match(routes, /"sub": "Parent" if is_parent else "Former parent"/);
   });
