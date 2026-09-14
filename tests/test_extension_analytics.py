@@ -448,6 +448,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         try:
             payload = self.routes["_console_email_send_log"](30)
             self.assertEqual(payload["primary_key"], "id")
+            self.assertEqual(payload["data_source"]["mode"], "server")
+            self.assertEqual(payload["data_source"]["pagination"], {
+                "enabled": True, "page": 1, "page_size": 25,
+            })
             self.assertEqual(
                 [column["id"] for column in payload["columns"]],
                 ["sent_at", "rep", "transport", "source", "messages", "words",
@@ -472,6 +476,53 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         finally:
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id == event_id))
+                session.commit()
+
+    def test_email_send_log_queries_only_the_requested_server_page(self):
+        with Session(self.engine) as session:
+            baseline_rows = session.scalar(
+                select(func.count(ExtensionUsageEvent.id)).where(
+                    ExtensionUsageEvent.kind == "feature",
+                    ExtensionUsageEvent.feature == "email_send",
+                )
+            ) or 0
+            events = [
+                ExtensionUsageEvent(
+                    owner_credential_id="cred-a",
+                    session_id=f"paged-{index}",
+                    kind="feature",
+                    feature="email_send",
+                    source="email_preview",
+                    transport="pa",
+                    count=1,
+                    ok=True,
+                    occurred_at=self.now - timedelta(minutes=index),
+                )
+                for index in range(31)
+            ]
+            session.add_all(events)
+            session.flush()
+            event_ids = [event.id for event in events]
+            session.commit()
+        try:
+            first = self.routes["_console_email_send_log"](30, page=1, page_size=10)
+            second = self.routes["_console_email_send_log"](30, page=2, page_size=10)
+            self.assertEqual(len(first["rows"]), 10)
+            self.assertEqual(len(second["rows"]), 10)
+            self.assertEqual(first["data_source"]["total_rows"], baseline_rows + 31)
+            self.assertEqual(second["data_source"]["pagination"], {
+                "enabled": True, "page": 2, "page_size": 10,
+            })
+            self.assertTrue(
+                {row["id"] for row in first["rows"]}.isdisjoint(
+                    {row["id"] for row in second["rows"]}
+                )
+            )
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(
+                    ExtensionUsageEvent.id.in_(event_ids)
+                ))
                 session.commit()
 
     def test_email_activity_matches_unique_short_and_work_install_names_to_pods(self):
