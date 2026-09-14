@@ -147,7 +147,16 @@ days as the dashed average marker and 120% of that pace as the solid goal.
 The Email Send Log keeps one metadata-only grid row per newly recorded send.
 Rows collected before individual preservation may represent a coalesced batch;
 their explicit message count remains visible rather than inventing per-message
-details the historical event does not contain.
+details the historical event does not contain. Recorded timestamps render in
+America/Chicago time, and the compact grid keeps authored-word and attachment
+counts visible while leaving entry-point and inline-image details in the row
+drawer.
+
+Each BDR, SA, and SR email-activity range publishes three footer comparisons:
+the role's current per-day pace versus last week's per-day pace, the percentage
+of benchmarked pod seats reaching their prior-week average, and the percentage
+reaching the 20%-above-average goal. Seats with no prior-week activity have no
+benchmark and are excluded from the two attainment denominators.
 
 The managed roster contains only first name, last name, pod, and position. A
 name first tries an exact installation display-name match after case and

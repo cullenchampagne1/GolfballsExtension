@@ -420,6 +420,16 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             self.assertTrue(all(item["mode"] == "stacked" for item in series))
             self.assertEqual(series[1]["roles"]["average"], "previous_week_average")
             self.assertEqual(series[1]["roles"]["goal"], "goal")
+            self.assertEqual(today["stats"], [
+                {"label": "vs last wk", "value": "↑ 150%"},
+                {"label": "at average", "value": "100%"},
+                {"label": "at goal", "value": "100%"},
+            ])
+            self.assertEqual(trailing["stats"], [
+                {"label": "vs last wk", "value": "↓ 50%"},
+                {"label": "at average", "value": "0%"},
+                {"label": "at goal", "value": "0%"},
+            ])
             json.dumps(payload)
         finally:
             with Session(self.engine) as session:
@@ -455,9 +465,14 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             })
             self.assertEqual(
                 [column["id"] for column in payload["columns"]],
-                ["sent_at", "rep", "transport", "messages", "status"],
+                ["sent_at", "rep", "transport", "messages", "words",
+                 "attachments", "status"],
             )
             self.assertEqual(payload["columns"][0]["primitive"], "datetime")
+            self.assertEqual(
+                payload["columns"][0]["type_options"]["timeZone"],
+                "America/Chicago",
+            )
             self.assertEqual(payload["columns"][1]["renderer"], "avatar_identity")
             self.assertEqual(payload["columns"][-1]["primitive"], "status_indicator")
             row = next(item for item in payload["rows"] if item["id"] == f"email-event-{event_id}")

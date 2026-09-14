@@ -97,6 +97,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, /^size: \{ w: 1, h: 5, min: \{ w: 1, h: 4 \} \}$/m);
       assert.match(block, /^\s+showRanges: true$/m);
       assert.match(block, /^\s+rangePosition: footer$/m);
+      assert.match(block, /^\s+chartShowStats: true$/m);
       assert.match(block, /^\s+chartShowLegend: true$/m);
       assert.match(block, /^\s+xTitle: Emails per day$/m);
       assert.match(block, /^\s+yFormat: decimal$/m);
@@ -141,6 +142,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /\.offset\(\(resolved_page - 1\) \* resolved_page_size\)/);
     assert.match(routes, /"renderer": "avatar_identity"/);
     assert.match(routes, /"primitive": "datetime"/);
+    assert.match(routes, /"timeZone": "America\/Chicago"/);
     assert.match(routes, /"primitive": "status_indicator"/);
     assert.match(routes, /"_detail": \{/);
     const placement = project.dashboard.default_layout.find(
