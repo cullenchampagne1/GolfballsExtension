@@ -158,6 +158,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
 
   it('declares call logs as vertical pod bars stacked by sales role', () => {
     assert.match(callActivityBlock, /^title: Call Logs by Pod$/m);
+    assert.match(callActivityBlock, /^size: \{ w: 4, h: 5, min: \{ w: 1, h: 4 \} \}$/m);
     assert.match(callActivityBlock, /^view: chart\.cartesian$/m);
     assert.match(callActivityBlock, /^\s+shape: chart\.cartesian$/m);
     assert.match(callActivityBlock, /data\/call\.activity/);
