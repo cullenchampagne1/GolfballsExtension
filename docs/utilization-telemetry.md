@@ -144,8 +144,11 @@ trailing seven-day daily average. Both ranges use the preceding seven complete
 days as the dashed average marker and 120% of that pace as the solid goal.
 
 The managed roster contains only first name, last name, pod, and position. A
-name must match the installation's registered display name after case and
-whitespace normalization. Changing the roster does not rewrite telemetry.
+name first tries an exact installation display-name match after case and
+punctuation normalization. A unique first name or four-character first-name
+prefix also matches, and a trailing `Work` label is ignored (for example,
+`Matt` → Matthew LaGrange and `Cullen-Work` → Cullen Champagne). Ambiguous
+short names remain unmatched. Changing the roster does not rewrite telemetry.
 
 ## Code ownership
 

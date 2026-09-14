@@ -14,6 +14,7 @@ directly, so this test has no cross-repo import dependency.
 import ast
 import json
 import math
+import re
 import unittest
 from bisect import bisect_left
 from decimal import Decimal
@@ -75,8 +76,18 @@ _TEST_POD_LINEUP = {
     "version": 1,
     "members": [
         {
-            "first_name": "Alex" if pod == 1 and position == "BDR" else f"{position}{pod}",
-            "last_name": "Rep" if pod == 1 and position == "BDR" else "Test",
+            "first_name": (
+                "Alex" if pod == 1 and position == "BDR" else
+                "Cullen" if pod == 5 and position == "BDR" else
+                "Matthew" if pod == 5 and position == "SA" else
+                f"{position}{pod}"
+            ),
+            "last_name": (
+                "Rep" if pod == 1 and position == "BDR" else
+                "Champagne" if pod == 5 and position == "BDR" else
+                "LaGrange" if pod == 5 and position == "SA" else
+                "Test"
+            ),
             "pod": pod,
             "position": position,
         }
@@ -291,7 +302,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         cls.routes = _load_routes_functions(
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
-                "_normalized_person_name", "_pod_lineup_members", "_email_activity_series",
+                "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
                 "_console_email_activity", "_POD_LINEUP_CONFIG",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
@@ -318,7 +329,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_presence_hourly_buckets", "_console_usage_kpi_strip", "_KPI_PROVENANCE",
             },
             extra_globals={
-                "math": math, "bisect_left": bisect_left,
+                "math": math, "re": re, "bisect_left": bisect_left,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
                 "select": select, "Session": Session, "Any": Any, "Optional": Optional,
                 "auth_manager": type("Auth", (), {
@@ -410,6 +421,48 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         finally:
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id.in_(added_ids)))
+                session.commit()
+
+    def test_email_activity_matches_unique_short_and_work_install_names_to_pods(self):
+        credentials = (("cred-matt", "MAtt", "SA"), ("cred-cullen", "Cullen-Work", "BDR"))
+        with Session(self.engine) as session:
+            for credential_id, display_name, _position in credentials:
+                session.add(ExtensionInstallationIdentity(
+                    credential_id=credential_id,
+                    display_name=display_name,
+                    local_part=display_name.casefold(),
+                ))
+                session.add(ExtensionUsageEvent(
+                    owner_credential_id=credential_id,
+                    session_id=f"session-{credential_id}",
+                    kind="feature",
+                    feature="email_send",
+                    source="popup",
+                    transport="pa",
+                    count=3,
+                    ok=True,
+                    occurred_at=self.now,
+                ))
+            session.commit()
+        try:
+            sa_pod_five = self.routes["_console_email_activity"]("SA")["ranges"][0]["rows"][4]
+            bdr_pod_five = self.routes["_console_email_activity"]("BDR")["ranges"][0]["rows"][4]
+            self.assertEqual((sa_pod_five["person"], sa_pod_five["pa"]),
+                             ("Matthew LaGrange", 3.0))
+            self.assertEqual((bdr_pod_five["person"], bdr_pod_five["pa"]),
+                             ("Cullen Champagne", 3.0))
+            ambiguous_members = [
+                {"first_name": "Matt", "last_name": "One", "name_key": "matt one"},
+                {"first_name": "Matthew", "last_name": "Two", "name_key": "matthew two"},
+            ]
+            self.assertIsNone(self.routes["_match_pod_member"]("Matt", ambiguous_members))
+        finally:
+            credential_ids = [credential_id for credential_id, _name, _position in credentials]
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(
+                    ExtensionUsageEvent.owner_credential_id.in_(credential_ids)))
+                session.execute(delete(ExtensionInstallationIdentity).where(
+                    ExtensionInstallationIdentity.credential_id.in_(credential_ids)))
                 session.commit()
 
     def test_leaderboard_ranks_the_busier_rep_first_and_names_it_by_identity(self):
