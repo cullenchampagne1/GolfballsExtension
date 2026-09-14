@@ -58,6 +58,7 @@ const adoptionBlock = blockSource('analytics-adoption');
 const emailVolumeBlock = blockSource('analytics-email-volume');
 const bdrEmailActivityBlock = blockSource('analytics-bdr-email-activity');
 const saEmailActivityBlock = blockSource('analytics-sa-email-activity');
+const srEmailActivityBlock = blockSource('analytics-sr-email-activity');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('keeps the reliability trend in milliseconds on an adaptive time axis', () => {
@@ -82,10 +83,11 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(emailVolumeBlock, /^\s+yFormat: integer$/m);
   });
 
-  it('declares BDR and SA pod activity as shared horizontal Cartesian charts', () => {
+  it('declares BDR, SA, and SR pod activity as shared horizontal Cartesian charts', () => {
     for (const [role, block] of [
       ['BDR', bdrEmailActivityBlock],
       ['SA', saEmailActivityBlock],
+      ['SR', srEmailActivityBlock],
     ]) {
       assert.match(block, new RegExp(`^title: ${role} Email Activity$`, 'm'));
       assert.match(block, /^view: chart\.cartesian$/m);
@@ -99,11 +101,23 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     }
     assert.match(bdrEmailActivityBlock, /data\/email\.bdr-activity/);
     assert.match(saEmailActivityBlock, /data\/email\.sa-activity/);
+    assert.match(srEmailActivityBlock, /data\/email\.sr-activity/);
     const layout = new Map(project.dashboard.default_layout.map((item) => [item.instance_id, item]));
     assert.equal(layout.get('analytics-bdr-email-activity')?.block_id,
       'golfballs-extension.analytics-bdr-email-activity');
     assert.equal(layout.get('analytics-sa-email-activity')?.block_id,
       'golfballs-extension.analytics-sa-email-activity');
+    assert.equal(layout.get('analytics-sr-email-activity')?.block_id,
+      'golfballs-extension.analytics-sr-email-activity');
+    assert.deepEqual(
+      ['analytics-bdr-email-activity', 'analytics-sa-email-activity', 'analytics-sr-email-activity']
+        .map((id) => ({ x: layout.get(id)?.x, y: layout.get(id)?.y, w: layout.get(id)?.w })),
+      [
+        { x: 0, y: 37, w: 4 / 3 },
+        { x: 4 / 3, y: 37, w: 4 / 3 },
+        { x: 8 / 3, y: 37, w: 4 / 3 },
+      ],
+    );
   });
 
   it('renders support tickets through the modal-capable ConsoleList contract', () => {

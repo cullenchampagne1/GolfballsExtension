@@ -135,8 +135,8 @@ The backend rejects extra fields instead of ignoring them. Timestamps from a bro
 
 ## Pod email activity
 
-The BDR Email Activity and SA Email Activity blocks join successful `email_send`
-events to the installation's registered display name and then to
+The BDR Email Activity, SA Email Activity, and SR Email Activity blocks join
+successful `email_send` events to the installation's registered display name and then to
 `api-access-configs/golfballs-pod-lineups.json`. Each pod bar is therefore the
 assigned individual's activity. The stack separates Power Automate sends from
 Outlook handoffs. `Today` shows the current UTC-day count; `7D avg` shows the

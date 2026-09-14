@@ -467,6 +467,42 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                     ExtensionInstallationIdentity.credential_id.in_(credential_ids)))
                 session.commit()
 
+    def test_sr_email_activity_uses_the_sr_lineup_and_real_telemetry(self):
+        credential_id = "cred-sr-five"
+        with Session(self.engine) as session:
+            session.add(ExtensionInstallationIdentity(
+                credential_id=credential_id,
+                display_name="SR5 Test",
+                local_part="sr5.test",
+            ))
+            session.add(ExtensionUsageEvent(
+                owner_credential_id=credential_id,
+                session_id="session-cred-sr-five",
+                kind="feature",
+                feature="email_send",
+                source="popup",
+                transport="mailto",
+                count=6,
+                ok=True,
+                occurred_at=self.now,
+            ))
+            session.commit()
+        try:
+            payload = self.routes["_console_email_activity"]("SR")
+            today = payload["ranges"][0]
+            self.assertEqual(len(today["rows"]), 10)
+            pod_five = today["rows"][4]
+            self.assertEqual((pod_five["person"], pod_five["position"]),
+                             ("SR5 Test", "SR"))
+            self.assertEqual((pod_five["pa"], pod_five["mailto"]), (0.0, 6.0))
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(
+                    ExtensionUsageEvent.owner_credential_id == credential_id))
+                session.execute(delete(ExtensionInstallationIdentity).where(
+                    ExtensionInstallationIdentity.credential_id == credential_id))
+                session.commit()
+
     def test_leaderboard_ranks_the_busier_rep_first_and_names_it_by_identity(self):
         payload = self.routes["_console_usage_leaderboard"]()
         rows = payload["rows"]
