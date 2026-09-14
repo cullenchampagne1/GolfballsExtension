@@ -195,6 +195,28 @@ describe('usage telemetry', () => {
     assert.equal(featureRows.find((event) => event.feature === 'contact_import_run')?.count, 2);
   });
 
+  it('coalesces successful call logs without accepting CRM or contact content', async () => {
+    const sent = [];
+    const { reporter } = loadTelemetry({ fetchImpl: recordingFetch(sent) });
+
+    assert.equal(reporter.record({
+      kind: 'feature', feature: 'call_log', source: 'contact', count: 1,
+      contact_id: 'private-contact', subject: 'private-subject',
+    }), true);
+    assert.equal(reporter.record({
+      kind: 'feature', feature: 'call_log', source: 'contact', count: 1,
+    }), true);
+    assert.equal(reporter.pending(), 1);
+
+    await reporter.flush();
+    await settle();
+
+    const call = sent[0].events.find((event) => event.feature === 'call_log');
+    assert.equal(call.count, 2);
+    assert.equal('contact_id' in call, false);
+    assert.equal('subject' in call, false);
+  });
+
   it('retains a pending aggregate across service-worker eviction', async () => {
     const sent = [];
     const first = loadTelemetry({ fetchImpl: recordingFetch(sent) });

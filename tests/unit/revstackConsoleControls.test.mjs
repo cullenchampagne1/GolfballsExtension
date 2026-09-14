@@ -60,6 +60,7 @@ const bdrEmailActivityBlock = blockSource('analytics-bdr-email-activity');
 const saEmailActivityBlock = blockSource('analytics-sa-email-activity');
 const srEmailActivityBlock = blockSource('analytics-sr-email-activity');
 const emailSendLogBlock = blockSource('analytics-email-send-log');
+const callActivityBlock = blockSource('analytics-call-activity');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('keeps the reliability trend in milliseconds on an adaptive time axis', () => {
@@ -149,6 +150,29 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       block_id: 'golfballs-extension.analytics-email-send-log',
       x: 0,
       y: 42,
+      w: 4,
+      h: 5,
+    });
+  });
+
+  it('declares call logs as vertical pod bars stacked by sales role', () => {
+    assert.match(callActivityBlock, /^title: Call Logs by Pod$/m);
+    assert.match(callActivityBlock, /^view: chart\.cartesian$/m);
+    assert.match(callActivityBlock, /^\s+shape: chart\.cartesian$/m);
+    assert.match(callActivityBlock, /data\/call\.activity/);
+    assert.match(callActivityBlock, /^\s+chartShowLegend: true$/m);
+    assert.match(callActivityBlock, /^\s+yTitle: Call logs$/m);
+    assert.match(routes, /def _console_call_activity\(\)/);
+    assert.match(routes, /"orientation": "vertical"/);
+    assert.match(routes, /roles = \("SA", "SR", "BDR"\)/);
+    const placement = project.dashboard.default_layout.find(
+      (item) => item.instance_id === 'analytics-call-activity',
+    );
+    assert.deepEqual(placement, {
+      instance_id: 'analytics-call-activity',
+      block_id: 'golfballs-extension.analytics-call-activity',
+      x: 0,
+      y: 47,
       w: 4,
       h: 5,
     });

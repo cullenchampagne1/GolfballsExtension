@@ -303,7 +303,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
                 "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
-                "_console_email_activity", "_console_email_send_log", "_POD_LINEUP_CONFIG",
+                "_console_email_activity", "_console_email_send_log", "_console_call_activity",
+                "_POD_LINEUP_CONFIG",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
                 "_SEV_OK", "_SEV_WARN", "_SEV_BAD",
@@ -476,6 +477,65 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         finally:
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id == event_id))
+                session.commit()
+
+    def test_call_activity_stacks_sa_sr_and_bdr_totals_in_vertical_pod_bars(self):
+        identities = (
+            ("cred-call-sa", "Matthew LaGrange", "SA", 2, 1),
+            ("cred-call-sa", "Matthew LaGrange", "SA", 3, 10),
+            ("cred-call-sr", "SR5 Test", "SR", 4, 1),
+            ("cred-a", "Alex Rep", "BDR", 6, 40),
+        )
+        event_ids = []
+        with Session(self.engine) as session:
+            session.add(ExtensionInstallationIdentity(
+                credential_id="cred-call-sa", display_name="Matthew LaGrange",
+                local_part="matthew.lagrange",
+            ))
+            session.add(ExtensionInstallationIdentity(
+                credential_id="cred-call-sr", display_name="SR5 Test",
+                local_part="sr5.test",
+            ))
+            for credential_id, _name, _role, count, offset in identities:
+                event = ExtensionUsageEvent(
+                    owner_credential_id=credential_id,
+                    session_id=f"session-{credential_id}",
+                    kind="feature",
+                    feature="call_log",
+                    source="contact",
+                    transport="none",
+                    count=count,
+                    ok=True,
+                    occurred_at=self.now - timedelta(days=offset),
+                )
+                session.add(event)
+                session.flush()
+                event_ids.append(event.id)
+            session.commit()
+        try:
+            payload = self.routes["_console_call_activity"]()
+            self.assertEqual(payload["default_range"], "30d")
+            self.assertEqual([item["label"] for item in payload["ranges"]],
+                             ["7D", "30D", "90D"])
+            self.assertEqual([item["name"] for item in payload["ranges"][0]["series"]],
+                             ["SA", "SR", "BDR"])
+            self.assertTrue(all(
+                item["mode"] == "stacked" and item["orientation"] == "vertical"
+                for item in payload["ranges"][0]["series"]
+            ))
+            seven, thirty, ninety = payload["ranges"]
+            self.assertEqual(len(seven["rows"]), 10)
+            self.assertEqual((seven["rows"][4]["sa"], seven["rows"][4]["sr"],
+                              seven["rows"][4]["bdr"]), (2, 4, 0))
+            self.assertEqual(thirty["rows"][4]["sa"], 5)
+            self.assertEqual(ninety["rows"][0]["bdr"], 6)
+            json.dumps(payload)
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(
+                    ExtensionUsageEvent.id.in_(event_ids)))
+                session.execute(delete(ExtensionInstallationIdentity).where(
+                    ExtensionInstallationIdentity.credential_id.in_(("cred-call-sa", "cred-call-sr"))))
                 session.commit()
 
     def test_email_send_log_queries_only_the_requested_server_page(self):

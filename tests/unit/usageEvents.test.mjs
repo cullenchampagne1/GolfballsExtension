@@ -5,6 +5,7 @@ import {
   emailUsageDimensions,
   reportContactImportUsage,
   reportFeatureUsage,
+  USAGE_FEATURES,
 } from '../../src/lib/usageEvents.js';
 
 const originalChrome = globalThis.chrome;
@@ -15,6 +16,10 @@ afterEach(() => {
 });
 
 describe('feature utilization event boundary', () => {
+  it('registers successful call logs as a content-free feature', () => {
+    assert.equal(USAGE_FEATURES.includes('call_log'), true);
+  });
+
   it('derives aggregate email dimensions without retaining body content', () => {
     const dimensions = emailUsageDimensions(`
       <p>Hello there, Sam.</p>

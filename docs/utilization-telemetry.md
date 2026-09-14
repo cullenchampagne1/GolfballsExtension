@@ -12,6 +12,7 @@ The dashboard now displays only stored telemetry. There is no generated example-
 | --- | --- | --- | --- | --- |
 | Email deliveries | Power Automate confirms a send, or the extension successfully opens an Outlook `mailto` compose window | One delivered or handed-off message | Entry point: Popup, Task List, CRM Search, Email Preview, Contact, or Other. Transport: Power Automate or Outlook handoff | Preserved individually inside the periodic batch |
 | Email previews | A user opens the email-preview surface | One preview open | Email Preview | Coalesced and sent in the periodic batch |
+| Call logs | The CRM accepts a Call Log submission from the extension | One successfully logged call | Contact | Coalesced and flushed soon after success |
 | Contacts imported | A spreadsheet is parsed and accepted records are loaded into CRM Search | Number of accepted records; retained for Utilization Details | CRM Search | Flush requested about 1.5 seconds after success |
 | Contact import runs | The same successful import completes | One completed import, regardless of spreadsheet size; used by Core tools | CRM Search | Flush requested about 1.5 seconds after success |
 | Proofs submitted | A real, non-mock submission returns at least one successful proof link | Number of successful proof requests | Submit Proof | Flush requested about 1.5 seconds after success |
@@ -23,7 +24,7 @@ The dashboard now displays only stored telemetry. There is no generated example-
 | Proposal emails opened | A user enters the catalog's proposal-email builder | One builder open | Gifting Catalog | Coalesced and sent in the periodic batch |
 | Checkouts opened | A user enters the catalog checkout builder | One checkout open | Gifting Catalog | Coalesced and sent in the periodic batch |
 
-Only successful feature rows (`ok = true`) enter the utilization chart and detail table. Email mock runs explicitly opt out of reporting. Failed email deliveries, failed imports, all-failed proof submissions, failed proposal saves, and failed publishes do not inflate utilization.
+Only successful feature rows (`ok = true`) enter the utilization chart and detail table. Email mock runs explicitly opt out of reporting. Rejected call-log submissions, failed email deliveries, failed imports, all-failed proof submissions, failed proposal saves, and failed publishes do not inflate utilization.
 
 ### Email composition dimensions
 
@@ -154,6 +155,16 @@ punctuation normalization. A unique first name or four-character first-name
 prefix also matches, and a trailing `Work` label is ignored (for example,
 `Matt` → Matthew LaGrange and `Cullen-Work` → Cullen Champagne). Ambiguous
 short names remain unmatched. Changing the roster does not rewrite telemetry.
+
+## Pod call activity
+
+The Call Logs by Pod block counts successful extension call-log submissions in
+7-day, 30-day, and 90-day windows. It draws one vertical bar per pod, stacked
+by SA, SR, and BDR, using the same managed roster and installation-name matcher
+as the email activity blocks. A name assigned to more than one role is omitted
+because one content-free call event cannot truthfully determine which seat made
+it; correcting the managed roster makes future and already stored events
+resolvable without rewriting telemetry.
 
 ## Code ownership
 

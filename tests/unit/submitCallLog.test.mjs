@@ -102,7 +102,7 @@ describe('submitCallLog — CRM request construction', () => {
     const calls = installChrome(() => ({ ok: true, text: CRM_FORM_HTML }));
     const res = await submitCallLog({ template: VALID_TEMPLATE, context: VALID_CONTEXT });
     assert.equal(res.ok, true);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(calls[1].method, 'POST');
     assert.equal(calls[1].url, calls[0].url);
     assert.deepEqual(calls[1].headers, { 'Content-Type': 'application/x-www-form-urlencoded' });
@@ -114,6 +114,20 @@ describe('submitCallLog — CRM request construction', () => {
     assert.equal(body.get('ctl00$Content$tbBody'), 'Called about order 2820701');
     assert.equal(body.get('ctl00$Content$Voicemail'), 'on');
     assert.equal(body.get('ctl00$Content$btnSubmit'), 'Save Activity');
+    assert.deepEqual(calls[2], {
+      action: 'gbUsageEvent',
+      flush: 'soon',
+      event: {
+        kind: 'feature',
+        feature: 'call_log',
+        source: 'contact',
+        count: 1,
+        word_count: 0,
+        attachment_count: 0,
+        inline_image_count: 0,
+        ok: true,
+      },
+    });
   });
 
   it('omits the Voicemail flag when the template does not set it', async () => {
@@ -153,7 +167,7 @@ describe('submitCallLog — CRM request construction', () => {
 
     assert.equal(res.ok, true);
     assert.equal(res.followUpAction.ok, true);
-    assert.deepEqual(calls[2], { followUpAction: 'action_1', contactId: '555001' });
+    assert.deepEqual(calls[3], { followUpAction: 'action_1', contactId: '555001' });
   });
 });
 

@@ -11,6 +11,7 @@ const MESSAGE = 'gbUsageEvent';
 export const USAGE_FEATURES = Object.freeze([
   'email_send',
   'email_preview',
+  'call_log',
   'contact_import',
   'contact_import_run',
   'proof_submit',

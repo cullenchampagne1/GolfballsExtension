@@ -62,6 +62,14 @@ class UsageTelemetryContractTests(unittest.TestCase):
         })
         self.assertEqual(event.count, 2)
 
+    def test_accepts_a_content_free_call_log_counter(self):
+        event = self.UsageEvent.model_validate({
+            "kind": "feature", "feature": "call_log",
+            "source": "contact", "count": 3,
+        })
+        self.assertEqual(event.count, 3)
+        self.assertIsNone(event.transport)
+
     def test_rejects_content_and_unregistered_dimensions(self):
         for patch in (
             {"subject": "private subject"},

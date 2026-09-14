@@ -31,6 +31,7 @@
 import { API } from './constants.js';
 import { resolveEmployeeId } from './employeeIdentity.js';
 import { runTemplateFollowUpAfterSuccess } from './templateFollowUpAction.js';
+import { reportFeatureUsage } from './usageEvents.js';
 
 const BASE = API.CRM;
 
@@ -210,6 +211,12 @@ export async function submitCallLog({ template, context } = {}, followUpDeps = {
   if (!postResp?.ok) {
     return { ok: false, error: `CRM rejected the submission (HTTP ${postResp?.status || 'error'}).` };
   }
+
+  // The CRM write is the durable success boundary. Report only the action —
+  // never the contact, phone, subject, body, category, or CRM response — and
+  // do it before the optional follow-up so a later task failure cannot erase a
+  // call that was already logged successfully.
+  reportFeatureUsage('call_log', { source: 'contact' }, { flush: 'soon' });
 
   return runTemplateFollowUpAfterSuccess({
     result: { ok: true },
