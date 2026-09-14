@@ -1,0 +1,73 @@
+# Volume — email sends per day, against the window before it.
+#
+# Replaces the `_block("analytics-email-volume", …)` registrar, a `LineChart`
+# with the legend props. The endpoint is UNTOUCHED.
+#
+# Two curves: this period, and the same-length prior period drawn dashed. The
+# prior line is a reference, not a measurement of now, which is what the dash
+# says — and the legend filter is how you read either one alone.
+#
+# The stat rail carries the real transport split ("68% Power Automate · 32%
+# mailto handoff"), which the endpoint computes from the same events. It is not
+# a caption: it is the answer to "and how did they go out".
+apiVersion: revstack.blocks/v1
+
+id: analytics-email-volume
+title: Volume
+description: Daily email sends from the extension, against the previous window.
+icon: mail
+scopes: [provider:golfballs-extension, project:golfballs-extension, custom]
+category: email
+
+# The FLOOR is this declaration, nothing in the rendering: `size.min.w`
+# becomes `layout_hints.minW`, which becomes the grid item's `minW` and the
+# width a resize refuses to go under. The plot itself draws fine at 300px —
+# the legend rides the card's header line and the window switcher sits in the
+# footer rail, so neither competes with it for width.
+size: { w: 2, h: 4, min: { w: 1, h: 3 } }
+
+header:
+  eyebrow: VOLUME
+  sub: Sends over time
+
+data:
+  url: /projects/golfballs-extension/data/email.volume
+  refresh:
+    every: 120s
+  # No `days` parameter: the window is this card's own control. The endpoint
+  # fetches its longest window once and slices every offered window out of
+  # it, so switching is a local read and the page's selector no longer
+  # reaches past the card to narrow what it can offer.
+  shape: chart.cartesian
+
+view: chart.cartesian
+
+options:
+  # The window's total is a header tag, not a headline over two curves one of
+  # which belongs to a different window.
+  chartShowStat: false
+  chartShowStats: true
+  chartShowLegend: true
+  xTitleVisible: false
+  yTitleVisible: false
+  xLabels: true
+  yLabels: true
+  yFormat: integer
+  # Sends are counts. The ingestion contract accepts only positive event
+  # counts, so a negative axis communicates a value this metric cannot have.
+  yMin: "0"
+  horizontalGrid: true
+  # On the card's header line, beside the published tags — the placement
+  # that costs the plot no height. Drawn in the body the chips took a band
+  # at every width.
+  chartLegendPlacement: header
+  chartLegendToggle: true
+  # The window switcher, in the footer rail. Telemetry started when it
+  # started: a 90-day axis on a young install is mostly the span before
+  # anything was being measured, and the endpoint drops the windows it has
+  # no data for rather than drawing them empty.
+  showRanges: true
+  rangePosition: footer
+
+publishes:
+  - { id: sends, label: sends, value: "${data.sends}", format: int }

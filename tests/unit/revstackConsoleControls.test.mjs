@@ -49,6 +49,8 @@ const managedTemplatesBlock = blockSource('managed-email-templates');
 const managedSourcesBlock = blockSource('managed-email-template-sources');
 const scorecardBlock = blockSource('analytics-scorecard');
 const reliabilityTrendBlock = blockSource('analytics-reliability-trend');
+const adoptionBlock = blockSource('analytics-adoption');
+const emailVolumeBlock = blockSource('analytics-email-volume');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('keeps the reliability trend in milliseconds on an adaptive time axis', () => {
@@ -58,6 +60,19 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(reliabilityTrendBlock, /^\s+yFormat: milliseconds$/m);
     assert.match(reliabilityTrendBlock, /^\s+chartShowStats: true$/m);
     assert.doesNotMatch(reliabilityTrendBlock, /^\s+yFormat: duration$/m);
+  });
+
+  it('keeps adoption footer copy off while retaining its range control', () => {
+    assert.match(adoptionBlock, /^view: chart\.cartesian$/m);
+    assert.match(adoptionBlock, /^\s+chartShowStats: false$/m);
+    assert.match(adoptionBlock, /^\s+showRanges: true$/m);
+    assert.match(adoptionBlock, /^\s+rangePosition: footer$/m);
+  });
+
+  it('grounds email volume at zero because send counts cannot be negative', () => {
+    assert.match(emailVolumeBlock, /^view: chart\.cartesian$/m);
+    assert.match(emailVolumeBlock, /^\s+yMin: "0"$/m);
+    assert.match(emailVolumeBlock, /^\s+yFormat: integer$/m);
   });
 
   it('renders support tickets through the modal-capable ConsoleList contract', () => {

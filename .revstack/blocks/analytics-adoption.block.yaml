@@ -1,0 +1,65 @@
+# Adoption — active installs per day, with first-ever installs under them.
+#
+# Replaces the `_block("analytics-adoption", …)` registrar, a `Stack` of
+# `_kpi_header` + `LineChart`. Two curves: active installs, and new installs
+# (first-ever session per credential) drawn dashed, because a first install is
+# a reference for the busier line rather than a second measurement.
+#
+# ## What changed on the endpoint
+#
+# `installActive` / `installDelta` became the range's own `value` and
+# `delta` — the two fields a hand-built `_kpi_header` row was binding above
+# the chart. `chart.line` draws the headline and its trend pill itself, and
+# holding both on the RANGE is what makes it impossible for the figure to
+# disagree with the curve under it.
+apiVersion: revstack.blocks/v1
+
+id: analytics-adoption
+title: Adoption
+description: Active extension installs per day, against first-ever installs.
+icon: trending-up
+scopes: [provider:golfballs-extension, project:golfballs-extension, custom]
+category: adoption
+size: { w: 2, h: 4, min: { w: 1, h: 3 } }
+
+header:
+  eyebrow: ADOPTION
+  sub: Installs over time
+
+data:
+  url: /projects/golfballs-extension/data/usage.adoption-trend
+  refresh:
+    every: 120s
+  # No `days` parameter: the window is this card's own control. The endpoint
+  # fetches its longest window once and slices every offered window out of
+  # it, so switching is a local read and the page's selector no longer
+  # reaches past the card to narrow what it can offer.
+  shape: chart.cartesian
+
+view: chart.cartesian
+
+options:
+  chartShowStat: true
+  chartStatLabel: active installs
+  chartStatFollowHover: true
+  chartShowLegend: true
+  xTitleVisible: false
+  yTitleVisible: false
+  xLabels: true
+  yLabels: true
+  yFormat: integer
+  horizontalGrid: true
+  # On the card's header line, beside the published tags — the placement
+  # that costs the plot no height. Drawn in the body the chips took a band
+  # at every width.
+  chartLegendPlacement: header
+  chartLegendToggle: true
+  # The window switcher, in the footer rail. Telemetry started when it
+  # started: a 90-day axis on a young install is mostly the span before
+  # anything was being measured, and the endpoint drops the windows it has
+  # no data for rather than drawing them empty.
+  showRanges: true
+  rangePosition: footer
+  # The range payload carries an optional usage hint, but this placement has
+  # no footer copy. Keep only the range picker in the footer rail.
+  chartShowStats: false
