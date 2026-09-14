@@ -56,6 +56,8 @@ const scorecardBlock = blockSource('analytics-scorecard');
 const reliabilityTrendBlock = blockSource('analytics-reliability-trend');
 const adoptionBlock = blockSource('analytics-adoption');
 const emailVolumeBlock = blockSource('analytics-email-volume');
+const bdrEmailActivityBlock = blockSource('analytics-bdr-email-activity');
+const saEmailActivityBlock = blockSource('analytics-sa-email-activity');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('keeps the reliability trend in milliseconds on an adaptive time axis', () => {
@@ -78,6 +80,29 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(emailVolumeBlock, /^view: chart\.cartesian$/m);
     assert.match(emailVolumeBlock, /^\s+yMin: "0"$/m);
     assert.match(emailVolumeBlock, /^\s+yFormat: integer$/m);
+  });
+
+  it('declares BDR and SA pod activity as shared horizontal Cartesian charts', () => {
+    for (const [role, block] of [
+      ['BDR', bdrEmailActivityBlock],
+      ['SA', saEmailActivityBlock],
+    ]) {
+      assert.match(block, new RegExp(`^title: ${role} Email Activity$`, 'm'));
+      assert.match(block, /^view: chart\.cartesian$/m);
+      assert.match(block, /^\s+shape: chart\.cartesian$/m);
+      assert.match(block, /^\s+showRanges: true$/m);
+      assert.match(block, /^\s+rangePosition: footer$/m);
+      assert.match(block, /^\s+chartShowLegend: true$/m);
+      assert.match(block, /^\s+xTitle: Emails per day$/m);
+      assert.match(block, /^\s+yFormat: decimal$/m);
+    }
+    assert.match(bdrEmailActivityBlock, /data\/email\.bdr-activity/);
+    assert.match(saEmailActivityBlock, /data\/email\.sa-activity/);
+    const layout = new Map(project.dashboard.default_layout.map((item) => [item.instance_id, item]));
+    assert.equal(layout.get('analytics-bdr-email-activity')?.block_id,
+      'golfballs-extension.analytics-bdr-email-activity');
+    assert.equal(layout.get('analytics-sa-email-activity')?.block_id,
+      'golfballs-extension.analytics-sa-email-activity');
   });
 
   it('renders support tickets through the modal-capable ConsoleList contract', () => {

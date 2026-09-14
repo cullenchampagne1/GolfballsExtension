@@ -133,6 +133,20 @@ The telemetry contract has no field for and does not store:
 
 The backend rejects extra fields instead of ignoring them. Timestamps from a browser are clamped to the current time and the 365-day retention horizon. The live guide sets `__gbUsageSilent`, so demonstrations do not count as real adoption.
 
+## Pod email activity
+
+The BDR Email Activity and SA Email Activity blocks join successful `email_send`
+events to the installation's registered display name and then to
+`api-access-configs/golfballs-pod-lineups.json`. Each pod bar is therefore the
+assigned individual's activity. The stack separates Power Automate sends from
+Outlook handoffs. `Today` shows the current UTC-day count; `7D avg` shows the
+trailing seven-day daily average. Both ranges use the preceding seven complete
+days as the dashed average marker and 120% of that pace as the solid goal.
+
+The managed roster contains only first name, last name, pod, and position. A
+name must match the installation's registered display name after case and
+whitespace normalization. Changing the roster does not rewrite telemetry.
+
 ## Code ownership
 
 - Feature event vocabulary and email measurements: `src/lib/usageEvents.js`
@@ -142,7 +156,7 @@ The backend rejects extra fields instead of ignoring them. Timestamps from a bro
 - Worker batching and coalescing: `lib/usage-telemetry.js`
 - Authenticated ingestion and strict validation: `.revstack/logic/client_api.py`
 - Dashboard aggregation: `.revstack/routes.py`
-- Dashboard block registrations: `.revstack/blocks.py`
+- Dashboard block registrations: `.revstack/blocks/`
 - Durable database schema: `revstack-backend/models/AuthModels.py` and migration `0027_extension_usage_telemetry.py`
 
 When a new event is added, update the closed vocabularies in the content helper, worker reporter, backend validation model, chart labels/groups, tests, and this document together.

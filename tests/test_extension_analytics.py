@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, func, inspect, select
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, delete, func, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Session
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +69,21 @@ _KEYRING = [
     _key("cred-d", "dddd", last_used_at=None),
     _key("cred-z", "zzzz", revoked_at="2026-02-01T00:00:00"),
 ]
+
+
+_TEST_POD_LINEUP = {
+    "version": 1,
+    "members": [
+        {
+            "first_name": "Alex" if pod == 1 and position == "BDR" else f"{position}{pod}",
+            "last_name": "Rep" if pod == 1 and position == "BDR" else "Test",
+            "pod": pod,
+            "position": position,
+        }
+        for pod in range(1, 11)
+        for position in ("BDR", "SA", "SR")
+    ],
+}
 
 
 class Base(DeclarativeBase):
@@ -276,6 +291,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         cls.routes = _load_routes_functions(
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
+                "_normalized_person_name", "_pod_lineup_members", "_email_activity_series",
+                "_console_email_activity", "_POD_LINEUP_CONFIG",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
                 "_SEV_OK", "_SEV_WARN", "_SEV_BAD",
@@ -311,6 +328,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "ExtensionUsageSession": ExtensionUsageSession, "ExtensionUsageEvent": ExtensionUsageEvent,
                 "ExtensionInstallationIdentity": ExtensionInstallationIdentity, "AuthApiKey": AuthApiKey,
                 "ExtensionInstallationAccess": ExtensionInstallationAccess,
+                "config_access_manager": type("ConfigAccess", (), {
+                    "read": staticmethod(lambda _name: (None, "", _TEST_POD_LINEUP)),
+                })(),
                 "EXTENSION_CLIENT_SCOPE": _CLIENT_SCOPE,
                 "_PROJECT_SCOPE_PREFIX": "/projects/golfballs-extension/",
                 "_KEY_NAME_PREFIXES": ("Golfballs Toolkit",),
@@ -344,6 +364,53 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         segments = {segment["name"]: segment["value"] for segment in payload["segments"]}
         self.assertEqual(segments["Registered"], 1)   # cred-a only
         self.assertEqual(segments["Unregistered"], 2)  # cred-b, cred-c
+
+    def test_email_activity_stacks_transports_and_compares_daily_pace_to_last_week(self):
+        added_ids = []
+        with Session(self.engine) as session:
+            samples = [
+                (0, "pa", 4),
+                (0, "mailto", 1),
+                (1, "pa", 2),
+                (8, "pa", 7),
+                (9, "mailto", 7),
+            ]
+            for offset, transport, count in samples:
+                event = ExtensionUsageEvent(
+                    owner_credential_id="cred-a", session_id="sess-a", kind="feature",
+                    feature="email_send", source="popup", transport=transport, count=count,
+                    ok=True, occurred_at=self.now - timedelta(days=offset),
+                )
+                session.add(event)
+                session.flush()
+                added_ids.append(event.id)
+            session.commit()
+        try:
+            payload = self.routes["_console_email_activity"]("BDR")
+            self.assertEqual(payload["default_range"], "today")
+            self.assertEqual([item["label"] for item in payload["ranges"]], ["Today", "7D avg"])
+            today, trailing = payload["ranges"]
+            self.assertEqual(len(today["rows"]), 10)
+            self.assertEqual([row["pod_label"] for row in today["rows"]],
+                             [f"POD {pod:02d}" for pod in range(1, 11)])
+            pod_one = today["rows"][0]
+            self.assertEqual(pod_one["person"], "Alex Rep")
+            self.assertEqual((pod_one["pa"], pod_one["mailto"]), (4.0, 1.0))
+            self.assertEqual(pod_one["previous_week_average"], 2.0)
+            self.assertEqual(pod_one["goal"], 2.4)
+            self.assertEqual((trailing["rows"][0]["pa"], trailing["rows"][0]["mailto"]),
+                             (round(6 / 7, 2), round(1 / 7, 2)))
+            series = today["series"]
+            self.assertEqual([item["name"] for item in series], ["PA send", "Outlook handoff"])
+            self.assertTrue(all(item["orientation"] == "horizontal" for item in series))
+            self.assertTrue(all(item["mode"] == "stacked" for item in series))
+            self.assertEqual(series[1]["roles"]["average"], "previous_week_average")
+            self.assertEqual(series[1]["roles"]["goal"], "goal")
+            json.dumps(payload)
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id.in_(added_ids)))
+                session.commit()
 
     def test_leaderboard_ranks_the_busier_rep_first_and_names_it_by_identity(self):
         payload = self.routes["_console_usage_leaderboard"]()
