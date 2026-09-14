@@ -31,7 +31,7 @@ header:
   sub: Sends over time
 
 data:
-  url: /projects/golfballs-extension/data/email.volume
+  aggregate: { id: email.volume, version: 1 }
   refresh:
     every: 120s
   # No `days` parameter: the window is this card's own control. The endpoint

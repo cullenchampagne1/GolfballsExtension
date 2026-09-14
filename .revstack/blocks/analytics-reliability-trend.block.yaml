@@ -34,7 +34,7 @@ header:
   eyebrow: RESPONSE TIME
 
 data:
-  url: /projects/golfballs-extension/data/reliability.trend
+  aggregate: { id: reliability.trend, version: 1 }
   # No `days` parameter: the window is this card's OWN control. The endpoint
   # sends every window it offers, each with its own buckets, stats and
   # timestamps, so switching is a local read of data already in hand and the

@@ -103,9 +103,9 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, /^\s+yFormat: decimal$/m);
       assert.match(block, /^\s+yCollision: none$/m);
     }
-    assert.match(bdrEmailActivityBlock, /data\/email\.bdr-activity/);
-    assert.match(saEmailActivityBlock, /data\/email\.sa-activity/);
-    assert.match(srEmailActivityBlock, /data\/email\.sr-activity/);
+    assert.match(bdrEmailActivityBlock, /aggregate: \{ id: email\.bdr-activity, version: 1 \}/);
+    assert.match(saEmailActivityBlock, /aggregate: \{ id: email\.sa-activity, version: 1 \}/);
+    assert.match(srEmailActivityBlock, /aggregate: \{ id: email\.sr-activity, version: 1 \}/);
     const layout = new Map(project.dashboard.default_layout.map((item) => [item.instance_id, item]));
     assert.equal(layout.get('analytics-bdr-email-activity')?.block_id,
       'golfballs-extension.analytics-bdr-email-activity');
@@ -133,7 +133,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(emailSendLogBlock, /^\s+pagination: true$/m);
     assert.match(emailSendLogBlock, /^\s+pageSize: 25$/m);
     assert.match(emailSendLogBlock, /^\s+search: true$/m);
-    assert.match(emailSendLogBlock, /data\/email\.send-log/);
+    assert.match(emailSendLogBlock, /aggregate: \{ id: email\.send-log, version: 1 \}/);
     assert.match(emailSendLogBlock, /^\s+stickyPinnedColumns: true$/m);
     assert.match(emailSendLogBlock, /^\s+filteringEnabled: false$/m);
     assert.match(emailSendLogBlock, /^\s+sortingEnabled: false$/m);
@@ -163,7 +163,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(callActivityBlock, /^size: \{ w: 4, h: 5, min: \{ w: 1, h: 4 \} \}$/m);
     assert.match(callActivityBlock, /^view: chart\.cartesian$/m);
     assert.match(callActivityBlock, /^\s+shape: chart\.cartesian$/m);
-    assert.match(callActivityBlock, /data\/call\.activity/);
+    assert.match(callActivityBlock, /aggregate: \{ id: call\.activity, version: 1 \}/);
     assert.match(callActivityBlock, /^\s+chartShowLegend: true$/m);
     assert.match(callActivityBlock, /^\s+yTitle: Call logs$/m);
     assert.match(routes, /def _console_call_activity\(\)/);

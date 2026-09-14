@@ -27,7 +27,7 @@ header:
   sub: Installs over time
 
 data:
-  url: /projects/golfballs-extension/data/usage.adoption-trend
+  aggregate: { id: usage.adoption-trend, version: 1 }
   refresh:
     every: 120s
   # No `days` parameter: the window is this card's own control. The endpoint
