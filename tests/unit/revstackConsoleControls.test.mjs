@@ -95,6 +95,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, /^\s+chartShowLegend: true$/m);
       assert.match(block, /^\s+xTitle: Emails per day$/m);
       assert.match(block, /^\s+yFormat: decimal$/m);
+      assert.match(block, /^\s+yCollision: none$/m);
     }
     assert.match(bdrEmailActivityBlock, /data\/email\.bdr-activity/);
     assert.match(saEmailActivityBlock, /data\/email\.sa-activity/);
