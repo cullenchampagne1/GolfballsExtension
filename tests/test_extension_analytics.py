@@ -413,6 +413,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                              (round(6 / 7, 2), round(1 / 7, 2)))
             series = today["series"]
             self.assertEqual([item["name"] for item in series], ["PA send", "Outlook handoff"])
+            self.assertEqual([item["colorKey"] for item in series],
+                             ["email-transport-primary", "email-transport-secondary"])
             self.assertTrue(all(item["orientation"] == "horizontal" for item in series))
             self.assertTrue(all(item["mode"] == "stacked" for item in series))
             self.assertEqual(series[1]["roles"]["average"], "previous_week_average")
