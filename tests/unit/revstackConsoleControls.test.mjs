@@ -22,6 +22,11 @@ const emailLinksEnd = routes.indexOf('@router.get("/shares/products")', emailLin
 const emailLinksRoute = emailLinksStart >= 0 && emailLinksEnd > emailLinksStart
   ? routes.slice(emailLinksStart, emailLinksEnd)
   : '';
+const managedTemplatesStart = routes.indexOf('@router.get("/managed-email-templates")');
+const managedTemplatesEnd = routes.indexOf('@router.get("/managed-email-template-sources")', managedTemplatesStart);
+const managedTemplatesRoute = managedTemplatesStart >= 0 && managedTemplatesEnd > managedTemplatesStart
+  ? routes.slice(managedTemplatesStart, managedTemplatesEnd)
+  : '';
 const sourceStart = routes.indexOf('@router.get("/managed-email-template-sources")');
 const sourceEnd = routes.indexOf('@router.post("/managed-email-templates/clear")', sourceStart);
 const sourceRoute = sourceStart >= 0 && sourceEnd > sourceStart
@@ -151,13 +156,20 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(managedTemplatesBlock, /^title: Managed email templates$/m);
     assert.match(managedTemplatesBlock, /^size: \{ w: 4, h: 4, min: \{ w: 1, h: 2 \} \}$/m);
     assert.match(managedTemplatesBlock, /sub: Approved templates in the universal bucket/);
+    assert.match(managedTemplatesBlock, /^view: data\.grid$/m);
+    assert.match(managedTemplatesBlock, /^\s+shape: data\.grid$/m);
+    assert.match(managedTemplatesBlock, /^\s+rowSelection: none$/m);
     assert.match(managedSourcesBlock, /^id: managed-email-template-sources$/m);
     assert.match(managedSourcesBlock, /^title: Template bucket sources$/m);
     assert.match(managedSourcesBlock, /^size: \{ w: 4, h: 3, min: \{ w: 1, h: 2 \} \}$/m);
     assert.match(routes, /@router\.get\("\/managed-email-templates"\)/);
     assert.match(routes, /"editor": _owner_cell\(editor\)/);
-    assert.match(routes, /"updated": updated/);
+    assert.match(managedTemplatesRoute, /"updated": row\.updated_at\.isoformat\(\) if row\.updated_at else None/);
     assert.match(routes, /"conflict": \{/);
+    assert.match(managedTemplatesRoute, /"id": "conflict", "field": "conflict\.color", "header": "Merge",\n\s+"primitive": "status_indicator"/);
+    assert.match(managedTemplatesRoute, /"renderer_options": \{"labelField": "conflict\.text"\}/);
+    assert.match(managedTemplatesRoute, /"id": "act", "field": "act", "header": "Remove",\n\s+"primitive": "button"/);
+    assert.match(managedTemplatesRoute, /"renderer_options": \{"color": "var\(--rs-bad, #E5484D\)"\}/);
     assert.match(routes, /@router\.get\("\/managed-email-template-sources"\)/);
     assert.match(routes, /"sub": "Parent" if is_parent else "Former parent"/);
   });
