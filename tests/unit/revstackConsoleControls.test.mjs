@@ -93,6 +93,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, new RegExp(`^title: ${role} Email Activity$`, 'm'));
       assert.match(block, /^view: chart\.cartesian$/m);
       assert.match(block, /^\s+shape: chart\.cartesian$/m);
+      assert.match(block, /^size: \{ w: 1, h: 5, min: \{ w: 1, h: 4 \} \}$/m);
       assert.match(block, /^\s+showRanges: true$/m);
       assert.match(block, /^\s+rangePosition: footer$/m);
       assert.match(block, /^\s+chartShowLegend: true$/m);
@@ -125,6 +126,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(emailSendLogBlock, /^title: Email Send Log$/m);
     assert.match(emailSendLogBlock, /^view: data\.grid$/m);
     assert.match(emailSendLogBlock, /^\s+shape: data\.grid$/m);
+    assert.match(emailSendLogBlock, /^\s+days: \{ default: 30 \}$/m);
     assert.match(emailSendLogBlock, /data\/email\.send-log/);
     assert.match(emailSendLogBlock, /^\s+stickyPinnedColumns: true$/m);
     assert.match(emailSendLogBlock, /^\s+filteringEnabled: true$/m);
