@@ -42,6 +42,12 @@ const nonNegativeInt = (value, maximum = 1_000_000) => {
   return Number.isFinite(number) && number >= 0 ? Math.min(number, maximum) : 0;
 };
 
+const compactLabel = (value, maximum) => String(value || '')
+  .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, maximum);
+
 export function sendUsageEvent(event, { flush = 'periodic' } = {}) {
   if (globalThis.__gbUsageSilent) return false;
   try {
@@ -57,6 +63,10 @@ export function sendUsageEvent(event, { flush = 'periodic' } = {}) {
 
 /** Record one fixed feature action. Numeric fields may already be aggregates. */
 export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
+  const templateId = compactLabel(dimensions.template_id, 200);
+  const templateName = compactLabel(dimensions.template_name, 160);
+  const variationId = compactLabel(dimensions.template_variation_id, 200);
+  const variationName = compactLabel(dimensions.template_variation_name, 160);
   return sendUsageEvent({
     kind: 'feature',
     feature,
@@ -67,6 +77,16 @@ export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
     attachment_count: nonNegativeInt(dimensions.attachment_count),
     inline_image_count: nonNegativeInt(dimensions.inline_image_count),
     ok: dimensions.ok !== false,
+    ...(feature === 'email_send' ? {
+      ...(templateId ? { template_id: templateId } : {}),
+      ...(templateName ? { template_name: templateName } : {}),
+      ...(variationId ? { template_variation_id: variationId } : {}),
+      ...(variationName ? { template_variation_name: variationName } : {}),
+      condition_count: nonNegativeInt(dimensions.condition_count, 100),
+      conditions_matched: typeof dimensions.conditions_matched === 'boolean'
+        ? dimensions.conditions_matched : null,
+      conditions_enforced: dimensions.conditions_enforced === true,
+    } : {}),
   }, options);
 }
 

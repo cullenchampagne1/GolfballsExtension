@@ -8,6 +8,7 @@ import {
 } from './emailTemplateCapabilities.js';
 import { emailUsageDimensions, reportFeatureUsage } from './usageEvents.js';
 import { parseCcList } from './emailCc.js';
+import { templateMatchConditionCount } from './emailRunnerMatch.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -148,13 +149,40 @@ export function buildPaPayload({ from, to, cc, subject, htmlBody, signature, rep
   };
 }
 
-function reportSuccessfulDelivery(result, message) {
+function templateUsageContext(message, config) {
+  const template = message.templateId && Array.isArray(config?.templates)
+    ? config.templates.find((item) => String(item?.id || '') === String(message.templateId))
+    : null;
+  const variationId = String(message.variationId || message.templateVariationId || '__original');
+  const variation = variationId === '__original' ? null
+    : (Array.isArray(template?.variations)
+      ? template.variations.find((item) => String(item?.id || '') === variationId) : null);
+  const conditionCount = Number.isFinite(Number(message.conditionCount))
+    ? Math.max(0, Math.min(100, Math.round(Number(message.conditionCount))))
+    : templateMatchConditionCount(template);
+  const hasTemplate = Boolean(message.templateId || message.templateName || template);
+  return {
+    template_id: message.templateId || template?.id || '',
+    template_name: message.templateName || template?.name || '',
+    template_variation_id: hasTemplate ? variationId : '',
+    template_variation_name: hasTemplate ? (message.templateVariationName
+      || variation?.name || variation?.label
+      || (variationId === '__original' ? template?.baseLabel || 'Original' : '')) : '',
+    condition_count: conditionCount,
+    conditions_matched: conditionCount > 0 && typeof message.conditionsMatched === 'boolean'
+      ? message.conditionsMatched : null,
+    conditions_enforced: message.conditionsEnforced === true,
+  };
+}
+
+function reportSuccessfulDelivery(result, message, config) {
   if (message.trackUsage === false || (result?.state !== 'sent' && result?.state !== 'opened')) return;
   reportFeatureUsage('email_send', {
     source: message.usageSource || 'other',
     transport: result.transport || 'none',
     count: 1,
     ...emailUsageDimensions(message.htmlBody, message.attachments),
+    ...templateUsageContext(message, config),
   });
 }
 
@@ -198,7 +226,7 @@ function classifyPaResult(r) {
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
  * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
  */
-export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, trackingContext, usageSource = 'other', trackUsage = true }, opts = {}) {
+export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, templateVariationName, trackingContext, usageSource = 'other', trackUsage = true, conditionCount, conditionsMatched, conditionsEnforced = false }, opts = {}) {
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
   const cfg = config || await readEmailConfig();
@@ -221,7 +249,11 @@ export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMod
     });
     const r = await dispatch({ action: 'paAutomate', payload });
     const result = classifyPaResult(r);
-    reportSuccessfulDelivery(result, { htmlBody, attachments, usageSource, trackUsage });
+    reportSuccessfulDelivery(result, {
+      htmlBody, attachments, usageSource, trackUsage, templateId, templateName,
+      variationId, templateVariationId, templateVariationName,
+      conditionCount, conditionsMatched, conditionsEnforced,
+    }, cfg);
     return result;
   }
 
@@ -238,6 +270,10 @@ export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMod
   });
   if (r && r.ok === false) return { state: 'failed', transport: 'mailto', error: r.error || 'Could not open mail window' };
   const result = { state: 'opened', transport: 'mailto', error: null };
-  reportSuccessfulDelivery(result, { htmlBody, attachments, usageSource, trackUsage });
+  reportSuccessfulDelivery(result, {
+    htmlBody, attachments, usageSource, trackUsage, templateId, templateName,
+    variationId, templateVariationId, templateVariationName,
+    conditionCount, conditionsMatched, conditionsEnforced,
+  }, cfg);
   return result;
 }

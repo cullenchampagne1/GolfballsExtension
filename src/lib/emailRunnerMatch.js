@@ -1,6 +1,19 @@
 import { isGroupedTree } from './matchEngine.js';
 import { matchesCachedEntity } from './crmCacheQuery.js';
 
+/** Number of real match predicates authored on a template. Empty grouped
+ * shells are common after opening the editor and must behave like no gate. */
+export function templateMatchConditionCount(template) {
+  const tree = template?.type === 'account' ? template?.accountConditions : template?.rules;
+  if (isGroupedTree(tree)) {
+    return (Array.isArray(tree.groups) ? tree.groups : []).reduce(
+      (total, group) => total + (Array.isArray(group?.conditions) ? group.conditions.length : 0),
+      0,
+    );
+  }
+  return Array.isArray(tree) ? tree.length : 0;
+}
+
 /* ───────────────────────────────────────────────────────────────
    emailRunnerMatch.js — the "Matched Only" gate for EmailRunner's
    bulk-send loop.
@@ -44,35 +57,47 @@ import { matchesCachedEntity } from './crmCacheQuery.js';
  * @param {boolean} [input.imported]      True for CSV-imported rows (no page).
  * @param {object} [deps]
  * @param {Function} [deps.resolveMatchForHtml]  Defaults to window.__gbResolveMatchForHtml.
- * @returns {Promise<{ matched: boolean, reason: string }>}
+ * @returns {Promise<{ matched: boolean, reason: string, evaluated: boolean }>}
  */
 export async function resolveMatchedOnlyOutcome(
   { template, cachedSnapshot = null, fetchedText = '', baseUrl = '', imported = false } = {},
   { resolveMatchForHtml = (typeof window !== 'undefined' ? window.__gbResolveMatchForHtml : null) } = {},
 ) {
   const tree = template?.type === 'account' ? template?.accountConditions : template?.rules;
+  // Logical AND over zero predicates is true. More importantly for the UI,
+  // selecting Require a rule match on a template with no authored rules must
+  // not turn every recipient into an unverifiable failure.
+  if (templateMatchConditionCount(template) === 0) {
+    return { matched: true, reason: '', evaluated: false };
+  }
 
   if (cachedSnapshot) {
     if (!isGroupedTree(tree)) {
-      return { matched: false, reason: 'Cached page data can’t verify legacy match rules' };
+      return { matched: false, reason: 'Cached page data can’t verify legacy match rules', evaluated: false };
     }
     const matched = await matchesCachedEntity(cachedSnapshot, tree);
-    return { matched: !!matched, reason: matched ? '' : 'Did not match template rules' };
+    return { matched: !!matched, reason: matched ? '' : 'Did not match template rules', evaluated: true };
   }
 
   if (imported) {
-    return { matched: false, reason: 'Imported rows have no page to verify match rules against' };
+    return { matched: false, reason: 'Imported rows have no page to verify match rules against', evaluated: false };
   }
 
   if (!fetchedText) {
-    return { matched: false, reason: 'No page data to verify match rules against' };
+    return { matched: false, reason: 'No page data to verify match rules against', evaluated: false };
   }
 
   if (typeof resolveMatchForHtml !== 'function') {
-    return { matched: false, reason: 'Match engine unavailable on this page' };
+    return { matched: false, reason: 'Match engine unavailable on this page', evaluated: false };
   }
 
   const result = await resolveMatchForHtml(fetchedText, template, baseUrl);
-  if (result?.error) return { matched: false, reason: `Match check failed: ${result.error}` };
-  return { matched: !!result?.matched, reason: result?.matched ? '' : 'Did not match template rules' };
+  if (result?.error) {
+    return { matched: false, reason: `Match check failed: ${result.error}`, evaluated: false };
+  }
+  return {
+    matched: !!result?.matched,
+    reason: result?.matched ? '' : 'Did not match template rules',
+    evaluated: true,
+  };
 }

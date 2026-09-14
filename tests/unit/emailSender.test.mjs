@@ -355,7 +355,10 @@ describe('sendEmail', () => {
       from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Update',
       htmlBody: '<p>Four body words here</p><img src="cid:logo"><span data-gb-attach="quote.pdf">hidden file name</span>',
       signature: '<p>signature words are excluded</p>', usageSource: 'task_list',
-      config: { paReady: true },
+      templateId: 'renewal', templateName: 'Annual renewal', variationId: 'warm',
+      templateVariationName: 'Warm opening', conditionCount: 2,
+      conditionsMatched: true, conditionsEnforced: true,
+      config: { paReady: true, templates: [{ id: 'renewal', name: 'Annual renewal' }] },
     }, { dispatch: async () => ({ ok: true }) });
 
     assert.equal(result.state, 'sent');
@@ -365,8 +368,37 @@ describe('sendEmail', () => {
       event: {
         kind: 'feature', feature: 'email_send', source: 'task_list', transport: 'pa',
         count: 1, word_count: 4, attachment_count: 1, inline_image_count: 1, ok: true,
+        template_id: 'renewal', template_name: 'Annual renewal',
+        template_variation_id: 'warm', template_variation_name: 'Warm opening',
+        condition_count: 2, conditions_matched: true, conditions_enforced: true,
       },
     });
+  });
+
+  it('infers content-free template context from the managed catalog', async () => {
+    usageMessages.length = 0;
+    await sendEmail({
+      from: 'a@golfballs.com', to: 'buyer@example.com', subject: 'Never retained',
+      htmlBody: '<p>Also never retained</p>', templateId: 'renewal', variationId: 'warm',
+      config: {
+        paReady: true,
+        templates: [{
+          id: 'renewal', name: 'Annual renewal', type: 'account',
+          accountConditions: [{ field: 'tier', op: 'equals', val: 'gold' }],
+          variations: [{ id: 'warm', label: 'Warm opening' }],
+        }],
+      },
+    }, { dispatch: async () => ({ ok: true }) });
+
+    const event = usageMessages.at(-1).event;
+    assert.equal(event.template_name, 'Annual renewal');
+    assert.equal(event.template_variation_name, 'Warm opening');
+    assert.equal(event.condition_count, 1);
+    assert.equal(event.conditions_matched, null);
+    assert.equal(event.conditions_enforced, false);
+    assert.equal('subject' in event, false);
+    assert.equal('body' in event, false);
+    assert.equal('to' in event, false);
   });
 
   it('does not count a failed send as utilization', async () => {

@@ -9,7 +9,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { resolveMatchedOnlyOutcome } from '../../src/lib/emailRunnerMatch.js';
+import {
+  resolveMatchedOnlyOutcome, templateMatchConditionCount,
+} from '../../src/lib/emailRunnerMatch.js';
 
 const readSource = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -25,7 +27,7 @@ describe('resolveMatchedOnlyOutcome — cached snapshot rows', () => {
   it('matches a grouped tree against the cached snapshot data', async () => {
     const snapshot = { schemaId: 'account', data: { account: { tier: 'gold' } } };
     const outcome = await resolveMatchedOnlyOutcome({ template: GROUPED_TEMPLATE, cachedSnapshot: snapshot });
-    assert.deepEqual(outcome, { matched: true, reason: '' });
+    assert.deepEqual(outcome, { matched: true, reason: '', evaluated: true });
   });
 
   it('reports a mismatch with a reason', async () => {
@@ -55,7 +57,7 @@ describe('resolveMatchedOnlyOutcome — fetched HTML rows', () => {
       { template: GROUPED_TEMPLATE, fetchedText: '<html></html>', baseUrl: 'https://crm.example/contact/1' },
       { resolveMatchForHtml },
     );
-    assert.deepEqual(outcome, { matched: true, reason: '' });
+    assert.deepEqual(outcome, { matched: true, reason: '', evaluated: true });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].html, '<html></html>');
     assert.equal(calls[0].baseUrl, 'https://crm.example/contact/1');
@@ -83,6 +85,22 @@ describe('resolveMatchedOnlyOutcome — fetched HTML rows', () => {
 });
 
 describe('resolveMatchedOnlyOutcome — rows with no page to evaluate', () => {
+  it('passes a template with no authored conditions even when rule matching is required', async () => {
+    for (const template of [
+      { type: 'account' },
+      { type: 'account', accountConditions: [] },
+      { type: 'account', accountConditions: { outerJoiner: 'AND', groups: [] } },
+      { type: 'account', accountConditions: {
+        outerJoiner: 'AND', groups: [{ joiner: 'AND', conditions: [] }],
+      } },
+    ]) {
+      assert.equal(templateMatchConditionCount(template), 0);
+      assert.deepEqual(await resolveMatchedOnlyOutcome({ template, imported: true }), {
+        matched: true, reason: '', evaluated: false,
+      });
+    }
+  });
+
   it('fails closed for an imported CSV row, even with fetched text present', async () => {
     const outcome = await resolveMatchedOnlyOutcome(
       { template: GROUPED_TEMPLATE, imported: true, fetchedText: '<html></html>' },
@@ -102,9 +120,12 @@ describe('resolveMatchedOnlyOutcome — rows with no page to evaluate', () => {
 describe('EmailRunner "Matched Only" wiring', () => {
   it('EmailRunner reads the resolver and skips the row with the gate\'s reason', async () => {
     const runner = await readSource('src/modals/EmailRunner.jsx');
-    assert.match(runner, /import \{ resolveMatchedOnlyOutcome \} from '\.\.\/lib\/emailRunnerMatch\.js'/);
+    assert.match(runner, /resolveMatchedOnlyOutcome, templateMatchConditionCount,/);
+    assert.match(runner, /from '\.\.\/lib\/emailRunnerMatch\.js'/);
     assert.match(runner, /const \[matchedOnly, setMatchedOnly\] = useState\(false\)/);
     assert.match(runner, /await resolveMatchedOnlyOutcome\(/);
+    assert.match(runner, /matchedOnly && !matchOutcome\.matched/);
+    assert.match(runner, /matchOutcome\.evaluated \? matchOutcome\.matched : null/);
     assert.match(runner, /!matchOutcome\.matched/);
     assert.match(runner, /title="Require a rule match"/);
   });

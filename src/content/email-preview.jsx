@@ -259,6 +259,8 @@ if (!window.__gbEmailPreviewLoaded) {
         replyMode: 'reply',
         signature: cfg.signature,
         config: cfg,
+        templateId: tpl.id || '',
+        templateName: tpl.name || '',
         usageSource: 'email_preview',
       });
       setSendingTemplate(false);

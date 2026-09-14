@@ -36,6 +36,11 @@ Every qualifying email delivery contributes the following aggregate-only values:
 - `inline_image_count`: `1` when the message contains one or more inline images; otherwise `0`.
 - `source`: the extension entry point that initiated the message.
 - `transport`: `pa` for a confirmed Power Automate send or `mailto` for a successful Outlook compose handoff.
+- `template_id` / `template_name`: the selected template's bounded identity, when a template was used.
+- `template_variation_id` / `template_variation_name`: the selected variation's bounded identity, when applicable.
+- `condition_count`: number of authored account conditions on the template.
+- `conditions_enforced`: whether **Require a rule match** was enabled for the send.
+- `conditions_matched`: `true` or `false` when one or more conditions were evaluated, otherwise `null`.
 
 The attachment and inline-image values count messages containing those properties, not the number of individual files or images. This makes the chart answer questions such as “how many sent emails included a file?” without retaining file metadata.
 
@@ -126,6 +131,7 @@ The telemetry contract has no field for and does not store:
 
 - Recipient or sender addresses
 - Email subjects or body content
+- Account-condition fields, operators, comparison values, or CRM values used to evaluate them
 - Contact, account, opportunity, order, or case identifiers
 - Search queries
 - URLs or page locations
@@ -148,9 +154,10 @@ The Email Send Log keeps one metadata-only grid row per newly recorded send.
 Rows collected before individual preservation may represent a coalesced batch;
 their explicit message count remains visible rather than inventing per-message
 details the historical event does not contain. Recorded timestamps render in
-America/Chicago time, and the compact grid keeps authored-word and attachment
-counts visible while leaving entry-point and inline-image details in the row
-drawer.
+America/Chicago time. The compact grid shows the template/variation and the
+content-free condition outcome alongside authored-word and attachment counts;
+entry-point, IDs, and inline-image details remain available in the row drawer.
+Server-side search can match a rep, template, variation, source, or transport.
 
 Each BDR, SA, and SR email-activity range publishes three footer comparisons:
 the role's current per-day pace versus last week's per-day pace, the percentage

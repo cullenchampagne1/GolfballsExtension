@@ -88,6 +88,13 @@ erDiagram
         int word_count
         int attachment_count
         int inline_image_count
+        string template_id
+        string template_name
+        string template_variation_id
+        string template_variation_name
+        int condition_count
+        bool conditions_matched "nullable"
+        bool conditions_enforced
         int duration_ms
         bool ok
         datetime occurred_at
@@ -189,6 +196,7 @@ leaderboard, or a single global trend line.
 | Email sends | Count of `email_send`, by entry point + transport | org · day, or **per rep** | ✅ chart / 🟡 per-rep | `EVENT` |
 | Email transport mix | Power Automate vs. Outlook mailto handoff share | org · window | ✅ | `EVENT` |
 | Email words/attachments/inline-images | Aggregate counts on delivered mail | org · window | ✅ | `EVENT` |
+| Email template and account-condition outcome | Template/variation identity, condition count, match result, and whether matching was required; no message or CRM content | org · day, or **per rep** | ✅ Email Send Log | `EVENT` |
 | Email previews opened | `email_preview` count | org, or per rep | ✅ global / 🟡 per-rep | `EVENT` |
 | Contacts imported (volume) | `contact_import` accepted-record sum | org · window | ✅ | `EVENT` |
 | Import runs (count) | `contact_import_run` derived count | org · window | ✅ | `EVENT` |
@@ -265,8 +273,10 @@ Preview, Gifting Catalog, Margin Calculator, Mockup Studio, Order Calendar,
 Workflow Manager, Quick Order Note, Actions Shelf.
 
 **Explicitly out of scope, by design (⛔):** exact email subject/body/
-recipient, contact/account/order/case identifiers, search query text,
-product identities/prices/quantities, URLs, filenames. The backend rejects
+recipient, account-condition operands or CRM values, contact/account/order/case
+identifiers, search query text, product identities/prices/quantities, URLs,
+filenames. Template and variation names are the only bounded user-authored
+email labels retained. The backend rejects
 any event payload carrying an unrecognized field, so this boundary is
 enforced, not just documented — any new metric proposal has to fit inside
 counts/durations/booleans/closed-vocabulary labels, never free text.

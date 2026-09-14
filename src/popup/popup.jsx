@@ -9,6 +9,7 @@ import { loadCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
 import { htmlToPlainText } from '../lib/emailSender.js';
+import { templateMatchConditionCount } from '../lib/emailRunnerMatch.js';
 import { popupFeatures } from '../lib/features/featureRegistry.js';
 import { loadFeatureConfig, normalizeFeatureConfig, featureShowsInPopup, FEATURE_CONFIG_KEY } from '../lib/features/featureConfig.js';
 import {
@@ -1042,6 +1043,8 @@ function MainView({
       rawBody,
       plainBody: htmlToPlainText(rawBody),
       variationId: variation?.id || '__original',
+      variationName: variation?.name || variation?.label
+        || (variation ? '' : tpl.baseLabel || 'Original'),
     };
   };
 
@@ -1091,7 +1094,8 @@ function MainView({
          3. No variations on the template  →  always parent body.
        The random roll is uniform — the popup is a single-send
        surface so there's no slider UX for weighting. */
-    const { subject, rawBody, variationId } = buildSendContent();
+    const { subject, rawBody, variationId, variationName } = buildSendContent();
+    const conditionCount = templateMatchConditionCount(tpl);
 
     // tpl.replyMode drives behavior for ALL template types:
     // 'reply'      → find prior email, thread the reply (file or PA)
@@ -1109,6 +1113,11 @@ function MainView({
       subject,
       htmlBody: rawBody,
       variationId,
+      templateVariationName: variationName,
+      conditionCount,
+      conditionsMatched: conditionCount > 0 && !ignorePageContext
+        ? matchedIds.includes(tpl.id) : null,
+      conditionsEnforced: false,
       replyMode: tpl.replyMode || replyMode,
       template: {
         id: tpl.id || '',

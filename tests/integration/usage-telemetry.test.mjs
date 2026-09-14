@@ -116,6 +116,9 @@ describe('usage telemetry', () => {
     reporter.record({
       kind: 'feature', feature: 'email_send', source: 'popup', transport: 'pa',
       count: 1, word_count: 84, attachment_count: 1, inline_image_count: 0,
+      template_id: 'renewal', template_name: 'Annual renewal',
+      template_variation_id: 'warm', template_variation_name: 'Warm opening',
+      condition_count: 2, conditions_matched: false, conditions_enforced: false,
       subject: 'this field must never survive normalization',
     });
     reporter.record({
@@ -148,6 +151,17 @@ describe('usage telemetry', () => {
       ],
     );
     assert.equal('subject' in featureRows[0], false, 'free-text fields are stripped before the wire');
+    assert.deepEqual({
+      templateId: featureRows[0].template_id,
+      templateName: featureRows[0].template_name,
+      variation: featureRows[0].template_variation_name,
+      conditionCount: featureRows[0].condition_count,
+      matched: featureRows[0].conditions_matched,
+      enforced: featureRows[0].conditions_enforced,
+    }, {
+      templateId: 'renewal', templateName: 'Annual renewal', variation: 'Warm opening',
+      conditionCount: 2, matched: false, enforced: false,
+    });
   });
 
   it('retains individual email rows across a service-worker restart', async () => {

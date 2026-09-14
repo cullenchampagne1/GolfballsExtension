@@ -15,7 +15,9 @@ import { directContactVariables } from '../lib/contactImport.js';
 import { loadCredentials } from '../lib/credentials.js';
 import { cachedSnapshotForContact } from '../lib/page-engine/cache-actions.js';
 import { contactPageFetchError } from '../lib/contactPageFetch.js';
-import { resolveMatchedOnlyOutcome } from '../lib/emailRunnerMatch.js';
+import {
+  resolveMatchedOnlyOutcome, templateMatchConditionCount,
+} from '../lib/emailRunnerMatch.js';
 import { createPauseGate, waitForPausableDelay } from '../lib/emailRunControl.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -643,18 +645,19 @@ export function EmailRunner({
           if (fetched?.ok && typeof fetched.text === 'string') fetchedText = fetched.text;
         }
 
-        /* 1b. "Matched Only": re-check the selected template's OWN match
-           rules against this row's page before sending. Task lists and CRM
+        /* 1b. Evaluate the selected template's OWN match rules against this
+           row's page before sending. Task lists and CRM
            search results are never pre-filtered by template rules — a rep
            can queue any row for any template — so this is the only point
            in the pipeline that knows both "which template" and "this row's
            actual page data" at once. See src/lib/emailRunnerMatch.js for
            how each of the three row shapes (cached snapshot / fetched HTML
-           / imported CSV) is evaluated, and why an unverifiable row fails
-           closed. Skipped entirely (always "matched") in mock mode, same
-           as the other resolvers above. */
-        const matchOutcome = !matchedOnly || useMock
-          ? { matched: true, reason: '' }
+           / imported CSV) is evaluated. An unverifiable row fails closed
+           only when Require a rule match is enabled; otherwise it can send
+           and its condition result remains unknown in analytics. */
+        const conditionCount = templateMatchConditionCount(selectedTpl);
+        const matchOutcome = conditionCount === 0 || useMock
+          ? { matched: true, reason: '', evaluated: false }
           : await resolveMatchedOnlyOutcome({
               template: selectedTpl,
               cachedSnapshot,
@@ -721,7 +724,7 @@ export function EmailRunner({
         } else if (skipRecent && lastEmailedMs && (Date.now() - lastEmailedMs) < recentCutoff) {
           const days = Math.floor((Date.now() - lastEmailedMs) / DAY_MS);
           outcome = { status: 'skipped', reason: days <= 0 ? 'Emailed today' : `Emailed ${days}d ago`, email: toEmail, name: pageName };
-        } else if (!matchOutcome.matched) {
+        } else if (matchedOnly && !matchOutcome.matched) {
           // Matched Only: the template's own rules don't (or can't be
           // verified to) evaluate true against this row's page.
           outcome = { status: 'skipped', reason: matchOutcome.reason || 'Did not match template rules', email: toEmail, name: pageName };
@@ -758,6 +761,11 @@ export function EmailRunner({
               templateId: selectedTpl.id || '',
               templateName: selectedTpl.name || '',
               variationId: v?.id || '__original',
+              templateVariationName: v?.name || v?.label
+                || (v ? '' : selectedTpl.baseLabel || 'Original'),
+              conditionCount,
+              conditionsMatched: matchOutcome.evaluated ? matchOutcome.matched : null,
+              conditionsEnforced: matchedOnly,
               trackingContext: {
                 contactId: c.crmContactId || c.contactId || '',
                 accountId: c.accountId || '',

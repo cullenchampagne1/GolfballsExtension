@@ -686,6 +686,10 @@ function __gbAccessAllowed(st, now) {
             htmlBody: msg.htmlBody || msg.templateHtml || '',
             replyMode: msg.replyMode || template.replyMode || 'standalone',
             variationId: msg.variationId || '__original',
+            templateVariationName: msg.templateVariationName || '',
+            conditionCount: msg.conditionCount,
+            conditionsMatched: msg.conditionsMatched,
+            conditionsEnforced: msg.conditionsEnforced === true,
             context: msg.context || {},
             usageSource: msg.usageSource || 'popup',
           });

@@ -51,9 +51,16 @@ class UsageTelemetryContractTests(unittest.TestCase):
             "kind": "feature", "feature": "email_send", "source": "task_list",
             "transport": "pa", "count": 4, "word_count": 381,
             "attachment_count": 2, "inline_image_count": 1,
+            "template_id": "renewal", "template_name": "Annual renewal",
+            "template_variation_id": "warm", "template_variation_name": "Warm opening",
+            "condition_count": 2, "conditions_matched": True,
+            "conditions_enforced": True,
         })
         self.assertEqual(event.count, 4)
         self.assertEqual(event.word_count, 381)
+        self.assertEqual((event.template_name, event.template_variation_name),
+                         ("Annual renewal", "Warm opening"))
+        self.assertTrue(event.conditions_matched)
 
     def test_accepts_a_coalesced_contact_import_run_counter(self):
         event = self.UsageEvent.model_validate({
@@ -76,6 +83,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
             {"recipient": "someone@example.com"},
             {"feature": "made_up_feature"},
             {"source": "account-123"},
+            {"template_name": "private\nsubject-shaped label"},
         ):
             payload = {
                 "kind": "feature", "feature": "email_send", "source": "popup",
@@ -90,6 +98,15 @@ class UsageTelemetryContractTests(unittest.TestCase):
             {"kind": "feature", "feature": "proof_submit", "source": "submit_proof", "transport": "pa"},
             {"kind": "feature", "feature": "email_send", "source": "popup", "transport": "pa", "count": 1, "attachment_count": 2},
             {"kind": "surface_open", "surface": "task_list", "word_count": 20},
+            {"kind": "feature", "feature": "proof_submit", "source": "submit_proof",
+             "template_name": "Not an email"},
+            {"kind": "feature", "feature": "email_send", "source": "popup",
+             "transport": "pa", "template_variation_name": "Warm"},
+            {"kind": "feature", "feature": "email_send", "source": "popup",
+             "transport": "pa", "condition_count": 0, "conditions_matched": True},
+            {"kind": "feature", "feature": "email_send", "source": "popup",
+             "transport": "pa", "condition_count": 1,
+             "conditions_matched": False, "conditions_enforced": True},
         ):
             with self.assertRaises(ValidationError):
                 self.UsageEvent.model_validate(payload)

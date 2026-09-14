@@ -128,6 +128,13 @@ class ExtensionUsageEvent(Base):
     word_count = Column(Integer, nullable=False, default=0)
     attachment_count = Column(Integer, nullable=False, default=0)
     inline_image_count = Column(Integer, nullable=False, default=0)
+    template_id = Column(String(200), nullable=True)
+    template_name = Column(String(160), nullable=True)
+    template_variation_id = Column(String(200), nullable=True)
+    template_variation_name = Column(String(160), nullable=True)
+    condition_count = Column(Integer, nullable=False, default=0)
+    conditions_matched = Column(Boolean, nullable=True)
+    conditions_enforced = Column(Boolean, nullable=False, default=False)
     duration_ms = Column(Integer, nullable=True)
     ok = Column(Boolean, nullable=False, default=True)
     occurred_at = Column(DateTime, nullable=False)
@@ -449,6 +456,13 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 word_count=184,
                 attachment_count=1,
                 inline_image_count=2,
+                template_id="renewal",
+                template_name="Annual renewal",
+                template_variation_id="warm",
+                template_variation_name="Warm opening",
+                condition_count=2,
+                conditions_matched=True,
+                conditions_enforced=True,
                 ok=True,
                 occurred_at=self.now,
             )
@@ -465,8 +479,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             })
             self.assertEqual(
                 [column["id"] for column in payload["columns"]],
-                ["sent_at", "rep", "transport", "messages", "words",
-                 "attachments", "status"],
+                ["sent_at", "rep", "template", "conditions", "transport",
+                 "messages", "words", "attachments", "status"],
             )
             self.assertEqual(payload["columns"][0]["primitive"], "datetime")
             self.assertEqual(
@@ -477,6 +491,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             self.assertEqual(payload["columns"][-1]["primitive"], "status_indicator")
             row = next(item for item in payload["rows"] if item["id"] == f"email-event-{event_id}")
             self.assertEqual((row["rep"], row["assignment"]), ("Alex Rep", "POD 01 · BDR"))
+            self.assertEqual(row["template"], "Annual renewal · Warm opening")
+            self.assertEqual(row["conditions"], {"tone": "success", "text": "Met"})
+            self.assertEqual((row["condition_count"], row["conditions_enforced"]), (2, True))
             self.assertEqual((row["transport"], row["source"]),
                              ("Power Automate", "Email Preview"))
             self.assertEqual(
