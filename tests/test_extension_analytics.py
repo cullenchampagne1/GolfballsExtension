@@ -455,8 +455,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             })
             self.assertEqual(
                 [column["id"] for column in payload["columns"]],
-                ["sent_at", "rep", "transport", "source", "messages", "words",
-                 "attachments", "inline_images", "status"],
+                ["sent_at", "rep", "transport", "messages", "status"],
             )
             self.assertEqual(payload["columns"][0]["primitive"], "datetime")
             self.assertEqual(payload["columns"][1]["renderer"], "avatar_identity")
@@ -480,11 +479,11 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 session.commit()
 
     def test_call_activity_stacks_sa_sr_and_bdr_totals_in_vertical_pod_bars(self):
-        identities = (
-            ("cred-call-sa", "Matthew LaGrange", "SA", 2, 1),
-            ("cred-call-sa", "Matthew LaGrange", "SA", 3, 10),
-            ("cred-call-sr", "SR5 Test", "SR", 4, 1),
-            ("cred-a", "Alex Rep", "BDR", 6, 40),
+        activity = (
+            ("cred-call-sa", 2, 1),
+            ("cred-call-sa", 3, 10),
+            ("cred-call-sr", 4, 1),
+            ("cred-a", 6, 40),
         )
         event_ids = []
         with Session(self.engine) as session:
@@ -496,21 +495,18 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 credential_id="cred-call-sr", display_name="SR5 Test",
                 local_part="sr5.test",
             ))
-            for credential_id, _name, _role, count, offset in identities:
-                event = ExtensionUsageEvent(
-                    owner_credential_id=credential_id,
-                    session_id=f"session-{credential_id}",
-                    kind="feature",
-                    feature="call_log",
-                    source="contact",
-                    transport="none",
-                    count=count,
-                    ok=True,
-                    occurred_at=self.now - timedelta(days=offset),
-                )
-                session.add(event)
-                session.flush()
-                event_ids.append(event.id)
+            for credential_id, uses, offset in activity:
+                for index in range(uses):
+                    event = ExtensionUsageEvent(
+                        owner_credential_id=credential_id,
+                        session_id=f"session-{credential_id}-{offset}-{index}",
+                        kind="surface_open",
+                        surface="Call Log",
+                        occurred_at=self.now - timedelta(days=offset, seconds=index),
+                    )
+                    session.add(event)
+                    session.flush()
+                    event_ids.append(event.id)
             session.commit()
         try:
             payload = self.routes["_console_call_activity"]()
@@ -582,6 +578,48 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(
                     ExtensionUsageEvent.id.in_(event_ids)
+                ))
+                session.commit()
+
+    def test_email_send_log_searches_before_counting_and_paginating(self):
+        credential_id = "cred-email-search"
+        with Session(self.engine) as session:
+            session.add(ExtensionInstallationIdentity(
+                credential_id=credential_id,
+                display_name="Needle Search Rep",
+                local_part="needle.search.rep",
+            ))
+            event = ExtensionUsageEvent(
+                owner_credential_id=credential_id,
+                session_id="search-email-log",
+                kind="feature",
+                feature="email_send",
+                source="email_preview",
+                transport="pa",
+                count=1,
+                ok=True,
+                occurred_at=self.now,
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+            session.commit()
+        try:
+            payload = self.routes["_console_email_send_log"](
+                30, page=3, page_size=10, query="  needle search  "
+            )
+            self.assertEqual(payload["data_source"]["total_rows"], 1)
+            self.assertGreater(payload["data_source"]["unfiltered_total_rows"], 1)
+            self.assertEqual(payload["data_source"]["pagination"]["page"], 1)
+            self.assertEqual([row["rep"] for row in payload["rows"]], ["Needle Search Rep"])
+            self.assertIn("1 matching", payload["summary"])
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(
+                    ExtensionUsageEvent.id == event_id
+                ))
+                session.execute(delete(ExtensionInstallationIdentity).where(
+                    ExtensionInstallationIdentity.credential_id == credential_id
                 ))
                 session.commit()
 

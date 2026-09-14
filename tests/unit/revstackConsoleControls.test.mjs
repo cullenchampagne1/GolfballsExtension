@@ -131,12 +131,13 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(emailSendLogBlock, /^\s+dataMode: server$/m);
     assert.match(emailSendLogBlock, /^\s+pagination: true$/m);
     assert.match(emailSendLogBlock, /^\s+pageSize: 25$/m);
-    assert.match(emailSendLogBlock, /^\s+search: false$/m);
+    assert.match(emailSendLogBlock, /^\s+search: true$/m);
     assert.match(emailSendLogBlock, /data\/email\.send-log/);
     assert.match(emailSendLogBlock, /^\s+stickyPinnedColumns: true$/m);
     assert.match(emailSendLogBlock, /^\s+filteringEnabled: false$/m);
     assert.match(emailSendLogBlock, /^\s+sortingEnabled: false$/m);
-    assert.match(routes, /def _console_email_send_log\(days: int = 30, page: int = 1, page_size: int = 25\)/);
+    assert.match(routes, /def _console_email_send_log\(days: int = 30, page: int = 1, page_size: int = 25,/);
+    assert.match(routes, /query=str\(\(params or \{\}\)\.get\("q"\) or ""\)/);
     assert.match(routes, /\.offset\(\(resolved_page - 1\) \* resolved_page_size\)/);
     assert.match(routes, /"renderer": "avatar_identity"/);
     assert.match(routes, /"primitive": "datetime"/);
@@ -165,6 +166,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /def _console_call_activity\(\)/);
     assert.match(routes, /"orientation": "vertical"/);
     assert.match(routes, /roles = \("SA", "SR", "BDR"\)/);
+    assert.match(routes, /ExtensionUsageEvent\.surface == "Call Log"/);
     const placement = project.dashboard.default_layout.find(
       (item) => item.instance_id === 'analytics-call-activity',
     );

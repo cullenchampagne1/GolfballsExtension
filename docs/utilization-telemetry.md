@@ -158,11 +158,11 @@ short names remain unmatched. Changing the roster does not rewrite telemetry.
 
 ## Pod call activity
 
-The Call Logs by Pod block counts successful extension call-log submissions in
+The Call Logs by Pod block counts historical Call Log menu opens in
 7-day, 30-day, and 90-day windows. It draws one vertical bar per pod, stacked
 by SA, SR, and BDR, using the same managed roster and installation-name matcher
 as the email activity blocks. A name assigned to more than one role is omitted
-because one content-free call event cannot truthfully determine which seat made
+because one content-free surface event cannot truthfully determine which seat made
 it; correcting the managed roster makes future and already stored events
 resolvable without rewriting telemetry.
 
