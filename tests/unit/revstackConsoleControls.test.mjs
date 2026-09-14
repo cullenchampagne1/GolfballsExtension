@@ -85,29 +85,34 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
 
   it('uses the editable block-shell title as the only email-share heading', () => {
     assert.match(emailLinksBlock, /^title: Shared email templates$/m);
-    assert.match(emailLinksBlock, /^view: table$/m);
+    assert.match(emailLinksBlock, /^view: data\.grid$/m);
     assert.match(emailLinksBlock, /^header:[\s\S]*?eyebrow: SHARES/m);
     assert.doesNotMatch(blocks, /Temp(?:orary)? email links/i);
   });
 
-  it('balances bucket-source columns and collapses secondary fields at one-column width', () => {
+  it('uses typed data-grid columns and declarative button actions for share surfaces', () => {
     const emailColumns = emailLinksRoute.match(/columns = \[([\s\S]*?)\]\n    return/)?.[1] || '';
     const sourceColumns = sourceRoute.match(/"columns": \[([\s\S]*?)\],\n        "rows"/)?.[1] || '';
-    const keys = (source) => [...source.matchAll(/"key": "([^"]+)"/g)].map((match) => match[1]);
+    const ids = (source) => [...source.matchAll(/"id": "([^"]+)"/g)].map((match) => match[1]);
 
-    assert.deepEqual(keys(emailColumns), ['name', 'owner', 'type', 'updated', 'act']);
-    assert.match(emailColumns, /"key": "act", "label": "Revoke"/);
-    assert.match(emailColumns, /"key": "name", "label": "Name", "grow": True/);
-    assert.doesNotMatch(emailColumns, /"key": "imports"|"key": "status"/);
-    assert.deepEqual(keys(sourceColumns), ['source', 'templates', 'updated', 'act']);
-    assert.match(sourceColumns, /"key": "act", "label": "Clear"/);
-    assert.match(sourceColumns, /"key": "source", "label": "Source account", "grow": True, "priority": "high"/);
-    assert.match(sourceColumns, /"key": "templates", "label": "Count", "priority": "medium"/);
-    assert.match(sourceColumns, /"key": "updated", "label": "Last update", "priority": "low"/);
-    assert.match(sourceColumns, /"key": "act", "label": "Clear", "type": "action", "priority": "high"/);
-    assert.doesNotMatch(sourceColumns, /"width"/);
+    assert.deepEqual(ids(emailColumns), ['name', 'owner', 'type', 'updated', 'act']);
+    assert.match(emailColumns, /"id": "name", "field": "name", "header": "Name", "primitive": "text"/);
+    assert.match(emailColumns, /"id": "act", "field": "act", "header": "Revoke", "primitive": "button"/);
+    assert.match(emailColumns, /"renderer_options": \{"color": "var\(--rs-bad, #E5484D\)"\}/);
+    assert.doesNotMatch(emailColumns, /"id": "imports"|"id": "status"/);
+    assert.deepEqual(ids(sourceColumns), ['source', 'standing', 'templates', 'updated', 'act']);
+    assert.match(sourceColumns, /"id": "source", "field": "source\.text", "header": "Source account"/);
+    assert.match(sourceColumns, /"id": "standing", "field": "source\.sub", "header": "Standing",\n\s+"primitive": "enum"/);
+    assert.match(sourceColumns, /"id": "templates", "field": "templates", "header": "Count",\n\s+"primitive": "integer"/);
+    assert.match(sourceColumns, /"id": "act", "field": "act", "header": "Clear",\n\s+"primitive": "button"/);
+    assert.match(sourceColumns, /"responsive": \{"priority": 100, "canHide": False\}/);
     assert.match(sourceRoute, /"sub": "Parent" if is_parent else "Former parent"/);
     assert.match(sourceRoute, /"sub": f"by \{_owner_detail\(editor\)\}"/);
+    for (const block of [emailLinksBlock, managedSourcesBlock, blockSource('product-stores'), blockSource('settings-shares')]) {
+      assert.match(block, /^view: data\.grid$/m);
+      assert.match(block, /^\s+shape: data\.grid$/m);
+      assert.match(block, /^\s+rowSelection: none$/m);
+    }
   });
 
   it('keeps override status and named actions proportionate', () => {

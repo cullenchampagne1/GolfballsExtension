@@ -40,8 +40,8 @@ _EMITTERS = ("_row_action", "_row_toggle")
 
 
 def _named_actions(node: ast.AST) -> set[str]:
-    """Action names emitted inside one function body."""
-    return {
+    """Action names emitted by row cells or typed editable columns."""
+    names = {
         call.args[0].value
         for call in ast.walk(node)
         if isinstance(call, ast.Call)
@@ -51,6 +51,18 @@ def _named_actions(node: ast.AST) -> set[str]:
         and isinstance(call.args[0], ast.Constant)
         and isinstance(call.args[0].value, str)
     }
+    # Editable data-grid controls declare their command on the column instead
+    # of wrapping every row value in `_row_toggle`. It is the same block-owned
+    # action contract, so keep that path inside this declaration guard too.
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Dict):
+            continue
+        for key, value in zip(child.keys, child.values):
+            if (isinstance(key, ast.Constant) and key.value == "editor"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)):
+                names.add(value.value)
+    return names
 
 
 def _row_action_names_by_endpoint() -> dict[str, set[str]]:
