@@ -303,7 +303,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
                 "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
-                "_console_email_activity", "_POD_LINEUP_CONFIG",
+                "_console_email_activity", "_console_email_send_log", "_POD_LINEUP_CONFIG",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
                 "_SEV_OK", "_SEV_WARN", "_SEV_BAD",
@@ -423,6 +423,55 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         finally:
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id.in_(added_ids)))
+                session.commit()
+
+    def test_email_send_log_projects_typed_rows_without_message_content(self):
+        with Session(self.engine) as session:
+            event = ExtensionUsageEvent(
+                owner_credential_id="cred-a",
+                session_id="sess-a",
+                kind="feature",
+                feature="email_send",
+                source="email_preview",
+                transport="pa",
+                count=2,
+                word_count=184,
+                attachment_count=1,
+                inline_image_count=2,
+                ok=True,
+                occurred_at=self.now,
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+            session.commit()
+        try:
+            payload = self.routes["_console_email_send_log"](30)
+            self.assertEqual(payload["primary_key"], "id")
+            self.assertEqual(
+                [column["id"] for column in payload["columns"]],
+                ["sent_at", "rep", "transport", "source", "messages", "words",
+                 "attachments", "inline_images", "status"],
+            )
+            self.assertEqual(payload["columns"][0]["primitive"], "datetime")
+            self.assertEqual(payload["columns"][1]["renderer"], "avatar_identity")
+            self.assertEqual(payload["columns"][-1]["primitive"], "status_indicator")
+            row = next(item for item in payload["rows"] if item["id"] == f"email-event-{event_id}")
+            self.assertEqual((row["rep"], row["assignment"]), ("Alex Rep", "POD 01 · BDR"))
+            self.assertEqual((row["transport"], row["source"]),
+                             ("Power Automate", "Email Preview"))
+            self.assertEqual(
+                (row["messages"], row["words"], row["attachments"], row["inline_images"]),
+                (2, 184, 1, 2),
+            )
+            self.assertEqual(row["status"], {"tone": "success", "text": "Delivered"})
+            self.assertIn("Content-free delivery telemetry", row["_detail"]["description"])
+            serialized = json.dumps(payload)
+            for forbidden in ("recipient", "subject", "body", "filename", "credential_id"):
+                self.assertNotIn(f'"{forbidden}"', serialized.casefold())
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id == event_id))
                 session.commit()
 
     def test_email_activity_matches_unique_short_and_work_install_names_to_pods(self):

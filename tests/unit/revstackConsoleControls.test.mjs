@@ -59,6 +59,7 @@ const emailVolumeBlock = blockSource('analytics-email-volume');
 const bdrEmailActivityBlock = blockSource('analytics-bdr-email-activity');
 const saEmailActivityBlock = blockSource('analytics-sa-email-activity');
 const srEmailActivityBlock = blockSource('analytics-sr-email-activity');
+const emailSendLogBlock = blockSource('analytics-email-send-log');
 
 describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable }, () => {
   it('keeps the reliability trend in milliseconds on an adaptive time axis', () => {
@@ -118,6 +119,32 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
         { x: 8 / 3, y: 37, w: 4 / 3 },
       ],
     );
+  });
+
+  it('declares the email send history as a shared typed data grid with row details', () => {
+    assert.match(emailSendLogBlock, /^title: Email Send Log$/m);
+    assert.match(emailSendLogBlock, /^view: data\.grid$/m);
+    assert.match(emailSendLogBlock, /^\s+shape: data\.grid$/m);
+    assert.match(emailSendLogBlock, /data\/email\.send-log/);
+    assert.match(emailSendLogBlock, /^\s+stickyPinnedColumns: true$/m);
+    assert.match(emailSendLogBlock, /^\s+filteringEnabled: true$/m);
+    assert.match(emailSendLogBlock, /^\s+sortingEnabled: true$/m);
+    assert.match(routes, /def _console_email_send_log\(days: int = 30, limit: int = 500\)/);
+    assert.match(routes, /"renderer": "avatar_identity"/);
+    assert.match(routes, /"primitive": "datetime"/);
+    assert.match(routes, /"primitive": "status_indicator"/);
+    assert.match(routes, /"_detail": \{/);
+    const placement = project.dashboard.default_layout.find(
+      (item) => item.instance_id === 'analytics-email-send-log',
+    );
+    assert.deepEqual(placement, {
+      instance_id: 'analytics-email-send-log',
+      block_id: 'golfballs-extension.analytics-email-send-log',
+      x: 0,
+      y: 42,
+      w: 4,
+      h: 5,
+    });
   });
 
   it('renders support tickets through the modal-capable ConsoleList contract', () => {

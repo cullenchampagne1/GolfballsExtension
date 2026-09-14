@@ -109,7 +109,7 @@ describe('usage telemetry', () => {
     assert.equal(reporter.record({ kind: 'latency', ms: -1 }), false);
   });
 
-  it('coalesces email dimensions by source and transport before the backend', async () => {
+  it('preserves each email row and its dimensions inside the periodic batch', async () => {
     const sent = [];
     const { reporter } = loadTelemetry({ fetchImpl: recordingFetch(sent) });
 
@@ -127,23 +127,48 @@ describe('usage telemetry', () => {
       count: 1, word_count: 45,
     });
 
-    assert.equal(reporter.pending(), 2, 'three sends become two dimension buckets');
+    assert.equal(reporter.pending(), 3, 'each send remains an inspectable row');
     await reporter.flush();
     await settle();
 
     const featureRows = sent[0].events.filter((event) => event.kind === 'feature');
-    assert.equal(featureRows.length, 2);
-    const popup = featureRows.find((event) => event.source === 'popup');
+    assert.equal(featureRows.length, 3);
     assert.deepEqual(
-      {
-        count: popup.count,
-        words: popup.word_count,
-        files: popup.attachment_count,
-        inline: popup.inline_image_count,
-      },
-      { count: 3, words: 274, files: 1, inline: 2 },
+      featureRows.map((event) => ({
+        source: event.source,
+        count: event.count,
+        words: event.word_count,
+        files: event.attachment_count,
+        inline: event.inline_image_count,
+      })),
+      [
+        { source: 'popup', count: 1, words: 84, files: 1, inline: 0 },
+        { source: 'popup', count: 2, words: 190, files: 0, inline: 2 },
+        { source: 'task_list', count: 1, words: 45, files: 0, inline: 0 },
+      ],
     );
-    assert.equal('subject' in popup, false, 'free-text fields are stripped before the wire');
+    assert.equal('subject' in featureRows[0], false, 'free-text fields are stripped before the wire');
+  });
+
+  it('retains individual email rows across a service-worker restart', async () => {
+    const sent = [];
+    const first = loadTelemetry({ fetchImpl: recordingFetch(sent) });
+    await first.reporter.ready();
+    for (const words of [31, 47]) {
+      first.reporter.record({
+        kind: 'feature', feature: 'email_send', source: 'contact', transport: 'pa',
+        count: 1, word_count: words,
+      });
+    }
+    await settle();
+
+    const restarted = first.context.GBUsageTelemetry.createReporter();
+    await restarted.ready();
+    assert.equal(restarted.pending(), 2);
+    await restarted.flush();
+    await settle();
+
+    assert.deepEqual(sent[0].events.map((event) => event.word_count), [31, 47]);
   });
 
   it('coalesces import runs independently from imported record volume', async () => {

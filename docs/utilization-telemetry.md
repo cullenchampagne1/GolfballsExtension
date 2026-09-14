@@ -10,7 +10,7 @@ The dashboard now displays only stored telemetry. There is no generated example-
 
 | Dashboard event | What increments it | Count meaning | Source / transport dimensions | Flush behavior |
 | --- | --- | --- | --- | --- |
-| Email deliveries | Power Automate confirms a send, or the extension successfully opens an Outlook `mailto` compose window | One delivered or handed-off message | Entry point: Popup, Task List, CRM Search, Email Preview, Contact, or Other. Transport: Power Automate or Outlook handoff | Coalesced and sent in the periodic batch |
+| Email deliveries | Power Automate confirms a send, or the extension successfully opens an Outlook `mailto` compose window | One delivered or handed-off message | Entry point: Popup, Task List, CRM Search, Email Preview, Contact, or Other. Transport: Power Automate or Outlook handoff | Preserved individually inside the periodic batch |
 | Email previews | A user opens the email-preview surface | One preview open | Email Preview | Coalesced and sent in the periodic batch |
 | Contacts imported | A spreadsheet is parsed and accepted records are loaded into CRM Search | Number of accepted records; retained for Utilization Details | CRM Search | Flush requested about 1.5 seconds after success |
 | Contact import runs | The same successful import completes | One completed import, regardless of spreadsheet size; used by Core tools | CRM Search | Flush requested about 1.5 seconds after success |
@@ -142,6 +142,11 @@ assigned individual's activity. The stack separates Power Automate sends from
 Outlook handoffs. `Today` shows the current UTC-day count; `7D avg` shows the
 trailing seven-day daily average. Both ranges use the preceding seven complete
 days as the dashed average marker and 120% of that pace as the solid goal.
+
+The Email Send Log keeps one metadata-only grid row per newly recorded send.
+Rows collected before individual preservation may represent a coalesced batch;
+their explicit message count remains visible rather than inventing per-message
+details the historical event does not contain.
 
 The managed roster contains only first name, last name, pod, and position. A
 name first tries an exact installation display-name match after case and
