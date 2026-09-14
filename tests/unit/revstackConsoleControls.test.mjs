@@ -121,6 +121,22 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     }
   });
 
+  it('gives every email-share and managed-bucket row a shared info-modal document', () => {
+    for (const [name, route] of [
+      ['email shares', emailLinksRoute],
+      ['managed templates', managedTemplatesRoute],
+      ['managed sources', sourceRoute],
+    ]) {
+      assert.match(route, /"_detail": \{/, `${name} has no row information document`);
+      assert.match(route, /"badge": \{/, `${name} has no modal status badge`);
+      assert.match(route, /"description": /, `${name} has no modal note`);
+      assert.match(route, /"fields": \[/, `${name} has no modal fact rows`);
+    }
+    assert.match(emailLinksRoute, /"label": "Link"[\s\S]*?"copyable": True[\s\S]*?"wrap": True/);
+    assert.match(managedTemplatesRoute, /"label": "Bucket ID"[\s\S]*?"copyable": True/);
+    assert.match(sourceRoute, /"label": "Installation ID"[\s\S]*?"copyable": True/);
+  });
+
   it('keeps override status and named actions proportionate', () => {
     assert.match(overridesRoute, /"key": "managed", "label": "Managed", "min_w": 2/);
     assert.match(overridesRoute, /"key": "settings", "label": "Edit", "type": "action"/);
