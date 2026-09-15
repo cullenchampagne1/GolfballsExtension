@@ -116,4 +116,16 @@ describe('settings registry · extension/backend parity', () => {
     }
   });
 
+  it('registers local workflow usage as a managed customer capability', () => {
+    const setting = DEV_SETTINGS.find((row) => row.key === 'workflows.allowLocalUsage');
+    assert.deepEqual(registry.developerSettings['workflows.allowLocalUsage'], {
+      type: 'bool',
+      default: true,
+      label: 'Allow Local Workflow Usage',
+      description: setting.desc,
+      managedDefault: true,
+    });
+    assert.equal(defaults['workflows.allowLocalUsage'], true);
+  });
+
 });

@@ -15,8 +15,9 @@ import {
 } from '../lib/workflow/store.js';
 import { parseWorkflowBlob, importWorkflows } from '../lib/workflow/workflowImport.js';
 import {
-  managedWorkflow, reconcileWorkflowBucket, setWorkflowBucketEnrollment,
-  shareableWorkflow, workflowBucketWrite, workflowsFromShare,
+  allowLocalWorkflowUsage, filterWorkflowLibrary, managedWorkflow,
+  reconcileWorkflowBucket, setWorkflowBucketEnrollment, shareableWorkflow,
+  workflowBucketWrite, workflowsFromShare,
 } from '../lib/workflow/distribution.js';
 import { hydrateWorkflowContact } from '../lib/workflow/codeContext.js';
 import { runCodeWorkflow } from '../lib/workflow/codeRunner.js';
@@ -98,7 +99,7 @@ function ensureWorkflowStyles() {
 }
 
 /* ── Sidebar ── */
-function WorkflowSidebar({ library, currentId, onSelect, onNew, onDelete, onImport }) {
+function WorkflowSidebar({ library, currentId, onSelect, onNew, onDelete, onImport, canAdd }) {
   const [q, setQ] = useState('');
   const [confirmId, setConfirmId] = useState(null);   // row pending delete-confirm
   const filtered = library.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
@@ -115,8 +116,8 @@ function WorkflowSidebar({ library, currentId, onSelect, onNew, onDelete, onImpo
           <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Workflows</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{library.length} total</div>
         </div>
-        <IconBtn size="sm" variant="ghost" icon={<I.download />} title="Import workflow (paste AI JSON)" onClick={onImport} />
-        <IconBtn size="sm" variant="secondary" icon={<I.plus />} onClick={onNew} />
+        <IconBtn size="sm" variant="ghost" icon={<I.download />} title={canAdd ? 'Import workflow' : 'Local workflow usage is disabled'} disabled={!canAdd} onClick={onImport} />
+        <IconBtn size="sm" variant="secondary" icon={<I.plus />} title={canAdd ? 'Add workflow' : 'Local workflow usage is disabled'} disabled={!canAdd} onClick={onNew} />
       </div>
       <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
         <Input value={q} placeholder="Search workflows…" leading={<I.search size={13} />} onChange={(v) => setQ(v)} />
@@ -168,7 +169,7 @@ function fmtMoney(n) {
   return `$${Math.round(v)}`;
 }
 
-function TopBar({ workflow, onChange, onShare, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
+function TopBar({ workflow, onChange, onShare, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange, actionsEnabled = true }) {
   const simBusy = sim.status === 'running' || sim.status === 'replaying';
   const building = sim.status === 'running';
   const contactOptions = audience.map((c, i) => ({ id: c._key, label: c.contactName || c.name || c.contactId || `Contact ${i + 1}` }));
@@ -178,7 +179,7 @@ function TopBar({ workflow, onChange, onShare, sim, onSimStart, onSimStop, onSim
         <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.megaphone size={17} /></div>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Workflow Manager</div>
-          <input value={workflow.name} onChange={(e) => onChange({ ...workflow, name: e.target.value })}
+          <input value={workflow.name} disabled={!actionsEnabled} onChange={(e) => onChange({ ...workflow, name: e.target.value })}
             style={{ marginTop: 2, width: '100%', height: 24, background: 'transparent', border: 'none', outline: 'none', padding: 0, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 16, fontWeight: 800, letterSpacing: -.3 }} />
         </div>
       </div>
@@ -206,13 +207,13 @@ function TopBar({ workflow, onChange, onShare, sim, onSimStart, onSimStop, onSim
             <Dropdown size="sm" value={simContactKey} options={contactOptions} searchable placeholder="Pick a contact…" disabled={simBusy} onChange={onSimContactChange} />
           </div>
         )}
-        <Btn variant={simBusy ? 'tinted' : 'secondary'} status={simBusy ? 'warning' : 'brand'} size="sm" icon={simBusy ? <I.pause /> : <I.play />} disabled={!contactOptions.length} state={building ? 'loading' : 'idle'} onClick={simBusy ? onSimStop : onSimStart}>{simBusy ? 'Stop sim' : 'Simulate'}</Btn>
+        <Btn variant={simBusy ? 'tinted' : 'secondary'} status={simBusy ? 'warning' : 'brand'} size="sm" icon={simBusy ? <I.pause /> : <I.play />} disabled={!actionsEnabled || !contactOptions.length} state={building ? 'loading' : 'idle'} onClick={simBusy ? onSimStop : onSimStart}>{simBusy ? 'Stop sim' : 'Simulate'}</Btn>
       </div>
       <PillTag on={dryRun} onClick={() => onDryRunChange(!dryRun)}>
         <Dot tone={dryRun ? 'warning' : 'muted'} /> Dry run
       </PillTag>
-      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={simBusy}>{dryRun ? 'Dry run' : 'Run workflow'}</Btn>
-      <IconBtn size="md" variant="secondary" icon={<I.link />} title="Share workflow" onClick={onShare} />
+      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={!actionsEnabled || simBusy}>{dryRun ? 'Dry run' : 'Run workflow'}</Btn>
+      <IconBtn size="md" variant="secondary" icon={<I.link />} title={actionsEnabled ? 'Share workflow' : 'Local workflow usage is disabled'} disabled={!actionsEnabled} onClick={onShare} />
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" icon={<I.close />} onClick={onClose} />
     </div>
@@ -223,6 +224,47 @@ function TopBar({ workflow, onChange, onShare, sim, onSimStart, onSimStop, onSim
    Shape contract lives in docs/llm-workflow-toolset.md. Validates executable
    automation live as you paste; Import appends with fresh ids and never
    overwrites an existing workflow. */
+function CreateWorkflowModal({ onClose, onCreate, onImport }) {
+  const [name, setName] = useState('');
+  const create = () => {
+    const clean = name.trim();
+    if (clean) onCreate(clean);
+  };
+  return (
+    <motion.div
+      role="dialog" aria-modal="true" aria-label="Add workflow"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 2147483600, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.72 }}
+        style={{ width: 520, maxWidth: '92vw', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <span style={{ width: 34, height: 34, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.sparkle size={16} /></span>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)' }}>Add workflow</div><div style={{ marginTop: 2, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Start clean or bring in an approved workflow definition.</div></div>
+          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+        </div>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: 14, border: '1px solid var(--gb-brand-tint-border)', background: 'var(--gb-brand-tint-soft)', borderRadius: 'var(--gb-r-lg)' }}>
+            <Field label="New blank workflow" hint="Name it now; automation and delivery settings are added in the editor.">
+              <Input value={name} placeholder="e.g. Two-year brand follow-up" leading={<I.megaphone size={13} />} onChange={setName} onKeyDown={(e) => { if (e.key === 'Enter') create(); }} />
+            </Field>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><Btn variant="primary" size="sm" icon={<I.plus />} disabled={!name.trim()} onClick={create}>Create workflow</Btn></div>
+          </div>
+          <button type="button" onClick={onImport} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: 13, textAlign: 'left', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', color: 'var(--gb-text-primary)', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <span style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-text-secondary)' }}><I.download size={15} /></span>
+            <span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 12, fontWeight: 750 }}>Import or open a customer link</span><span style={{ display: 'block', marginTop: 3, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Paste workflow JSON or a revocable RevStack share URL.</span></span>
+            <I.chevr size={14} style={{ color: 'var(--gb-text-muted)' }} />
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function ImportWorkflowsModal({ onClose, onDone }) {
   const [text, setText] = useState('');
   const [shareUrl, setShareUrl] = useState('');
@@ -254,9 +296,11 @@ function ImportWorkflowsModal({ onClose, onDone }) {
     }
   };
   return (
-    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <motion.div role="dialog" aria-modal="true" aria-label="Import workflow"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 2147483600, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: 600, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+      <motion.div initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }} transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.72 }} style={{ width: 600, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.download size={14} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -328,8 +372,8 @@ function ImportWorkflowsModal({ onClose, onDone }) {
             Import{parsed && parsed.ok ? ` ${parsed.items.length}` : ''}
           </Btn>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -351,15 +395,15 @@ function ShareWorkflowModal({ workflow, onClose }) {
     finally { setBusy(false); }
   };
   return (
-    <div className="gb-workflow-scope" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'var(--gb-backdrop)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 480, padding: 16, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <motion.div className="gb-workflow-scope" role="dialog" aria-modal="true" aria-label="Share workflow" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <motion.div initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }} transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.72 }} style={{ width: 480, padding: 16, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}><I.link size={16} /><b style={{ flex: 1 }}>Share “{workflow.name}”</b><IconBtn size="sm" icon={<I.close />} onClick={onClose} /></div>
         <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', lineHeight: 1.5 }}>Create an authenticated, revocable customer link. It contains the workflow logic and settings, but no CRM records. Saved template references remain names, so the customer can map them to their own templates.</div>
         {url ? <div style={{ display: 'flex', gap: 7 }}><Input value={url} mono onChange={() => {}} /><Btn size="sm" icon={<I.copy />} onClick={() => navigator.clipboard?.writeText(url)}>Copy</Btn></div> : null}
         {error ? <div style={{ color: 'var(--gb-error-fg)', fontSize: 11 }}>{error}</div> : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{url ? <Btn variant="ghost" size="sm" onClick={onClose}>Done</Btn> : <Btn variant="primary" size="sm" icon={<I.link />} state={busy ? 'loading' : 'idle'} disabled={busy} onClick={create}>Create link</Btn>}</div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -915,11 +959,17 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   const requestClose = () => setOpen(false);
   const [library, setLibrary] = useState([]);
   const [workflow, setWorkflow] = useState(() => newWorkflow('Untitled workflow'));
+  const lockedWorkflowRef = useRef(null);
+  if (!lockedWorkflowRef.current) lockedWorkflowRef.current = newWorkflow('Managed workflows only');
   const [dirty, setDirty] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const isParent = devSettings['emailTemplates.allowParentAccount'] === true;
-  const workflowEditable = managedWorkflow(workflow)?.editable !== false;
+  const canUseLocal = allowLocalWorkflowUsage(devSettings);
+  const visibleLibrary = useMemo(() => filterWorkflowLibrary(library, devSettings), [library, devSettings]);
+  const workflowUsable = canUseLocal || !!managedWorkflow(workflow);
+  const workflowEditable = workflowUsable && managedWorkflow(workflow)?.editable !== false;
   // Which audience member the code simulation runs against (page.contact).
   const [simContactKey, setSimContactKey] = useState(null);
   // The rep's saved templates, exposed to code as user.emails / user.tasks / user.calls.
@@ -932,7 +982,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
     setImportOpen(false);
     if (!r || r.error) { toast?.error?.('Import failed — ' + (r?.error || 'unknown')); return; }
     setLibrary(r.list);
-    const first = r.list[0];
+    const first = filterWorkflowLibrary(r.list, devSettings)[0];
     if (first) { setWorkflow(first); setDirty(false); }
     if (r.unresolved?.length) {
       toast?.warning?.(`Imported ${r.count} — ${r.unresolved.length} template${r.unresolved.length === 1 ? '' : 's'} need picking in the editor`, { duration: 5000 });
@@ -944,7 +994,8 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   // Load the local library, then reconcile the server-owned customer bucket.
   useEffect(() => {
     let alive = true;
-    loadWorkflows().then(async (list) => {
+    const refreshBucket = async ({ chooseFirst = false } = {}) => {
+      const list = await loadWorkflows();
       if (!alive) return;
       let next = list;
       try {
@@ -954,11 +1005,37 @@ export function WorkflowManager({ onClose, contacts = [] }) {
       } catch { /* offline: the last synchronized mirrors remain usable */ }
       if (!alive) return;
       setLibrary(next);
-      if (next.length) setWorkflow(next[0]);
-    });
+      const first = filterWorkflowLibrary(next, devSettings)[0];
+      if (chooseFirst && first) setWorkflow(first);
+    };
+    refreshBucket({ chooseFirst: true });
     const unsub = subscribeWorkflows((list) => { if (alive) setLibrary(list); });
-    return () => { alive = false; unsub(); };
+    const onStorageChanged = (changes, area) => {
+      if (area !== 'local'
+          || changes.gbLiveUpdate?.newValue?.type !== 'managed_workflows.changed') return;
+      refreshBucket();
+    };
+    chrome?.storage?.onChanged?.addListener?.(onStorageChanged);
+    return () => {
+      alive = false;
+      unsub();
+      chrome?.storage?.onChanged?.removeListener?.(onStorageChanged);
+    };
   }, []);
+
+  // A remote policy change takes effect immediately without deleting private
+  // drafts. Move the editor onto an approved bucket workflow (or a locked
+  // placeholder) so hidden local automation cannot still be run from memory.
+  useEffect(() => {
+    const managed = managedWorkflow(workflow);
+    if (managed && visibleLibrary.some((row) => row.id === workflow.id)) return;
+    if (!managed && canUseLocal) return;
+    const next = visibleLibrary[0] || (canUseLocal
+      ? newWorkflow('Untitled workflow')
+      : lockedWorkflowRef.current);
+    setWorkflow(next);
+    setDirty(canUseLocal && visibleLibrary.length === 0);
+  }, [canUseLocal, visibleLibrary, workflow]);
 
   // Load the rep's saved email / task / call templates for the user.* binding.
   useEffect(() => {
@@ -986,11 +1063,16 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   };
 
   const selectWorkflow = (id) => {
-    const c = library.find((x) => x.id === id);
+    const c = visibleLibrary.find((x) => x.id === id);
     if (c) { setWorkflow(c); setDirty(false); }
   };
-  const createWorkflow = () => {
-    setWorkflow(newWorkflow('Untitled workflow')); setDirty(true);
+  const createWorkflow = (name = 'Untitled workflow') => {
+    if (!canUseLocal) {
+      toast?.warning?.('Local workflow usage is disabled for this installation.');
+      return;
+    }
+    setCreateOpen(false);
+    setWorkflow(newWorkflow(name)); setDirty(true);
   };
   const deleteWorkflow = async (id) => {
     const removed = library.find((c) => c.id === id);
@@ -1195,6 +1277,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   };
 
   const startRun = () => {
+    if (!workflowUsable) { toast?.warning?.('Local workflow usage is disabled for this installation.'); return; }
     if (!audienceKeyed.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
     if (!program.effectCount) { toast?.warning?.('Add a CRM action before running.'); return; }
     if (program.errors.length) { toast?.warning?.('Fix the syntax error first.'); return; }
@@ -1225,7 +1308,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
           onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
-          dryRun={dryRun} onDryRunChange={setDryRun} />
+          dryRun={dryRun} onDryRunChange={setDryRun} actionsEnabled={workflowUsable} />
         <AnimatePresence mode="wait" initial={false}>
         {runMode ? (
           <AudienceRunView key="run"
@@ -1240,7 +1323,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
         <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
           style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <WorkflowSidebar library={library} currentId={workflow.id} onSelect={selectWorkflow} onNew={createWorkflow} onDelete={deleteWorkflow} onImport={() => setImportOpen(true)} />
+          <WorkflowSidebar library={visibleLibrary} currentId={workflow.id} onSelect={selectWorkflow} onNew={() => setCreateOpen(true)} onDelete={deleteWorkflow} onImport={() => setImportOpen(true)} canAdd={canUseLocal} />
           <CodeAutomationPanel
             value={workflow.automation || ''} onChange={setAutomation}
             readOnly={!workflowEditable}
@@ -1268,9 +1351,12 @@ export function WorkflowManager({ onClose, contacts = [] }) {
         </AnimatePresence>
       </ModalShell>
       </motion.div>
-      {importOpen && <ImportWorkflowsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
-      {shareOpen && <ShareWorkflowModal workflow={workflow} onClose={() => setShareOpen(false)} />}
-      {confirmRun && <ConfirmRunModal plan={confirmRun.plan} summary={confirmRun.summary} audience={audienceKeyed.length} onConfirm={beginRealRun} onCancel={() => setConfirmRun(null)} />}
+      <AnimatePresence>
+        {createOpen && <CreateWorkflowModal key="create-workflow" onClose={() => setCreateOpen(false)} onCreate={createWorkflow} onImport={() => { setCreateOpen(false); setImportOpen(true); }} />}
+        {importOpen && <ImportWorkflowsModal key="import-workflow" onClose={() => setImportOpen(false)} onDone={onImported} />}
+        {shareOpen && <ShareWorkflowModal key="share-workflow" workflow={workflow} onClose={() => setShareOpen(false)} />}
+        {confirmRun && <ConfirmRunModal key="confirm-workflow" plan={confirmRun.plan} summary={confirmRun.summary} audience={audienceKeyed.length} onConfirm={beginRealRun} onCancel={() => setConfirmRun(null)} />}
+      </AnimatePresence>
     </motion.div>
     )}
     </AnimatePresence>

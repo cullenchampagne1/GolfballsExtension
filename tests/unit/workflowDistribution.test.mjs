@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  reconcileWorkflowBucket, shareableWorkflow, workflowBucketWrite, workflowsFromShare,
+  allowLocalWorkflowUsage, filterWorkflowLibrary, reconcileWorkflowBucket,
+  shareableWorkflow, workflowBucketWrite, workflowsFromShare,
 } from '../../src/lib/workflow/distribution.js';
 
 const workflow = {
@@ -62,5 +63,22 @@ describe('workflow distribution · customer links and managed bucket', () => {
     assert.equal(write.base_version, 3);
     assert.equal(write.base_workflow.name, 'Earlier');
     assert.equal(write.workflow.name, 'Two-year follow-up');
+  });
+
+  it('preserves private rows but hides them when local workflow usage is disabled', () => {
+    const managed = reconcileWorkflowBucket([], {
+      is_parent: false,
+      workflows: [{
+        id: 'C'.repeat(32), client_workflow_id: 'managed', version: 1,
+        workflow: shareableWorkflow(workflow), created_by: 'Management',
+        last_editor: 'Management', created_by_current: false,
+      }],
+    })[0];
+    const settings = { 'workflows.allowLocalUsage': false };
+    assert.equal(allowLocalWorkflowUsage(settings), false);
+    assert.deepEqual(filterWorkflowLibrary([workflow, managed], settings), [managed]);
+    assert.equal(allowLocalWorkflowUsage({
+      ...settings, 'emailTemplates.allowParentAccount': true,
+    }), true);
   });
 });

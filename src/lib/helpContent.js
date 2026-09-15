@@ -5449,6 +5449,34 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
+            "text": "workflows"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Allow Local Workflow Usage",
+                "bool",
+                "On",
+                "",
+                "Allow this installation to create, import, edit, and run private local workflows. Turning this off preserves those rows but shows only management-approved bucket workflows."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "workflows.allowLocalUsage"
+              ]
+            }
+          },
+          {
+            "type": "heading",
             "text": "Email"
           },
           {
@@ -9971,6 +9999,16 @@ export const HELP_CONTENT = {
         "emailTemplates.allowBulkSending"
       ],
       "description": "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:workflows.allowLocalUsage",
+      "category": "Settings",
+      "title": "Allow Local Workflow Usage",
+      "keywords": [
+        "workflows.allowLocalUsage"
+      ],
+      "description": "Allow this installation to create, import, edit, and run private local workflows. Turning this off preserves those rows but shows only management-approved bucket workflows.",
       "article": "developer-settings"
     },
     {

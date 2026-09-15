@@ -153,6 +153,7 @@ class RowActionDeclarationTests(unittest.TestCase):
                 "/shares/settings": {"revoke"},
                 "/managed-email-templates": {"clear"},
                 "/managed-email-template-sources": {"clearSource"},
+                "/managed-workflows": {"clearWorkflow"},
                 # The rep leaderboard, which absorbed the installations roster
                 # and its two switches. Not revokes — two reversible controls,
                 # the only row actions in this file that are not destructive.
@@ -192,7 +193,7 @@ class RowActionDeclarationTests(unittest.TestCase):
     #: template, a share. Listed rather than pattern-matched, so adding a
     #: destructive action is a reviewed change to this line and not a naming
     #: accident.
-    DESTRUCTIVE = {"revoke", "clear", "clearSource"}
+    DESTRUCTIVE = {"revoke", "clear", "clearSource", "clearWorkflow"}
 
     def test_a_destructive_action_declares_its_own_confirmation(self):
         # The prompt lives in the BLOCK because a payload able to rewrite it
@@ -269,7 +270,7 @@ class MigratedRegistrarTests(unittest.TestCase):
         registrar = (ROOT / ".revstack" / "blocks.py").read_text()
         for block_id in ("email-links", "managed-email-templates",
                          "managed-email-template-sources",
-                         "product-stores", "settings-shares"):
+                         "managed-workflows", "product-stores", "settings-shares"):
             self.assertNotRegex(
                 registrar, rf'_list_block\(\s*"{re.escape(block_id)}"',
                 f"{block_id} is registered twice")

@@ -136,4 +136,46 @@ describe('settings migration · workflow namespace', () => {
     assert.equal(stored[STORAGE_KEY][0].name, 'Updated account pass');
     assert.equal(Object.hasOwn(stored, LEGACY_STORAGE_KEY), false);
   });
+
+  it('rejects direct local workflow saves when management disables local usage', async () => {
+    const stored = installStorage({
+      devSettings: { 'workflows.allowLocalUsage': false },
+      [STORAGE_KEY]: [],
+    });
+
+    await assert.rejects(
+      saveWorkflow({
+        id: 'private-draft',
+        name: 'Private draft',
+        status: 'Draft',
+        automation: 'return "done";',
+      }),
+      /Local workflow usage is disabled/,
+    );
+    assert.deepEqual(stored[STORAGE_KEY], []);
+  });
+
+  it('does not let a direct write alter a locked managed workflow mirror', async () => {
+    const managed = {
+      id: 'managed-row',
+      name: 'Approved workflow',
+      status: 'Active',
+      automation: 'return "approved";',
+      managedWorkflow: {
+        kind: 'revstack-managed-workflow',
+        bucketId: 'A'.repeat(32),
+        editable: false,
+      },
+    };
+    const stored = installStorage({
+      devSettings: { 'workflows.allowLocalUsage': false },
+      [STORAGE_KEY]: [managed],
+    });
+
+    await assert.rejects(
+      saveWorkflow({ ...managed, automation: 'return "changed";' }),
+      /Local workflow usage is disabled/,
+    );
+    assert.equal(stored[STORAGE_KEY][0].automation, 'return "approved";');
+  });
 });

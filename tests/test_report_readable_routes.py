@@ -108,6 +108,7 @@ class ReportReadableRouteTests(unittest.TestCase):
         # below pass by matching nothing.
         self.assertGreater(len(self.readable), 5)
         self.assertIn("/managed-email-templates", self.readable)
+        self.assertIn("/managed-workflows", self.readable)
 
     def test_every_report_placeable_read_endpoint_admits_a_viewer(self):
         missing = []
@@ -130,7 +131,8 @@ class ReportReadableRouteTests(unittest.TestCase):
         # Named explicitly: these are the two the bug was reported on, and a
         # refactor that drops them from the scan should fail here rather than
         # quietly shrink the invariant.
-        for path in ("/managed-email-templates", "/managed-email-template-sources"):
+        for path in ("/managed-email-templates", "/managed-email-template-sources",
+                     "/managed-workflows"):
             self.assertIn(VIEWER_GUARD, self.guards[("get", path)], path)
 
     def test_no_mutating_route_admits_a_viewer(self):
@@ -149,6 +151,7 @@ class ReportReadableRouteTests(unittest.TestCase):
         # The clears and revokes the relaxed tables declare. A viewer never
         # sees the buttons, and must be refused even if it forges the request.
         for path in ("/managed-email-templates/clear",
+                     "/managed-workflows/clear",
                      "/managed-email-template-sources/clear",
                      "/shares/email/revoke",
                      "/shares/products/revoke",

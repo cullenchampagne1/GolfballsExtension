@@ -221,6 +221,22 @@ function writeAll(list) {
   });
 }
 
+function canSaveWorkflow(workflow) {
+  return new Promise((resolve) => {
+    if (!hasChromeStorage()) { resolve(true); return; }
+    try {
+      chrome.storage.local.get('devSettings', (out) => {
+        const settings = out?.devSettings || {};
+        const managed = workflow?.managedWorkflow;
+        const isParent = settings['emailTemplates.allowParentAccount'] === true;
+        resolve(managed?.kind === 'revstack-managed-workflow'
+          ? managed.editable !== false || isParent
+          : isParent || settings['workflows.allowLocalUsage'] !== false);
+      });
+    } catch { resolve(true); }
+  });
+}
+
 export async function replaceWorkflows(list) {
   const next = (Array.isArray(list) ? list : []).map(normalizeWorkflow);
   await writeAll(next);
@@ -229,6 +245,9 @@ export async function replaceWorkflows(list) {
 
 /* Upsert one workflow (stamps lastSaved) and persist the whole list. */
 export async function saveWorkflow(workflow) {
+  if (!await canSaveWorkflow(workflow)) {
+    throw new Error('Local workflow usage is disabled for this installation');
+  }
   const stamped = { ...normalizeWorkflow(workflow), lastSaved: new Date().toISOString() };
   const list = await loadWorkflows();
   const i = list.findIndex((c) => c.id === stamped.id);

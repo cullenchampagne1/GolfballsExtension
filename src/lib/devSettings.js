@@ -317,6 +317,13 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: true,
   },
+  {
+    key:     'workflows.allowLocalUsage',
+    label:   'Allow Local Workflow Usage',
+    desc:    'Allow this installation to create, import, edit, and run private local workflows. Turning this off preserves those rows but shows only management-approved bucket workflows.',
+    type:    'bool',
+    default: true,
+  },
 
   /* ── Outbound email account host ──────────────────────────────
      The local part (before @) used when constructing the `from`

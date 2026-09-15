@@ -32,6 +32,11 @@ const sourceEnd = routes.indexOf('@router.post("/managed-email-templates/clear")
 const sourceRoute = sourceStart >= 0 && sourceEnd > sourceStart
   ? routes.slice(sourceStart, sourceEnd)
   : '';
+const managedWorkflowsStart = routes.indexOf('@router.get("/managed-workflows")');
+const managedWorkflowsEnd = routes.indexOf('@router.get("/shares/settings")', managedWorkflowsStart);
+const managedWorkflowsRoute = managedWorkflowsStart >= 0 && managedWorkflowsEnd > managedWorkflowsStart
+  ? routes.slice(managedWorkflowsStart, managedWorkflowsEnd)
+  : '';
 const overridesStart = routes.indexOf('@router.get("/configuration-overrides")');
 const overridesEnd = routes.indexOf('# ---------------- AI help companion', overridesStart);
 const overridesRoute = overridesStart >= 0 && overridesEnd > overridesStart
@@ -52,6 +57,7 @@ const blockSource = (name) => localRuntimeAvailable
 const emailLinksBlock = blockSource('email-links');
 const managedTemplatesBlock = blockSource('managed-email-templates');
 const managedSourcesBlock = blockSource('managed-email-template-sources');
+const managedWorkflowsBlock = blockSource('managed-workflows');
 const scorecardBlock = blockSource('analytics-scorecard');
 const reliabilityTrendBlock = blockSource('analytics-reliability-trend');
 const adoptionBlock = blockSource('analytics-adoption');
@@ -338,6 +344,31 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(clearRoute, /"reason": "dashboard_clear"/);
     assert.match(clearRoute, /event_type="managed_email_templates\.changed"/);
     assert.match(clearRoute, /"removed_count": result\["removed_count"\]/);
+  });
+
+  it('manages the universal workflow bucket through a responsive data grid', () => {
+    assert.match(managedWorkflowsBlock, /^id: managed-workflows$/m);
+    assert.match(managedWorkflowsBlock, /^title: Managed workflows$/m);
+    assert.match(managedWorkflowsBlock, /^view: data\.grid$/m);
+    assert.match(managedWorkflowsBlock, /^size: \{ w: 4, h: 4, min: \{ w: 1, h: 2 \} \}$/m);
+    assert.match(managedWorkflowsBlock, /^\s+minimumVisibleColumns: 2$/m);
+    assert.match(managedWorkflowsBlock, /^\s+search: true$/m);
+    assert.match(managedWorkflowsBlock, /clearWorkflow:[\s\S]*?confirm: Remove this managed workflow from every installation\?/);
+    assert.match(managedWorkflowsRoute, /automation source is intentionally omitted from dashboard data/);
+    assert.match(managedWorkflowsRoute, /_row_action\(\n\s+"clearWorkflow"/);
+    assert.match(managedWorkflowsRoute, /@router\.post\("\/managed-workflows\/clear"\)/);
+    assert.match(managedWorkflowsRoute, /event_type="managed_workflows\.changed"/);
+    const placement = project.dashboard.default_layout.find(
+      (item) => item.instance_id === 'managed-workflows',
+    );
+    assert.deepEqual(placement, {
+      instance_id: 'managed-workflows',
+      block_id: 'golfballs-extension.managed-workflows',
+      x: 0,
+      y: 52,
+      w: 4,
+      h: 4,
+    });
   });
 
   it('declares notification composers as action-modal inputs with validated fields', () => {

@@ -612,6 +612,20 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
         self.assertEqual(customer["workflows"][0]["workflow"]["name"], workflow["name"])
         self.assertEqual(customer["workflows"][0]["created_by"], "Template Owner")
 
+        cleared = self.api.clear_managed_workflow(bucket_id=parent["workflows"][0]["id"])
+        self.assertEqual(cleared["removed_count"], 1)
+        self.assertEqual(cleared["bucket_ids"], [parent["workflows"][0]["id"]])
+        self.assertEqual(
+            self._payload(self.api.get_managed_workflow_bucket(
+                self._request(self.recipient),
+            ))["workflows"],
+            [],
+        )
+        self.assertEqual(
+            self.api.clear_managed_workflow(bucket_id=parent["workflows"][0]["id"])["removed_count"],
+            0,
+        )
+
     def test_parent_disjoint_edits_merge_and_overlap_names_the_conflicting_parent(self):
         original = {
             "name": "Approved welcome", "type": "order",

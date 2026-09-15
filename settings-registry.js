@@ -328,6 +328,13 @@
       "description": "Show Email selected actions and permit Quick Send from Task List and CRM Search surfaces.",
       "managedDefault": true
     },
+    "workflows.allowLocalUsage": {
+      "type": "bool",
+      "default": true,
+      "label": "Allow Local Workflow Usage",
+      "description": "Allow this installation to create, import, edit, and run private local workflows. Turning this off preserves those rows but shows only management-approved bucket workflows.",
+      "managedDefault": true
+    },
     "email.localPart": {
       "type": "string",
       "default": "",

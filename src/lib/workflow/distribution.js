@@ -23,6 +23,18 @@ export function managedWorkflow(workflow) {
   return meta?.kind === MANAGED_WORKFLOW_KIND && meta.bucketId ? meta : null;
 }
 
+export function allowLocalWorkflowUsage(settings = {}) {
+  return settings?.['emailTemplates.allowParentAccount'] === true
+    || settings?.['workflows.allowLocalUsage'] !== false;
+}
+
+export function filterWorkflowLibrary(workflows, settings = {}) {
+  const list = Array.isArray(workflows) ? workflows : [];
+  return allowLocalWorkflowUsage(settings)
+    ? list
+    : list.filter((workflow) => !!managedWorkflow(workflow));
+}
+
 export function setWorkflowBucketEnrollment(workflow, enrolled) {
   const next = { ...workflow };
   if (enrolled) next.managedWorkflowEnrollment = true;

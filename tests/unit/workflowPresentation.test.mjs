@@ -63,6 +63,14 @@ describe('Workflow Manager presentation scale', () => {
     assert.match(managerSource, /advanceRunRow\(current\[contact\._key\], event, pipeline\)/);
   });
 
+  it('opens a polished animated add menu before creating or importing', () => {
+    assert.match(managerSource, /function CreateWorkflowModal/);
+    assert.match(managerSource, /initial=\{\{ opacity: 0, scale: 0\.94, y: 18 \}\}/);
+    assert.match(managerSource, /transition=\{\{ type: 'spring', stiffness: 420, damping: 34/);
+    assert.match(managerSource, /<AnimatePresence>[\s\S]*?<CreateWorkflowModal key="create-workflow"/);
+    assert.match(managerSource, /onNew=\{\(\) => setCreateOpen\(true\)\}/);
+  });
+
   it('replays and visibly restarts repeated function-call animations', () => {
     assert.match(managerSource, /current\?\.kind === 'function' \? 320 : 600/);
     assert.match(blocksSource, /key=\{`\$\{block\.id\}:\$\{d\.runs\}`\}/);

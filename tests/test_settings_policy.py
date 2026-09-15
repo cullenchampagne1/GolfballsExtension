@@ -210,6 +210,9 @@ class SettingsPolicyTests(unittest.TestCase):
             ),
             "emailTemplates.maxDailyBulkSend": (0, "Max Daily Bulk Send"),
             "emailTemplates.allowBulkSending": (True, "Allow Bulk Sending"),
+            "workflows.allowLocalUsage": (
+                True, "Allow Local Workflow Usage"
+            ),
         }
 
         self.store.global_document()
