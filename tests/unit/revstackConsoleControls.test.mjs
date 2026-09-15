@@ -133,11 +133,15 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(emailSendLogBlock, /^\s+pagination: true$/m);
     assert.match(emailSendLogBlock, /^\s+pageSize: 25$/m);
     assert.match(emailSendLogBlock, /^\s+search: true$/m);
-    assert.match(emailSendLogBlock, /aggregate: \{ id: email\.send-log, version: 1 \}/);
+    assert.match(emailSendLogBlock, /^\s+url: \/projects\/golfballs-extension\/email\/send-log$/m);
+    assert.doesNotMatch(emailSendLogBlock, /^\s+aggregate:/m);
+    assert.match(emailSendLogBlock, /^\s+on: \[analytics:source\/source_dirty\]$/m);
+    assert.doesNotMatch(emailSendLogBlock, /^\s+every:/m);
     assert.match(emailSendLogBlock, /^\s+stickyPinnedColumns: true$/m);
     assert.match(emailSendLogBlock, /^\s+filteringEnabled: false$/m);
     assert.match(emailSendLogBlock, /^\s+sortingEnabled: false$/m);
     assert.match(routes, /def _console_email_send_log\(days: int = 30, page: int = 1, page_size: int = 25,/);
+    assert.match(routes, /@router\.get\("\/email\/send-log"\)/);
     assert.match(routes, /query=str\(\(params or \{\}\)\.get\("q"\) or ""\)/);
     assert.match(routes, /\.offset\(\(resolved_page - 1\) \* resolved_page_size\)/);
     assert.match(routes, /"renderer": "avatar_identity"/);
@@ -156,6 +160,17 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       w: 4,
       h: 5,
     });
+  });
+
+  it('keeps interactive tables on direct no-store routes instead of aggregate materializations', () => {
+    const leaderboard = blockSource('analytics-leaderboard');
+    const analytics = readFileSync(resolve(root, '.revstack/analytics.py'), 'utf8');
+    assert.match(leaderboard, /^\s+url: \/projects\/golfballs-extension\/usage\/leaderboard$/m);
+    assert.doesNotMatch(leaderboard, /^\s+aggregate:/m);
+    assert.match(leaderboard, /^\s+on: \[analytics:source\/source_dirty\]$/m);
+    assert.doesNotMatch(leaderboard, /^\s+every:/m);
+    assert.doesNotMatch(analytics, /register\("usage\.leaderboard"/);
+    assert.doesNotMatch(analytics, /register\("email\.send-log"/);
   });
 
   it('declares call logs as vertical pod bars stacked by sales role', () => {
