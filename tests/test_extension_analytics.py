@@ -1480,6 +1480,8 @@ class ConsoleFetchDelegationTests(unittest.TestCase):
     def test_the_request_bridge_has_no_second_process_local_cache(self):
         source = ROUTES.read_text()
         self.assertNotIn("_CONSOLE_CACHE", source)
+        self.assertNotIn("_cached(", source)
+        self.assertNotIn("_cache_put(", source)
         self.assertIn("return await _fetch_uncached(endpoint, params)", source)
 
 
