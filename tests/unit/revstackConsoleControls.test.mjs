@@ -173,13 +173,13 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(analytics, /register\("email\.send-log"/);
   });
 
-  it('versions the activity heatmap after correcting its compact local-time matrix', () => {
+  it('keeps the compact local-time heatmap on the live registered aggregate version', () => {
     const activity = blockSource('analytics-activity-heatmap');
     const analytics = readFileSync(resolve(root, '.revstack/analytics.py'), 'utf8');
-    assert.match(activity, /aggregate: \{ id: usage\.activity-heatmap, version: 2 \}/);
+    assert.match(activity, /aggregate: \{ id: usage\.activity-heatmap, version: 1 \}/);
     assert.match(activity, /sub: Surface opens · local 3h × day/);
-    assert.match(analytics,
-      /register\("usage\.activity-heatmap", inputs=DAYS, schema="chart\.heatmap@1", version=2\)/);
+    assert.match(analytics, /"usage\.activity-heatmap": "chart\.heatmap@1"/);
+    assert.doesNotMatch(analytics, /usage\.activity-heatmap.*version=2/);
     assert.match(routes, /sunday_first_weekday = \(local\.weekday\(\) \+ 1\) % 7/);
     assert.match(routes, /grid\[sunday_first_weekday\]\[local\.hour \/\/ 3\] \+= 1/);
   });
