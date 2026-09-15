@@ -435,13 +435,17 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                              (round(10 / 7, 2), 1.0))
             self.assertEqual(prior_week["rows"][0]["previous_week_average"], 2.0)
             self.assertEqual(
-                [item["reference_bands"][0]["to"] for item in payload["ranges"]],
+                [item["reference_lines"][0]["value"] for item in payload["ranges"]],
                 [0.3, 0.7, 0.24, 0.2],
             )
             self.assertEqual(
-                [item["reference_bands"][0]["label"] for item in payload["ranges"]],
+                [item["reference_lines"][0]["label"] for item in payload["ranges"]],
                 ["PW same-day avg", "PW same-day avg", "PW daily avg", "Prior-PW daily avg"],
             )
+            self.assertTrue(all(
+                item["reference_lines"][0]["style"] == "dotted"
+                for item in payload["ranges"]
+            ))
             series = today["series"]
             self.assertEqual([item["name"] for item in series], ["PA send", "Outlook handoff"])
             self.assertEqual([item["colorKey"] for item in series],
