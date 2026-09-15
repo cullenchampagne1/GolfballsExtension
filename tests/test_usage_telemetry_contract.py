@@ -2,10 +2,12 @@
 
 import ast
 import importlib.util
+import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
@@ -28,7 +30,8 @@ class UsageTelemetryContractTests(unittest.TestCase):
         names = {
             "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
             "_USAGE_TRANSPORT_LABELS", "_USAGE_COLORS",
-            "_usage_days", "_utilization_series", "_core_tool_rows",
+            "_ANALYTICS_TIMEZONE", "_analytics_zone", "_analytics_datetime", "_analytics_day",
+            "_analytics_days", "_usage_days", "_utilization_series", "_core_tool_rows",
             "_console_usage_utilization",
             "_console_usage_utilization_table",
         }
@@ -43,6 +46,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
                 selected.append(node)
         cls.routes = {
             "datetime": datetime, "timedelta": timedelta, "timezone": timezone,
+            "ZoneInfo": ZoneInfo, "os": os,
         }
         exec(compile(ast.Module(body=selected, type_ignores=[]), "usage-routes", "exec"), cls.routes)
 
@@ -112,7 +116,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
                 self.UsageEvent.model_validate(payload)
 
     def test_manager_views_group_daily_email_sources_and_delivery_methods(self):
-        day = datetime.utcnow().date().isoformat()
+        day = self.routes["_analytics_day"]().isoformat()
         rows = [
             {"day": day, "feature": "email_send", "source": "task_list", "transport": "pa", "uses": 2, "words": 40, "attachments": 1, "inline_images": 1},
             {"day": day, "feature": "email_send", "source": "popup", "transport": "mailto", "uses": 1, "words": 12, "attachments": 0, "inline_images": 0},
@@ -159,7 +163,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
         )
 
     def test_core_tools_counts_import_runs_instead_of_imported_records(self):
-        day = datetime.utcnow().date().isoformat()
+        day = self.routes["_analytics_day"]().isoformat()
         self.routes["_usage_feature_rows"] = lambda _days: [
             {
                 "day": day, "feature": "contact_import", "source": "crm_search",
@@ -194,7 +198,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
         self.assertFalse(any(row["id"].startswith("contact_import_run:") for row in details["rows"]))
 
     def test_core_tools_uses_legacy_import_samples_only_without_exact_runs(self):
-        day = datetime.utcnow().date().isoformat()
+        day = self.routes["_analytics_day"]().isoformat()
         legacy = {
             "day": day, "feature": "contact_import", "source": "crm_search",
             "transport": "none", "events": 2, "uses": 5_000,
@@ -216,7 +220,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
         self.assertEqual(core["series"][0]["values"][-1], 3)
 
     def test_catalog_usage_is_the_default_when_email_data_is_missing(self):
-        day = datetime.utcnow().date().isoformat()
+        day = self.routes["_analytics_day"]().isoformat()
         self.routes["_usage_feature_rows"] = lambda _days: [{
             "day": day,
             "feature": "gift_catalog_search",

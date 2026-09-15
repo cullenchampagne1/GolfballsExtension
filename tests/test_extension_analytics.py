@@ -24,7 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, delete, func, inspect, select
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, delete, func, inspect, literal, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Session
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -309,8 +310,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         cls.routes = _load_routes_functions(
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
-                "_ANALYTICS_TIMEZONE", "_analytics_zone", "_analytics_day",
-                "_analytics_midnight_utc", "_analytics_days",
+                "_ANALYTICS_TIMEZONE", "_analytics_zone", "_analytics_datetime", "_analytics_day",
+                "_analytics_midnight_utc", "_analytics_days", "_analytics_date_sql",
                 "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
                 "_console_email_activity", "_console_email_send_log", "_console_call_activity",
                 "_POD_LINEUP_CONFIG",
@@ -457,6 +458,29 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             business_day(datetime(2026, 9, 15, 5, 30, tzinfo=timezone.utc)).isoformat(),
             "2026-09-15",
         )
+
+    def test_database_day_grouping_uses_the_same_central_midnight(self):
+        with Session(self.engine) as session:
+            business_date = self.routes["_analytics_date_sql"]
+            before = session.scalar(select(business_date(
+                literal(datetime(2026, 9, 15, 0, 30)), session,
+            )))
+            after = session.scalar(select(business_date(
+                literal(datetime(2026, 9, 15, 5, 30)), session,
+            )))
+        self.assertEqual(str(before), "2026-09-14")
+        self.assertEqual(str(after), "2026-09-15")
+
+    def test_postgres_day_grouping_attaches_utc_before_projecting_central(self):
+        bind = type("Bind", (), {"dialect": type("Dialect", (), {"name": "postgresql"})()})()
+        session = type("Session", (), {"get_bind": lambda _self: bind})()
+        expression = self.routes["_analytics_date_sql"](
+            ExtensionUsageEvent.occurred_at, session,
+        )
+        sql = str(expression.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+        ))
+        self.assertIn("date(timezone('America/Chicago', timezone('UTC'", sql)
 
     def test_email_send_log_projects_typed_rows_without_message_content(self):
         with Session(self.engine) as session:
@@ -1483,6 +1507,10 @@ class ConsoleFetchDelegationTests(unittest.TestCase):
         self.assertNotIn("_cached(", source)
         self.assertNotIn("_cache_put(", source)
         self.assertIn("return await _fetch_uncached(endpoint, params)", source)
+
+    def test_telemetry_invalidates_the_clicked_rep_scorecard_variant(self):
+        source = (ROOT / ".revstack" / "logic" / "client_api.py").read_text()
+        self.assertIn('"rep_id": ["", principal.credential_id]', source)
 
 
 class LatencyTrendCostTests(unittest.TestCase):
