@@ -266,6 +266,7 @@ function CreateWorkflowModal({ onClose, onCreate, onImport }) {
 }
 
 function ImportWorkflowsModal({ onClose, onDone }) {
+  const [method, setMethod] = useState(null);
   const [text, setText] = useState('');
   const [shareUrl, setShareUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -295,83 +296,104 @@ function ImportWorkflowsModal({ onClose, onDone }) {
       setBusy(false); setLinkError(error?.message || 'Unable to import workflow link');
     }
   };
+  const title = method === 'link' ? 'Import from a share link'
+    : method === 'json' ? 'Import workflow JSON'
+      : 'Import workflow';
+  const subtitle = method === 'link' ? 'Use a workflow another installation shared with you.'
+    : method === 'json' ? 'Paste a workflow definition and review it before saving.'
+      : 'Choose where the workflow is coming from.';
   return (
     <motion.div role="dialog" aria-modal="true" aria-label="Import workflow"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 2147483600, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <motion.div initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }} transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.72 }} style={{ width: 600, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
-          <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.download size={14} /></span>
+      <motion.div initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }} transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.72 }} style={{ width: 620, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          {method ? <IconBtn size="sm" variant="ghost" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} title="Back to import options" disabled={busy} onClick={() => setMethod(null)} /> : null}
+          <span style={{ width: 34, height: 34, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{method === 'link' ? <I.link size={16} /> : method === 'json' ? <I.code size={16} /> : <I.upload size={16} />}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import workflow</div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Paste an AI-generated JSON blob — single workflow, array, or {'{ workflows: […] }'} · spec in docs/llm-workflow-toolset.md</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)' }}>{title}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>{subtitle}</div>
           </div>
           <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
         </div>
-        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'auto' }}>
-          <Field label="Customer share link" hint="Paste a revocable workflow link from another installation">
-            <div style={{ display: 'flex', gap: 7 }}>
-              <Input value={shareUrl} placeholder="https://api.cullenchampagne.com/settings-shares/…" leading={<I.link size={13} />} onChange={setShareUrl} />
-              <Btn variant="secondary" size="sm" disabled={!shareUrl.trim() || busy} onClick={doLinkImport}>Import link</Btn>
-            </div>
-          </Field>
-          {linkError ? <div style={{ fontSize: 10.5, color: 'var(--gb-error-fg)' }}>{linkError}</div> : null}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10 }}><span style={{ height: 1, flex: 1, background: 'var(--gb-border-subtle)' }} />or paste JSON<span style={{ height: 1, flex: 1, background: 'var(--gb-border-subtle)' }} /></div>
-          <textarea
-            autoFocus
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder='Paste the workflow JSON here…'
-            spellCheck={false}
-            style={{ width: '100%', boxSizing: 'border-box', height: 240, resize: 'vertical', padding: 10,
-              background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-              outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11, lineHeight: 1.5 }}
-          />
-          {parsed && (
-            parsed.ok ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>
-                  {parsed.items.length} workflow{parsed.items.length === 1 ? '' : 's'} ready to import
-                </div>
-                {parsed.items.map(({ workflow: c, warnings }, i) => {
-                  const imported = translateProgram(c.automation || '');
-                  const flat = flattenBlocks(imported.blocks);
-                  const actions = flat.filter((block) => (
-                    block.kind === 'action'
-                    || block.kind === 'complete'
-                    || block.kind === 'edit'
-                  )).length;
-                  const branches = flat.filter((block) => (
-                    block.kind === 'branch' || block.kind === 'cases'
-                  )).length;
-                  return (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', minWidth: 0 }}>
-                        <Tag tone="brand" size="xs">{actions} action{actions === 1 ? '' : 's'}</Tag>
-                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
-                        <span style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }}>{branches ? `${branches} branch${branches === 1 ? '' : 'es'} · ` : ''}{c.audienceOrder}</span>
-                      </div>
-                      {warnings.map((w, j) => (
-                        <div key={j} style={{ fontSize: 10, color: 'var(--gb-warning-fg)', paddingLeft: 4 }}>⚠ {w}</div>
-                      ))}
+        <AnimatePresence mode="wait" initial={false}>
+          {!method ? (
+            <motion.div key="import-choices" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.16 }} style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <motion.button type="button" whileHover={{ y: -2, scale: 1.01 }} whileTap={{ scale: 0.985 }} onClick={() => setMethod('link')} style={{ minHeight: 184, padding: 18, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-lg)', color: 'var(--gb-text-primary)', cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'var(--gb-shadow-xs)' }}>
+                <span style={{ width: 42, height: 42, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)' }}><I.link size={19} /></span>
+                <span style={{ marginTop: 18, fontSize: 13, fontWeight: 800 }}>Customer share link</span>
+                <span style={{ marginTop: 6, fontSize: 10.5, lineHeight: 1.55, color: 'var(--gb-text-secondary)' }}>Open a workflow shared from another RevStack installation.</span>
+                <span style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--gb-brand-label)', fontSize: 10.5, fontWeight: 750 }}>Continue <I.chevr size={11} /></span>
+              </motion.button>
+              <motion.button type="button" whileHover={{ y: -2, scale: 1.01 }} whileTap={{ scale: 0.985 }} onClick={() => setMethod('json')} style={{ minHeight: 184, padding: 18, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', color: 'var(--gb-text-primary)', cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'var(--gb-shadow-xs)' }}>
+                <span style={{ width: 42, height: 42, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-secondary)', border: '1px solid var(--gb-border-subtle)' }}><I.code size={19} /></span>
+                <span style={{ marginTop: 18, fontSize: 13, fontWeight: 800 }}>Workflow JSON</span>
+                <span style={{ marginTop: 6, fontSize: 10.5, lineHeight: 1.55, color: 'var(--gb-text-secondary)' }}>Paste a workflow definition created by your team or assistant.</span>
+                <span style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', alignItems: 'center', gap: 5, color: 'var(--gb-text-secondary)', fontSize: 10.5, fontWeight: 750 }}>Continue <I.chevr size={11} /></span>
+              </motion.button>
+            </motion.div>
+          ) : method === 'link' ? (
+            <motion.div key="import-link" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.16 }} style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ padding: 14, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
+                <Field label="Share link" hint="The link stays controlled by the installation that published it.">
+                  <Input value={shareUrl} placeholder="Paste the RevStack workflow link…" leading={<I.link size={13} />} onChange={setShareUrl} onKeyDown={(e) => { if (e.key === 'Enter') doLinkImport(); }} />
+                </Field>
+              </div>
+              {linkError ? <div style={{ padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))', border: '1px solid var(--gb-error-tint-border, var(--gb-warning-tint-border))', fontSize: 10.5, color: 'var(--gb-error-fg)', lineHeight: 1.45 }}>{linkError}</div> : null}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setMethod(null)}>Back</Btn>
+                <Btn variant="primary" size="sm" icon={<I.download />} disabled={!shareUrl.trim() || busy} state={busy ? 'loading' : 'idle'} onClick={doLinkImport}>Import workflow</Btn>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="import-json" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.16 }} style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'auto' }}>
+              <textarea
+                autoFocus
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Paste workflow JSON…"
+                spellCheck={false}
+                style={{ width: '100%', boxSizing: 'border-box', height: 240, resize: 'vertical', padding: 12,
+                  background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)',
+                  outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11, lineHeight: 1.55 }}
+              />
+              {parsed && (
+                parsed.ok ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>
+                      {parsed.items.length} workflow{parsed.items.length === 1 ? '' : 's'} ready to import
                     </div>
-                  );
-                })}
+                    {parsed.items.map(({ workflow: c, warnings }, i) => {
+                      const imported = translateProgram(c.automation || '');
+                      const flat = flattenBlocks(imported.blocks);
+                      const actions = flat.filter((block) => block.kind === 'action' || block.kind === 'complete' || block.kind === 'edit').length;
+                      const branches = flat.filter((block) => block.kind === 'branch' || block.kind === 'cases').length;
+                      return (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', minWidth: 0 }}>
+                            <Tag tone="brand" size="xs">{actions} action{actions === 1 ? '' : 's'}</Tag>
+                            <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                            <span style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }}>{branches ? `${branches} branch${branches === 1 ? '' : 'es'} · ` : ''}{c.audienceOrder}</span>
+                          </div>
+                          {warnings.map((w, j) => <div key={j} style={{ fontSize: 10, color: 'var(--gb-warning-fg)', paddingLeft: 4 }}>⚠ {w}</div>)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))', border: '1px solid var(--gb-error-tint-border, var(--gb-warning-tint-border))', fontSize: 11, color: 'var(--gb-error-fg, var(--gb-warning-fg))', lineHeight: 1.5 }}>{parsed.error}</div>
+                )
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setMethod(null)}>Back</Btn>
+                <Btn variant="primary" size="sm" icon={<I.download />} disabled={!parsed || !parsed.ok || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>Import{parsed && parsed.ok ? ` ${parsed.items.length}` : ''}</Btn>
               </div>
-            ) : (
-              <div style={{ padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))', border: '1px solid var(--gb-error-tint-border, var(--gb-warning-tint-border))', fontSize: 11, color: 'var(--gb-error-fg, var(--gb-warning-fg))', lineHeight: 1.5 }}>
-                {parsed.error}
-              </div>
-            )
+            </motion.div>
           )}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
-          <Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" size="sm" icon={<I.download />} disabled={!parsed || !parsed.ok || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>
-            Import{parsed && parsed.ok ? ` ${parsed.items.length}` : ''}
-          </Btn>
-        </div>
+        </AnimatePresence>
+        {!method ? <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '11px 16px', borderTop: '1px solid var(--gb-border-subtle)' }}><Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn></div> : null}
       </motion.div>
     </motion.div>
   );

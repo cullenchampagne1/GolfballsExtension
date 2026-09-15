@@ -71,6 +71,15 @@ describe('Workflow Manager presentation scale', () => {
     assert.match(managerSource, /onNew=\{\(\) => setCreateOpen\(true\)\}/);
   });
 
+  it('presents workflow import as two friendly choices before showing JSON', () => {
+    assert.match(managerSource, /const \[method, setMethod\] = useState\(null\)/);
+    assert.match(managerSource, />Customer share link</);
+    assert.match(managerSource, />Workflow JSON</);
+    assert.match(managerSource, /key="import-choices"[\s\S]*?key="import-link"[\s\S]*?key="import-json"/);
+    assert.doesNotMatch(managerSource, /Paste an AI-generated JSON blob/);
+    assert.doesNotMatch(managerSource, /spec in docs\/llm-workflow-toolset\.md/);
+  });
+
   it('replays and visibly restarts repeated function-call animations', () => {
     assert.match(managerSource, /current\?\.kind === 'function' \? 320 : 600/);
     assert.match(blocksSource, /key=\{`\$\{block\.id\}:\$\{d\.runs\}`\}/);
