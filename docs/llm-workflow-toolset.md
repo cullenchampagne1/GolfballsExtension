@@ -294,6 +294,12 @@ can be duplicated without review, updates it to current products and pricing,
 saves it as an editable proposal, and appends its link to the generated
 `user.emails.PriorYear` email before sending.
 
+[`docs/examples/lead-brand-follow-up-workflow.js`](examples/lead-brand-follow-up-workflow.js)
+routes a contact or account lead from its rolling two-year order history. It
+chooses Titleist, Srixon, Bridgestone, TaylorMade, or Callaway by matching-order
+count (latest matching order breaks a tie), falls back to the `Check In` saved
+email, sends the evaluated template, and creates a three-day follow-up task.
+
 ## Control flow
 
 Ordinary JavaScript controls which blocks run:

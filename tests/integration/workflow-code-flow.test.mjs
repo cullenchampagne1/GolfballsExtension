@@ -46,6 +46,10 @@ const REORDER_PROPOSAL_ACTION = readFileSync(
   new URL('../../docs/examples/reorder-proposal-contact-action.js', import.meta.url),
   'utf8',
 );
+const LEAD_BRAND_WORKFLOW = readFileSync(
+  new URL('../../docs/examples/lead-brand-follow-up-workflow.js', import.meta.url),
+  'utf8',
+);
 
 /* ── Shared helpers for reconciliation expectations ──────────────
    These restate the workflow's DOCUMENTED rules (not its code) so the
@@ -136,6 +140,51 @@ const gapMidpointOf = (slotOffset, busyDayNums) => {
 async function fakeSandbox(body, ctx, vars = {}, _doc) {
   const fn = new AsyncFunction('ctx', 'vars', 'h', `"use strict";\n${body}`);
   return fn(ctx || {}, vars || {}, {});
+}
+
+const LEAD_EMAIL_NAMES = [
+  'Titleist', 'Srixon', 'Bridgestone', 'TaylorMade', 'Callaway', 'Check In',
+];
+
+async function simulateLeadBrandWorkflow(orders) {
+  const writes = [];
+  const user = {
+    emails: LEAD_EMAIL_NAMES.map((name, index) => ({
+      id: `lead-email-${index + 1}`,
+      name,
+      subject: `${name} subject`,
+      body: `<p>${name} body</p>`,
+    })),
+  };
+  const evaluateRef = async (reference) => ({
+    name: reference.name,
+    templateId: reference.id,
+    subject: `${reference.name} subject`,
+    body: `<p>${reference.name} body</p>`,
+    to: 'avery@example.test',
+    evaluated: true,
+  });
+  const result = await simulateProgram(LEAD_BRAND_WORKFLOW, {
+    contact: {
+      contactId: '771',
+      contactName: 'Avery Buyer',
+      email: 'avery@example.test',
+    },
+    orders,
+    tasks: { open: [], done: [] },
+  }, {
+    run: makeSandboxRunner({ exec: fakeSandbox, evaluateRef }),
+    user,
+    evaluateRef,
+    executor: {
+      async run(name, input) {
+        writes.push([name, input]);
+        return name === 'createTask' ? { ok: true, taskId: 'task-1' } : { ok: true };
+      },
+      async commitEdits() { return { ok: true }; },
+    },
+  });
+  return { result, writes };
 }
 
 function contextFor(contact) {
@@ -334,6 +383,55 @@ describe('workflow code flow', () => {
       'sendEmail',
     ]);
     assert.deepEqual(sent, [['sendEmail', 'email-1', 'Hi Avery', 'avery@example.test']]);
+  });
+
+  it('routes a lead to its most frequently ordered supported brand before creating a follow-up', async () => {
+    const recentTitleist = isoOf(atNoonDay(-45));
+    const recentCallaway = isoOf(atNoonDay(-10));
+    const oldCallaway = atNoonDay(0);
+    oldCallaway.setFullYear(oldCallaway.getFullYear() - 3);
+    const { result, writes } = await simulateLeadBrandWorkflow([
+      { number: '5001', date: recentTitleist, summary: 'Titleist Pro V1 golf balls' },
+      { number: '5002', date: isoOf(atNoonDay(-120)), summary: 'TITLEIST AVX personalized balls' },
+      { number: '5003', date: recentCallaway, summary: 'Callaway Chrome Soft golf balls' },
+      { number: '4100', date: isoOf(oldCallaway), summary: 'Callaway Supersoft golf balls' },
+    ]);
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(
+      result.trace.filter((entry) => entry.contract).map((entry) => entry.contract),
+      ['evaluate', 'sendEmail', 'createTask'],
+    );
+    assert.equal(writes[0][0], 'sendEmail');
+    assert.equal(writes[0][1].name, 'Titleist');
+    assert.equal(writes[1][0], 'createTask');
+    assert.equal(writes[1][1].subject, 'Follow up — Titleist lead email');
+    assert.match(writes[1][1].body, /2 matching order\(s\)/);
+    assert.equal(writes[1][1].daysOut, 3);
+  });
+
+  it('uses the most recent supported brand to break equal-order ties', async () => {
+    const { writes } = await simulateLeadBrandWorkflow([
+      { number: '5101', date: isoOf(atNoonDay(-90)), summary: 'Titleist Pro V1' },
+      { number: '5102', date: isoOf(atNoonDay(-15)), summary: 'Srixon Z-Star' },
+    ]);
+
+    assert.equal(writes[0][1].name, 'Srixon');
+    assert.equal(writes[1][1].subject, 'Follow up — Srixon lead email');
+  });
+
+  it('routes leads without a recent supported-brand order to Check In', async () => {
+    const oldBridgestone = atNoonDay(0);
+    oldBridgestone.setFullYear(oldBridgestone.getFullYear() - 3);
+    const { result, writes } = await simulateLeadBrandWorkflow([
+      { number: '4001', date: isoOf(oldBridgestone), summary: 'Bridgestone Tour B' },
+      { number: '5201', date: isoOf(atNoonDay(-30)), summary: 'House-brand tees and towels' },
+    ]);
+
+    assert.equal(result.ok, true);
+    assert.equal(writes[0][1].name, 'Check In');
+    assert.equal(writes[1][1].subject, 'Follow up — Check In lead email');
+    assert.match(writes[1][1].body, /No supported-brand order/);
   });
 
   it('ships a monthly opportunity action that closes first, then creates from average order value', async () => {
@@ -624,8 +722,14 @@ describe('workflow code flow', () => {
     );
   });
 
-  it('accepts the saved-email and opportunity examples through the live sandbox guard', () => {
-    for (const source of [SAVED_EMAIL_ACTION, MONTHLY_OPPORTUNITY_ACTION, REORDER_PROPOSAL_ACTION, SKU_PROPOSAL_SOURCE]) {
+  it('accepts the saved-email, lead-routing, and opportunity examples through the live sandbox guard', () => {
+    for (const source of [
+      SAVED_EMAIL_ACTION,
+      LEAD_BRAND_WORKFLOW,
+      MONTHLY_OPPORTUNITY_ACTION,
+      REORDER_PROPOSAL_ACTION,
+      SKU_PROPOSAL_SOURCE,
+    ]) {
       assert.equal(staticCheckCodeBody(buildTraceBody(instrument(source).code)), null);
     }
   });
