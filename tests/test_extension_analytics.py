@@ -14,8 +14,10 @@ directly, so this test has no cross-repo import dependency.
 import ast
 import json
 import math
+import os
 import re
 import unittest
+from zoneinfo import ZoneInfo
 from bisect import bisect_left
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
@@ -211,9 +213,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         # percentile trend's 7-day window quietly lost its oldest sample and
         # the p95 assertion started failing on a calendar boundary rather than
         # on a code change.
-        cls.now = datetime.utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
-        if cls.now > datetime.utcnow():
-            cls.now -= timedelta(days=1)
+        cls.now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
         with Session(cls.engine) as session:
             # Rep A: registered, high activity — 5 feature events/day for 3 days,
             # touches 2 surfaces, reaches 3 of the 7 catalog funnel stages.
@@ -309,6 +309,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         cls.routes = _load_routes_functions(
             {
                 "_usage_ready", "_usage_feature_ready", "_usage_feature_rows",
+                "_ANALYTICS_TIMEZONE", "_analytics_zone", "_analytics_day",
+                "_analytics_midnight_utc", "_analytics_days",
                 "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
                 "_console_email_activity", "_console_email_send_log", "_console_call_activity",
                 "_POD_LINEUP_CONFIG",
@@ -339,6 +341,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             extra_globals={
                 "math": math, "re": re, "bisect_left": bisect_left,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
+                "ZoneInfo": ZoneInfo,
+                "os": os,
                 "select": select, "Session": Session, "Any": Any, "Optional": Optional,
                 "auth_manager": type("Auth", (), {
                     "engine": cls.engine,
@@ -442,6 +446,17 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id.in_(added_ids)))
                 session.commit()
+
+    def test_email_calendar_day_uses_central_time_instead_of_utc_midnight(self):
+        business_day = self.routes["_analytics_day"]
+        self.assertEqual(
+            business_day(datetime(2026, 9, 15, 0, 30, tzinfo=timezone.utc)).isoformat(),
+            "2026-09-14",
+        )
+        self.assertEqual(
+            business_day(datetime(2026, 9, 15, 5, 30, tzinfo=timezone.utc)).isoformat(),
+            "2026-09-15",
+        )
 
     def test_email_send_log_projects_typed_rows_without_message_content(self):
         with Session(self.engine) as session:
@@ -1198,8 +1213,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         builder = ROUTES.read_text()
         body = builder[builder.index("def _console_email_volume"):]
         body = body[:body.index("\ndef ", 1)]
-        self.assertIn("func.date(ExtensionUsageEvent.occurred_at).label(\"day\"),\n"
-                      "                   ExtensionUsageEvent.transport", body)
+        self.assertIn("day = _analytics_day(occurred_at).isoformat()", body)
+        self.assertNotIn("func.date(ExtensionUsageEvent.occurred_at)", body)
         self.assertIn("def transport_stats(window_keys)", body)
         self.assertIn("transport_stats(_keys)", body)
 
@@ -1459,87 +1474,13 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ConsoleFetchCacheTests(unittest.TestCase):
-    """The console data bridge is read-through cached, and why it had to be.
+class ConsoleFetchDelegationTests(unittest.TestCase):
+    """The compatibility bridge computes only for the aggregate worker."""
 
-    Every block on this page polls at 60s or slower, so no endpoint here is a
-    live reading — and the console draws ~20 cards whose builders are pure
-    reads of the same few tables. Nothing was cached but `header.chips`.
-
-    Measured against the real 255,000-row events table, one page load ran
-    ~1.7s of builder CPU, serialized because each arrives on its own thread and
-    holds the GIL. A row click (91ms of work) or a sort switch (67ms) then
-    queued behind whatever poll cycle was in flight, which is why a click felt
-    like it hung: the work was small and the wait in front of it was a second.
-
-    These tests pin the CACHE, not the timings — the key, the TTL policy, and
-    the bound. The timings are in the commit that added it.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.routes = _load_routes_functions(
-            {"_endpoint_cache_key", "_console_ttl", "_CONSOLE_TTL",
-             "_SLOW_HISTORICAL_TTL", "_SLOW_HISTORICAL", "_CONSOLE_CACHE_MAX",
-             "_cached", "_cache_put"},
-            # `_CONSOLE_CACHE: dict = {}` is an annotated assignment, which the
-            # AST selector above does not pick up — injected instead.
-            extra_globals={"Optional": Optional, "Dict": dict, "Any": object,
-                           "_time": __import__("time"), "_CONSOLE_CACHE": {}},
-        )
-
-    def test_the_key_separates_two_placements_asking_different_questions(self):
-        key = self.routes["_endpoint_cache_key"]
-        # The scorecard for one rep must never be served for another, and a
-        # 30-day window must never be served to a card asking for 90.
-        self.assertNotEqual(key("usage.rep-scorecard", {"rep_id": "cred-a"}),
-                            key("usage.rep-scorecard", {"rep_id": "cred-b"}))
-        self.assertNotEqual(key("usage.latency", {"days": "30"}),
-                            key("usage.latency", {"days": "90"}))
-        self.assertNotEqual(key("usage.leaderboard", {"sort": "funnel"}),
-                            key("usage.leaderboard", {"sort": "actions"}))
-
-    def test_the_key_is_order_independent_so_one_answer_serves_both_callers(self):
-        key = self.routes["_endpoint_cache_key"]
-        self.assertEqual(key("usage.latency", {"days": "90", "rep_id": "a"}),
-                         key("usage.latency", {"rep_id": "a", "days": "90"}))
-        self.assertEqual(key("usage.identity", {}), key("usage.identity", None))
-
-    def test_a_parameter_shape_it_cannot_serialize_is_not_cached(self):
-        # Guessing would be worse than recomputing: a key that collides serves
-        # one card's answer to a card that asked something else.
-        class Hostile:
-            def __str__(self): raise RuntimeError("no")
-        self.assertIsNone(self.routes["_endpoint_cache_key"]("x", {"k": Hostile()}))
-
-    def test_the_two_expensive_historical_cards_are_held_far_longer(self):
-        ttl = self.routes["_console_ttl"]
-        # `latency` events are 88% of the events table, so both of these read
-        # ~212,000 rows to draw twenty buckets — and a percentile trend over 90
-        # days does not change meaningfully in a minute.
-        self.assertEqual(ttl("reliability.trend"), self.routes["_SLOW_HISTORICAL_TTL"])
-        self.assertEqual(ttl("usage.latency"), self.routes["_SLOW_HISTORICAL_TTL"])
-        self.assertGreaterEqual(self.routes["_SLOW_HISTORICAL_TTL"], 300.0)
-        # Everything else keeps the short TTL, so a card polling on the minute
-        # still sees fresh numbers.
-        for endpoint in ("usage.leaderboard", "usage.rep-scorecard", "usage.presence"):
-            self.assertEqual(ttl(endpoint), self.routes["_CONSOLE_TTL"])
-        self.assertLessEqual(self.routes["_CONSOLE_TTL"], 30.0)
-
-    def test_a_hit_inside_the_ttl_is_served_and_a_stale_one_is_not(self):
-        cache, put, cached = (self.routes["_CONSOLE_CACHE"], self.routes["_cache_put"],
-                              self.routes["_cached"])
-        cache.clear()
-        put("probe", {"rows": 1})
-        self.assertEqual(cached("probe", 30.0), {"rows": 1})
-        # Zero TTL: every entry is already stale, so nothing is served.
-        self.assertIsNone(cached("probe", 0.0))
-        self.assertIsNone(cached("never-stored", 30.0))
-
-    def test_the_cache_is_bounded_so_an_unforeseen_parameter_cannot_grow_it(self):
-        self.assertLessEqual(self.routes["_CONSOLE_CACHE_MAX"], 1000)
+    def test_the_request_bridge_has_no_second_process_local_cache(self):
         source = ROUTES.read_text()
-        self.assertIn("if len(_CONSOLE_CACHE) >= _CONSOLE_CACHE_MAX:", source)
+        self.assertNotIn("_CONSOLE_CACHE", source)
+        self.assertIn("return await _fetch_uncached(endpoint, params)", source)
 
 
 class LatencyTrendCostTests(unittest.TestCase):
