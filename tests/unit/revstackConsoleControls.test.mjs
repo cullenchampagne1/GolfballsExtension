@@ -107,7 +107,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(bdrEmailActivityBlock, /aggregate: \{ id: email\.bdr-activity, version: 1 \}/);
     assert.match(saEmailActivityBlock, /aggregate: \{ id: email\.sa-activity, version: 1 \}/);
     assert.match(srEmailActivityBlock, /aggregate: \{ id: email\.sr-activity, version: 1 \}/);
-    assert.match(routes, /\("today", "Today".*\("pd", "PD".*\("7d", "7D avg".*\("pw", "PW"/s);
+    assert.match(routes, /\("today", "Today".*\("pd", "PD".*\("pw", "PW".*\("7d", "7D AVG"/s);
     assert.match(routes, /\("pw", "PW", 7, 7, 13, 1, 14, 20, 1, "Prior-PW total avg"\)/);
     assert.match(routes, /"reference_lines": reference_line\(rows, line_label\)/);
     const layout = new Map(project.dashboard.default_layout.map((item) => [item.instance_id, item]));

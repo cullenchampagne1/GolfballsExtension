@@ -415,8 +415,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             payload = self.routes["_console_email_activity"]("BDR")
             self.assertEqual(payload["default_range"], "today")
             self.assertEqual([item["label"] for item in payload["ranges"]],
-                             ["Today", "PD", "7D avg", "PW"])
-            today, prior_day, trailing, prior_week = payload["ranges"]
+                             ["Today", "PD", "PW", "7D AVG"])
+            today, prior_day, prior_week, trailing = payload["ranges"]
             self.assertEqual(len(today["rows"]), 10)
             self.assertEqual([row["pod_label"] for row in today["rows"]],
                              [f"POD {pod:02d}" for pod in range(1, 11)])
@@ -437,11 +437,11 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             self.assertEqual(prior_week["rows"][0]["goal"], 16.8)
             self.assertEqual(
                 [item["reference_lines"][0]["value"] for item in payload["ranges"]],
-                [0.3, 0.7, 0.24, 1.4],
+                [0.3, 0.7, 1.4, 0.24],
             )
             self.assertEqual(
                 [item["reference_lines"][0]["label"] for item in payload["ranges"]],
-                ["PW same-day avg", "PW same-day avg", "PW daily avg", "Prior-PW total avg"],
+                ["PW same-day avg", "PW same-day avg", "Prior-PW total avg", "PW daily avg"],
             )
             self.assertTrue(all(
                 item["reference_lines"][0]["style"] == "dotted"
