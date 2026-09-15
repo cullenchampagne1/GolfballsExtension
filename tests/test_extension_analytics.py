@@ -396,8 +396,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 (0, "pa", 4),
                 (0, "mailto", 1),
                 (1, "pa", 2),
+                (7, "pa", 3),
                 (8, "pa", 7),
                 (9, "mailto", 7),
+                (14, "pa", 14),
             ]
             for offset, transport, count in samples:
                 event = ExtensionUsageEvent(
@@ -412,18 +414,34 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         try:
             payload = self.routes["_console_email_activity"]("BDR")
             self.assertEqual(payload["default_range"], "today")
-            self.assertEqual([item["label"] for item in payload["ranges"]], ["Today", "7D avg"])
-            today, trailing = payload["ranges"]
+            self.assertEqual([item["label"] for item in payload["ranges"]],
+                             ["Today", "PD", "7D avg", "PW"])
+            today, prior_day, trailing, prior_week = payload["ranges"]
             self.assertEqual(len(today["rows"]), 10)
             self.assertEqual([row["pod_label"] for row in today["rows"]],
                              [f"POD {pod:02d}" for pod in range(1, 11)])
             pod_one = today["rows"][0]
             self.assertEqual(pod_one["person"], "Alex Rep")
             self.assertEqual((pod_one["pa"], pod_one["mailto"]), (4.0, 1.0))
-            self.assertEqual(pod_one["previous_week_average"], 2.0)
-            self.assertEqual(pod_one["goal"], 2.4)
+            self.assertEqual(pod_one["previous_week_average"], 3.0)
+            self.assertEqual(pod_one["goal"], 3.6)
+            self.assertEqual((prior_day["rows"][0]["pa"], prior_day["rows"][0]["mailto"]),
+                             (2.0, 0.0))
+            self.assertEqual(prior_day["rows"][0]["previous_week_average"], 7.0)
             self.assertEqual((trailing["rows"][0]["pa"], trailing["rows"][0]["mailto"]),
                              (round(6 / 7, 2), round(1 / 7, 2)))
+            self.assertEqual(trailing["rows"][0]["previous_week_average"], round(17 / 7, 2))
+            self.assertEqual((prior_week["rows"][0]["pa"], prior_week["rows"][0]["mailto"]),
+                             (round(10 / 7, 2), 1.0))
+            self.assertEqual(prior_week["rows"][0]["previous_week_average"], 2.0)
+            self.assertEqual(
+                [item["reference_bands"][0]["to"] for item in payload["ranges"]],
+                [0.3, 0.7, 0.24, 0.2],
+            )
+            self.assertEqual(
+                [item["reference_bands"][0]["label"] for item in payload["ranges"]],
+                ["PW same-day avg", "PW same-day avg", "PW daily avg", "Prior-PW daily avg"],
+            )
             series = today["series"]
             self.assertEqual([item["name"] for item in series], ["PA send", "Outlook handoff"])
             self.assertEqual([item["colorKey"] for item in series],
@@ -433,12 +451,12 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             self.assertEqual(series[1]["roles"]["average"], "previous_week_average")
             self.assertEqual(series[1]["roles"]["goal"], "goal")
             self.assertEqual(today["stats"], [
-                {"label": "vs last wk", "value": "↑ 150%"},
+                {"label": "vs last wk", "value": "↑ 67%"},
                 {"label": "at average", "value": "100%"},
                 {"label": "at goal", "value": "100%"},
             ])
             self.assertEqual(trailing["stats"], [
-                {"label": "vs last wk", "value": "↓ 50%"},
+                {"label": "vs last wk", "value": "↓ 59%"},
                 {"label": "at average", "value": "0%"},
                 {"label": "at goal", "value": "0%"},
             ])

@@ -95,6 +95,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, /^view: chart\.cartesian$/m);
       assert.match(block, /^\s+shape: chart\.cartesian$/m);
       assert.match(block, /^size: \{ w: 1, h: 5, min: \{ w: 1, h: 4 \} \}$/m);
+      assert.match(block, /^\s+sub: PW band · pod avg dashed · \+20% solid$/m);
       assert.match(block, /^\s+showRanges: true$/m);
       assert.match(block, /^\s+rangePosition: footer$/m);
       assert.match(block, /^\s+chartShowStats: true$/m);
@@ -106,6 +107,8 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(bdrEmailActivityBlock, /aggregate: \{ id: email\.bdr-activity, version: 1 \}/);
     assert.match(saEmailActivityBlock, /aggregate: \{ id: email\.sa-activity, version: 1 \}/);
     assert.match(srEmailActivityBlock, /aggregate: \{ id: email\.sr-activity, version: 1 \}/);
+    assert.match(routes, /\("today", "Today".*\("pd", "PD".*\("7d", "7D avg".*\("pw", "PW"/s);
+    assert.match(routes, /"reference_bands": reference_band\(rows, band_label\)/);
     const layout = new Map(project.dashboard.default_layout.map((item) => [item.instance_id, item]));
     assert.equal(layout.get('analytics-bdr-email-activity')?.block_id,
       'golfballs-extension.analytics-bdr-email-activity');
