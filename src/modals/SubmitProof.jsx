@@ -10,7 +10,9 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { CRM_PAGES } from '../lib/constants.js';
 import { reportFeatureUsage } from '../lib/usageEvents.js';
-import { buildAutoProofNames, buildProofEmailSubject } from '../lib/submitProofNames.js';
+import {
+  buildAutoProofNames, buildProofEmailSubject, proofLogoTypeValue,
+} from '../lib/submitProofNames.js';
 
 /* ───────────────────────────────────────────────────────────────
    SubmitProof — React port of the proof-submission flow that used
@@ -537,7 +539,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         return acc;
       }, {});
 
-      const logoType = dyn.logoType || 'other';
+      const logoType = proofLogoTypeValue(dyn.logoType || 'other');
       setSubmitProgress({ current: i + 1, total: selectedItems.length, item });
       const r = await sendOne({
         action: 'generateProofLink',

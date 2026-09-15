@@ -4,10 +4,17 @@ import assert from 'node:assert/strict';
 import {
   buildAutoProofNames,
   buildProofEmailSubject,
+  proofLogoTypeValue,
   proofItemLabel,
 } from '../../src/lib/submitProofNames.js';
 
 describe('submit proof · generated names', () => {
+  it('sends the server GiftSet enum while keeping the friendly spaced label', () => {
+    assert.equal(proofLogoTypeValue('Gift Set'), 'GiftSet');
+    assert.equal(proofLogoTypeValue(' giftset '), 'GiftSet');
+    assert.equal(proofLogoTypeValue('Ball'), 'Ball');
+  });
+
   it('shortens every gift-set variant to Gift Set', () => {
     assert.equal(
       proofItemLabel('Gift Set - 6 Ball - Wooden Box - Poker Chip'),
