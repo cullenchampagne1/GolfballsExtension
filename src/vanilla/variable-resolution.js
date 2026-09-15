@@ -699,6 +699,8 @@
       );
       const first = value('contact.firstName', '') || '';
       const last = value('contact.lastName', '') || '';
+      const accountTerritoryId = value('account.territoryId', '') || '';
+      const accountTerritoryName = value('account.territoryName', '') || '';
       let lastEmailMs = 0;
       /* Canonical Page Engine snapshots store Email History at the root. The
          nested fallback keeps already-saved legacy snapshots sendable. */
@@ -713,13 +715,21 @@
       }
       try {
         const result = await resolveAllVarsAsync(vars, toField, null, null, snapshot);
-        return { ...result, displayName: `${first} ${last}`.trim(), lastEmailMs };
+        return {
+          ...result,
+          displayName: `${first} ${last}`.trim(),
+          lastEmailMs,
+          accountTerritoryId,
+          accountTerritoryName,
+        };
       } catch (error) {
         return {
           resolved: {},
           toEmail: '',
           displayName: `${first} ${last}`.trim(),
           lastEmailMs,
+          accountTerritoryId,
+          accountTerritoryName,
           error: error?.message || 'resolve failed',
         };
       }

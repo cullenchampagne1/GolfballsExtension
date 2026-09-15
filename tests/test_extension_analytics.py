@@ -138,6 +138,9 @@ class ExtensionUsageEvent(Base):
     condition_count = Column(Integer, nullable=False, default=0)
     conditions_matched = Column(Boolean, nullable=True)
     conditions_enforced = Column(Boolean, nullable=False, default=False)
+    account_territory_id = Column(String(64), nullable=True)
+    account_territory_name = Column(String(160), nullable=True)
+    last_emailed_at = Column(DateTime, nullable=True)
     duration_ms = Column(Integer, nullable=True)
     ok = Column(Boolean, nullable=False, default=True)
     occurred_at = Column(DateTime, nullable=False)
@@ -530,6 +533,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 condition_count=2,
                 conditions_matched=True,
                 conditions_enforced=True,
+                account_territory_id="17",
+                account_territory_name="Upper Midwest",
+                last_emailed_at=self.now - timedelta(days=9, hours=3),
                 ok=True,
                 occurred_at=self.now,
             )
@@ -546,7 +552,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             })
             self.assertEqual(
                 [column["id"] for column in payload["columns"]],
-                ["sent_at", "rep", "template", "conditions", "transport",
+                ["sent_at", "rep", "template", "territory", "last_emailed_at",
+                 "conditions", "transport",
                  "messages", "words", "attachments", "status"],
             )
             self.assertEqual(payload["columns"][0]["primitive"], "datetime")
@@ -559,6 +566,11 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             row = next(item for item in payload["rows"] if item["id"] == f"email-event-{event_id}")
             self.assertEqual((row["rep"], row["assignment"]), ("Alex Rep", "POD 01 · BDR"))
             self.assertEqual(row["template"], "Annual renewal · Warm opening")
+            self.assertEqual(row["territory"], "Upper Midwest")
+            expected_prior = (self.now - timedelta(days=9, hours=3)).replace(
+                tzinfo=timezone.utc
+            ).isoformat().replace("+00:00", "Z")
+            self.assertEqual(row["last_emailed_at"], expected_prior)
             self.assertEqual(row["conditions"], {"tone": "success", "text": "Met"})
             self.assertEqual((row["condition_count"], row["conditions_enforced"]), (2, True))
             self.assertEqual((row["transport"], row["source"]),
@@ -568,7 +580,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 (2, 184, 1, 2),
             )
             self.assertEqual(row["status"], {"tone": "success", "text": "Delivered"})
-            self.assertIn("Content-free delivery telemetry", row["_detail"]["description"])
+            self.assertIn("Privacy-bounded delivery telemetry", row["_detail"]["description"])
             serialized = json.dumps(payload)
             for forbidden in ("recipient", "subject", "body", "filename", "credential_id"):
                 self.assertNotIn(f'"{forbidden}"', serialized.casefold())
@@ -695,6 +707,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 feature="email_send",
                 source="email_preview",
                 transport="pa",
+                account_territory_id="17",
+                account_territory_name="Needle Territory",
                 count=1,
                 ok=True,
                 occurred_at=self.now,
@@ -705,7 +719,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             session.commit()
         try:
             payload = self.routes["_console_email_send_log"](
-                30, page=3, page_size=10, query="  needle search  "
+                30, page=3, page_size=10, query="  needle territory  "
             )
             self.assertEqual(payload["data_source"]["total_rows"], 1)
             self.assertGreater(payload["data_source"]["unfiltered_total_rows"], 1)

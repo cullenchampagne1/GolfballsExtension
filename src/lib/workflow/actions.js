@@ -145,6 +145,10 @@ async function runEmail(step, template, ctx, { dryRun }) {
         contactId: ctx.contact?.crmContactId || ctx.contactId || ctx.contact?.contactId || '',
         accountId: ctx.accountId || ctx.contact?.accountId || '',
       },
+      recipientContext: {
+        data: ctx.snapshot?.data || ctx.data || ctx.page || {},
+        lastEmailedAt: resolved?.lastEmailMs || 0,
+      },
     },
     { dispatch: ctx.dispatch },
   );

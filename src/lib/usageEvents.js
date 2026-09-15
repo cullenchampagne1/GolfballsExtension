@@ -48,6 +48,58 @@ const compactLabel = (value, maximum) => String(value || '')
   .trim()
   .slice(0, maximum);
 
+const usableTerritory = (value, maximum) => {
+  const clean = compactLabel(value, maximum);
+  return /^(?:0|not set|select)$/i.test(clean) ? '' : clean;
+};
+
+const timestampMs = (value) => {
+  const number = value instanceof Date ? value.getTime()
+    : (typeof value === 'number' ? value : Date.parse(String(value || '')));
+  return Number.isFinite(number) && number > 0
+    ? Math.min(Math.round(number), Number.MAX_SAFE_INTEGER) : 0;
+};
+
+/**
+ * Reduce already-extracted CRM page context to the three bounded fields email
+ * analytics may retain. Multiple sources are accepted because a bulk runner
+ * has fetched-recipient data while a popup send has only the current page.
+ */
+export function emailRecipientAnalyticsContext(...sources) {
+  let territoryId = '';
+  let territoryName = '';
+  let lastEmailedAt = 0;
+  const visit = (source) => {
+    if (!source || typeof source !== 'object') return;
+    const data = source.data && typeof source.data === 'object' ? source.data : source;
+    const page = data.page && typeof data.page === 'object' ? data.page : data;
+    const account = page.account && typeof page.account === 'object' ? page.account : {};
+    territoryId ||= usableTerritory(
+      source.accountTerritoryId || source.account_territory_id
+      || account.territoryId || account.territoryID,
+      64,
+    );
+    territoryName ||= usableTerritory(
+      source.accountTerritoryName || source.account_territory_name
+      || account.territoryName || account.territory,
+      160,
+    );
+    lastEmailedAt = Math.max(
+      lastEmailedAt,
+      timestampMs(source.lastEmailedAt || source.last_emailed_at || source.lastEmailMs),
+    );
+    const emails = Array.isArray(page.emails) ? page.emails
+      : (Array.isArray(page.contact?.emails) ? page.contact.emails : []);
+    for (const email of emails) lastEmailedAt = Math.max(lastEmailedAt, timestampMs(email?.date));
+  };
+  for (const source of sources) visit(source);
+  return {
+    ...(territoryId ? { account_territory_id: territoryId } : {}),
+    ...(territoryName ? { account_territory_name: territoryName } : {}),
+    ...(lastEmailedAt ? { last_emailed_at: lastEmailedAt } : {}),
+  };
+}
+
 export function sendUsageEvent(event, { flush = 'periodic' } = {}) {
   if (globalThis.__gbUsageSilent) return false;
   try {
@@ -86,6 +138,7 @@ export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
       conditions_matched: typeof dimensions.conditions_matched === 'boolean'
         ? dimensions.conditions_matched : null,
       conditions_enforced: dimensions.conditions_enforced === true,
+      ...emailRecipientAnalyticsContext(dimensions),
     } : {}),
   }, options);
 }

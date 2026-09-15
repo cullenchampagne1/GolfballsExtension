@@ -1,4 +1,4 @@
-"""Project API validation for aggregate-only extension telemetry."""
+"""Project API validation for privacy-bounded extension telemetry."""
 
 import ast
 import importlib.util
@@ -59,12 +59,18 @@ class UsageTelemetryContractTests(unittest.TestCase):
             "template_variation_id": "warm", "template_variation_name": "Warm opening",
             "condition_count": 2, "conditions_matched": True,
             "conditions_enforced": True,
+            "account_territory_id": "17",
+            "account_territory_name": "Upper Midwest",
+            "last_emailed_at": 1789244100000,
         })
         self.assertEqual(event.count, 4)
         self.assertEqual(event.word_count, 381)
         self.assertEqual((event.template_name, event.template_variation_name),
                          ("Annual renewal", "Warm opening"))
         self.assertTrue(event.conditions_matched)
+        self.assertEqual((event.account_territory_id, event.account_territory_name),
+                         ("17", "Upper Midwest"))
+        self.assertEqual(event.last_emailed_at, 1789244100000)
 
     def test_accepts_a_coalesced_contact_import_run_counter(self):
         event = self.UsageEvent.model_validate({
@@ -88,6 +94,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
             {"feature": "made_up_feature"},
             {"source": "account-123"},
             {"template_name": "private\nsubject-shaped label"},
+            {"account_territory_name": "private\nterritory"},
         ):
             payload = {
                 "kind": "feature", "feature": "email_send", "source": "popup",
@@ -104,6 +111,8 @@ class UsageTelemetryContractTests(unittest.TestCase):
             {"kind": "surface_open", "surface": "task_list", "word_count": 20},
             {"kind": "feature", "feature": "proof_submit", "source": "submit_proof",
              "template_name": "Not an email"},
+            {"kind": "feature", "feature": "call_log", "source": "contact",
+             "account_territory_id": "17"},
             {"kind": "feature", "feature": "email_send", "source": "popup",
              "transport": "pa", "template_variation_name": "Warm"},
             {"kind": "feature", "feature": "email_send", "source": "popup",

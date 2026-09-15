@@ -401,6 +401,27 @@ describe('sendEmail', () => {
     assert.equal('to' in event, false);
   });
 
+  it('reports account territory and the prior-email date without recipient content', async () => {
+    usageMessages.length = 0;
+    await sendEmail({
+      from: 'a@golfballs.com', to: 'private@example.com', subject: 'Never retained',
+      htmlBody: '<p>Never retained either</p>', usageSource: 'contact',
+      recipientContext: {
+        page: {
+          account: { territoryId: '17', territoryName: 'Upper Midwest' },
+          emails: [{ date: '2026-09-12T20:15:00Z', subject: 'Private history' }],
+        },
+      },
+      config: { paReady: true },
+    }, { dispatch: async () => ({ ok: true }) });
+
+    const event = usageMessages.at(-1).event;
+    assert.equal(event.account_territory_id, '17');
+    assert.equal(event.account_territory_name, 'Upper Midwest');
+    assert.equal(event.last_emailed_at, Date.parse('2026-09-12T20:15:00Z'));
+    for (const field of ['to', 'recipient', 'subject', 'body']) assert.equal(field in event, false);
+  });
+
   it('does not count a failed send as utilization', async () => {
     usageMessages.length = 0;
     const result = await sendEmail({

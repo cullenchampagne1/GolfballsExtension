@@ -6,7 +6,12 @@ import {
   filterLocalEmailTemplates,
   resolveEmailTemplateCapabilities,
 } from './emailTemplateCapabilities.js';
-import { emailUsageDimensions, reportFeatureUsage } from './usageEvents.js';
+import {
+  emailRecipientAnalyticsContext,
+  emailUsageDimensions,
+  reportFeatureUsage,
+} from './usageEvents.js';
+import { getPageContext } from './pageContext.js';
 import { parseCcList } from './emailCc.js';
 import { templateMatchConditionCount } from './emailRunnerMatch.js';
 
@@ -183,7 +188,15 @@ function reportSuccessfulDelivery(result, message, config) {
     count: 1,
     ...emailUsageDimensions(message.htmlBody, message.attachments),
     ...templateUsageContext(message, config),
+    ...message.recipientAnalytics,
   });
+}
+
+function currentPageEmailContext() {
+  try {
+    if (typeof document === 'undefined') return null;
+    return getPageContext(document)?.data || null;
+  } catch { return null; }
 }
 
 /* Default dispatcher — a Promise-wrapped chrome.runtime.sendMessage. Callers
@@ -226,9 +239,15 @@ function classifyPaResult(r) {
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
  * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
  */
-export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, templateVariationName, trackingContext, usageSource = 'other', trackUsage = true, conditionCount, conditionsMatched, conditionsEnforced = false }, opts = {}) {
+export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMode = 'standalone', signature = '', attachments, config, templateId, templateName, variationId, templateVariationId, templateVariationName, trackingContext, recipientContext, usageSource = 'other', trackUsage = true, conditionCount, conditionsMatched, conditionsEnforced = false }, opts = {}) {
   const dispatch = opts.dispatch || defaultDispatch;
   if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
+  // Snapshot this before dispatch. The field means "last emailed before this
+  // send", not the message we are about to add to local/CRM history.
+  const recipientAnalytics = emailRecipientAnalyticsContext(
+    recipientContext,
+    currentPageEmailContext(),
+  );
   const cfg = config || await readEmailConfig();
   if (templateId && Array.isArray(cfg.templates)
       && !cfg.templates.some((template) => String(template?.id || '') === String(templateId))) {
@@ -253,6 +272,7 @@ export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMod
       htmlBody, attachments, usageSource, trackUsage, templateId, templateName,
       variationId, templateVariationId, templateVariationName,
       conditionCount, conditionsMatched, conditionsEnforced,
+      recipientAnalytics,
     }, cfg);
     return result;
   }
@@ -274,6 +294,7 @@ export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMod
     htmlBody, attachments, usageSource, trackUsage, templateId, templateName,
     variationId, templateVariationId, templateVariationName,
     conditionCount, conditionsMatched, conditionsEnforced,
+    recipientAnalytics,
   }, cfg);
   return result;
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
 import {
+  emailRecipientAnalyticsContext,
   emailUsageDimensions,
   reportContactImportUsage,
   reportFeatureUsage,
@@ -32,6 +33,29 @@ describe('feature utilization event boundary', () => {
       attachment_count: 1,
       inline_image_count: 1,
     });
+  });
+
+  it('reduces recipient context to territory and the latest prior-email date', () => {
+    const context = emailRecipientAnalyticsContext({
+      page: {
+        account: { territoryId: ' 42 ', territoryName: ' Midwest\nNorth ' },
+        emails: [
+          { date: '2026-08-01T14:00:00Z', subject: 'never retained' },
+          { date: '2026-09-10T16:30:00Z', recipient: 'never@example.com' },
+        ],
+      },
+    });
+
+    assert.deepEqual(context, {
+      account_territory_id: '42',
+      account_territory_name: 'Midwest North',
+      last_emailed_at: Date.parse('2026-09-10T16:30:00Z'),
+    });
+    assert.equal('subject' in context, false);
+    assert.equal('recipient' in context, false);
+    assert.deepEqual(emailRecipientAnalyticsContext({
+      accountTerritoryId: '0', accountTerritoryName: 'Not Set',
+    }), {});
   });
 
   it('sends only fixed dimensions and supports a rare-action flush hint', () => {

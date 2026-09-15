@@ -770,6 +770,11 @@ export function EmailRunner({
                 contactId: c.crmContactId || c.contactId || '',
                 accountId: c.accountId || '',
               },
+              recipientContext: {
+                accountTerritoryId: resolved?.accountTerritoryId || '',
+                accountTerritoryName: resolved?.accountTerritoryName || '',
+                lastEmailedAt: lastEmailedMs,
+              },
               usageSource,
               trackUsage: !useMock,
             },

@@ -191,6 +191,7 @@ export async function makeLiveExecutor(page, options = {}) {
         templateName: outbound.name || '',
         variationId: outbound.variationId || '__original',
         trackingContext: { contactId: ctx.crmContactId || ctx.contactId || '', accountId: ctx.accountId || '' },
+        recipientContext: { page },
       }, { dispatch: dispatchBackgroundMessage });
     },
     submitQuickTask,

@@ -157,6 +157,8 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"renderer": "avatar_identity"/);
     assert.match(routes, /"primitive": "datetime"/);
     assert.match(routes, /"timeZone": "America\/Chicago"/);
+    assert.match(routes, /"id": "territory"/);
+    assert.match(routes, /"id": "last_emailed_at"/);
     assert.match(routes, /"primitive": "status_indicator"/);
     assert.match(routes, /"_detail": \{/);
     const placement = project.dashboard.default_layout.find(

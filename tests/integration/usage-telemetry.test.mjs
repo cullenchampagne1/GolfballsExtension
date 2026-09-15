@@ -119,6 +119,8 @@ describe('usage telemetry', () => {
       template_id: 'renewal', template_name: 'Annual renewal',
       template_variation_id: 'warm', template_variation_name: 'Warm opening',
       condition_count: 2, conditions_matched: false, conditions_enforced: false,
+      account_territory_id: '17', account_territory_name: 'Upper Midwest',
+      last_emailed_at: Date.parse('2026-09-12T20:15:00Z'),
       subject: 'this field must never survive normalization',
     });
     reporter.record({
@@ -158,9 +160,14 @@ describe('usage telemetry', () => {
       conditionCount: featureRows[0].condition_count,
       matched: featureRows[0].conditions_matched,
       enforced: featureRows[0].conditions_enforced,
+      territoryId: featureRows[0].account_territory_id,
+      territoryName: featureRows[0].account_territory_name,
+      lastEmailedAt: featureRows[0].last_emailed_at,
     }, {
       templateId: 'renewal', templateName: 'Annual renewal', variation: 'Warm opening',
       conditionCount: 2, matched: false, enforced: false,
+      territoryId: '17', territoryName: 'Upper Midwest',
+      lastEmailedAt: Date.parse('2026-09-12T20:15:00Z'),
     });
   });
 

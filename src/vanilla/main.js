@@ -847,6 +847,8 @@ function __gbAccessAllowed(st, now) {
          doing it here keeps the parse + engine call in one place
          instead of re-parsing the HTML on the React side. */
       let displayName = '';
+      let accountTerritoryId = '';
+      let accountTerritoryName = '';
       /* Most-recent email date from the contact's Email history portlet
          (emails[].date) as an epoch-ms value — drives EmailRunner's
          "skip if emailed within N days" rule off the page's real send history.
@@ -858,6 +860,8 @@ function __gbAccessAllowed(st, now) {
           const first = engine.resolvePath(doc, 'contact.firstName', '') || '';
           const last  = engine.resolvePath(doc, 'contact.lastName',  '') || '';
           displayName = `${first} ${last}`.trim();
+          accountTerritoryId = engine.resolvePath(doc, 'account.territoryId', '') || '';
+          accountTerritoryName = engine.resolvePath(doc, 'account.territoryName', '') || '';
           /* Email history is a root schema collection. Cached snapshots use a
              separate compatibility bridge in variable-resolution.js. */
           const emails = engine.resolvePath(doc, 'emails', []) || [];
@@ -871,10 +875,10 @@ function __gbAccessAllowed(st, now) {
         }
       } catch {}
       return resolveAllVarsAsync(vars, toField, doc)
-        .then((res) => ({ ...res, displayName, lastEmailMs }))
-        .catch((err) => ({ resolved: {}, toEmail: '', displayName, lastEmailMs, error: err?.message || 'resolve failed' }));
+        .then((res) => ({ ...res, displayName, lastEmailMs, accountTerritoryId, accountTerritoryName }))
+        .catch((err) => ({ resolved: {}, toEmail: '', displayName, lastEmailMs, accountTerritoryId, accountTerritoryName, error: err?.message || 'resolve failed' }));
     } catch (e) {
-      return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
+      return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', lastEmailMs: 0, accountTerritoryId: '', accountTerritoryName: '', error: e?.message || 'parse failed' });
     }
   };
 

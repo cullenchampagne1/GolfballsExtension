@@ -473,6 +473,7 @@ function makeContactExecutor(context, page, runDeps, dispatch) {
         templateName: outbound.name || '',
         variationId: outbound.variationId || '__original',
         trackingContext: { contactId: ctx.crmContactId || ctx.contactId || '', accountId: ctx.accountId || '' },
+        recipientContext: { page: model },
       }, { dispatch });
       if (result?.state === 'failed') throw new Error(result.error || 'email send failed');
       return result;

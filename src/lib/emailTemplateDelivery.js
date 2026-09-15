@@ -75,6 +75,7 @@ export async function sendEmailTemplateFromPage(input = {}, deps = {}) {
       conditionsMatched: input.conditionsMatched,
       conditionsEnforced: input.conditionsEnforced === true,
       trackingContext: input.context || {},
+      recipientContext: input.recipientContext || input.context || {},
       usageSource: input.usageSource || 'other',
     },
     template,
