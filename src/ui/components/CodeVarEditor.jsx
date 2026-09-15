@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -198,7 +198,7 @@ const BINDING_OPTIONS = {
   ],
 };
 
-export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false, onContext, bindings = null }) {
+export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false, fill = false, onContext, bindings = null, readOnly = false }) {
   const hostRef    = useRef(null);
   const viewRef    = useRef(null);
   const onChangeRef = useRef(onChange);
@@ -207,6 +207,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
   const bindingsRef = useRef(bindings);
   bindingsRef.current = bindings;
   const valueRef   = useRef(value || '');
+  const editableRef = useRef(new Compartment());
   const ctxOptsRef = useRef(typeId === 'account' ? CTX_OPTIONS : []);
   const varNamesRef = useRef(varNames);
 
@@ -316,6 +317,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           lintGutter(),
           cmPlaceholder(placeholder || 'e.g. h.fmt.title(ctx.contact.firstName)'),
           EditorView.lineWrapping,
+          editableRef.current.of(EditorView.editable.of(!readOnly)),
           GB_THEME,
           keymap.of([
             indentWithTab,
@@ -341,6 +343,12 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
     viewRef.current = view;
     return () => { view.destroy(); viewRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: editableRef.current.reconfigure(EditorView.editable.of(!readOnly)),
+    });
+  }, [readOnly]);
 
   // Re-run the linter when the saved-template bindings load/change, so a
   // missing-dependency error appears without needing an edit first.

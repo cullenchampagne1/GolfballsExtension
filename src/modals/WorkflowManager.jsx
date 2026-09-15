@@ -10,9 +10,14 @@ import { buildCodeSpec } from '../lib/codeEngine/spec.js';
 import { codeTemplateBindings, loadCodeTemplateLibrary } from '../lib/codeEngine/templateLibrary.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
-  loadWorkflows, saveWorkflow, removeWorkflow, newWorkflow, subscribeWorkflows, writeWorkflowCode,
+  loadWorkflows, saveWorkflow, removeWorkflow, newWorkflow, replaceWorkflows,
+  subscribeWorkflows, writeWorkflowCode,
 } from '../lib/workflow/store.js';
 import { parseWorkflowBlob, importWorkflows } from '../lib/workflow/workflowImport.js';
+import {
+  managedWorkflow, reconcileWorkflowBucket, setWorkflowBucketEnrollment,
+  shareableWorkflow, workflowBucketWrite, workflowsFromShare,
+} from '../lib/workflow/distribution.js';
 import { hydrateWorkflowContact } from '../lib/workflow/codeContext.js';
 import { runCodeWorkflow } from '../lib/workflow/codeRunner.js';
 import { evaluateWorkflowTemplate } from '../lib/workflow/templateEvaluation.js';
@@ -163,7 +168,7 @@ function fmtMoney(n) {
   return `$${Math.round(v)}`;
 }
 
-function TopBar({ workflow, onChange, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
+function TopBar({ workflow, onChange, onShare, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
   const simBusy = sim.status === 'running' || sim.status === 'replaying';
   const building = sim.status === 'running';
   const contactOptions = audience.map((c, i) => ({ id: c._key, label: c.contactName || c.name || c.contactId || `Contact ${i + 1}` }));
@@ -207,6 +212,7 @@ function TopBar({ workflow, onChange, sim, onSimStart, onSimStop, onSimReset, au
         <Dot tone={dryRun ? 'warning' : 'muted'} /> Dry run
       </PillTag>
       <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={simBusy}>{dryRun ? 'Dry run' : 'Run workflow'}</Btn>
+      <IconBtn size="md" variant="secondary" icon={<I.link />} title="Share workflow" onClick={onShare} />
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" icon={<I.close />} onClick={onClose} />
     </div>
@@ -219,7 +225,9 @@ function TopBar({ workflow, onChange, sim, onSimStart, onSimStop, onSimReset, au
    overwrites an existing workflow. */
 function ImportWorkflowsModal({ onClose, onDone }) {
   const [text, setText] = useState('');
+  const [shareUrl, setShareUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [linkError, setLinkError] = useState('');
   const parsed = useMemo(() => {
     const t = text.trim();
     if (!t) return null;
@@ -231,6 +239,19 @@ function ImportWorkflowsModal({ onClose, onDone }) {
     setBusy(true);
     try { onDone(await importWorkflows(parsed.items)); }
     catch (e) { onDone({ error: e.message }); }
+  };
+  const doLinkImport = async () => {
+    if (!shareUrl.trim() || busy) return;
+    setBusy(true); setLinkError('');
+    try {
+      const response = await dispatchBackgroundMessage({ action: 'settingsShareGet', url: shareUrl.trim() });
+      const parsedItems = workflowsFromShare(response.share);
+      const result = await importWorkflows(parsedItems);
+      await dispatchBackgroundMessage({ action: 'settingsShareRecordImport', shareId: response.share.id, scopeIds: ['workflows'] });
+      onDone(result);
+    } catch (error) {
+      setBusy(false); setLinkError(error?.message || 'Unable to import workflow link');
+    }
   };
   return (
     <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -245,6 +266,14 @@ function ImportWorkflowsModal({ onClose, onDone }) {
           <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'auto' }}>
+          <Field label="Customer share link" hint="Paste a revocable workflow link from another installation">
+            <div style={{ display: 'flex', gap: 7 }}>
+              <Input value={shareUrl} placeholder="https://api.cullenchampagne.com/settings-shares/…" leading={<I.link size={13} />} onChange={setShareUrl} />
+              <Btn variant="secondary" size="sm" disabled={!shareUrl.trim() || busy} onClick={doLinkImport}>Import link</Btn>
+            </div>
+          </Field>
+          {linkError ? <div style={{ fontSize: 10.5, color: 'var(--gb-error-fg)' }}>{linkError}</div> : null}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 10 }}><span style={{ height: 1, flex: 1, background: 'var(--gb-border-subtle)' }} />or paste JSON<span style={{ height: 1, flex: 1, background: 'var(--gb-border-subtle)' }} /></div>
           <textarea
             autoFocus
             value={text}
@@ -299,6 +328,36 @@ function ImportWorkflowsModal({ onClose, onDone }) {
             Import{parsed && parsed.ok ? ` ${parsed.items.length}` : ''}
           </Btn>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareWorkflowModal({ workflow, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+  const create = async () => {
+    setBusy(true); setError('');
+    try {
+      const response = await dispatchBackgroundMessage({
+        action: 'settingsShareCreate',
+        name: `Workflow · ${workflow.name}`,
+        scopes: { workflows: { workflows: [shareableWorkflow(workflow)] } },
+      });
+      setUrl(response.share.url);
+      try { await navigator.clipboard?.writeText(response.share.url); } catch { /* link remains visible */ }
+    } catch (e) { setError(e?.message || 'Unable to share workflow'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="gb-workflow-scope" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 2147483601, background: 'var(--gb-backdrop)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 480, padding: 16, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}><I.link size={16} /><b style={{ flex: 1 }}>Share “{workflow.name}”</b><IconBtn size="sm" icon={<I.close />} onClick={onClose} /></div>
+        <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', lineHeight: 1.5 }}>Create an authenticated, revocable customer link. It contains the workflow logic and settings, but no CRM records. Saved template references remain names, so the customer can map them to their own templates.</div>
+        {url ? <div style={{ display: 'flex', gap: 7 }}><Input value={url} mono onChange={() => {}} /><Btn size="sm" icon={<I.copy />} onClick={() => navigator.clipboard?.writeText(url)}>Copy</Btn></div> : null}
+        {error ? <div style={{ color: 'var(--gb-error-fg)', fontSize: 11 }}>{error}</div> : null}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{url ? <Btn variant="ghost" size="sm" onClick={onClose}>Done</Btn> : <Btn variant="primary" size="sm" icon={<I.link />} state={busy ? 'loading' : 'idle'} disabled={busy} onClick={create}>Create link</Btn>}</div>
       </div>
     </div>
   );
@@ -702,7 +761,7 @@ function StatsStrip({ program, workflow, dirty, onSave }) {
 
 /* ── Workflow settings (right sidebar in Blocks view) — the original
    pacing / delivery / order controls. ── */
-function WorkflowSettings({ workflow, onChange }) {
+function WorkflowSettings({ workflow, onChange, isParent }) {
   const upd = (patch) => onChange({ ...workflow, ...patch });
   const ratePerMin = Math.round(60 / Math.max(workflow.paceDelay || 12, 1));
   const paceLo = Math.max(1, (workflow.paceDelay || 0) - (workflow.paceJitter || 0));
@@ -713,6 +772,19 @@ function WorkflowSettings({ workflow, onChange }) {
         <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Workflow settings</span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {isParent ? (
+          <div>
+            <SectionLabel>Distribution</SectionLabel>
+            <div style={{ padding: 12, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
+              <Checkbox
+                checked={!!(managedWorkflow(workflow) || workflow.managedWorkflowEnrollment)}
+                label="Approved workflow bucket"
+                hint="Automatically distribute this workflow to every customer installation"
+                onChange={(checked) => onChange(setWorkflowBucketEnrollment(workflow, checked))}
+              />
+            </div>
+          </div>
+        ) : null}
         <div>
           <SectionLabel>Identity</SectionLabel>
           <Field label="Workflow name" hint="Shown in the workflow library and run history">
@@ -845,6 +917,9 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   const [workflow, setWorkflow] = useState(() => newWorkflow('Untitled workflow'));
   const [dirty, setDirty] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const isParent = devSettings['emailTemplates.allowParentAccount'] === true;
+  const workflowEditable = managedWorkflow(workflow)?.editable !== false;
   // Which audience member the code simulation runs against (page.contact).
   const [simContactKey, setSimContactKey] = useState(null);
   // The rep's saved templates, exposed to code as user.emails / user.tasks / user.calls.
@@ -866,13 +941,20 @@ export function WorkflowManager({ onClose, contacts = [] }) {
     }
   };
 
-  // Load workflows once + stay subscribed to store changes.
+  // Load the local library, then reconcile the server-owned customer bucket.
   useEffect(() => {
     let alive = true;
-    loadWorkflows().then((list) => {
+    loadWorkflows().then(async (list) => {
       if (!alive) return;
-      setLibrary(list);
-      if (list.length) setWorkflow(list[0]);
+      let next = list;
+      try {
+        const response = await dispatchBackgroundMessage({ action: 'workflowBucketGet' });
+        next = reconcileWorkflowBucket(list, response.bucket);
+        await replaceWorkflows(next);
+      } catch { /* offline: the last synchronized mirrors remain usable */ }
+      if (!alive) return;
+      setLibrary(next);
+      if (next.length) setWorkflow(next[0]);
     });
     const unsub = subscribeWorkflows((list) => { if (alive) setLibrary(list); });
     return () => { alive = false; unsub(); };
@@ -898,7 +980,10 @@ export function WorkflowManager({ onClose, contacts = [] }) {
     };
   }, []);
 
-  const patchWorkflow = (next) => { setWorkflow(next); setDirty(true); };
+  const patchWorkflow = (next) => {
+    if (!workflowEditable) return;
+    setWorkflow(next); setDirty(true);
+  };
 
   const selectWorkflow = (id) => {
     const c = library.find((x) => x.id === id);
@@ -907,9 +992,16 @@ export function WorkflowManager({ onClose, contacts = [] }) {
   const createWorkflow = () => {
     setWorkflow(newWorkflow('Untitled workflow')); setDirty(true);
   };
-  const deleteWorkflow = (id) => {
+  const deleteWorkflow = async (id) => {
     const removed = library.find((c) => c.id === id);
-    removeWorkflow(id).then((list) => {
+    const meta = managedWorkflow(removed);
+    if (meta && (!isParent || !meta.createdByCurrent)) {
+      toast?.warning?.('Managed customer workflows can only be removed by their publishing parent.');
+      return;
+    }
+    try {
+      if (meta) await dispatchBackgroundMessage({ action: 'workflowBucketUpdate', workflows: [], removedIds: [meta.bucketId] });
+      const list = await removeWorkflow(id);
       setLibrary(list);
       // If we deleted the open workflow, fall back to the first remaining
       // one (or a fresh untitled draft if the library is now empty).
@@ -917,13 +1009,22 @@ export function WorkflowManager({ onClose, contacts = [] }) {
         setWorkflow(list[0] || newWorkflow('Untitled workflow')); setDirty(!list.length);
       }
       toast?.success?.(`Deleted “${removed?.name || 'workflow'}”`);
-    }).catch(() => toast?.error?.('Couldn’t delete workflow'));
+    } catch { toast?.error?.('Couldn’t delete workflow'); }
   };
-  const save = () => {
-    saveWorkflow(workflow).then(({ workflow: saved, list }) => {
+  const save = async () => {
+    try {
+      let { workflow: saved, list } = await saveWorkflow(workflow);
+      if (isParent && (managedWorkflow(saved) || saved.managedWorkflowEnrollment)) {
+        const response = await dispatchBackgroundMessage({
+          action: 'workflowBucketUpdate', workflows: [workflowBucketWrite(saved)], removedIds: [],
+        });
+        list = reconcileWorkflowBucket(list, response.bucket);
+        await replaceWorkflows(list);
+        saved = list.find((row) => row.id === saved.id) || saved;
+      }
       setLibrary(list); setWorkflow(saved); setDirty(false);
       toast?.success?.(`Saved “${saved.name}”`);
-    }).catch(() => toast?.error?.('Couldn’t save workflow'));
+    } catch (error) { toast?.error?.(`Couldn’t save workflow — ${error?.message || 'unknown error'}`); }
   };
 
   const audienceKeyed = useMemo(() => contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` })), [contacts]);
@@ -1120,7 +1221,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
           the scale/fade exit on close. */}
       <motion.div className="gb-workflow-scope" initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
       <ModalShell width={WORKFLOW_MANAGER_WIDTH} height={WORKFLOW_MANAGER_HEIGHT} style={{ zoom: scale, color: 'var(--gb-text-secondary)' }}>
-        <TopBar workflow={workflow} onChange={patchWorkflow} sim={sim}
+        <TopBar workflow={workflow} onChange={patchWorkflow} onShare={() => setShareOpen(true)} sim={sim}
           onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
@@ -1142,6 +1243,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
           <WorkflowSidebar library={library} currentId={workflow.id} onSelect={selectWorkflow} onNew={createWorkflow} onDelete={deleteWorkflow} onImport={() => setImportOpen(true)} />
           <CodeAutomationPanel
             value={workflow.automation || ''} onChange={setAutomation}
+            readOnly={!workflowEditable}
             blocks={program.blocks} errors={program.errors} blockCount={program.blockCount}
             view={view} onView={setView} onContext={setDocToken} bindings={bindings}
             trace={shownTrace} runningId={runningId} done={sim.status === 'done'} result={sim.status === 'done' ? sim.result : null}
@@ -1155,7 +1257,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
                 style={{ position: 'absolute', inset: 0, minHeight: 0 }}>
                 {view === 'code'
                   ? <CodeDocsSidebar doc={activeDoc} />
-                  : <WorkflowSettings workflow={workflow} onChange={patchWorkflow} />}
+                  : <WorkflowSettings workflow={workflow} onChange={patchWorkflow} isParent={isParent} />}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -1167,6 +1269,7 @@ export function WorkflowManager({ onClose, contacts = [] }) {
       </ModalShell>
       </motion.div>
       {importOpen && <ImportWorkflowsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
+      {shareOpen && <ShareWorkflowModal workflow={workflow} onClose={() => setShareOpen(false)} />}
       {confirmRun && <ConfirmRunModal plan={confirmRun.plan} summary={confirmRun.summary} audience={audienceKeyed.length} onConfirm={beginRealRun} onCancel={() => setConfirmRun(null)} />}
     </motion.div>
     )}

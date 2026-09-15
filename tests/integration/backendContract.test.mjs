@@ -71,6 +71,8 @@ const RUNTIME = [
   { name: 'configuration',          in: 'installation-auth.js', literal: '/configuration',                       method: 'get',  route: '/client/configuration' },
   { name: 'managed-email:read',     in: 'managed-email-templates.js', literal: '/email-template-bucket',          method: 'get',  route: '/client/email-template-bucket' },
   { name: 'managed-email:merge',    in: 'managed-email-templates.js', literal: "method: 'PUT'",                  method: 'put',  route: '/client/email-template-bucket' },
+  { name: 'managed-workflow:read',  in: 'background.js', literal: '/workflow-bucket', method: 'get', route: '/client/workflow-bucket' },
+  { name: 'managed-workflow:merge', in: 'background.js', literal: 'workflowBucketUpdate', method: 'put', route: '/client/workflow-bucket' },
   { name: 'email-submissions:list', in: 'email-template-submissions.js', literal: '/email-template-submissions', method: 'get', route: '/client/email-template-submissions' },
   { name: 'email-submissions:create', in: 'email-template-submissions.js', literal: 'client_submission_id', method: 'post', route: '/client/email-template-submissions' },
   { name: 'email-submissions:update', in: 'email-template-submissions.js', literal: '${PATH}/${encodeURIComponent(submissionId)}`', method: 'post', route: '/client/email-template-submissions/{submission_id}' },

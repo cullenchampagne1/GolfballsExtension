@@ -1026,7 +1026,7 @@ try {
 const GB_SETTINGS_SHARE_ID_RE = /^[A-Za-z0-9_-]{32}$/;
 // The project API accepts ten categorized scopes plus the legacy broad
 // `settings` scope. The old limit of eight rejected otherwise-valid imports.
-const GB_SETTINGS_SHARE_SCOPE_LIMIT = 11;
+const GB_SETTINGS_SHARE_SCOPE_LIMIT = 12;
 function gbSettingsShareId(value) {
   const raw = String(value || '').trim();
   if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
@@ -1851,6 +1851,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/settings-shares/${shareId}/revoke`, { method: 'POST' })
       .then(() => sendResponse({ ok: true, shareId }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke settings share' }));
+    return true;
+  }
+  if (msg.action === 'workflowBucketGet') {
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/workflow-bucket`)
+      .then((bucket) => sendResponse({ ok: true, bucket }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load workflow bucket' }));
+    return true;
+  }
+  if (msg.action === 'workflowBucketUpdate') {
+    const workflows = Array.isArray(msg.workflows) ? msg.workflows : [];
+    const removedIds = Array.isArray(msg.removedIds) ? msg.removedIds : [];
+    let body = '';
+    try { body = JSON.stringify({ workflows, removed_ids: removedIds }); } catch { /* invalid */ }
+    if (!body) { sendResponse({ ok: false, error: 'Invalid workflow bucket update' }); return true; }
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/workflow-bucket`, {
+      method: 'PUT', body,
+    }).then((bucket) => sendResponse({ ok: true, bucket }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to update workflow bucket' }));
     return true;
   }
   if (msg.action === 'emailShareList') {

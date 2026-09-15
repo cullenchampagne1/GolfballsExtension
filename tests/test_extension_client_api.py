@@ -383,6 +383,18 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             updated_at = Column(DateTime, nullable=False, index=True)
             deleted_at = Column(DateTime, nullable=True, index=True)
 
+        class ManagedWorkflowRow(Base):
+            __tablename__ = "extension_managed_workflows"
+            id = Column(String(64), primary_key=True)
+            client_workflow_id = Column(String(160), nullable=False)
+            created_by_credential_id = Column(String(36), nullable=False, index=True)
+            last_editor_credential_id = Column(String(36), nullable=False, index=True)
+            workflow = Column(JSON, nullable=False)
+            version = Column(Integer, nullable=False, default=1)
+            created_at = Column(DateTime, nullable=False)
+            updated_at = Column(DateTime, nullable=False, index=True)
+            deleted_at = Column(DateTime, nullable=True, index=True)
+
         class SubmissionRow(Base):
             __tablename__ = "extension_email_template_submissions"
             id = Column(String(64), primary_key=True)
@@ -406,6 +418,7 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             ExtensionEmailTemplateShare=ShareRow,
             ExtensionEmailTemplateShareImport=ImportRow,
             ExtensionManagedEmailTemplate=ManagedRow,
+            ExtensionManagedWorkflow=ManagedWorkflowRow,
             ExtensionEmailTemplateSubmission=SubmissionRow,
         )
 
@@ -562,6 +575,42 @@ class EmailTemplateShareLifecycleTests(unittest.TestCase):
             for index in range(501)
         ])
         self.assertEqual(len(body.templates), 501)
+
+    def test_managed_workflow_bucket_distributes_parent_workflows_to_customers(self):
+        workflow = {
+            "name": "Top golf-ball brand follow-up",
+            "status": "Active",
+            "paceDelay": 12,
+            "paceJitter": 4,
+            "automation": 'return "done";',
+        }
+        client_api_module.ManagedWorkflowBucketUpdate.model_rebuild(
+            _types_namespace=vars(client_api_module),
+        )
+        write = client_api_module.ManagedWorkflowWrite(
+            client_workflow_id="brand-follow-up", workflow=workflow,
+        )
+        with self.assertRaises(HTTPException) as raised:
+            self.api.update_managed_workflow_bucket(
+                client_api_module.ManagedWorkflowBucketUpdate(workflows=[write]),
+                self._request(self.recipient),
+            )
+        self.assertEqual(raised.exception.status_code, 403)
+
+        parent = self._payload(self.api.update_managed_workflow_bucket(
+            client_api_module.ManagedWorkflowBucketUpdate(workflows=[write]),
+            self._request(self.owner),
+        ))
+        self.assertTrue(parent["is_parent"])
+        self.assertEqual(parent["workflows"][0]["client_workflow_id"], "brand-follow-up")
+        self.assertNotIn("id", parent["workflows"][0]["workflow"])
+
+        customer = self._payload(self.api.get_managed_workflow_bucket(
+            self._request(self.recipient),
+        ))
+        self.assertFalse(customer["is_parent"])
+        self.assertEqual(customer["workflows"][0]["workflow"]["name"], workflow["name"])
+        self.assertEqual(customer["workflows"][0]["created_by"], "Template Owner")
 
     def test_parent_disjoint_edits_merge_and_overlap_names_the_conflicting_parent(self):
         original = {

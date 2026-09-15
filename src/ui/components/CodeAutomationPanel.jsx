@@ -36,6 +36,7 @@ export function CodeAutomationPanel({
   view = 'code', onView, onContext, bindings = null,
   trace = [], runningId = null, done = false, result = null, error = null,
   simStatus = 'idle',
+  readOnly = false,
 }) {
   const code = value || '';
 
@@ -67,6 +68,7 @@ export function CodeAutomationPanel({
                   hideActions
                   fill
                   placeholder={STARTER}
+                  readOnly={readOnly}
                 />
               </div>
               <div style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>

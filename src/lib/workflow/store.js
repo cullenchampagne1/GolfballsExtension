@@ -156,6 +156,10 @@ export function normalizeWorkflow(raw) {
     // close/reopen; legacy steps remain compatibility metadata only.
     automation: typeof raw.automation === 'string' ? raw.automation : '',
     lastSaved: raw.lastSaved || null,
+    ...(raw.managedWorkflow?.kind === 'revstack-managed-workflow'
+      ? { managedWorkflow: raw.managedWorkflow } : {}),
+    ...(raw.managedWorkflowEnrollment === true
+      ? { managedWorkflowEnrollment: true } : {}),
   };
 }
 
@@ -215,6 +219,12 @@ function writeAll(list) {
     }
     catch { resolve(list); }
   });
+}
+
+export async function replaceWorkflows(list) {
+  const next = (Array.isArray(list) ? list : []).map(normalizeWorkflow);
+  await writeAll(next);
+  return next;
 }
 
 /* Upsert one workflow (stamps lastSaved) and persist the whole list. */

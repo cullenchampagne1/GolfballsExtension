@@ -699,6 +699,10 @@
       "file": "tests/unit/workflowImport.test.mjs"
     },
     {
+      "name": "flow \u00b7 workflow customer distribution",
+      "file": "tests/unit/workflowDistribution.test.mjs"
+    },
+    {
       "name": "flow \u00b7 workflow run policy controls",
       "file": "tests/unit/workflowRunPolicy.test.mjs"
     },

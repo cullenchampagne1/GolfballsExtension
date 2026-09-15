@@ -133,6 +133,10 @@ export const PRESET_SCOPES = [
     id: 'custom-actions', category: 'Automation', label: 'Custom Actions', desc: 'User-authored code-block shelf actions',
     keys: ['gbCustomActions'], merge: 'mergeById',
   },
+  {
+    id: 'workflows', category: 'Automation', label: 'Workflows', desc: 'Code-first CRM workflows',
+    keys: ['workflows'], merge: 'mergeById',
+  },
 ];
 
 /** Stable, versioned envelope used when the RevStack sharing API is not
@@ -164,6 +168,15 @@ function withoutInstallationLocalDevSettings(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const safe = { ...value };
   for (const key of INSTALLATION_LOCAL_DEV_SETTING_KEYS) delete safe[key];
+  return safe;
+}
+
+function withoutWorkflowLocalState(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const safe = { ...value };
+  delete safe.lastSaved;
+  delete safe.managedWorkflow;
+  delete safe.managedWorkflowEnrollment;
   return safe;
 }
 
@@ -202,7 +215,9 @@ function scopesFromStorageData(data, wanted = PRESET_SCOPES) {
           ? subset.map(withoutEmailTemplateLocalState)
           : subset;
       } else {
-        bag[k] = k === 'featureFlags'
+        bag[k] = k === 'workflows'
+          ? data[k].map(withoutWorkflowLocalState)
+          : k === 'featureFlags'
           ? withoutCredentials(data[k])
           : (k === 'devSettings' ? withoutInstallationLocalDevSettings(data[k]) : data[k]);
       }
@@ -277,6 +292,8 @@ export async function applyScopes(scopes) {
         ? incoming[k]
           .filter(shareableLocalEmailTemplate)
           .map(withoutEmailTemplateLocalState)
+        : k === 'workflows' && Array.isArray(incoming[k])
+          ? incoming[k].map(withoutWorkflowLocalState)
         : incoming[k];
       if (!Array.isArray(inc)) continue;
       const have = Array.isArray(writes[k])
