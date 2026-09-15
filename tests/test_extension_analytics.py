@@ -330,7 +330,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_developer_override_value",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_adoption",
-                "_console_usage_activity_heatmap", "_HEATMAP_DAYS", "_HEATMAP_HOURS",
+                "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
                 "_console_reliability_trend", "_console_reliability_integrity",
                 "_bucket_samples", "_level_curve", "_level_curves", "_latency_range",
                 "_percentile_of_sorted", "_percentiles",
@@ -1483,7 +1483,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["fmt"], "pct")
         self.assertEqual(payload["window_days"], 30)
 
-    def test_activity_heatmap_uses_local_weekdays_and_compact_three_hour_windows(self):
+    def test_activity_heatmap_uses_local_weekdays_and_individual_hours(self):
         before = self.routes["_console_usage_activity_heatmap"](30)
         zone = ZoneInfo(self.routes["_ANALYTICS_TIMEZONE"])
         today = datetime.now(zone).date()
@@ -1522,14 +1522,11 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
 
         self.assertEqual([row["label"] for row in payload["rows"]],
                          ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"])
-        self.assertEqual(payload["colLabels"], [
-            "12a–3a", "3a–6a", "6a–9a", "9a–12p",
-            "12p–3p", "3p–6p", "6p–9p", "9p–12a",
-        ])
+        self.assertEqual(payload["colLabels"], [str(hour) for hour in range(24)])
         before_rows = {row["label"]: row["cells"] for row in before["rows"]}
         rows = {row["label"]: row["cells"] for row in payload["rows"]}
-        self.assertEqual(rows["Fri"][7], before_rows["Fri"][7] + 1)
-        self.assertEqual(rows["Sun"][0], before_rows["Sun"][0] + 1)
+        self.assertEqual(rows["Fri"][22], before_rows["Fri"][22] + 1)
+        self.assertEqual(rows["Sun"][1], before_rows["Sun"][1] + 1)
 
 
 if __name__ == "__main__":
