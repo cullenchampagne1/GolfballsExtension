@@ -100,7 +100,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, /^\s+rangePosition: footer$/m);
       assert.match(block, /^\s+chartShowStats: true$/m);
       assert.match(block, /^\s+chartShowLegend: true$/m);
-      assert.match(block, /^\s+xTitle: Emails per day$/m);
+      assert.match(block, /^\s+xTitle: Email volume$/m);
       assert.match(block, /^\s+yFormat: decimal$/m);
       assert.match(block, /^\s+yCollision: none$/m);
     }
@@ -108,6 +108,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(saEmailActivityBlock, /aggregate: \{ id: email\.sa-activity, version: 1 \}/);
     assert.match(srEmailActivityBlock, /aggregate: \{ id: email\.sr-activity, version: 1 \}/);
     assert.match(routes, /\("today", "Today".*\("pd", "PD".*\("7d", "7D avg".*\("pw", "PW"/s);
+    assert.match(routes, /\("pw", "PW", 7, 7, 13, 1, 14, 20, 1, "Prior-PW total avg"\)/);
     assert.match(routes, /"reference_lines": reference_line\(rows, line_label\)/);
     const layout = new Map(project.dashboard.default_layout.map((item) => [item.instance_id, item]));
     assert.equal(layout.get('analytics-bdr-email-activity')?.block_id,

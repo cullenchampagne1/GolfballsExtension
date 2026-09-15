@@ -432,15 +432,16 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                              (round(6 / 7, 2), round(1 / 7, 2)))
             self.assertEqual(trailing["rows"][0]["previous_week_average"], round(17 / 7, 2))
             self.assertEqual((prior_week["rows"][0]["pa"], prior_week["rows"][0]["mailto"]),
-                             (round(10 / 7, 2), 1.0))
-            self.assertEqual(prior_week["rows"][0]["previous_week_average"], 2.0)
+                             (10.0, 7.0))
+            self.assertEqual(prior_week["rows"][0]["previous_week_average"], 14.0)
+            self.assertEqual(prior_week["rows"][0]["goal"], 16.8)
             self.assertEqual(
                 [item["reference_lines"][0]["value"] for item in payload["ranges"]],
-                [0.3, 0.7, 0.24, 0.2],
+                [0.3, 0.7, 0.24, 1.4],
             )
             self.assertEqual(
                 [item["reference_lines"][0]["label"] for item in payload["ranges"]],
-                ["PW same-day avg", "PW same-day avg", "PW daily avg", "Prior-PW daily avg"],
+                ["PW same-day avg", "PW same-day avg", "PW daily avg", "Prior-PW total avg"],
             )
             self.assertTrue(all(
                 item["reference_lines"][0]["style"] == "dotted"
@@ -463,6 +464,11 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 {"label": "vs last wk", "value": "↓ 59%"},
                 {"label": "at average", "value": "0%"},
                 {"label": "at goal", "value": "0%"},
+            ])
+            self.assertEqual(prior_week["stats"], [
+                {"label": "vs last wk", "value": "↑ 21%"},
+                {"label": "at average", "value": "100%"},
+                {"label": "at goal", "value": "100%"},
             ])
             json.dumps(payload)
         finally:
