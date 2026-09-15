@@ -330,7 +330,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_developer_override_value",
                 "_console_usage_leaderboard", "_console_usage_rep_scorecard", "_console_usage_identity",
                 "_console_usage_adoption_trend", "_console_usage_adoption",
-                "_console_usage_activity_heatmap", "_HEATMAP_DAYS",
+                "_console_usage_activity_heatmap", "_HEATMAP_DAYS", "_HEATMAP_HOURS",
                 "_console_reliability_trend", "_console_reliability_integrity",
                 "_bucket_samples", "_level_curve", "_level_curves", "_latency_range",
                 "_percentile_of_sorted", "_percentiles",
@@ -1483,15 +1483,53 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["fmt"], "pct")
         self.assertEqual(payload["window_days"], 30)
 
-    def test_activity_heatmap_lists_sunday_first_and_buckets_by_real_hour(self):
-        payload = self.routes["_console_usage_activity_heatmap"](30)
-        # `colLabels`, which is the spelling `chart.heatmap`'s payload contract
-        # declares; `Matrix` took the snake_case prop.
-        self.assertEqual(payload["colLabels"][0], "0")
-        self.assertEqual(len(payload["colLabels"]), 24)
-        self.assertEqual([row["label"] for row in payload["rows"]][0], self.routes["_HEATMAP_DAYS"][6])
-        total_events = sum(sum(row["cells"]) for row in payload["rows"])
-        self.assertGreater(total_events, 0)
+    def test_activity_heatmap_uses_local_weekdays_and_compact_three_hour_windows(self):
+        before = self.routes["_console_usage_activity_heatmap"](30)
+        zone = ZoneInfo(self.routes["_ANALYTICS_TIMEZONE"])
+        today = datetime.now(zone).date()
+
+        # Strictly previous occurrences keep both samples in the past and
+        # inside the 30-day window regardless of the day this suite runs.
+        previous = lambda weekday: today - timedelta(days=((today.weekday() - weekday) % 7 or 7))
+        friday_local = datetime.combine(
+            previous(4), datetime.min.time(), tzinfo=zone,
+        ).replace(hour=22, minute=30)
+        sunday_local = datetime.combine(
+            previous(6), datetime.min.time(), tzinfo=zone,
+        ).replace(hour=1, minute=30)
+
+        added_ids = []
+        with Session(self.engine) as session:
+            for feature, local_time in (("heatmap_friday", friday_local), ("heatmap_sunday", sunday_local)):
+                event = ExtensionUsageEvent(
+                    owner_credential_id="cred-a", session_id="sess-a", kind="feature",
+                    feature=feature, source="test", transport="none", ok=True,
+                    occurred_at=local_time.astimezone(timezone.utc).replace(tzinfo=None),
+                )
+                session.add(event)
+                session.flush()
+                added_ids.append(event.id)
+            session.commit()
+
+        try:
+            payload = self.routes["_console_usage_activity_heatmap"](30)
+        finally:
+            with Session(self.engine) as session:
+                session.query(ExtensionUsageEvent).filter(
+                    ExtensionUsageEvent.id.in_(added_ids),
+                ).delete(synchronize_session=False)
+                session.commit()
+
+        self.assertEqual([row["label"] for row in payload["rows"]],
+                         ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"])
+        self.assertEqual(payload["colLabels"], [
+            "12a–3a", "3a–6a", "6a–9a", "9a–12p",
+            "12p–3p", "3p–6p", "6p–9p", "9p–12a",
+        ])
+        before_rows = {row["label"]: row["cells"] for row in before["rows"]}
+        rows = {row["label"]: row["cells"] for row in payload["rows"]}
+        self.assertEqual(rows["Fri"][7], before_rows["Fri"][7] + 1)
+        self.assertEqual(rows["Sun"][0], before_rows["Sun"][0] + 1)
 
 
 if __name__ == "__main__":

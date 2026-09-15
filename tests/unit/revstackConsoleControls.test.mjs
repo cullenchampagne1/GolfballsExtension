@@ -173,6 +173,17 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.doesNotMatch(analytics, /register\("email\.send-log"/);
   });
 
+  it('versions the activity heatmap after correcting its compact local-time matrix', () => {
+    const activity = blockSource('analytics-activity-heatmap');
+    const analytics = readFileSync(resolve(root, '.revstack/analytics.py'), 'utf8');
+    assert.match(activity, /aggregate: \{ id: usage\.activity-heatmap, version: 2 \}/);
+    assert.match(activity, /sub: Surface opens · local 3h × day/);
+    assert.match(analytics,
+      /register\("usage\.activity-heatmap", inputs=DAYS, schema="chart\.heatmap@1", version=2\)/);
+    assert.match(routes, /sunday_first_weekday = \(local\.weekday\(\) \+ 1\) % 7/);
+    assert.match(routes, /grid\[sunday_first_weekday\]\[local\.hour \/\/ 3\] \+= 1/);
+  });
+
   it('declares call logs as vertical pod bars stacked by sales role', () => {
     assert.match(callActivityBlock, /^title: Call Logs by Pod$/m);
     assert.match(callActivityBlock, /^size: \{ w: 4, h: 5, min: \{ w: 1, h: 4 \} \}$/m);
