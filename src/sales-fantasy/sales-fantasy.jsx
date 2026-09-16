@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
@@ -7,21 +7,24 @@ import {
   SALES_FANTASY_CURRENT_WEEK,
   SALES_FANTASY_PODS,
   SALES_FANTASY_ROLES,
-  SALES_FANTASY_SCORING,
   buildFantasySchedule,
   buildPlayoffBracket,
   buildStandings,
   fantasyScore,
+  getSalesFantasyScoring,
   memberInitials,
   memberWeekPointSplit,
   matchupForPod,
   podForId,
   podWeekPointSplit,
+  setSalesFantasySnapshot,
   weekState,
 } from '../lib/salesFantasy.js';
+import { fetchSalesFantasySnapshot } from '../lib/salesFantasyClient.js';
 
 const MY_POD_ID = 'pod-1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
+setSalesFantasySnapshot({ daily_scores: [], weeks: [] });
 const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
 const DETAIL_TRANSITION = { duration: 0.18, ease: EASE };
@@ -78,6 +81,8 @@ const CSS = `
   .sf-kicker { margin-top: 3px; color: var(--gb-text-muted); font-size: 10px; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; }
   .sf-appbar-meta { margin-top: 2px; display: flex; align-items: center; gap: 6px; color: var(--gb-text-muted); font-size: 9.5px; font-weight: 700; }
   .sf-appbar-meta .sf-live-dot { color: var(--gb-success-fg); }
+  .sf-data-state { width:100%; max-width:760px; margin:0 auto var(--sf-3); padding:8px 10px; color:var(--gb-text-muted); border:1px solid var(--gb-border-default); border-radius:var(--gb-r-md); background:var(--gb-fill-faint); font-size:10px; }
+  .sf-data-state.error { color:var(--gb-danger-fg); border-color:var(--gb-danger-tint-border); background:var(--gb-danger-tint-soft); }
   .sf-live-pill, .sf-status-pill, .sf-event-pill {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     border-radius: var(--gb-r-pill); font-weight: 800; text-transform: uppercase;
@@ -852,14 +857,15 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
       <div className="sf-member-tabs" aria-label="Select individual performance">
         {pod.members.map((candidate) => {
           const active = candidate.id === member.id;
-          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <span aria-hidden="true" className="sf-member-active" />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidate.name)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidate.name}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
+          const candidateName = memberWeekPointSplit(pod.id, candidate.id, week)?.memberName || candidate.name;
+          return <button type="button" className={`sf-member-tab ${active ? 'active' : ''}`} aria-pressed={active} key={candidate.id} onClick={() => onSelectMember(candidate.id)}>{active && <span aria-hidden="true" className="sf-member-active" />}<span className="sf-avatar" aria-hidden="true">{memberInitials(candidateName)}</span><span className="sf-member-tab-copy"><span className="sf-member-tab-name">{candidateName}</span><span className="sf-member-tab-role">{candidate.role}</span></span></button>;
         })}
       </div>
       <div className="sf-detail-stage">
         <AnimatePresence initial={false} mode="popLayout">
           <motion.div className="sf-performance-detail sf-detail-transition" key={`${member.id}-${week}`} initial={DETAIL_INITIAL} animate={DETAIL_ANIMATE} exit={DETAIL_EXIT} transition={DETAIL_TRANSITION}>
           <article className="sf-card sf-performance-card">
-            <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{member.name}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
+            <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(points.memberName)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{points.memberName}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
               <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
               <div className="sf-stat"><div className="sf-stat-label">{member.roleId === 'bdr' ? 'Sales + referred' : 'Sales'}</div><div className="sf-stat-value">{resultPoints.toFixed(1)}</div><div className="sf-stat-detail">{member.roleId === 'bdr' ? 'Owned results plus account referrals' : 'Owned proposals and completed results'}</div></div>
@@ -916,14 +922,15 @@ function RuleDetailRows({ rules, roleId, valueForRule = (rule) => ruleRate(rule,
 }
 
 function RoleScoringDetails({ role }) {
+  const scoring = getSalesFantasyScoring();
   const referralRate = (rule) => role.id === 'bdr' ? ruleRate(rule, role.id) : 'Not scored';
   return (
     <section className="sf-role-rule-card" aria-label={`${role.label} scoring details`}>
       <div className="sf-role-rule-head"><span className="sf-avatar">{role.label}</span><div className="sf-role-rule-head-copy"><div className="sf-role-rule-name">{role.label}</div><div className="sf-role-rule-title">{role.title}</div></div></div>
-      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Activity</div><RuleDetailRows rules={SALES_FANTASY_SCORING.activity} roleId={role.id} /></div>
-      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Sales</div><RuleDetailRows rules={SALES_FANTASY_SCORING.sales} roleId={role.id} /></div>
-      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Margin</div>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <div className="sf-role-rule-row" key={tier.id}><span className="sf-role-rule-label">{tier.label}<span className="sf-role-rule-detail">Completed-order bonus</span></span><span className="sf-role-rule-value">+{tier.orderBonusPoints}</span></div>)}</div>
-      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Referred</div><RuleDetailRows rules={SALES_FANTASY_SCORING.referral} roleId={role.id} valueForRule={referralRate} /></div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Activity</div><RuleDetailRows rules={scoring.activity} roleId={role.id} /></div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Sales</div><RuleDetailRows rules={scoring.sales} roleId={role.id} /></div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Margin</div>{scoring.marginTiers.map((tier) => <div className="sf-role-rule-row" key={tier.id}><span className="sf-role-rule-label">{tier.label}<span className="sf-role-rule-detail">Completed-order bonus</span></span><span className="sf-role-rule-value">+{tier.orderBonusPoints}</span></div>)}</div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Referred</div><RuleDetailRows rules={scoring.referral} roleId={role.id} valueForRule={referralRate} /></div>
     </section>
   );
 }
@@ -950,7 +957,8 @@ function SeasonSchedule() {
 }
 
 function Rules() {
-  const scoringDays = SALES_FANTASY_SCORING.scoringDaysPerWeek;
+  const scoring = getSalesFantasyScoring();
+  const scoringDays = scoring.scoringDaysPerWeek;
   return (
     <div className="sf-stack">
       <article className="sf-card">
@@ -960,17 +968,17 @@ function Rules() {
 
       <article className="sf-card sf-rule-section">
         <div className="sf-card-head"><div><div className="sf-card-title">1 · Activity rates</div><div className="sf-card-caption">Verified actions × the listed rate over {scoringDays} business days</div></div></div>
-        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Activity</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{SALES_FANTASY_SCORING.activity.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Activity</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{scoring.activity.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
         <div className="sf-card-head"><div><div className="sf-card-title">2 · Sales rates</div><div className="sf-card-caption">SR, SA, and BDR use the same point values</div></div></div>
-        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Sales metric</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{SALES_FANTASY_SCORING.sales.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Sales metric</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{scoring.sales.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
         <div className="sf-card-head"><div><div className="sf-card-title">3 · Margin bonuses</div><div className="sf-card-caption">The highest qualifying tier applies to each completed order</div></div></div>
-        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Placed-order margin</th><th>Bonus</th></tr></thead><tbody>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.orderBonusPoints}</td></tr>)}</tbody></table></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Placed-order margin</th><th>Bonus</th></tr></thead><tbody>{scoring.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.orderBonusPoints}</td></tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
@@ -1127,8 +1135,8 @@ function RoleBreakdowns({ pod, week }) {
         return (
           <section className="sf-role-card" key={member.id}>
             <div className="sf-role-head">
-              <span className="sf-avatar" aria-hidden="true">{memberInitials(member.name)}</span>
-              <div className="sf-role-head-copy"><div className="sf-role-name">{member.name}</div><div className="sf-role-title">{member.role}</div></div>
+              <span className="sf-avatar" aria-hidden="true">{memberInitials(points.memberName)}</span>
+              <div className="sf-role-head-copy"><div className="sf-role-name">{points.memberName}</div><div className="sf-role-title">{member.role}</div></div>
               <div className="sf-role-total"><div className="sf-role-total-value">{points.total.toFixed(1)}</div><div className="sf-role-total-label">Role points</div></div>
             </div>
             <div className="sf-role-categories">
@@ -1149,7 +1157,27 @@ function SalesFantasyApp() {
   const [direction, setDirection] = useState(1);
   const [selectedMemberId, setSelectedMemberId] = useState(SALES_FANTASY_PODS[0].members[0].id);
   const [selectedGameId, setSelectedGameId] = useState(matchupForPod(SCHEDULE[SALES_FANTASY_CURRENT_WEEK - 1], MY_POD_ID)?.id || '');
-  const standings = useMemo(() => buildStandings(SALES_FANTASY_PODS, SCHEDULE, SALES_FANTASY_CURRENT_WEEK), []);
+  const [snapshotRevision, setSnapshotRevision] = useState('loading');
+  const [dataError, setDataError] = useState('');
+  useEffect(() => {
+    let active = true;
+    fetchSalesFantasySnapshot()
+      .then((snapshot) => {
+        if (!active) return;
+        setSalesFantasySnapshot(snapshot);
+        setSnapshotRevision(String(snapshot.scoring_fingerprint || snapshot.generated_at || Date.now()));
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDataError(error?.message || 'Sales Fantasy activity is unavailable');
+        setSnapshotRevision('unavailable');
+      });
+    return () => { active = false; };
+  }, []);
+  const standings = useMemo(
+    () => buildStandings(SALES_FANTASY_PODS, SCHEDULE, SALES_FANTASY_CURRENT_WEEK),
+    [snapshotRevision],
+  );
   const myPod = podForId(MY_POD_ID);
   const myStanding = standings.find((row) => row.podId === MY_POD_ID);
   const page = PAGES.find((item) => item.id === view) || POD_PAGE;
@@ -1191,6 +1219,8 @@ function SalesFantasyApp() {
       </header>
       <main className="sf-main">
         <div className="sf-content">
+          {snapshotRevision === 'loading' && <div className="sf-data-state">Loading server-scored activity…</div>}
+          {dataError && <div className="sf-data-state error">{dataError}</div>}
           <AnimatePresence initial={false} mode="wait">
             <motion.div className="sf-mobile-page-head" key={pageHeadKey} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={PAGE_TRANSITION}>
               <div><div className="sf-page-title-row"><h1 className="sf-page-title">{page.label}</h1><span className="sf-event-pill">EVENT</span></div><div className="sf-page-subtitle">{pageSubtitle(view, week)}</div></div>

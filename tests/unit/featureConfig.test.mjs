@@ -185,8 +185,8 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /Open POD 1 current Week \$\{SALES_FANTASY_CURRENT_WEEK\} standing/);
     assert.match(salesFantasySource, /className="sf-bottom-center-week">POD 1/);
     assert.match(salesFantasySource, /className="sf-bottom-center-rank">W\{SALES_FANTASY_CURRENT_WEEK\} · Rank #\{rank\}/);
-    assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(candidate\.name\)\}/);
-    assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(member\.name\)\}/);
+    assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(candidateName\)\}/);
+    assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(points\.memberName\)\}/);
     assert.doesNotMatch(salesFantasySource, /className="sf-avatar">\{(?:candidate|member)\.name\}/);
     assert.match(salesFantasySource, /onCurrentWeek=\{returnToCurrentWeek\}/);
     assert.match(salesFantasySource, /setView\('pods'\)/);
@@ -256,10 +256,11 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(scheduleSource, /week\.games\.map/);
     assert.match(scheduleSource, /week\.byes\.map/);
     assert.match(salesFantasySource, /\.sf-schedule-week \{[^}]*grid-template-columns: 58px minmax\(0, 1fr\) 122px/);
-    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.activity/);
-    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.sales/);
-    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.marginTiers/);
-    assert.match(roleScoringSource, /SALES_FANTASY_SCORING\.referral/);
+    assert.match(roleScoringSource, /const scoring = getSalesFantasyScoring\(\)/);
+    assert.match(roleScoringSource, /scoring\.activity/);
+    assert.match(roleScoringSource, /scoring\.sales/);
+    assert.match(roleScoringSource, /scoring\.marginTiers/);
+    assert.match(roleScoringSource, /scoring\.referral/);
     assert.match(roleScoringSource, /role\.id === 'bdr' \? ruleRate\(rule, role\.id\) : 'Not scored'/);
     assert.match(salesFantasySource, /rule\.pointsByRole\?\.\[roleId\] \?\? rule\.pointsPerUnit \?\? 0/);
     assert.match(salesFantasySource, /Orders placed while the account is assigned to the BDR/);

@@ -316,6 +316,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_ANALYTICS_TIMEZONE", "_analytics_zone", "_analytics_datetime", "_analytics_day",
                 "_analytics_midnight_utc", "_analytics_days", "_analytics_date_sql",
                 "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
+                "_cached_sales_fantasy_snapshot",
                 "_console_email_activity", "_console_email_send_log", "_console_call_activity",
                 "_POD_LINEUP_CONFIG",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
@@ -343,7 +344,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_presence_hourly_buckets", "_console_usage_kpi_strip", "_KPI_PROVENANCE",
             },
             extra_globals={
-                "math": math, "re": re, "bisect_left": bisect_left,
+                "math": math, "re": re, "json": json, "bisect_left": bisect_left,
                 "datetime": datetime, "timedelta": timedelta, "timezone": timezone, "func": func, "inspect": inspect,
                 "ZoneInfo": ZoneInfo,
                 "os": os,
@@ -813,6 +814,50 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 session.execute(delete(ExtensionInstallationIdentity).where(
                     ExtensionInstallationIdentity.credential_id == credential_id))
                 session.commit()
+
+    def test_versioned_lineup_defaults_to_v2_and_can_select_historical_v1(self):
+        v1 = json.loads(json.dumps(_TEST_POD_LINEUP))
+        v2 = json.loads(json.dumps(_TEST_POD_LINEUP))
+        next(member for member in v1["members"] if member["pod"] == 2 and member["position"] == "BDR")["first_name"] = "Historical"
+        next(member for member in v2["members"] if member["pod"] == 2 and member["position"] == "BDR")["first_name"] = "Current"
+        document = {
+            "version": 2,
+            "default_version": "v2",
+            "members": v2["members"],
+            "versions": {"v1": v1, "v2": v2},
+        }
+        manager = self.routes["_pod_lineup_members"].__globals__["config_access_manager"]
+        original_read = manager.read
+        manager.read = lambda _name: (None, "", document)
+        try:
+            self.assertEqual(self.routes["_pod_lineup_members"]("BDR")[1]["first_name"], "Current")
+            self.assertEqual(self.routes["_pod_lineup_members"]("BDR", "v1")[1]["first_name"], "Historical")
+        finally:
+            manager.read = original_read
+
+    def test_sales_fantasy_cache_remains_readable_without_a_running_script(self):
+        expected = {"season_id": "season-01", "daily_scores": [{"week": 1}]}
+        cache = type("Cache", (), {
+            "get_item_by_id": staticmethod(lambda key: {
+                "cache_key": key,
+                "cache_value": json.dumps(expected),
+            }),
+        })()
+        cache_manager = type("CacheManager", (), {
+            "get_cache": staticmethod(lambda cache_id: cache if cache_id == "sales-fantasy-activity" else None),
+        })()
+        helper = self.routes["_cached_sales_fantasy_snapshot"]
+        original_backend_logic = helper.__globals__.get("backend_logic")
+        helper.__globals__["backend_logic"] = lambda name: type(
+            "CacheModule", (), {"cache_manager": cache_manager},
+        )() if name == "CacheManager" else None
+        try:
+            self.assertEqual(helper(), expected)
+        finally:
+            if original_backend_logic is None:
+                helper.__globals__.pop("backend_logic", None)
+            else:
+                helper.__globals__["backend_logic"] = original_backend_logic
 
     def test_leaderboard_ranks_the_busier_rep_first_and_names_it_by_identity(self):
         payload = self.routes["_console_usage_leaderboard"]()

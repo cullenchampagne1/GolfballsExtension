@@ -12,6 +12,7 @@ import {
   buildPlayoffBracket,
   buildStandings,
   fantasyScore,
+  getSalesFantasyScoring,
   marginTierForOrder,
   memberInitials,
   memberWeekPointSplit,
@@ -20,13 +21,69 @@ import {
   matchupForPod,
   podWeekPointSplit,
   scoreRoleMetrics,
+  setSalesFantasySnapshot,
   weekState,
 } from '../../src/lib/salesFantasy.js';
+import { fetchSalesFantasySnapshot } from '../../src/lib/salesFantasyClient.js';
 
 const salesFantasySource = await readFile(new URL('../../src/sales-fantasy/sales-fantasy.jsx', import.meta.url), 'utf8');
 const arenaCss = salesFantasySource.match(/const ARENA_CSS = `([\s\S]*?)`;/)?.[1] || '';
 
 describe('salesFantasy · league model', () => {
+  it('loads the persistent server snapshot through the authenticated worker boundary', async () => {
+    const calls = [];
+    const fixture = { weeks: [{ week: 5 }], daily_scores: [] };
+    const result = await fetchSalesFantasySnapshot(async (action, payload) => {
+      calls.push([action, payload]);
+      return { ok: true, snapshot: fixture };
+    });
+    assert.equal(result, fixture);
+    assert.deepEqual(calls, [['salesFantasySnapshot', {}]]);
+    await assert.rejects(
+      () => fetchSalesFantasySnapshot(async () => ({ ok: true, snapshot: {} })),
+      /invalid activity snapshot/,
+    );
+  });
+
+  it('uses server-scored daily activity for Weeks 1-4 and starts Week 5 at zero', () => {
+    setSalesFantasySnapshot({
+      weeks: [
+        { week: 1, lineup_version: 'v1' },
+        { week: 5, lineup_version: 'v2' },
+      ],
+      lineups: {
+        v1: [{ pod: 1, role: 'sr', name: 'Lorie Ojeman' }],
+        v2: [{ pod: 1, role: 'sr', name: 'Current SR' }],
+      },
+      point_values: { emails_sent: { sr: 2, sa: 0.01, bdr: 0.001 } },
+      daily_scores: [{
+        date: '2026-08-03', week: 1, pod: 1, role: 'sr', person: 'Lorie Ojeman',
+        metrics: { emails_sent: 10, emails_replied: 2, outbound_calls: 3, inbound_calls: 1 },
+        points: { emails_sent: 0.1, emails_replied: 0.2, outbound_calls: 0.45, inbound_calls: 0.1 },
+        activity_points: 0.85,
+      }],
+    });
+    try {
+      const firstWeek = memberWeekPointSplit('pod-1', 'pod-1-sr', 1);
+      const fifthWeek = memberWeekPointSplit('pod-1', 'pod-1-sr', 5);
+      assert.deepEqual(firstWeek.activity.rows.map((row) => [row.id, row.value, row.points]), [
+        ['emailsSent', 10, 0.1],
+        ['emailsReplied', 2, 0.2],
+        ['outboundCalls', 3, 0.5],
+        ['inboundCalls', 1, 0.1],
+      ]);
+      assert.equal(firstWeek.total, 0.9);
+      assert.equal(firstWeek.sales, null);
+      assert.equal(firstWeek.referred, null);
+      assert.equal(fifthWeek.total, 0);
+      assert.equal(fifthWeek.memberName, 'Current SR');
+      assert.equal(SALES_FANTASY_CURRENT_WEEK, 5);
+      assert.equal(getSalesFantasyScoring().activity[0].pointsByRole.sr, 2);
+    } finally {
+      setSalesFantasySnapshot(null);
+    }
+  });
+
   it('keeps passive surfaces stable and uses one anchored detail transition', () => {
     assert.doesNotMatch(salesFantasySource, /\.sf-card:hover/);
     assert.doesNotMatch(salesFantasySource, /\.sf-stat:hover/);

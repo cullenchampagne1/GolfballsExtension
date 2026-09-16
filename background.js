@@ -1219,6 +1219,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'salesFantasySnapshot') {
+    GBInstallationAuth.apiJson(`${GBInstallationAuth.CLIENT_BASE}/sales-fantasy`, {
+      responseLimit: 8 * 1024 * 1024,
+    })
+      .then((snapshot) => sendResponse({ ok: true, snapshot }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error?.message || 'Sales Fantasy activity is unavailable',
+        status: Number(error?.status || 0),
+      }));
+    return true;
+  }
+
   // ── Surface usage ──────────────────────────────────────────────────────
   // A modal or takeover page opened or closed in some tab. Buffered here and
   // flushed as one batch per minute; the reporter validates the envelope, so

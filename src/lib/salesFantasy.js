@@ -1,17 +1,30 @@
 /**
  * Sales Fantasy league model.
  *
- * The event UI currently runs on deterministic preview data while the live
- * metrics feed is being connected. Pod identity, scheduling, and the scoring
- * contract live here so the server adapter can replace only the fixture data.
+ * The event UI installs a server-scored activity snapshot at startup. The
+ * deterministic generators remain as isolated fixture data for model tests;
+ * the production page clears them before requesting the backend snapshot.
  */
 
-export const SALES_FANTASY_CURRENT_WEEK = 4;
+export const SALES_FANTASY_CURRENT_WEEK = 5;
 
 const POD_COUNT = 10;
 const oneDecimal = (value) => Number(value.toFixed(1));
 const money = (value) => Number(value.toFixed(2));
 const roleRates = (sr, sa, bdr) => Object.freeze({ sr, sa, bdr });
+let installedActivitySnapshot = null;
+
+export function setSalesFantasySnapshot(snapshot) {
+  if (snapshot === null) {
+    installedActivitySnapshot = null;
+    return null;
+  }
+  if (!snapshot || !Array.isArray(snapshot.daily_scores)) {
+    throw new TypeError('Sales Fantasy snapshot must include daily_scores');
+  }
+  installedActivitySnapshot = snapshot;
+  return snapshot;
+}
 
 export const SALES_FANTASY_ROLES = Object.freeze([
   Object.freeze({ id: 'sr', label: 'SR', title: 'Sales Representative' }),
@@ -71,6 +84,27 @@ export const SALES_FANTASY_SCORING = Object.freeze({
     Object.freeze({ id: 'referredSales', label: 'Referred dollars', pointsPerUnit: 0.004, format: 'money' }),
   ]),
 });
+
+export function getSalesFantasyScoring() {
+  const values = installedActivitySnapshot?.point_values;
+  if (!values || typeof values !== 'object') return SALES_FANTASY_SCORING;
+  const sourceIds = {
+    emailsSent: 'emails_sent',
+    emailsReplied: 'emails_replied',
+    outboundCalls: 'outbound_calls',
+    inboundCalls: 'inbound_calls',
+  };
+  return {
+    ...SALES_FANTASY_SCORING,
+    activity: SALES_FANTASY_SCORING.activity.map((rule) => ({
+      ...rule,
+      pointsByRole: {
+        ...rule.pointsByRole,
+        ...(values[sourceIds[rule.id]] || {}),
+      },
+    })),
+  };
+}
 
 export const SALES_FANTASY_PODS = Array.from({ length: POD_COUNT }, (_, podIndex) => {
   const number = podIndex + 1;
@@ -354,10 +388,53 @@ export function memberWeekPointSplit(podId, memberId, weekNumber, pods = SALES_F
   if (podIndex < 0 || memberIndex < 0 || !Number.isInteger(weekNumber) || weekNumber < 1) return null;
 
   const member = pod.members[memberIndex];
-  const scored = scoreRoleMetrics(roleWeekMetrics(podIndex + 1, memberIndex, weekNumber), member.roleId);
+  let scored;
+  let memberName = member.name;
+  if (installedActivitySnapshot) {
+    const lineupVersion = installedActivitySnapshot.weeks
+      ?.find((candidate) => Number(candidate?.week) === weekNumber)?.lineup_version;
+    const lineupMember = installedActivitySnapshot.lineups?.[lineupVersion]
+      ?.find((candidate) => (
+        Number(candidate?.pod) === podIndex + 1
+        && String(candidate?.role || '').toLowerCase() === member.roleId
+      ));
+    if (lineupMember?.name) memberName = String(lineupMember.name);
+    const rows = installedActivitySnapshot.daily_scores.filter((row) => (
+      Number(row?.pod) === podIndex + 1
+      && String(row?.role || '').toLowerCase() === member.roleId
+      && Number(row?.week) === weekNumber
+    ));
+    const metricIds = {
+      emails_sent: 'emailsSent',
+      emails_replied: 'emailsReplied',
+      outbound_calls: 'outboundCalls',
+      inbound_calls: 'inboundCalls',
+    };
+    const activityRows = Object.entries(metricIds).map(([sourceId, id]) => {
+      const rule = SALES_FANTASY_SCORING.activity.find((candidate) => candidate.id === id);
+      return {
+        id,
+        label: rule?.label || id,
+        value: rows.reduce((sum, row) => sum + (Number(row?.metrics?.[sourceId]) || 0), 0),
+        format: 'number',
+        points: oneDecimal(rows.reduce((sum, row) => sum + (Number(row?.points?.[sourceId]) || 0), 0)),
+      };
+    });
+    if (!lineupMember?.name && rows[0]?.person) memberName = String(rows[0].person);
+    const activityTotal = oneDecimal(activityRows.reduce((sum, row) => sum + row.points, 0));
+    scored = {
+      raw: { activity: Object.fromEntries(activityRows.map((row) => [row.id, row.value])) },
+      activity: { rows: activityRows, total: activityTotal },
+      sales: null,
+      referred: null,
+      total: activityTotal,
+    };
+  } else {
+    scored = scoreRoleMetrics(roleWeekMetrics(podIndex + 1, memberIndex, weekNumber), member.roleId);
+  }
   return {
     memberId,
-    memberName: member.name,
+    memberName,
     memberRole: member.role,
     roleId: member.roleId,
     ...scored,
