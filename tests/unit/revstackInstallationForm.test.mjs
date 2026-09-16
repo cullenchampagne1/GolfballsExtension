@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const blockPath = resolve(root, '.revstack/blocks/analytics-scorecard.block.yaml');
+const routesPath = resolve(root, '.revstack/routes.py');
 const generator = resolve(root, 'scripts/build-revstack-installation-form.mjs');
 
 describe('RevStack installation form generator', { skip: !existsSync(blockPath) }, () => {
@@ -28,5 +29,21 @@ describe('RevStack installation form generator', { skip: !existsSync(blockPath) 
     assert.match(action, /key: developer_section[\s\S]*?value_type: select/);
     assert.doesNotMatch(action, /type: kv_editor/);
     assert.doesNotMatch(action, /name: installation-settings|remote_table|maxWidth/);
+  });
+
+  it('makes explicit scorecard values managed and inheritance remove the user marker', () => {
+    const routes = readFileSync(routesPath, 'utf8');
+    const handler = routes.slice(
+      routes.indexOf('async def update_installation_settings('),
+      routes.indexOf('@router.post("/keys/{key_id}/configuration-overrides/clear")'),
+    );
+
+    assert.match(
+      handler,
+      /desired_managed_mode\s*=\s*\(\s*"managed" if desired_mode == "override" else "inherit"\s*\)/,
+    );
+    assert.match(handler, /managed_mode == desired_managed_mode/);
+    assert.match(handler, /managed_mode=desired_managed_mode/);
+    assert.doesNotMatch(handler, /managed_mode=managed_mode/);
   });
 });
