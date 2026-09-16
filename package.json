@@ -55,6 +55,10 @@
       "file": "tests/unit/emailSubjectTracking.test.mjs"
     },
     {
+      "name": "email \u00b7 contact context suppression statuses",
+      "file": "tests/unit/contactEmailSuppression.test.mjs"
+    },
+    {
       "name": "email \u00b7 template follow-up tasks & custom actions",
       "file": "tests/unit/emailTemplateFollowUps.test.mjs"
     },
@@ -133,6 +137,10 @@
     {
       "name": "modal \u00b7 quick-task create payload",
       "file": "tests/unit/submitQuickTask.test.mjs"
+    },
+    {
+      "name": "modal \u00b7 active sales-rep assignment directory",
+      "file": "tests/unit/crmSalesReps.test.mjs"
     },
     {
       "name": "modal \u00b7 quick order-note templates & last-note action",

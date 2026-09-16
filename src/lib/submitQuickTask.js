@@ -126,7 +126,7 @@ export async function readTaskContext() {
  * Never throws — every error path resolves with a string the modal
  * pipes straight into a toast.
  */
-export async function submitQuickTask({ template, context } = {}, followUpDeps = {}) {
+export async function submitQuickTask({ template, context, assigneeId } = {}, followUpDeps = {}) {
   const tpl = template || {};
   const ctx = context  || {};
 
@@ -144,7 +144,10 @@ export async function submitQuickTask({ template, context } = {}, followUpDeps =
        indexed on contactID, and the CRM expects employeeID for
        ownership. Without them we'd create an orphan task. */
   const contactId = numericId(ctx.contactId);
-  const employeeId = numericId(ctx.employeeId) || numericId(await resolveEmployeeId());
+  const requestedAssigneeId = assigneeId ?? tpl.assigneeId;
+  const employeeId = numericId(requestedAssigneeId)
+    || numericId(ctx.employeeId)
+    || numericId(await resolveEmployeeId());
   const missing = [];
   if (!contactId)  missing.push('valid contact ID');
   if (!employeeId) missing.push('valid employee ID');

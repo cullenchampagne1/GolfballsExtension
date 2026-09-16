@@ -3,7 +3,7 @@ import {
   FloatingPanel, ModalHeader,
   Btn, Kbd, TYPE_ICONS, EmptyState, StatusBadge,
   KeyboardComposer, useComposerFilter, COMPOSER_TONE, DueControl,
-  Icon, I, useToast,
+  Dropdown, Icon, I, useToast,
 } from '../ui/index.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -22,6 +22,7 @@ import {
   getTaskCategoryTone,
 } from '../lib/taskCategories.js';
 import { templateFollowUpActionError } from '../lib/templateFollowUpAction.js';
+import { loadActiveSalesReps } from '../lib/crmSalesReps.js';
 
 /* ───────────────────────────────────────────────────────────────
    QuickTask — the redesigned, keyboard-first task creator.
@@ -103,6 +104,7 @@ export function QuickTask({
   onComposed,
   autoCompose = false,
   draft = null,
+  defaultAssigneeId = '',
   onClosed,
   bindClose,
 }) {
@@ -115,6 +117,8 @@ export function QuickTask({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [flashId, setFlashId] = useState(null);
+  const [salesReps, setSalesReps] = useState(null);
+  const [assigneeId, setAssigneeId] = useState(String(defaultAssigneeId || ''));
   /* Due lives here (not in the composer) so onLog can read it back. */
   const [due, setDue] = useState({ kind: 'relative', days: 0 });
 
@@ -132,6 +136,18 @@ export function QuickTask({
     loadTaskTemplates().then((t) => { if (!alive) return; setTemplates(t); setLoading(false); });
     const unsub = subscribeToTaskTemplates((next) => { if (alive) setTemplates(next); });
     return () => { alive = false; unsub(); };
+  }, []);
+
+  useEffect(() => {
+    setAssigneeId(String(defaultAssigneeId || ''));
+  }, [defaultAssigneeId]);
+
+  useEffect(() => {
+    let alive = true;
+    loadActiveSalesReps()
+      .then((reps) => { if (alive) setSalesReps(reps); })
+      .catch(() => { if (alive) setSalesReps([]); });
+    return () => { alive = false; };
   }, []);
 
   /* On open: drop straight into the composer / menu when asked
@@ -157,6 +173,7 @@ export function QuickTask({
       categoryLabel: getTaskCategoryLabel(tpl.categoryId),
       daysOut: r.daysOut > 0 ? r.daysOut : 0,
       dueDate: r.crmDate,
+      assigneeId: assigneeId || undefined,
     };
   };
 
@@ -174,7 +191,7 @@ export function QuickTask({
     setFlashId(tpl.id); setTimeout(() => setFlashId((id) => (id === tpl.id ? null : id)), 650);
     setBusy(true);
     try {
-      const result = await onSubmit(tpl);
+      const result = await onSubmit(tpl, { assigneeId: assigneeId || undefined });
       if (result?.ok) {
         const followUpError = templateFollowUpActionError(result);
         if (followUpError) toast?.warning?.(`Task created, but follow-up action failed: ${followUpError}`, { duration: 5000 });
@@ -198,6 +215,7 @@ export function QuickTask({
         categoryId: parseInt(tokens.category || 0, 10),
         categoryLabel: getTaskCategoryLabel(tokens.category),
         daysOut, dueDate: resolved.crmDate,
+        assigneeId: assigneeId || undefined,
       });
       animatedClose();
       return;
@@ -211,7 +229,7 @@ export function QuickTask({
     });
     setBusy(true);
     try {
-      const result = await onSubmit(synthetic);
+      const result = await onSubmit(synthetic, { assigneeId: assigneeId || undefined });
       if (result?.ok) {
         const followUpError = templateFollowUpActionError(result);
         if (followUpError) toast?.warning?.(`Task created, but follow-up action failed: ${followUpError}`, { duration: 5000 });
@@ -238,6 +256,10 @@ export function QuickTask({
     </span>
   );
   const dueFooter = <span style={{ fontFamily: 'var(--gb-font-mono)' }}>due {resolved.crmDate}</span>;
+  const assigneeOptions = (salesReps || []).map((rep) => ({ id: rep.id, label: rep.name }));
+  if (assigneeId && !assigneeOptions.some((option) => option.id === assigneeId)) {
+    assigneeOptions.unshift({ id: assigneeId, label: 'Me (current rep)' });
+  }
 
   const renderList = (ff) => (
     <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -280,6 +302,25 @@ export function QuickTask({
       bindClose={handleBindClose}
     >
       <ModalHeader icon={<TYPE_ICONS.task />} title="Create task" subtitle={contactName} />
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr)', alignItems: 'center', gap: 10,
+        padding: '9px 14px', background: 'var(--gb-fill-faint)',
+        borderBottom: '1px solid var(--gb-border-subtle)',
+      }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.7, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>
+          Assign to
+        </span>
+        <Dropdown
+          size="sm"
+          value={assigneeId}
+          onChange={setAssigneeId}
+          options={assigneeOptions}
+          placeholder={salesReps == null ? 'Loading active reps…' : 'Me (current rep)'}
+          searchable
+          disabled={busy || salesReps == null}
+        />
+      </div>
 
       <div
         style={{ display: 'flex', flexDirection: 'column', height: 'min(72vh, 600px)' }}

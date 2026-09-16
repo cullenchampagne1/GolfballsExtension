@@ -849,6 +849,7 @@ function __gbAccessAllowed(st, now) {
       let displayName = '';
       let accountTerritoryId = '';
       let accountTerritoryName = '';
+      let contactContext = '';
       /* Most-recent email date from the contact's Email history portlet
          (emails[].date) as an epoch-ms value — drives EmailRunner's
          "skip if emailed within N days" rule off the page's real send history.
@@ -862,6 +863,7 @@ function __gbAccessAllowed(st, now) {
           displayName = `${first} ${last}`.trim();
           accountTerritoryId = engine.resolvePath(doc, 'account.territoryId', '') || '';
           accountTerritoryName = engine.resolvePath(doc, 'account.territoryName', '') || '';
+          contactContext = engine.resolvePath(doc, 'contact.context', '') || '';
           /* Email history is a root schema collection. Cached snapshots use a
              separate compatibility bridge in variable-resolution.js. */
           const emails = engine.resolvePath(doc, 'emails', []) || [];
@@ -875,10 +877,10 @@ function __gbAccessAllowed(st, now) {
         }
       } catch {}
       return resolveAllVarsAsync(vars, toField, doc)
-        .then((res) => ({ ...res, displayName, lastEmailMs, accountTerritoryId, accountTerritoryName }))
-        .catch((err) => ({ resolved: {}, toEmail: '', displayName, lastEmailMs, accountTerritoryId, accountTerritoryName, error: err?.message || 'resolve failed' }));
+        .then((res) => ({ ...res, displayName, lastEmailMs, accountTerritoryId, accountTerritoryName, contactContext }))
+        .catch((err) => ({ resolved: {}, toEmail: '', displayName, lastEmailMs, accountTerritoryId, accountTerritoryName, contactContext, error: err?.message || 'resolve failed' }));
     } catch (e) {
-      return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', lastEmailMs: 0, accountTerritoryId: '', accountTerritoryName: '', error: e?.message || 'parse failed' });
+      return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', lastEmailMs: 0, accountTerritoryId: '', accountTerritoryName: '', contactContext: '', error: e?.message || 'parse failed' });
     }
   };
 

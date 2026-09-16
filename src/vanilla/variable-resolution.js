@@ -701,6 +701,7 @@
       const last = value('contact.lastName', '') || '';
       const accountTerritoryId = value('account.territoryId', '') || '';
       const accountTerritoryName = value('account.territoryName', '') || '';
+      const contactContext = value('contact.context', '') || '';
       let lastEmailMs = 0;
       /* Canonical Page Engine snapshots store Email History at the root. The
          nested fallback keeps already-saved legacy snapshots sendable. */
@@ -721,6 +722,7 @@
           lastEmailMs,
           accountTerritoryId,
           accountTerritoryName,
+          contactContext,
         };
       } catch (error) {
         return {
@@ -730,6 +732,7 @@
           lastEmailMs,
           accountTerritoryId,
           accountTerritoryName,
+          contactContext,
           error: error?.message || 'resolve failed',
         };
       }

@@ -58,9 +58,14 @@ if (!window.__gbQuickTaskModalLoaded) {
           contactType={ctx.contactType || 'contact'}
           autoCompose={autoCompose}
           draft={draft}
+          defaultAssigneeId={ctx.employeeId || ''}
           onComposed={handleComposed}
-          onSubmit={async (template) => {
-            const r = await submitQuickTask({ template, context: ctx });
+          onSubmit={async (template, options = {}) => {
+            const r = await submitQuickTask({
+              template,
+              context: ctx,
+              assigneeId: options.assigneeId,
+            });
             // Let an opener (e.g. the custom contact page) optimistically add
             // the row + animate, without a reload, after a real CRM create.
             if (r && r.ok && typeof onCreated === 'function') { try { onCreated({ template, context: ctx, result: r }); } catch (e) { /* ignore */ } }

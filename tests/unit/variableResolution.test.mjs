@@ -191,6 +191,7 @@ describe('cached Page Engine variable resolution', () => {
           firstName: 'Ada',
           lastName: 'Lovelace',
           email: 'ada@example.test',
+          context: 'Retired — use the purchasing contact',
         },
         account: { territoryId: '17', territoryName: 'Upper Midwest' },
         emails: [{ date: '2026-07-21T12:00:00Z' }],
@@ -209,6 +210,7 @@ describe('cached Page Engine variable resolution', () => {
     assert.equal(result.lastEmailMs, Date.parse('2026-07-21T12:00:00Z'));
     assert.equal(result.accountTerritoryId, '17');
     assert.equal(result.accountTerritoryName, 'Upper Midwest');
+    assert.equal(result.contactContext, 'Retired — use the purchasing contact');
 
     const transformed = await dom.window.__gbResolveVarsForData(snapshot, {
       first: { type: 'literal', value: 'MARCUS', smart: { transform: 'titleCase' } },

@@ -159,6 +159,16 @@ describe('submitQuickTask — Create.ajax payload construction', () => {
     await submitQuickTask({ template: { name: 'Send catalog' }, context: VALID_CONTEXT });
     assert.equal(payloadOf(calls[0].url).Subject, 'Send catalog');
   });
+
+  it('assigns the task to an explicitly selected active rep', async () => {
+    const calls = installChrome();
+    await submitQuickTask({
+      template: { subject: 'Prepare renewal quote' },
+      context: VALID_CONTEXT,
+      assigneeId: '314',
+    });
+    assert.equal(payloadOf(calls[0].url).employeeID, '314');
+  });
 });
 
 describe('submitQuickTask — response handling', () => {

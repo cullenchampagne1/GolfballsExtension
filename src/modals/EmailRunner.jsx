@@ -19,6 +19,7 @@ import {
   resolveMatchedOnlyOutcome, templateMatchConditionCount,
 } from '../lib/emailRunnerMatch.js';
 import { createPauseGate, waitForPausableDelay } from '../lib/emailRunControl.js';
+import { contactEmailSuppressionReason } from '../lib/contactEmailSuppression.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -137,7 +138,6 @@ function readEmailLog() {
   });
 }
 function writeEmailLog(log) { try { chrome.storage.local.set({ [EMAIL_LOG_KEY]: log }); } catch { /* */ } }
-const _dnc = (s) => /do\s*not\s*contact/i.test(String(s || ''));
 
 /* Delegates to the shared renderer so OR-blocks (`{{a|b}}`) and
    conditional drop-out behave identically to the popup's
@@ -278,7 +278,7 @@ export function EmailRunner({
   const [delay, setDelay] = useState([15, 45]); // seconds
   // Skip rules — contacts that match are quietly skipped (not emailed) and
   // counted/tagged as "skipped" rather than sent.
-  const [skipDnc, setSkipDnc] = useState(true);            // name/email says "do not contact"
+  const [skipDnc, setSkipDnc] = useState(true);            // identity/context marks contact unsafe
   const [skipRecent, setSkipRecent] = useState(false);     // emailed within N days
   const [skipRecentDays, setSkipRecentDays] = useState(30);
   // Inverted from the two skip rules above: skips a row when the selected
@@ -706,6 +706,11 @@ export function EmailRunner({
            page engine) and our own local send log. Drives the "recently emailed"
            skip rule. */
         const lastEmailedMs = Math.max(Number(resolved?.lastEmailMs) || 0, (toEmail && emailLog[toEmail.toLowerCase()]) || 0);
+        const suppressionReason = skipDnc ? contactEmailSuppressionReason({
+          name: pageName,
+          email: toEmail,
+          context: resolved?.contactContext || c.contactContext || c.context || '',
+        }) : null;
         /* Enrich the "Now sending" card with the resolved name + recipient
            as soon as they're known (the row started with just the task-row
            text). */
@@ -718,9 +723,8 @@ export function EmailRunner({
           outcome = { status: 'error', error: `Resolve failed: ${resolved.error}`, name: pageName };
         } else if (!toEmail) {
           outcome = { status: 'error', error: 'No recipient email resolved', name: pageName };
-        } else if (skipDnc && (_dnc(pageName) || _dnc(toEmail))) {
-          // Do-not-contact flag baked into the name or email → never send.
-          outcome = { status: 'skipped', reason: 'Do not contact', email: toEmail, name: pageName };
+        } else if (suppressionReason) {
+          outcome = { status: 'skipped', reason: suppressionReason, email: toEmail, name: pageName };
         } else if (skipRecent && lastEmailedMs && (Date.now() - lastEmailedMs) < recentCutoff) {
           const days = Math.floor((Date.now() - lastEmailedMs) / DAY_MS);
           outcome = { status: 'skipped', reason: days <= 0 ? 'Emailed today' : `Emailed ${days}d ago`, email: toEmail, name: pageName };
@@ -974,7 +978,7 @@ export function EmailRunner({
                   <SkipRow
                     on={skipDnc} onChange={setSkipDnc} disabled={status === 'running'}
                     title="Do-not-contact"
-                    desc={'Skip when the first name, last name, or email contains “do not contact”.'}
+                    desc="Skip names/emails marked do not contact and CRM context statuses such as undeliverable, inactive, retired, or out of business."
                   />
                   <SkipRow
                     on={skipRecent} onChange={setSkipRecent} disabled={status === 'running'}

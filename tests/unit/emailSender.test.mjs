@@ -368,6 +368,7 @@ describe('sendEmail', () => {
       event: {
         kind: 'feature', feature: 'email_send', source: 'task_list', transport: 'pa',
         count: 1, word_count: 4, attachment_count: 1, inline_image_count: 1, ok: true,
+        subject_cluster_id: 'email-template:renewal',
         template_id: 'renewal', template_name: 'Annual renewal',
         template_variation_id: 'warm', template_variation_name: 'Warm opening',
         condition_count: 2, conditions_matched: true, conditions_enforced: true,
@@ -393,6 +394,8 @@ describe('sendEmail', () => {
     const event = usageMessages.at(-1).event;
     assert.equal(event.template_name, 'Annual renewal');
     assert.equal(event.template_variation_name, 'Warm opening');
+    assert.equal(event.subject_cluster_id, 'email-template:renewal');
+    assert.equal('subject' in event, false);
     assert.equal(event.condition_count, 1);
     assert.equal(event.conditions_matched, null);
     assert.equal(event.conditions_enforced, false);

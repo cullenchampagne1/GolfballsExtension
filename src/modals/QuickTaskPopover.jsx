@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, IconBtn, Tag, I, Spinner } from '../ui/index.js';
+import { Btn, Dropdown, IconBtn, Tag, I, Spinner } from '../ui/index.js';
 import { DraggablePopup } from '../ui/components/DraggablePopup.jsx';
 import { useSurfaceUsage } from '../lib/usageTelemetry.js';
+import { loadActiveSalesReps } from '../lib/crmSalesReps.js';
+import { resolveEmployeeId } from '../lib/employeeIdentity.js';
 
 /* qs-* keyframes for the in-popover run lifecycle (the popover can open
    without the EmailRunner mounted, so inject our own copy; redefining the
@@ -253,8 +255,22 @@ export function QuickTaskPopover({
      due-in-N-days instead of only offering saved templates). */
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDue, setTaskDue] = useState('+3d');
+  const [salesReps, setSalesReps] = useState(null);
+  const [assigneeId, setAssigneeId] = useState('');
   useEffect(() => { ensureQuickTaskStyles(); }, []);
   useEffect(() => { setRun(null); setTaskTitle(''); }, [open, qt?.taskId, qt?.mode]);
+  useEffect(() => {
+    if (!open || salesReps != null) return undefined;
+    let alive = true;
+    Promise.all([loadActiveSalesReps(), resolveEmployeeId()])
+      .then(([reps, currentId]) => {
+        if (!alive) return;
+        setSalesReps(reps);
+        setAssigneeId((selected) => selected || String(currentId || ''));
+      })
+      .catch(() => { if (alive) setSalesReps([]); });
+    return () => { alive = false; };
+  }, [open, salesReps]);
 
   const bodyRef = useRef(null);
   const [bodyH, setBodyH] = useState('auto');
@@ -282,8 +298,8 @@ export function QuickTaskPopover({
     if (!title) return;
     const opt = DUE_OPTS.find((o) => o.k === taskDue) || DUE_OPTS[2];
     fire(isBulk ? 'bulk-create-task' : 'create-task',
-      isBulk ? { custom: { title, days: opt.days } }
-             : { taskId: qtv.taskId, custom: { title, days: opt.days } });
+      isBulk ? { custom: { title, days: opt.days }, assigneeId }
+             : { taskId: qtv.taskId, custom: { title, days: opt.days }, assigneeId });
   };
 
   /* Retain the last qt so the close animation can play: the parent nulls
@@ -301,6 +317,10 @@ export function QuickTaskPopover({
   const dueText = showOther
     ? `+${customDays}d`
     : PUSH_PRESETS[pushIdx].label;
+  const assigneeOptions = (salesReps || []).map((rep) => ({ id: rep.id, label: rep.name }));
+  if (assigneeId && !assigneeOptions.some((option) => option.id === assigneeId)) {
+    assigneeOptions.unshift({ id: assigneeId, label: 'Me (current rep)' });
+  }
 
   /* Sync the parent's pushDays state with the active chip's days
      so a follow-on "Apply push" reads the right value. The custom
@@ -510,6 +530,18 @@ export function QuickTaskPopover({
             onBack={() => setPane('main')}
           />
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '62px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
+              <Caption>Assign to</Caption>
+              <Dropdown
+                size="sm"
+                value={assigneeId}
+                onChange={setAssigneeId}
+                options={assigneeOptions}
+                placeholder={salesReps == null ? 'Loading active reps…' : 'Me (current rep)'}
+                searchable
+                disabled={salesReps == null}
+              />
+            </div>
             {/* Custom task — type a title + pick a due, no template needed. */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Caption>{isBulk ? 'Custom task · all selected' : 'Custom task'}</Caption>
@@ -572,7 +604,9 @@ export function QuickTaskPopover({
                     name={tpl.name || tpl.subject || 'Untitled'}
                     meta={describeTemplate(tpl)}
                     onClick={() => fire(isBulk ? 'bulk-create-task' : 'create-task',
-                      isBulk ? { template: tpl } : { taskId: qtv.taskId, template: tpl })}
+                      isBulk
+                        ? { template: tpl, assigneeId }
+                        : { taskId: qtv.taskId, template: tpl, assigneeId })}
                   />
                 ))
               )}

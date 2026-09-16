@@ -55,6 +55,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
             "kind": "feature", "feature": "email_send", "source": "task_list",
             "transport": "pa", "count": 4, "word_count": 381,
             "attachment_count": 2, "inline_image_count": 1,
+            "subject_cluster_id": "email-template:renewal",
             "template_id": "renewal", "template_name": "Annual renewal",
             "template_variation_id": "warm", "template_variation_name": "Warm opening",
             "condition_count": 2, "conditions_matched": True,
@@ -65,6 +66,7 @@ class UsageTelemetryContractTests(unittest.TestCase):
         })
         self.assertEqual(event.count, 4)
         self.assertEqual(event.word_count, 381)
+        self.assertEqual(event.subject_cluster_id, "email-template:renewal")
         self.assertEqual((event.template_name, event.template_variation_name),
                          ("Annual renewal", "Warm opening"))
         self.assertTrue(event.conditions_matched)
@@ -115,6 +117,9 @@ class UsageTelemetryContractTests(unittest.TestCase):
              "account_territory_id": "17"},
             {"kind": "feature", "feature": "email_send", "source": "popup",
              "transport": "pa", "template_variation_name": "Warm"},
+            {"kind": "feature", "feature": "email_send", "source": "popup",
+             "transport": "pa", "template_id": "renewal",
+             "subject_cluster_id": "private subject disguised as a cluster"},
             {"kind": "feature", "feature": "email_send", "source": "popup",
              "transport": "pa", "condition_count": 0, "conditions_matched": True},
             {"kind": "feature", "feature": "email_send", "source": "popup",

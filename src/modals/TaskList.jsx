@@ -771,6 +771,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           const res = await submitQuickTask({
             template,
             context:  { contactId, employeeId },
+            assigneeId: payload.assigneeId,
           });
           if (!res?.ok) throw new Error(res?.error || 'Create task failed');
           const followUpError = templateFollowUpActionError(res);

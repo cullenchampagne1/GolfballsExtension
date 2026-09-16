@@ -14,6 +14,7 @@ import {
 import { getPageContext } from './pageContext.js';
 import { parseCcList } from './emailCc.js';
 import { templateMatchConditionCount } from './emailRunnerMatch.js';
+import { emailTemplateClusterId } from './emailSubjectTracking.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -166,7 +167,10 @@ function templateUsageContext(message, config) {
     ? Math.max(0, Math.min(100, Math.round(Number(message.conditionCount))))
     : templateMatchConditionCount(template);
   const hasTemplate = Boolean(message.templateId || message.templateName || template);
+  const subjectClusterId = message.replyMode === 'reply'
+    ? null : emailTemplateClusterId(message.templateId || template?.id);
   return {
+    subject_cluster_id: subjectClusterId || '',
     template_id: message.templateId || template?.id || '',
     template_name: message.templateName || template?.name || '',
     template_variation_id: hasTemplate ? variationId : '',
@@ -269,7 +273,7 @@ export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMod
     const r = await dispatch({ action: 'paAutomate', payload });
     const result = classifyPaResult(r);
     reportSuccessfulDelivery(result, {
-      htmlBody, attachments, usageSource, trackUsage, templateId, templateName,
+      htmlBody, attachments, usageSource, trackUsage, replyMode, templateId, templateName,
       variationId, templateVariationId, templateVariationName,
       conditionCount, conditionsMatched, conditionsEnforced,
       recipientAnalytics,
@@ -291,7 +295,7 @@ export async function sendEmail({ from, to, cc = '', subject, htmlBody, replyMod
   if (r && r.ok === false) return { state: 'failed', transport: 'mailto', error: r.error || 'Could not open mail window' };
   const result = { state: 'opened', transport: 'mailto', error: null };
   reportSuccessfulDelivery(result, {
-    htmlBody, attachments, usageSource, trackUsage, templateId, templateName,
+    htmlBody, attachments, usageSource, trackUsage, replyMode, templateId, templateName,
     variationId, templateVariationId, templateVariationName,
     conditionCount, conditionsMatched, conditionsEnforced,
     recipientAnalytics,

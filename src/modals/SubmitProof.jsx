@@ -13,6 +13,7 @@ import { reportFeatureUsage } from '../lib/usageEvents.js';
 import {
   buildAutoProofNames, buildProofEmailSubject, proofLogoTypeValue,
 } from '../lib/submitProofNames.js';
+import { parseActiveSalesReps, SALES_REP_DIRECTORY_URL } from '../lib/crmSalesReps.js';
 
 /* ───────────────────────────────────────────────────────────────
    SubmitProof — React port of the proof-submission flow that used
@@ -44,7 +45,7 @@ import {
      bindClose        (close: () => void) => void
 ─────────────────────────────────────────────────────────────── */
 
-const ENDPOINT_PAGE128 = `/golfballs/adminnew/Default.aspx?Page=${CRM_PAGES.CONTACT_SEARCH}`;
+const ENDPOINT_PAGE128 = SALES_REP_DIRECTORY_URL;
 
 // Shared footer height — used by both the form column's real footer
 // AND the gallery column's blank "footer extender" so the two
@@ -361,7 +362,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             if (!sel) return [];
             return Array.from(sel.options).map((o) => ({ val: o.value, txt: o.text.trim() }));
           };
-          const r = scrape('ctl00_DropDownSalesRep');
+          const r = parseActiveSalesReps(doc).map((rep) => ({ val: rep.id, txt: rep.name }));
           const a = scrape('ctl00_DropDownArtist');
           if (!alive) return;
           if (r.length === 0 && a.length === 0) throw new Error('Empty option lists');

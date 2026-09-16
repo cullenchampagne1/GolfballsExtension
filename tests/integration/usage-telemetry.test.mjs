@@ -116,6 +116,7 @@ describe('usage telemetry', () => {
     reporter.record({
       kind: 'feature', feature: 'email_send', source: 'popup', transport: 'pa',
       count: 1, word_count: 84, attachment_count: 1, inline_image_count: 0,
+      subject_cluster_id: 'email-template:renewal',
       template_id: 'renewal', template_name: 'Annual renewal',
       template_variation_id: 'warm', template_variation_name: 'Warm opening',
       condition_count: 2, conditions_matched: false, conditions_enforced: false,
@@ -155,6 +156,7 @@ describe('usage telemetry', () => {
     assert.equal('subject' in featureRows[0], false, 'free-text fields are stripped before the wire');
     assert.deepEqual({
       templateId: featureRows[0].template_id,
+      subjectClusterId: featureRows[0].subject_cluster_id,
       templateName: featureRows[0].template_name,
       variation: featureRows[0].template_variation_name,
       conditionCount: featureRows[0].condition_count,
@@ -164,7 +166,8 @@ describe('usage telemetry', () => {
       territoryName: featureRows[0].account_territory_name,
       lastEmailedAt: featureRows[0].last_emailed_at,
     }, {
-      templateId: 'renewal', templateName: 'Annual renewal', variation: 'Warm opening',
+      templateId: 'renewal', subjectClusterId: 'email-template:renewal',
+      templateName: 'Annual renewal', variation: 'Warm opening',
       conditionCount: 2, matched: false, enforced: false,
       territoryId: '17', territoryName: 'Upper Midwest',
       lastEmailedAt: Date.parse('2026-09-12T20:15:00Z'),

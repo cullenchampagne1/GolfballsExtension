@@ -115,6 +115,7 @@ export function sendUsageEvent(event, { flush = 'periodic' } = {}) {
 
 /** Record one fixed feature action. Numeric fields may already be aggregates. */
 export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
+  const subjectClusterId = compactLabel(dimensions.subject_cluster_id, 260);
   const templateId = compactLabel(dimensions.template_id, 200);
   const templateName = compactLabel(dimensions.template_name, 160);
   const variationId = compactLabel(dimensions.template_variation_id, 200);
@@ -130,6 +131,7 @@ export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
     inline_image_count: nonNegativeInt(dimensions.inline_image_count),
     ok: dimensions.ok !== false,
     ...(feature === 'email_send' ? {
+      ...(subjectClusterId ? { subject_cluster_id: subjectClusterId } : {}),
       ...(templateId ? { template_id: templateId } : {}),
       ...(templateName ? { template_name: templateName } : {}),
       ...(variationId ? { template_variation_id: variationId } : {}),
