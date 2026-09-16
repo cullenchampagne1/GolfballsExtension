@@ -166,7 +166,7 @@ function taskPriority(value) {
 export async function updateTaskById(id, fields = {}) {
   const safeId = numericId(id, 'task ID');
   const allowed = new Set([
-    'subject', 'description', 'liveDate', 'dueDate', 'categoryId', 'priority',
+    'subject', 'description', 'liveDate', 'dueDate', 'categoryId', 'priority', 'ownerId',
   ]);
   const changes = Object.entries(fields || {})
     .filter(([key]) => allowed.has(key));
@@ -200,6 +200,7 @@ export async function updateTaskById(id, fields = {}) {
       }
       params.taskCategoryID = String(categoryId);
     } else if (key === 'priority') params.Priority = taskPriority(value);
+    else if (key === 'ownerId') params.employeeID = numericId(value, 'task owner ID');
   }
 
   const response = await fetch(

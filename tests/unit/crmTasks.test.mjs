@@ -168,6 +168,25 @@ describe('updateTaskById', () => {
     assert.equal(fetched, 0);
   });
 
+  it('moves a task to the selected active rep without changing other fields', async () => {
+    const updates = installFetch();
+    const result = await updateTaskById('101', { ownerId: '314' });
+
+    assert.deepEqual(result, { ok: true, taskId: '101', changed: ['ownerId'] });
+    assert.equal(updates[0].employeeID, '314');
+    assert.equal(updates[0].Subject, TASK_101.Subject);
+    assert.equal(updates[0].taskStatusID, '1');
+  });
+
+  it('rejects an invalid task owner before writing the update', async () => {
+    const updates = installFetch();
+    await assert.rejects(
+      () => updateTaskById('101', { ownerId: 'not-a-rep' }),
+      /Invalid task owner ID/,
+    );
+    assert.deepEqual(updates, []);
+  });
+
   it('rejects malformed dates without writing an update', async () => {
     const updates = installFetch();
     await assert.rejects(

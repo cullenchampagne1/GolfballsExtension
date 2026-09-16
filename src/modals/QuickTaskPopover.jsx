@@ -34,6 +34,8 @@ const QT_VERB = {
   'bulk-push': { ing: 'Pushing', ed: 'Pushed', icon: 'check', tone: 'success' },
   'set-date': { ing: 'Updating', ed: 'Date set', icon: 'check', tone: 'success' },
   'bulk-set-date': { ing: 'Updating', ed: 'Dates set', icon: 'check', tone: 'success' },
+  move: { ing: 'Moving', ed: 'Task moved', icon: 'check', tone: 'success' },
+  'bulk-move': { ing: 'Moving', ed: 'Tasks moved', icon: 'check', tone: 'success' },
   'create-task': { ing: 'Adding', ed: 'Task added', icon: 'plus', tone: 'success' },
   'bulk-create-task': { ing: 'Adding', ed: 'Tasks added', icon: 'plus', tone: 'success' },
 };
@@ -114,8 +116,8 @@ function RunPanel({ run, onClose, onRetry }) {
 
    Action contract is the same the legacy QuickTaskMenu used so
    TaskList's runQuickAction handler doesn't change:
-     'complete' / 'reopen' / 'push' / 'set-date' / 'create-task'
-     'bulk-complete' / 'bulk-push' / 'bulk-set-date' /
+     'complete' / 'reopen' / 'push' / 'set-date' / 'move' / 'create-task'
+     'bulk-complete' / 'bulk-push' / 'bulk-set-date' / 'bulk-move' /
      'bulk-create-task'
 ─────────────────────────────────────────────────────────────── */
 
@@ -417,6 +419,33 @@ export function QuickTaskPopover({
                 onClick={() => fire(isBulk ? 'bulk-complete' : 'complete', isBulk ? {} : { taskId: qtv.taskId })}
               >{isBulk ? 'Complete all' : 'Mark complete'}</Btn>
             )}
+
+            <div style={{
+              display: 'grid', gridTemplateColumns: '62px minmax(0, 1fr) auto',
+              alignItems: 'center', gap: 7, padding: 9,
+              background: 'var(--gb-surface-1)',
+              border: '1px solid var(--gb-border-subtle)',
+              borderRadius: 'var(--gb-r-md)',
+            }}>
+              <Caption>Move to</Caption>
+              <Dropdown
+                size="sm"
+                value={assigneeId}
+                onChange={setAssigneeId}
+                options={assigneeOptions}
+                placeholder={salesReps == null ? 'Loading active reps…' : 'Select a rep…'}
+                searchable
+                disabled={salesReps == null}
+              />
+              <Btn
+                size="sm"
+                variant="tinted"
+                disabled={!assigneeId || salesReps == null}
+                onClick={() => fire(isBulk ? 'bulk-move' : 'move', isBulk
+                  ? { assigneeId }
+                  : { taskId: qtv.taskId, assigneeId })}
+              >{isBulk ? 'Move all' : 'Move'}</Btn>
+            </div>
 
             {/* Push due date card. */}
             <div style={{

@@ -18,7 +18,7 @@ import { ReplacementContacts } from './ReplacementContacts.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
-import { liveDateOnPush } from '../lib/crmTasks.js';
+import { liveDateOnPush, updateTaskById } from '../lib/crmTasks.js';
 import { STATUS_OPTS, filterTasks } from '../lib/taskListModel.js';
 import {
   TASK_LIST_ROW_HEIGHT,
@@ -710,6 +710,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       reopen:   'reopening',
       push:     'moving', 'bulk-push': 'moving',
       'set-date': 'moving', 'bulk-set-date': 'moving',
+      move: 'moving', 'bulk-move': 'moving',
       'create-task': 'adding', 'bulk-create-task': 'adding',
     };
     const verbedMap = {
@@ -717,6 +718,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       reopen:   'reopened',
       push:     'moved', 'bulk-push': 'moved',
       'set-date': 'moved', 'bulk-set-date': 'moved',
+      move: 'moved', 'bulk-move': 'moved',
       'create-task': 'added', 'bulk-create-task': 'added',
     };
     const verbing = verbingMap[action] || 'updating';
@@ -756,6 +758,8 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           await apiSetTaskDate(id, payload.date);
           const [m, d, y] = payload.date.split('/');
           patchTaskLocal(id, { due: payload.date, dueDate: new Date(+y, +m - 1, +d) });
+        } else if (action === 'move' || action === 'bulk-move') {
+          await updateTaskById(id, { ownerId: payload.assigneeId });
         } else if (action === 'create-task' || action === 'bulk-create-task') {
           const contactId = await apiGetTaskContactId(id);
           const employeeId = await new Promise((resolve) => {
