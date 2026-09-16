@@ -27,6 +27,10 @@ describe('RevStack installation form generator', { skip: !existsSync(blockPath) 
     assert.equal([...action.matchAll(/value_type: boolean/g)].length >= 25, true);
     assert.match(action, /key: "numberDisplay\.durationMs"[\s\S]*?value_type: number/);
     assert.match(action, /key: developer_section[\s\S]*?value_type: select/);
+    assert.match(
+      action,
+      /key: "workflows\.allowLocalUsage"[\s\S]*?label: "Allow Local Workflow Usage"[\s\S]*?value_type: boolean/,
+    );
     assert.doesNotMatch(action, /type: kv_editor/);
     assert.doesNotMatch(action, /name: installation-settings|remote_table|maxWidth/);
   });
