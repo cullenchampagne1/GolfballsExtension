@@ -217,7 +217,7 @@ const CSS = `
   .sf-metric-label { min-width: 0; color: var(--gb-text-secondary); font-size: 10px; overflow-wrap: anywhere; }
   .sf-metric-value { color: var(--gb-text-muted); font-size: 9.5px; font-variant-numeric: tabular-nums; }
   .sf-metric-points { min-width: 43px; color: var(--gb-text-primary); font-size: 10px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
-  .sf-margin-summary { margin-top: var(--sf-2); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-fill-faint); }
+  .sf-margin-summary { margin-top: var(--sf-2); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-md); background: var(--gb-fill-faint); }
   .sf-margin-tier { min-width: 0; padding: 7px 8px; display: grid; gap: 2px; color: var(--gb-text-muted); }
   .sf-margin-tier + .sf-margin-tier { border-left: 1px solid var(--gb-border-subtle); }
   .sf-margin-tier.hit { color: var(--gb-text-secondary); background: var(--gb-brand-tint-soft); }
@@ -922,7 +922,7 @@ function RoleScoringDetails({ role }) {
       <div className="sf-role-rule-head"><span className="sf-avatar">{role.label}</span><div className="sf-role-rule-head-copy"><div className="sf-role-rule-name">{role.label}</div><div className="sf-role-rule-title">{role.title}</div></div></div>
       <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Activity</div><RuleDetailRows rules={SALES_FANTASY_SCORING.activity} roleId={role.id} /></div>
       <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Sales</div><RuleDetailRows rules={SALES_FANTASY_SCORING.sales} roleId={role.id} /></div>
-      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Margin</div>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <div className="sf-role-rule-row" key={tier.id}><span className="sf-role-rule-label">{tier.label}<span className="sf-role-rule-detail">Proposal bonus / order bonus</span></span><span className="sf-role-rule-value">+{tier.proposalBonusPoints} / +{tier.orderBonusPoints}</span></div>)}</div>
+      <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Margin</div>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <div className="sf-role-rule-row" key={tier.id}><span className="sf-role-rule-label">{tier.label}<span className="sf-role-rule-detail">Completed-order bonus</span></span><span className="sf-role-rule-value">+{tier.orderBonusPoints}</span></div>)}</div>
       <div className="sf-role-rule-group"><div className="sf-role-rule-group-title">Referred</div><RuleDetailRows rules={SALES_FANTASY_SCORING.referral} roleId={role.id} valueForRule={referralRate} /></div>
     </section>
   );
@@ -969,8 +969,8 @@ function Rules() {
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">3 · Margin bonuses</div><div className="sf-card-caption">The highest qualifying tier applies to each proposal and completed order</div></div></div>
-        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Margin</th><th>Proposal bonus</th><th>Order bonus</th></tr></thead><tbody>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.proposalBonusPoints}</td><td>+{tier.orderBonusPoints}</td></tr>)}</tbody></table></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">3 · Margin bonuses</div><div className="sf-card-caption">The highest qualifying tier applies to each completed order</div></div></div>
+        <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Placed-order margin</th><th>Bonus</th></tr></thead><tbody>{SALES_FANTASY_SCORING.marginTiers.map((tier) => <tr key={tier.id}><td>{tier.label}</td><td>+{tier.orderBonusPoints}</td></tr>)}</tbody></table></div>
       </article>
 
       <article className="sf-card sf-rule-section">
@@ -1105,11 +1105,11 @@ function MetricCategory({ name, score }) {
         </div>
       ))}
       {score.marginTiers && (
-        <div className="sf-margin-summary" aria-label="Proposals and completed orders by margin tier">
+        <div className="sf-margin-summary" aria-label="Completed orders by margin tier">
           {score.marginTiers.map((tier) => (
-            <span className={`sf-margin-tier ${tier.proposals || tier.orders ? 'hit' : ''}`} key={tier.id}>
+            <span className={`sf-margin-tier ${tier.orders ? 'hit' : ''}`} key={tier.id}>
               <span className="sf-margin-tier-label">{tier.label}</span>
-              <span className="sf-margin-tier-count"><strong>{tier.proposals}</strong> P&nbsp;&nbsp;·&nbsp;&nbsp;<strong>{tier.orders}</strong> O</span>
+              <span className="sf-margin-tier-count"><strong>{tier.orders}</strong> orders</span>
             </span>
           ))}
         </div>

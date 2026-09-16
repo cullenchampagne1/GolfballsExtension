@@ -61,8 +61,8 @@ describe('salesFantasy · league model', () => {
     assert.doesNotMatch(decorativeArenaCss, /var\(--gb-success\)/);
     assert.match(arenaCss, /\.sf-live-pill \{ color:var\(--gb-brand-label\);[^}]*border:1px solid/);
     assert.match(arenaCss, /\.sf-status-pill\.scheduled \{ color:var\(--gb-brand-label\);[^}]*background:color-mix\(in srgb, var\(--gb-brand-label\)/);
-    assert.match(salesFantasySource, /\.sf-margin-summary \{ margin-top:[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-    assert.match(salesFantasySource, /className=\{`sf-margin-tier \$\{tier\.proposals \|\| tier\.orders \? 'hit' : ''\}`\}/);
+    assert.match(salesFantasySource, /\.sf-margin-summary \{ margin-top:[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+    assert.match(salesFantasySource, /className=\{`sf-margin-tier \$\{tier\.orders \? 'hit' : ''\}`\}/);
     assert.doesNotMatch(salesFantasySource, /sf-margin-chip/);
   });
 
@@ -116,7 +116,7 @@ describe('salesFantasy · league model', () => {
             'emailsSent', 'emailsReplied', 'outboundCalls', 'inboundCalls',
           ]);
           assert.deepEqual(member.sales.rows.map((row) => row.id), [
-            'proposalsSent', 'proposalMarginBonus', 'orders', 'totalSales', 'totalProfit', 'orderMarginBonus',
+            'proposalsSent', 'orders', 'totalSales', 'totalProfit', 'orderMarginBonus',
           ]);
           if (member.roleId === 'bdr') assert.deepEqual(member.referred.rows.map((row) => row.id), ['referredOrders', 'referredSales']);
           else assert.equal(member.referred, null);
@@ -129,7 +129,7 @@ describe('salesFantasy · league model', () => {
     }
   });
 
-  it('awards each proposal and completed order only its highest qualifying margin bonus', () => {
+  it('awards only completed orders their highest qualifying margin bonus', () => {
     const deals = [
       { id: 'base', sale: 1000, profit: 299 },
       { id: 'rounded-below', sale: 1000, profit: 299.6 },
@@ -147,15 +147,14 @@ describe('salesFantasy · league model', () => {
     const score = scoreRoleMetrics(metrics, 'sa');
 
     assert.equal(orderMarginPercent(metrics.sales.orders[0]), 29.9);
-    assert.equal(marginTierForOrder(metrics.sales.orders[0]).id, 'base');
+    assert.equal(marginTierForOrder(metrics.sales.orders[0]), null);
     assert.equal(orderMarginPercent(metrics.sales.orders[1]), 30);
-    assert.equal(marginTierForOrder(metrics.sales.orders[1]).id, 'base');
+    assert.equal(marginTierForOrder(metrics.sales.orders[1]), null);
     assert.equal(marginTierForOrder(metrics.sales.orders[2]).id, 'healthy');
     assert.equal(marginTierForOrder(metrics.sales.orders[3]).id, 'strong');
     assert.equal(marginTierForOrder(metrics.sales.orders[4]).id, 'premium');
-    assert.deepEqual(score.sales.marginTiers.map((tier) => tier.orders), [2, 1, 1, 1]);
-    assert.deepEqual(score.sales.marginTiers.map((tier) => tier.proposals), [2, 1, 1, 1]);
-    assert.equal(score.sales.rows.find((row) => row.id === 'proposalMarginBonus').points, 10);
+    assert.deepEqual(score.sales.marginTiers.map((tier) => tier.orders), [1, 1, 1]);
+    assert.equal(score.sales.rows.find((row) => row.id === 'proposalMarginBonus'), undefined);
     assert.equal(score.sales.rows.find((row) => row.id === 'orderMarginBonus').points, 20);
     assert.equal(score.sales.rows.find((row) => row.id === 'orders').points, 30);
   });
@@ -234,12 +233,11 @@ describe('salesFantasy · league model', () => {
       proposals: [{ sale: 500, profit: 275 }],
       orders: [{ sale: 500, profit: 275 }],
     } }, 'bdr');
-    assert.equal(lowMargin.sales.rows.find((row) => row.id === 'proposalMarginBonus').points, 0);
     assert.equal(lowMargin.sales.rows.find((row) => row.id === 'orderMarginBonus').points, 0);
-    assert.equal(highMargin.sales.rows.find((row) => row.id === 'proposalMarginBonus').points, 6);
     assert.equal(highMargin.sales.rows.find((row) => row.id === 'orderMarginBonus').points, 12);
-    assert.equal(highMarginBdr.sales.rows.find((row) => row.id === 'proposalMarginBonus').points, 6);
     assert.equal(highMarginBdr.sales.rows.find((row) => row.id === 'orderMarginBonus').points, 12);
+    assert.equal(highMargin.sales.rows.find((row) => row.id === 'proposalMarginBonus'), undefined);
+    assert.equal(highMarginBdr.sales.rows.find((row) => row.id === 'proposalMarginBonus'), undefined);
     assert.ok(highMargin.total > lowMargin.total);
     for (const rule of SALES_FANTASY_SCORING.sales) {
       assert.equal(rule.pointsByRole.sr, rule.pointsByRole.sa, rule.id);
@@ -260,8 +258,8 @@ describe('salesFantasy · league model', () => {
     assert.deepEqual(SALES_FANTASY_SCORING.ownershipBands.map((band) => [band.roleId, band.minSale, band.maxSale]), [
       ['bdr', 0, 500], ['sa', 500, 1500], ['sr', 1500, null],
     ]);
-    assert.deepEqual(SALES_FANTASY_SCORING.marginTiers.map((tier) => [tier.minMargin, tier.proposalBonusPoints, tier.orderBonusPoints]), [
-      [0, 0, 0], [30, 1, 2], [40, 3, 6], [50, 6, 12],
+    assert.deepEqual(SALES_FANTASY_SCORING.marginTiers.map((tier) => [tier.minMargin, tier.orderBonusPoints]), [
+      [30, 2], [40, 6], [50, 12],
     ]);
     assert.deepEqual(SALES_FANTASY_SCORING.referral.map((rule) => [rule.label, rule.pointsPerUnit]), [
       ['Referred orders', 4], ['Referred dollars', 0.004],
@@ -283,7 +281,7 @@ describe('salesFantasy · league model', () => {
     for (const [roleId, share] of Object.entries(shares)) {
       assert.ok(share >= 0.28 && share <= 0.38, `${roleId} contribution share ${share}`);
     }
-    assert.ok(totals.sr > totals.sa && totals.sr > totals.bdr, 'SR remains the largest contribution driver');
+    assert.ok(Math.max(...Object.values(shares)) - Math.min(...Object.values(shares)) < 0.1);
   });
 
   it('builds ten head-to-head weeks with four games and two byes every week', () => {
@@ -321,8 +319,8 @@ describe('salesFantasy · league model', () => {
 
   it('produces stable scores, live state, matchups, and ranked records', () => {
     const schedule = buildFantasySchedule();
-    assert.equal(fantasyScore('pod-1', 4), 301.2);
-    assert.deepEqual(podWeekPointSplit('pod-1', 4).members.map((member) => member.total), [117, 87.1, 97.1]);
+    assert.equal(fantasyScore('pod-1', 4), 275.2);
+    assert.deepEqual(podWeekPointSplit('pod-1', 4).members.map((member) => member.total), [112, 76.1, 87.1]);
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK), 'live');
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK - 1), 'final');
     assert.equal(weekState(SALES_FANTASY_CURRENT_WEEK + 1), 'scheduled');

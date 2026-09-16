@@ -62,10 +62,9 @@ export const SALES_FANTASY_SCORING = Object.freeze({
     Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(0.008, 0.008, 0.008), format: 'money' }),
   ]),
   marginTiers: Object.freeze([
-    Object.freeze({ id: 'base', label: 'Under 30%', minMargin: 0, proposalBonusPoints: 0, orderBonusPoints: 0 }),
-    Object.freeze({ id: 'healthy', label: '30%+', minMargin: 30, proposalBonusPoints: 1, orderBonusPoints: 2 }),
-    Object.freeze({ id: 'strong', label: '40%+', minMargin: 40, proposalBonusPoints: 3, orderBonusPoints: 6 }),
-    Object.freeze({ id: 'premium', label: '50%+', minMargin: 50, proposalBonusPoints: 6, orderBonusPoints: 12 }),
+    Object.freeze({ id: 'healthy', label: '30%+', minMargin: 30, orderBonusPoints: 2 }),
+    Object.freeze({ id: 'strong', label: '40%+', minMargin: 40, orderBonusPoints: 6 }),
+    Object.freeze({ id: 'premium', label: '50%+', minMargin: 50, orderBonusPoints: 12 }),
   ]),
   referral: Object.freeze([
     Object.freeze({ id: 'referredOrders', label: 'Referred orders', pointsPerUnit: 4, format: 'orders' }),
@@ -220,7 +219,7 @@ export function marginTierForOrder(order, tiers = SALES_FANTASY_SCORING.marginTi
     : 0;
   return [...tiers]
     .filter((tier) => margin >= tier.minMargin)
-    .sort((left, right) => right.minMargin - left.minMargin)[0] || tiers[0] || null;
+    .sort((left, right) => right.minMargin - left.minMargin)[0] || null;
 }
 
 /** Resolve the single owner role from an order or proposal's expected value. */
@@ -297,23 +296,6 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
   const salesRows = earnsSalesPoints
     ? rules.sales.map((metric) => scoreMetric(metric, salesValues[metric.id], roleId))
     : [];
-  const proposalTierCounts = new Map(rules.marginTiers.map((tier) => [tier.id, 0]));
-  let proposalMarginBonusPoints = 0;
-  proposals.forEach((proposal) => {
-    const tier = marginTierForOrder(proposal, rules.marginTiers);
-    if (!tier) return;
-    proposalTierCounts.set(tier.id, (proposalTierCounts.get(tier.id) || 0) + 1);
-    proposalMarginBonusPoints += tier.proposalBonusPoints;
-  });
-  if (earnsSalesPoints) {
-    salesRows.splice(1, 0, {
-      id: 'proposalMarginBonus',
-      label: 'Proposal margin bonus',
-      value: proposals.length,
-      format: 'proposals',
-      points: oneDecimal(proposalMarginBonusPoints),
-    });
-  }
   const orderTierCounts = new Map(rules.marginTiers.map((tier) => [tier.id, 0]));
   let orderMarginBonusPoints = 0;
   completedOrders.forEach((order) => {
@@ -324,9 +306,7 @@ export function scoreRoleMetrics(metrics, roleId = 'sr', rules = SALES_FANTASY_S
   });
   const marginTiers = rules.marginTiers.map((tier) => ({
     ...tier,
-    proposals: proposalTierCounts.get(tier.id) || 0,
     orders: orderTierCounts.get(tier.id) || 0,
-    proposalPoints: oneDecimal((proposalTierCounts.get(tier.id) || 0) * tier.proposalBonusPoints),
     orderPoints: oneDecimal((orderTierCounts.get(tier.id) || 0) * tier.orderBonusPoints),
   }));
   if (earnsSalesPoints) {
