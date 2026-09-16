@@ -158,7 +158,8 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
     assert.match(routes, /"primitive": "datetime"/);
     assert.match(routes, /"timeZone": "America\/Chicago"/);
     assert.match(routes, /"id": "territory"/);
-    assert.match(routes, /"id": "last_emailed_at"/);
+    assert.match(routes, /"id": "prior_email_age"[\s\S]*?"header": "Days since prior"/);
+    assert.match(routes, /"field": "prior_email_age\.tone"[\s\S]*?"labelField": "prior_email_age\.text"/);
     assert.match(routes, /"primitive": "status_indicator"/);
     assert.match(routes, /"_detail": \{/);
     const placement = project.dashboard.default_layout.find(

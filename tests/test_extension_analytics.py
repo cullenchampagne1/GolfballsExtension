@@ -317,7 +317,8 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 "_analytics_midnight_utc", "_analytics_days", "_analytics_date_sql",
                 "_normalized_person_name", "_match_pod_member", "_pod_lineup_members", "_email_activity_series",
                 "_cached_sales_fantasy_snapshot",
-                "_console_email_activity", "_console_email_send_log", "_console_call_activity",
+                "_console_email_activity", "_email_spacing_status",
+                "_console_email_send_log", "_console_call_activity",
                 "_POD_LINEUP_CONFIG",
                 "_usage_days", "_installation_owners", "_owner_label", "_percentile", "_fmt_ms", "_fmt_span",
                 "_presence_hourly_buckets", "_USAGE_FEATURE_LABELS", "_USAGE_SOURCE_LABELS",
@@ -553,7 +554,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             })
             self.assertEqual(
                 [column["id"] for column in payload["columns"]],
-                ["sent_at", "rep", "template", "territory", "last_emailed_at",
+                ["sent_at", "rep", "template", "territory", "prior_email_age",
                  "conditions", "transport",
                  "messages", "words", "attachments", "status"],
             )
@@ -572,6 +573,9 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 tzinfo=timezone.utc
             ).isoformat().replace("+00:00", "Z")
             self.assertEqual(row["last_emailed_at"], expected_prior)
+            self.assertEqual(row["prior_email_age"], {
+                "tone": "warning", "text": "9 days", "days": 9,
+            })
             self.assertEqual(row["conditions"], {"tone": "success", "text": "Met"})
             self.assertEqual((row["condition_count"], row["conditions_enforced"]), (2, True))
             self.assertEqual((row["transport"], row["source"]),
@@ -589,6 +593,25 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id == event_id))
                 session.commit()
+
+    def test_email_spacing_day_count_uses_requested_attention_thresholds(self):
+        status = self.routes["_email_spacing_status"]
+        sent = datetime(2026, 9, 16, 12, 0)
+        self.assertEqual(status(sent, sent - timedelta(days=6)), {
+            "tone": "danger", "text": "6 days", "days": 6,
+        })
+        self.assertEqual(status(sent, sent - timedelta(days=7)), {
+            "tone": "warning", "text": "7 days", "days": 7,
+        })
+        self.assertEqual(status(sent, sent - timedelta(days=14)), {
+            "tone": "warning", "text": "14 days", "days": 14,
+        })
+        self.assertEqual(status(sent, sent - timedelta(days=15)), {
+            "tone": "neutral", "text": "15 days", "days": 15,
+        })
+        self.assertEqual(status(sent, None), {
+            "tone": "neutral", "text": "No prior email", "days": None,
+        })
 
     def test_call_activity_stacks_sa_sr_and_bdr_totals_in_vertical_pod_bars(self):
         activity = (
