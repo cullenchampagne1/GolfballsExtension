@@ -17,6 +17,7 @@ import {
   Spinner, I, T, inputBaseStyle, ToastHost,
 } from '../ui';
 import { trackDocumentSurface } from '../lib/usageTelemetry.js';
+import { runPopupInitialization } from '../lib/popupInitialization.js';
 
 /* Registry features that already have a bespoke popup button above (charge/
    order-edit/proof aren't registry features). We don't duplicate these in the
@@ -176,6 +177,7 @@ function PopupApp() {
   const [paConfigured, setPaConfigured] = useState(false);
   const [watchList, setWatchList] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [initializationWarning, setInitializationWarning] = useState('');
 
   // ── dev settings — live-subscribed so every toggle reflects instantly ──
   // Single hook covers every devSettings knob this popup reads (ignore-context
@@ -223,21 +225,27 @@ function PopupApp() {
   /* ── initial load: tab → templates/watchList/flags → probe content scripts → getPageInfo ── */
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let initializationStage = 'reading the active Chrome tab';
+    const initialize = async () => {
       const currentTab = await tabsQueryActive();
-      if (cancelled || !currentTab) return;
+      if (cancelled) return;
+      if (!currentTab) { renderMain({ pageType: 'other' }); return; }
       // Access gate: if this installation is revoked / past the 48h grace, show
       // the paused notice instead of the toolkit. Fail-open (accessAllowed
       // returns true on any missing/unreadable state).
+      initializationStage = 'reading extension access state';
       if (!accessAllowed(await readAccessState())) { if (!cancelled) setStage('revoked'); return; }
+      initializationStage = 'saving the active CRM tab';
       await new Promise((res) => {
         try { chrome.storage.local.set({ orderTabId: currentTab.id }, res); }
         catch { res(); }
       });
 
+      initializationStage = 'reading extension settings';
       const data = await storageGet([
         'templates', 'watchList', 'featureFlags', 'gbNotifications',
       ]);
+      initializationStage = 'reading email delivery settings';
       const credentials = await loadCredentials();
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
@@ -249,6 +257,7 @@ function PopupApp() {
       // Read ignorePageContext directly from storage on init so we can branch
       // before kicking off the content-script probe. The useDevSettings hook
       // takes over for live updates after this.
+      initializationStage = 'reading developer settings';
       const initialDev = await new Promise((res) => {
         try { chrome.storage.local.get('devSettings', (d) => res(d.devSettings || {})); }
         catch { res({}); }
@@ -282,6 +291,7 @@ function PopupApp() {
       // Checks both the ready flag (set by main.js) AND the existence of the
       // watchlist function (from watchlist-modal.js) to catch any partial-load
       // scenarios where main.js ran but a dependency failed.
+      initializationStage = 'checking page scripts';
       const probeResults = await new Promise((res) => {
         try {
           chrome.scripting.executeScript(
@@ -294,6 +304,7 @@ function PopupApp() {
       const alreadyLoaded = probeResults?.[0]?.result === true;
 
       const askForPageInfo = async () => {
+        initializationStage = 'reading page context';
         const info = await sendMessage(currentTab.id, {
           action: 'getPageInfo',
           templates: usableTpls.map((t) => ({
@@ -309,33 +320,47 @@ function PopupApp() {
       };
 
       if (alreadyLoaded) {
-        askForPageInfo();
+        await askForPageInfo();
       } else {
         // First open on a fresh page load — inject the full bundle once.
+        initializationStage = 'loading page scripts';
         try {
-          chrome.scripting.executeScript(
-            { target: { tabId: currentTab.id },
-              files: [
-                'theme.js',
-                'src/vanilla/smart-detection.js',
-                'react-dist/vanilla/page-engine.js',
-                'src/vanilla/variable-resolution.js',
-                'src/vanilla/usage-report.js', 'src/vanilla/modals/modal-chrome.js',
-                'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
-                'src/vanilla/page-utils.js', 'react-dist/content/email-preview.js',
-                'react-dist/content/watch-list.js',
-                'react-dist/content/actions-shelf.js', 'react-dist/content/calendar.js',
-                'src/vanilla/main.js',
-              ] },
-            () => { void chrome.runtime.lastError; askForPageInfo(); },
-          );
-        } catch { askForPageInfo(); }
+          await new Promise((resolve) => {
+            chrome.scripting.executeScript(
+              { target: { tabId: currentTab.id },
+                files: [
+                  'theme.js',
+                  'src/vanilla/smart-detection.js',
+                  'react-dist/vanilla/page-engine.js',
+                  'src/vanilla/variable-resolution.js',
+                  'src/vanilla/usage-report.js', 'src/vanilla/modals/modal-chrome.js',
+                  'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
+                  'src/vanilla/page-utils.js', 'react-dist/content/email-preview.js',
+                  'react-dist/content/watch-list.js',
+                  'react-dist/content/actions-shelf.js', 'react-dist/content/calendar.js',
+                  'src/vanilla/main.js',
+                ] },
+              () => { void chrome.runtime.lastError; resolve(); },
+            );
+          });
+        } catch { /* page context fallback below */ }
+        await askForPageInfo();
       }
-    })().catch(() => {
+    };
+
+    runPopupInitialization(initialize, { getStage: () => initializationStage }).catch((error) => {
       // Never leave the popup stuck on the blank 'loading' stage: if init throws
       // (storage, credentials, messaging…), fall back to a rendered state so the
       // UI and the Manage button are always usable.
-      if (!cancelled) { try { renderMain({ pageType: 'other' }); } catch { setStage('empty'); } }
+      if (cancelled) return;
+      console.warn('[Golfballs Toolkit] Popup page scan failed open', error);
+      const failedStage = error?.stage || initializationStage;
+      try {
+        renderMain({ pageType: 'other' });
+        setInitializationWarning(`Page scan stalled while ${failedStage}. Page-specific actions may be unavailable.`);
+      } catch {
+        setStage('empty');
+      }
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -355,6 +380,7 @@ function PopupApp() {
   }, [allTemplates, pageInfo.pageType, ignorePageContext]);
 
   function renderMain(info, tpls = allTemplates) {
+    setInitializationWarning('');
     setPageInfo(info);
     setMatchedIds(info.matchedTemplateIds || []);
     setResolvingIds(info.pendingTemplateIds || []);
@@ -548,6 +574,7 @@ function PopupApp() {
   return (
     <>
       <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}>
+        {initializationWarning && <PopupInitializationWarning message={initializationWarning} />}
         <MainView
           templates={visibleTemplates}
           matchedIds={effectiveMatchedIds}
@@ -728,6 +755,24 @@ function LoadingState() {
       color: 'var(--gb-text-muted)', fontSize: 12, fontWeight: 500, padding: '8px 0',
     }}>
       <Spinner size={12} /> Scanning page…
+    </div>
+  );
+}
+
+function PopupInitializationWarning({ message }) {
+  return (
+    <div role="status" style={{
+      marginBottom: 10,
+      padding: '8px 9px',
+      borderRadius: 'var(--gb-r-sm)',
+      border: '1px solid var(--gb-warning-tint-border)',
+      background: 'var(--gb-warning-tint-soft)',
+      color: 'var(--gb-warning-fg)',
+      fontSize: 10.5,
+      lineHeight: 1.45,
+      flexShrink: 0,
+    }}>
+      {message}
     </div>
   );
 }

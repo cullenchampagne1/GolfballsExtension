@@ -1,7 +1,7 @@
 {
   "name": "golfballs-extension",
   "private": true,
-  "version": "3.5.3",
+  "version": "3.5.4",
   "type": "module",
   "description": "Golfballs.com Sales Toolkit \u2014 Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
@@ -525,6 +525,10 @@
     {
       "name": "guard \u00b7 project runtime lifecycle",
       "file": "tests/unit/runtimeBootstrap.test.mjs"
+    },
+    {
+      "name": "ui \u00b7 popup initialization timeout",
+      "file": "tests/unit/popupInitialization.test.mjs"
     },
     {
       "name": "guard \u00b7 installation access and draft-only email flow",
