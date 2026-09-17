@@ -1062,10 +1062,11 @@ export const HELP_CONTENT = {
         "push due",
         "complete",
         "export csv",
+        "import csv",
         "replacement contacts",
         "bounced email"
       ],
-      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, a dedicated Replacement Contacts queue, and the per-task popover with its mini calendar.",
+      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk actions, an admin-only recipient import, and a dedicated Replacement Contacts queue.",
       "feature": "task-list",
       "flag": "taskListEnabled",
       "shortcut": "Ctrl+X",
@@ -1092,6 +1093,14 @@ export const HELP_CONTENT = {
           {
             "type": "p",
             "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run workflow, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task."
+          },
+          {
+            "type": "heading",
+            "text": "Import task recipients (admin build)"
+          },
+          {
+            "type": "p",
+            "text": "Choose Import list and open the same CSV or XLSX contact/account format accepted by CRM Search. Contact rows use their contact ID directly; account rows load the account and use the first contact in its Contacts table. Valid recipients are selected automatically. Choose Create Tasks, enter the label, date, category, priority, and assignee in Quick Task, then the extension creates that task once for every selected recipient. Rows without a usable contact are skipped and reported without creating orphan tasks."
           },
           {
             "type": "heading",
@@ -8182,10 +8191,11 @@ export const HELP_CONTENT = {
         "push due",
         "complete",
         "export csv",
+        "import csv",
         "replacement contacts",
         "bounced email"
       ],
-      "description": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, a dedicated Replacement Contacts queue, and the per-task popover with its mini calendar.",
+      "description": "Your CRM tasks in a sortable table with chained sorts, bulk actions, an admin-only recipient import, and a dedicated Replacement Contacts queue.",
       "article": "task-list",
       "shortcut": "Ctrl+X",
       "flag": "taskListEnabled"

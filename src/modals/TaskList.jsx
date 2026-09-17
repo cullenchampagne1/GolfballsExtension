@@ -19,6 +19,9 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
 import { liveDateOnPush, updateTaskById } from '../lib/crmTasks.js';
+import { parseContactFile } from '../lib/contactImport.js';
+import { resolveTaskImportRecords } from '../lib/taskListImport.js';
+import { reportContactImportUsage } from '../lib/usageEvents.js';
 import { STATUS_OPTS, filterTasks } from '../lib/taskListModel.js';
 import {
   TASK_LIST_ROW_HEIGHT,
@@ -317,6 +320,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   const [statusFilter, setStatusFilter] = useState('1');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [selected, setSelected]   = useState(() => new Set());
+  const [importBatch, setImportBatch] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef(null);
   const [replacementContactsOpen, setReplacementContactsOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
@@ -433,6 +439,58 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   }, [useMock, toast]);
   loadTasksRef.current = loadTasks;
 
+  const onImportTargets = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    // Cancel any ordinary Task List fetch that was still in flight; imported
+    // recipients are a deliberate temporary workspace and must not be replaced
+    // by a late Page=349 response.
+    loadGenRef.current += 1;
+    setImporting(true);
+    try {
+      const parsed = await parseContactFile(file);
+      const resolved = await resolveTaskImportRecords(parsed.records);
+      if (!resolved.rows.length) {
+        const first = resolved.errors[0];
+        throw new Error(first ? `No task recipients resolved. Row ${first.row}: ${first.message}` : 'No task recipients resolved.');
+      }
+      const skipped = parsed.errors.length + parsed.warnings.length + resolved.errors.length;
+      setImportBatch({
+        fileName: file.name,
+        rows: resolved.rows,
+        accepted: resolved.rows.length,
+        skipped,
+        errors: [...parsed.errors, ...resolved.errors].sort((a, b) => a.row - b.row).slice(0, 5),
+      });
+      setStatus('ready');
+      setQuery('');
+      setStatusFilter('1');
+      setPriorityFilter('');
+      setDueFilter('all');
+      setSelected(new Set(resolved.rows.map((row) => row.id)));
+      setQt(null);
+      setBulkCompose(false);
+      reportContactImportUsage(resolved.rows.length, { flush: 'soon' });
+      toast?.success?.(
+        `Prepared ${resolved.rows.length} task recipient${resolved.rows.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`,
+        { duration: 3600 },
+      );
+    } catch (error) {
+      toast?.error?.(`Import failed: ${error?.message || error}`, { duration: 5000 });
+    } finally {
+      setImporting(false);
+    }
+  }, [toast]);
+
+  const closeImportBatch = useCallback(() => {
+    setImportBatch(null);
+    setSelected(new Set());
+    setQuery('');
+    setActionStateByRow({});
+    loadTasks();
+  }, [loadTasks]);
+
   // Initial load. No second effect this time — TaskList doesn't auto-
   // refire on filter changes (filtering is client-side over the loaded
   // set), so we don't have the CRMSearch StrictMode double-fire risk.
@@ -487,6 +545,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
             below all the strong ones)
      Within the same tier the multi-column sortChain orders rows; the
      chain is also the primary sort when the query is empty. */
+  const taskRows = importBatch?.rows || tasks;
   const visibleTasks = useMemo(() => {
     const q = query.trim().toLowerCase();
 
@@ -518,7 +577,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       return false;
     };
 
-    let rows = filterTasks(tasks, { status: statusFilter }).filter((t) => {
+    let rows = filterTasks(taskRows, { status: statusFilter }).filter((t) => {
       if (priorityFilter && String(t.priority) !== priorityFilter) return false;
       if (dueFilter === 'urgent' && !isUrgent(t)) return false;
       if (q && scoreRow(t) === 0) return false;
@@ -544,7 +603,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       return 0;
     });
     return rows;
-  }, [tasks, query, statusFilter, priorityFilter, dueFilter, sortChain]);
+  }, [taskRows, query, statusFilter, priorityFilter, dueFilter, sortChain]);
 
   // Keep only the raw inputs in the ref. The potentially large serialized
   // snapshot is built lazily if a modal-scoped custom action actually asks
@@ -654,6 +713,11 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     toast?.success?.(`Opened ${tasksToOpen.length} contact${tasksToOpen.length === 1 ? '' : 's'}`, { duration: 2200 });
   };
   const onQuickTask = (e) => {
+    if (importBatch) {
+      setQt(null);
+      setBulkCompose(true);
+      return;
+    }
     /* Footer Quick Task — picks mode based on selection size:
        single row → main (per-task subject, push card, etc.);
        multi → bulk (broadcasts the action across selected ids).
@@ -761,7 +825,8 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         } else if (action === 'move' || action === 'bulk-move') {
           await updateTaskById(id, { ownerId: payload.assigneeId });
         } else if (action === 'create-task' || action === 'bulk-create-task') {
-          const contactId = await apiGetTaskContactId(id);
+          const target = taskRows.find((row) => row.id === id);
+          const contactId = target?.targetContactId || await apiGetTaskContactId(id);
           const employeeId = await new Promise((resolve) => {
             try { chrome.storage.local.get('gbEmployeeId', (d) => resolve(d?.gbEmployeeId || '')); }
             catch { resolve(''); }
@@ -821,7 +886,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       onProgress?.(done, failed);
     }
     return { done, failed };
-  }, [selected, patchTaskLocal, toast]);
+  }, [selected, patchTaskLocal, taskRows, toast]);
 
   const onRunWorkflow = () => {
     // Hand the current task selection off to the Workflow Manager, which
@@ -881,7 +946,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   const [lastIdx, setLastIdx] = useState(null);
 
   // ── Subtitle ─────────────────────────────────────────────────
-  const subtitle = useMock
+  const subtitle = importBatch
+    ? `${visibleTasks.length} of ${importBatch.rows.length} imported task recipient${importBatch.rows.length === 1 ? '' : 's'}`
+    : useMock
     ? <span>My open tasks · <span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)', fontWeight: 700, fontSize: 10 }}>OFFLINE / MOCK</span></span>
     : status === 'loading'
       ? 'Loading tasks…'
@@ -943,33 +1010,87 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         display: 'flex', gap: 8, alignItems: 'center',
         flexShrink: 0,
       }}>
+        {__ADMIN__ && (
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            onChange={onImportTargets}
+            style={{ display: 'none' }}
+          />
+        )}
         <Input
           value={query}
           onChange={setQuery}
-          placeholder="Search account, contact, subject…"
+          placeholder={importBatch ? 'Filter imported accounts or contacts…' : 'Search account, contact, subject…'}
           leading={<I.search size={12} />}
           style={{ flex: 1 }}
         />
-        <Dropdown
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={STATUS_OPTS}
-          style={{ width: 170 }}
-        />
-        <Dropdown
-          value={priorityFilter}
-          onChange={setPriorityFilter}
-          options={PRIORITY_OPTS}
-          style={{ width: 150 }}
-        />
+        {!importBatch && (
+          <>
+            <Dropdown
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={STATUS_OPTS}
+              style={{ width: 170 }}
+            />
+            <Dropdown
+              value={priorityFilter}
+              onChange={setPriorityFilter}
+              options={PRIORITY_OPTS}
+              style={{ width: 150 }}
+            />
+          </>
+        )}
+        {__ADMIN__ && (
+          <Btn
+            size="sm"
+            variant="secondary"
+            icon={<I.upload size={11} />}
+            disabled={importing}
+            onClick={() => importInputRef.current?.click()}
+          >{importing ? 'Resolving…' : 'Import list'}</Btn>
+        )}
         <Btn
           size="sm"
           variant="secondary"
-          icon={<RefreshIcon />}
-          onClick={loadTasks}
+          icon={importBatch ? <I.close size={11} /> : <RefreshIcon />}
+          onClick={importBatch ? closeImportBatch : loadTasks}
           disabled={status === 'loading'}
-        >Refresh</Btn>
+        >{importBatch ? 'Back to tasks' : 'Refresh'}</Btn>
       </div>
+
+      <AnimatePresence initial={false}>
+        {importBatch && (
+          <motion.div
+            key="task-import-summary"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--gb-brand-tint-border)',
+              background: 'var(--gb-brand-tint-soft)',
+              display: 'flex', alignItems: 'center', gap: 10,
+              fontSize: 11, color: 'var(--gb-text-secondary)',
+            }}>
+              <I.upload size={12} style={{ color: 'var(--gb-brand-label)' }} />
+              <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{importBatch.fileName}</span>
+              <span>{importBatch.accepted} task-ready</span>
+              <span>· account rows use their first CRM contact</span>
+              {importBatch.skipped > 0 && (
+                <span style={{ color: 'var(--gb-warning-fg)' }}>
+                  · {importBatch.skipped} skipped
+                  {importBatch.errors[0] ? ` (row ${importBatch.errors[0].row}: ${importBatch.errors[0].message})` : ''}
+                </span>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* "Urgent only" filter chip — visible whenever dueFilter is on.
           Set by the modal-aware action shelf entry ("Only overdue +
@@ -977,7 +1098,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           filter bar in CRMSearch so the active narrowing is always
           surfaced inline rather than buried in a sub-menu. */}
       <AnimatePresence initial={false}>
-        {dueFilter === 'urgent' && (
+        {!importBatch && dueFilter === 'urgent' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -1033,31 +1154,39 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
             }}>
               <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
                 <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span>
-                {' '}of {visibleTasks.length} task{visibleTasks.length === 1 ? '' : 's'}
+                {' '}of {visibleTasks.length} {importBatch ? 'recipient' : 'task'}{visibleTasks.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<MegaphoneIcon />}
-                onClick={onRunWorkflow}
-              >Run workflow</Btn>
-              <CapabilitySlot visible={allowBulkSending} slotKey="task-list-email-selected">
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  icon={<I.mail size={11} />}
-                  onClick={(e) => {
-                    if (!allowBulkSending) {
-                      toast?.error?.('Bulk email sending is disabled for this installation');
-                      return;
-                    }
-                    setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
-                    setEmailRunnerOpen(true);
-                  }}
-                >Email selected</Btn>
-              </CapabilitySlot>
-              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
+              {importBatch ? (
+                <Btn size="sm" variant="tinted" status="brand" icon={<I.bolt size={11} />} onClick={onQuickTask}>
+                  Create tasks
+                </Btn>
+              ) : (
+                <>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    icon={<MegaphoneIcon />}
+                    onClick={onRunWorkflow}
+                  >Run workflow</Btn>
+                  <CapabilitySlot visible={allowBulkSending} slotKey="task-list-email-selected">
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      icon={<I.mail size={11} />}
+                      onClick={(e) => {
+                        if (!allowBulkSending) {
+                          toast?.error?.('Bulk email sending is disabled for this installation');
+                          return;
+                        }
+                        setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
+                        setEmailRunnerOpen(true);
+                      }}
+                    >Email selected</Btn>
+                  </CapabilitySlot>
+                  <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
+                </>
+              )}
             </div>
           </motion.div>
         )}
@@ -1098,9 +1227,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       }}>
         {hasSelection ? (
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>
-            Bulk actions for <strong style={{ color: 'var(--gb-text-secondary)' }}>{selCount}</strong> selected
+            {importBatch ? 'Create one task for ' : 'Bulk actions for '}
+            <strong style={{ color: 'var(--gb-text-secondary)' }}>{selCount}</strong> selected
           </div>
-        ) : (
+        ) : !importBatch ? (
           <Btn
             size="sm"
             variant="secondary"
@@ -1112,22 +1242,24 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
               setReplacementContactsOpen(true);
             }}
           >Replacement Contacts</Btn>
-        )}
+        ) : <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>Select imported recipients to create tasks</span>}
         <div style={{ flex: 1 }} />
-        <Btn
-          size="sm"
-          variant="ghost"
-          icon={<OpenTabsIcon />}
-          disabled={!hasSelection}
-          onClick={openSelectedTabs}
-        >Open Tabs</Btn>
+        {!importBatch && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            icon={<OpenTabsIcon />}
+            disabled={!hasSelection}
+            onClick={openSelectedTabs}
+          >Open Tabs</Btn>
+        )}
         <Btn
           size="sm"
           variant="ghost"
           icon={<I.bolt size={11} />}
           disabled={!hasSelection}
           onClick={onQuickTask}
-        >Quick Task</Btn>
+        >{importBatch ? 'Create Tasks' : 'Quick Task'}</Btn>
       </div>
 
       {/* Quick Task — moveable popover (replaces the legacy portal
@@ -1136,7 +1268,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           main / date / templates and surfaces the push presets as
           chips with an inline stepper for the custom day count. */}
       <QuickTaskPopover
-        open={!!qt}
+        open={!importBatch && !!qt}
         qt={qt}
         pushDays={pushDays}
         setPushDays={setPushDays}
@@ -1152,7 +1284,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           hands back the task shape submitQuickTask already speaks. */}
       {bulkCompose && (
         <QuickTask
-          contactName={`${selCount} selected task${selCount === 1 ? '' : 's'}`}
+          contactName={importBatch
+            ? `${selCount} imported recipient${selCount === 1 ? '' : 's'}`
+            : `${selCount} selected task${selCount === 1 ? '' : 's'}`}
           autoCompose
           onComposed={(data) => runQuickAction('bulk-create-task', { template: data })}
           onClosed={() => setBulkCompose(false)}
@@ -1618,8 +1752,8 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle,
         fontVariantNumeric: 'tabular-nums',
       }}>{fmtDate(task.dueDate)}</div>
       <div>
-        <Tag tone={PRIORITY_TONE[task.priority] || 'neutral'} size="xs">
-          {task.priorityLabel || (task.priority === 1 ? 'High' : task.priority === 3 ? 'Low' : 'Med')}
+        <Tag tone={task.importedTarget ? 'neutral' : (PRIORITY_TONE[task.priority] || 'neutral')} size="xs">
+          {task.importedTarget ? 'Target' : (task.priorityLabel || (task.priority === 1 ? 'High' : task.priority === 3 ? 'Low' : 'Med'))}
         </Tag>
       </div>
       <div style={{
@@ -1660,6 +1794,7 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle,
    transitions read as one continuous motion. */
 const STATE_META = {
   new:        { tone: 'info',    label: 'New' },
+  ready:      { tone: 'brand',   label: 'Ready' },
   complete:   { tone: 'success', label: 'Complete' },
   /* Email lifecycle. */
   queued:     { tone: 'neutral', label: 'Queued' },
@@ -1690,6 +1825,7 @@ function resolveRowState({ task, emailStatus, actionState }) {
   if (emailStatus === 'sent')    return 'sent';
   if (emailStatus === 'error')   return 'failed';
   if (actionState) return actionState;
+  if (task?.importedTarget) return 'ready';
   if (task?.status === 'Complete') return 'complete';
   return 'new';
 }

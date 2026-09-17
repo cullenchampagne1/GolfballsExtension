@@ -101,7 +101,15 @@ describe('Task List presentation · named views', () => {
   it('retains replacement rows at modal load time', () => {
     for (const source of [taskListSource]) {
       assert.doesNotMatch(source, /excludeReplacementTasks\(parseTasksFrom/);
-      assert.match(source, /filterTasks\(tasks, \{ status: statusFilter \}/);
+      assert.match(source, /filterTasks\(taskRows, \{ status: statusFilter \}/);
     }
+  });
+
+  it('offers an admin-only import workspace that creates tasks for resolved targets', () => {
+    assert.match(taskListSource, /__ADMIN__ && \([\s\S]*?Import list/);
+    assert.match(taskListSource, /parseContactFile\(file\)/);
+    assert.match(taskListSource, /resolveTaskImportRecords\(parsed\.records\)/);
+    assert.match(taskListSource, /target\?\.targetContactId \|\| await apiGetTaskContactId/);
+    assert.match(taskListSource, /importBatch \? 'Create Tasks' : 'Quick Task'/);
   });
 });

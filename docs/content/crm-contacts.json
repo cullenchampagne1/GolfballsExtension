@@ -151,8 +151,8 @@
       "title": "Task List",
       "icon": "check",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list", "push due", "complete", "export csv", "replacement contacts", "bounced email"],
-      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, a dedicated Replacement Contacts queue, and the per-task popover with its mini calendar.",
+      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list", "push due", "complete", "export csv", "import csv", "replacement contacts", "bounced email"],
+      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk actions, an admin-only recipient import, and a dedicated Replacement Contacts queue.",
       "feature": "task-list",
       "flag": "taskListEnabled",
       "shortcut": "Ctrl+X",
@@ -165,6 +165,8 @@
         "intermediate": [
           { "type": "heading", "text": "Bulk actions" },
           { "type": "p", "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run workflow, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task." },
+          { "type": "heading", "text": "Import task recipients (admin build)" },
+          { "type": "p", "text": "Choose Import list and open the same CSV or XLSX contact/account format accepted by CRM Search. Contact rows use their contact ID directly; account rows load the account and use the first contact in its Contacts table. Valid recipients are selected automatically. Choose Create Tasks, enter the label, date, category, priority, and assignee in Quick Task, then the extension creates that task once for every selected recipient. Rows without a usable contact are skipped and reported without creating orphan tasks." },
           { "type": "heading", "text": "The task popover" },
           { "type": "p", "text": "Acting on a task (or a bulk selection) opens a compact popover with three panes:" },
           { "type": "list", "items": [

@@ -783,6 +783,10 @@
       "file": "tests/unit/contactImport.test.mjs"
     },
     {
+      "name": "crm \u00b7 task-list import recipients",
+      "file": "tests/unit/taskListImport.test.mjs"
+    },
+    {
       "name": "guard \u00b7 employee identity",
       "file": "tests/unit/employeeIdentity.test.mjs"
     },
