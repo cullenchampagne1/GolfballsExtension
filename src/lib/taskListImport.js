@@ -2,17 +2,59 @@
  *
  * CRM Search owns the common CSV/XLSX parser. This module turns its canonical
  * Contact/Account rows into task-recipient rows. Contacts already carry the
- * required CRM contact id; accounts are fetched and deliberately resolve to
- * the first contact in the account Contacts table.
+ * required CRM contact id; accounts are fetched and resolve to the contact
+ * attached to the order nearest the same calendar date one year ago.
  */
 
 import { API, CRM_PAGES } from './constants.js';
 import { contactIdsFromRow } from './contactImport.js';
 import { sendBackgroundMessage } from './backgroundMessage.js';
-import { firstAccountContactField } from './page-engine/helpers.js';
+import { accountContactRows, accountOrderRows } from './page-engine/helpers.js';
 
 const text = (value) => String(value == null ? '' : value).trim();
 const positiveId = (value) => (/^\d{1,12}$/.test(text(value)) && Number(value) > 0 ? text(value) : '');
+const normalizedContactName = (value) => text(value)
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+function contactIdFromElement(element) {
+  const href = element?.querySelector?.('a[href]')?.getAttribute('href') || '';
+  const match = href.match(/[?&]customerID=(\d{1,12})(?:[&#]|$)/i);
+  return positiveId(match?.[1]);
+}
+
+function parseCrmOrderDate(value) {
+  const raw = text(value);
+  let match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D|$)/);
+  let year;
+  let month;
+  let day;
+  if (match) {
+    [, month, day, year] = match.map(Number);
+  } else {
+    match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\D|$)/);
+    if (!match) return null;
+    [, year, month, day] = match.map(Number);
+  }
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+export function priorYearDate(now = new Date()) {
+  const source = now instanceof Date ? now : new Date(now);
+  if (Number.isNaN(source.getTime())) throw new Error('A valid reference date is required');
+  const year = source.getFullYear() - 1;
+  const month = source.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const result = new Date(year, month, Math.min(source.getDate(), lastDay));
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
 
 export const importedAccountUrl = (accountId) => (
   `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.ACCOUNT_DETAIL}&AccountID=${encodeURIComponent(accountId)}`
@@ -22,21 +64,63 @@ export const importedContactUrl = (contactId) => (
   `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${encodeURIComponent(contactId)}`
 );
 
-export function firstTaskContactFromAccountHtml(html, sourceUrl = '') {
+export function taskContactFromAccountHtml(html, sourceUrl = '', options = {}) {
   if (typeof DOMParser === 'undefined') throw new Error('Account-page parser is unavailable');
   const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
   if (doc.body) doc.body.dataset.gbSourceUrl = sourceUrl;
-  return {
-    contactId: positiveId(firstAccountContactField(doc, 'contactId')),
-    contactName: text(firstAccountContactField(doc, 'fullName')),
-  };
+
+  const contacts = accountContactRows(doc).map((row) => ({
+    contactId: contactIdFromElement(row.children?.[0]),
+    contactName: text(row.children?.[0]?.textContent),
+  })).filter(({ contactId }) => contactId);
+  const contactsByName = new Map();
+  contacts.forEach((contact) => {
+    const key = normalizedContactName(contact.contactName);
+    if (key && !contactsByName.has(key)) contactsByName.set(key, contact);
+  });
+
+  const anchor = priorYearDate(options.now);
+  const orders = accountOrderRows(doc).map((row, index) => {
+    const contactCell = row.children?.[1];
+    const orderDateText = text(row.children?.[3]?.textContent);
+    const orderDate = parseCrmOrderDate(orderDateText);
+    return {
+      index,
+      contactId: contactIdFromElement(contactCell),
+      contactName: text(contactCell?.textContent),
+      orderDate,
+      orderDateText,
+      distance: orderDate ? Math.abs(orderDate.getTime() - anchor.getTime()) : Number.POSITIVE_INFINITY,
+    };
+  }).filter(({ orderDate }) => orderDate)
+    .sort((left, right) => left.distance - right.distance || left.index - right.index);
+
+  for (const order of orders) {
+    const contact = order.contactId
+      ? { contactId: order.contactId, contactName: order.contactName }
+      : contactsByName.get(normalizedContactName(order.contactName));
+    if (!contact?.contactId) continue;
+    return {
+      contactId: contact.contactId,
+      contactName: contact.contactName || order.contactName,
+      selection: 'prior-year-order',
+      orderDate: order.orderDateText,
+    };
+  }
+
+  const fallback = contacts[0];
+  return fallback ? {
+    ...fallback,
+    selection: 'first-contact-fallback',
+    orderDate: '',
+  } : { contactId: '', contactName: '', selection: 'none', orderDate: '' };
 }
 
-async function fetchFirstAccountContact(accountId) {
+async function fetchTaskAccountContact(accountId) {
   const url = importedAccountUrl(accountId);
   const response = await sendBackgroundMessage('fetchRaw', { url });
   if (typeof response.text !== 'string') throw new Error('Account page returned no HTML');
-  return firstTaskContactFromAccountHtml(response.text, url);
+  return taskContactFromAccountHtml(response.text, url);
 }
 
 export function importedTaskTargetRow(record, resolved = {}, index = 0) {
@@ -56,7 +140,11 @@ export function importedTaskTargetRow(record, resolved = {}, index = 0) {
     contactUrl: importedContactUrl(contactId),
     due: '—',
     dueDate: null,
-    category: ids.contactId ? 'Imported contact' : 'Account · first contact',
+    category: ids.contactId
+      ? 'Imported contact'
+      : resolved.selection === 'prior-year-order'
+        ? 'Account · prior-year order'
+        : 'Account · first-contact fallback',
     priority: 2,
     priorityLabel: 'Medium',
     subject: 'Ready for Quick Task',
@@ -68,7 +156,7 @@ export function importedTaskTargetRow(record, resolved = {}, index = 0) {
 /** Resolve imported CRM Search records with bounded account-page concurrency. */
 export async function resolveTaskImportRecords(records, options = {}) {
   const source = Array.isArray(records) ? records : [];
-  const resolveAccount = options.resolveAccount || fetchFirstAccountContact;
+  const resolveAccount = options.resolveAccount || fetchTaskAccountContact;
   const concurrency = Math.max(1, Math.min(8, Number(options.concurrency) || 4));
   const rows = new Array(source.length);
   const errors = [];

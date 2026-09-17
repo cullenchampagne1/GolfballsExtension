@@ -1100,7 +1100,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Choose Import list and open the same CSV or XLSX contact/account format accepted by CRM Search. Contact rows use their contact ID directly; account rows load the account and use the first contact in its Contacts table. Valid recipients are selected automatically. Choose Create Tasks, enter the label, date, category, priority, and assignee in Quick Task, then the extension creates that task once for every selected recipient. Rows without a usable contact are skipped and reported without creating orphan tasks."
+            "text": "Choose Import list and open the same CSV or XLSX contact/account format accepted by CRM Search. Contact rows use their contact ID directly; account rows use the contact attached to the order nearest the same calendar date one year ago. If no order contact can be resolved, the first account contact is used as a fallback. Valid recipients are selected automatically. Choose Create Tasks, enter the label, date, category, priority, and assignee in Quick Task, then the extension creates that task once for every selected recipient. Rows without a usable contact are skipped and reported without creating orphan tasks."
           },
           {
             "type": "heading",

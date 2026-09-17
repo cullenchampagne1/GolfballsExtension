@@ -1080,7 +1080,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
               <I.upload size={12} style={{ color: 'var(--gb-brand-label)' }} />
               <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{importBatch.fileName}</span>
               <span>{importBatch.accepted} task-ready</span>
-              <span>· account rows use their first CRM contact</span>
+              <span>· account rows use the order contact nearest this date last year</span>
               {importBatch.skipped > 0 && (
                 <span style={{ color: 'var(--gb-warning-fg)' }}>
                   · {importBatch.skipped} skipped
