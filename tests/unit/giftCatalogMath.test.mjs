@@ -13,7 +13,7 @@ import {
   priceAtQty, isTierPrice, priceAtBreaks,
   SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice,
   editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits,
-  restoreProposalPriceOverrides,
+  restoreProposalPriceOverrides, linePricingKey, withResolvedPriceBreaks,
   topPrice, lowPrice, saleCut, netP, netTop, netLow,
 } from '../../src/lib/giftCatalogMath.js';
 
@@ -282,6 +282,36 @@ describe('proposal split price intent', () => {
     assert.deepEqual(moveProposalSplitQuantity(line, reset, 24), {
       id: 'tier-1', qty: 24, price: 60.99, priceEdited: false,
     });
+  });
+
+  it('keeps quantity changes on the exact decorated-item ladder', () => {
+    // The catalog snapshot can carry a stock/non-logo 12-unit tier while the
+    // product page resolves a different ladder for the actual item added.
+    const catalogLine = {
+      product: {
+        id: 'custom-ball', customLogo: true, price: 57.99,
+        breaks: [{ q: 1, p: 68.99 }, { q: 12, p: 57.99 }],
+      },
+      decoration: { engine: 'ballLogo' },
+      splits: [],
+    };
+    const resolved = withResolvedPriceBreaks(catalogLine, [
+      { q: 1, p: 68.99 }, { q: 12, p: 62.99 }, { q: 24, p: 61.99 },
+    ]);
+
+    assert.equal(resolved.resolvedPricing.key, linePricingKey(resolved));
+    assert.equal(linePriceAt(resolved, 12), 62.99);
+    assert.deepEqual(
+      moveProposalSplitQuantity(resolved, { id: 'tier-1', qty: 1, price: 68.99 }, 12),
+      { id: 'tier-1', qty: 12, price: 62.99, priceEdited: false },
+    );
+  });
+
+  it('ignores a resolved ladder after the item customization changes', () => {
+    const resolved = withResolvedPriceBreaks(line, [{ q: 1, p: 70 }, { q: 12, p: 64 }]);
+    const changed = { ...resolved, decoration: { engine: 'none' } };
+    assert.notEqual(linePricingKey(changed), resolved.resolvedPricing.key);
+    assert.equal(linePriceAt(changed, 12), 57.99);
   });
 
   it('does not let an imprint reprice overwrite an edited split', () => {

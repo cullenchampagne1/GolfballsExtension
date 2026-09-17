@@ -59,8 +59,52 @@ export const lineSecondPoleFee = (line) => {
   if (!d || !d.pole2 || !d.pole2.kind) return 0;   // keyed on a real 2nd-pole imprint
   return SECOND_POLE_FEE[d.pole2.kind] || 0;
 };
+
+/* The normalized catalog is an index, not the final authority for decorated
+   pricing. GiftCatalog resolves the exact product page in the background and
+   stores that line-specific ladder here. Key it to every input that can change
+   the selected modification/child so a stale ladder can never survive an
+   imprint or variant change. Keep only a short hash: decorations may contain a
+   large local logo data URL. */
+export function linePricingKey(line) {
+  const p = (line && line.product) || {};
+  const input = JSON.stringify([
+    p.id || p.sourceId || p.url || '',
+    (line && line.decoration) || null,
+    (line && line.variant && line.variant.values) || null,
+  ], (_key, value) => (
+    typeof value === 'string' && value.startsWith('data:') ? '[embedded-image]' : value
+  ));
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+export function withResolvedPriceBreaks(line, breaks) {
+  const normalized = (Array.isArray(breaks) ? breaks : [])
+    .map((entry) => ({ q: Number(entry && entry.q), p: Number(entry && entry.p) }))
+    .filter((entry) => Number.isFinite(entry.q) && entry.q > 0 && Number.isFinite(entry.p) && entry.p >= 0)
+    .sort((a, b) => a.q - b.q);
+  if (!normalized.length) return line;
+  const key = linePricingKey(line);
+  const current = line && line.resolvedPricing;
+  const unchanged = current && current.key === key
+    && JSON.stringify(current.breaks) === JSON.stringify(normalized);
+  return unchanged ? line : { ...line, resolvedPricing: { key, breaks: normalized } };
+}
+
 export function linePriceAt(line, qty) {
   const p = (line && line.product) || {};
+  // The exact decorated product-page ladder wins over the catalog snapshot.
+  // It already includes selected modifications, gift-set conversion and any
+  // second-pole charge, so return it before adding catalog-derived adjustments.
+  const resolved = line && line.resolvedPricing;
+  if (resolved && resolved.key === linePricingKey(line) && resolved.breaks && resolved.breaks.length) {
+    return Math.round(priceAtQty({ breaks: resolved.breaks }, qty) * 100) / 100;
+  }
   // Gift set: per-set price from the verified gift-set ladder (the catalog's
   // custom-logo ladder == the raw ladder, so this matches the cart exactly).
   const gs = line && line.decoration && line.decoration.giftSet;

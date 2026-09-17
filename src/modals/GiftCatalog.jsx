@@ -11,7 +11,7 @@ import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDr
 import { loadPriorOrderEntries } from '../lib/priorOrderEngine.js';
 import { proposalLineFromProduct } from '../lib/catalogProposalEngine.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
-import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
+import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, editProposalSplitPrice, moveProposalSplitQuantity, repriceProposalSplits, restoreProposalPriceOverrides, withResolvedPriceBreaks, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, repoOf, REPOS, createProductStore, importProductStore, buildProductStoreFile, importProductStoreFile } from '../lib/customItems.js';
 import { CATALOG_FAVORITES_STORAGE_KEY, loadCatalogFavorites, setCatalogFavorite } from '../lib/catalogFavorites.js';
 // The built-in supplier ingesters are admin-only and loaded lazily (see REPO_RUN
@@ -3390,8 +3390,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             if (!raw) return l;   // not one of the lines we fetched
             let pr; try { pr = decoratedPricingForLine(raw, l.decoration, { values: l.variant && l.variant.values }); } catch { pr = null; }
             if (!pr || !pr.breaks || !pr.breaks.length) return l;
-            let lineChanged = false;
-            const splits = l.splits.map((s) => {
+            // Retain the exact item ladder, not only today's currently visible
+            // price. Quantity changes can then remain on this decorated item
+            // instead of falling back to the normalized/stock catalog tiers.
+            const pricedLine = withResolvedPriceBreaks(l, pr.breaks);
+            let lineChanged = pricedLine !== l;
+            const splits = pricedLine.splits.map((s) => {
               if (s.priceEdited) return s;
               const unit = priceAtBreaks(pr.breaks, s.qty);
               if (unit != null && Math.abs(unit - s.price) > 0.005) { lineChanged = true; return { ...s, price: unit }; }
@@ -3402,7 +3406,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             // derives so the fee row, the totals and the email all have it; a
             // rep's typed fee still wins (withDerivedSetupFee only fills
             // `setupFeeAuto`).
-            const withFee = withDerivedSetupFee(lineChanged ? { ...l, splits } : l, pr.setupBreaks);
+            const withFee = withDerivedSetupFee(lineChanged ? { ...pricedLine, splits } : pricedLine, pr.setupBreaks);
             if (lineChanged || withFee !== l) changed = true;
             return withFee;
           });
