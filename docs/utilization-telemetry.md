@@ -96,12 +96,14 @@ The Response Time block displays p50, p95, and p99, a 20-bucket p95 trend, sampl
 
 1. Workflow code emits a bounded event to the extension service worker. Email sends may include the selected template's compiled subject regex.
 2. The worker validates it against closed feature, source, transport, event-kind, and surface-kind vocabularies.
-3. Ordinary surface and latency events enter a bounded 240-event buffer. Feature events are coalesced by `feature + source + transport + success` into at most 96 buckets, summing their numeric aggregates.
-4. Pending state is persisted in `chrome.storage.session`, so Chrome service-worker eviction does not erase the current batch.
-5. One authenticated POST is made every minute. Important, low-frequency success events can request the same batch about 1.5 seconds later instead.
-6. The backend validates the same strict shape, updates the session heartbeat, stores the event rows, and removes rows older than 365 days.
+3. Ordinary surface and latency events enter a bounded 960-event buffer. Feature events are coalesced by `feature + source + transport + success` into at most 96 buckets, summing their numeric aggregates.
+4. Pending state and one in-flight outbox batch are persisted in `chrome.storage.session`, so Chrome service-worker eviction does not erase unacknowledged events.
+5. Each POST carries a stable `batch_id`. The worker removes that batch only after the backend acknowledges the same ID and exact event-row count; failures retry the same batch.
+6. The backend stores the batch receipt and event rows in one transaction. Replaying a committed batch returns its prior acknowledgement without duplicating session or event counts.
+7. One authenticated POST is made every minute. Important, low-frequency success events can request the same batch about 1.5 seconds later instead.
+8. The backend validates the same strict shape, updates the session heartbeat, stores the event rows, and removes rows older than 365 days.
 
-If the local buffers overflow, the worker retains the newest ordinary events and records how many were dropped. A failed telemetry POST is intentionally best-effort: it never blocks the user's workflow and does not grow an unbounded retry queue. This means utilization is operational telemetry, not an auditable billing ledger.
+If the local buffers overflow, the worker retains the newest ordinary events and records how many were dropped. A failed telemetry POST never blocks the user's workflow; one bounded durable batch remains in the outbox while the fresh-event buffers retain subsequent activity. This makes transient network and database failures recoverable without creating an unbounded retry queue.
 
 ## Dashboard reporting
 

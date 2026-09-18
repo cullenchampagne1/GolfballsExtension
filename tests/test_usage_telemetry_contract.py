@@ -25,6 +25,8 @@ class UsageTelemetryContractTests(unittest.TestCase):
         sys.modules[spec.name] = module
         spec.loader.exec_module(module)
         cls.UsageEvent = module.UsageEvent
+        cls.UsageBatch = module.UsageBatch
+        cls.MAX_USAGE_EVENTS = module.MAX_USAGE_EVENTS
 
         routes_tree = ast.parse((ROOT / ".revstack" / "routes.py").read_text())
         names = {
@@ -76,6 +78,25 @@ class UsageTelemetryContractTests(unittest.TestCase):
         self.assertEqual((event.account_territory_id, event.account_territory_name),
                          ("17", "Upper Midwest"))
         self.assertEqual(event.last_emailed_at, 1789244100000)
+
+    def test_accepts_idempotent_batch_identity_and_current_extension_version(self):
+        batch = self.UsageBatch.model_validate({
+            "batch_id": "12345678-1234-4234-8234-123456789abc",
+            "session_id": "87654321-4321-4234-8234-cba987654321",
+            "extension_version": "3.5.4",
+            "events": [],
+        })
+        self.assertEqual(batch.batch_id, "12345678-1234-4234-8234-123456789abc")
+        self.assertEqual(batch.extension_version, "3.5.4")
+
+        legacy = self.UsageBatch.model_validate({
+            "session_id": "87654321-4321-4234-8234-cba987654321",
+            "events": [],
+        })
+        self.assertIsNone(legacy.batch_id)
+
+    def test_server_batch_ceiling_covers_every_bounded_client_queue(self):
+        self.assertGreaterEqual(self.MAX_USAGE_EVENTS, 960 + 96)
 
     def test_accepts_a_coalesced_contact_import_run_counter(self):
         event = self.UsageEvent.model_validate({

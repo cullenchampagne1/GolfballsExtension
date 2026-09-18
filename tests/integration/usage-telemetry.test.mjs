@@ -12,7 +12,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  API_ORIGIN, createChrome, createContext, jsonResponse, loadScript, settle,
+  API_ORIGIN, MANIFEST, createChrome, createContext, jsonResponse, loadScript, settle,
   validInstallation,
 } from './helpers/harness.mjs';
 
@@ -35,10 +35,15 @@ function loadTelemetry({ fetchImpl } = {}) {
 function recordingFetch(sent, { failTelemetry = false } = {}) {
   return async (url, options = {}) => {
     if (String(url) === TELEMETRY_URL) {
-      sent.push(JSON.parse(options.body));
+      const batch = JSON.parse(options.body);
+      sent.push(batch);
       return failTelemetry
         ? jsonResponse({ detail: 'nope' }, 503)
-        : jsonResponse({ ok: true, accepted: 0 });
+        : jsonResponse({
+          ok: true,
+          batch_id: batch.batch_id,
+          accepted: batch.events.length,
+        });
     }
     return jsonResponse({ ok: true });
   };
@@ -61,6 +66,8 @@ describe('usage telemetry', () => {
     assert.equal(sent.length, 1, 'one POST carries the whole minute, not one per event');
     const batch = sent[0];
     assert.equal(batch.session_id, reporter.sessionId);
+    assert.match(batch.batch_id, /^[0-9a-f-]{36}$/i);
+    assert.equal(batch.extension_version, MANIFEST.version);
     assert.equal(batch.dropped, 0);
     assert.deepEqual(batch.events.map((e) => e.kind),
       ['surface_open', 'surface_close', 'surface_open', 'latency'],
@@ -282,21 +289,56 @@ describe('usage telemetry', () => {
     assert.equal(batch.events.at(-1).surface, `S${capacity + 29}`);
   });
 
-  it('never resends a batch the backend refused', async () => {
+  it('retries the same durable batch after the backend refuses it', async () => {
     const sent = [];
+    let attempt = 0;
     const { reporter } = loadTelemetry({
-      fetchImpl: recordingFetch(sent, { failTelemetry: true }),
+      fetchImpl: async (url, options = {}) => {
+        if (String(url) !== TELEMETRY_URL) return jsonResponse({ ok: true });
+        const batch = JSON.parse(options.body);
+        sent.push(batch);
+        attempt += 1;
+        return attempt === 1
+          ? jsonResponse({ detail: 'temporary outage' }, 503)
+          : jsonResponse({
+            ok: true, batch_id: batch.batch_id, accepted: batch.events.length,
+          });
+      },
     });
 
     reporter.record({ kind: 'surface_open', surface: 'CRM Search', surface_kind: 'modal' });
     assert.equal(await reporter.flush(), false, 'a refused flush reports failure');
     await settle();
+    assert.equal(reporter.pending(), 1, 'the refused event remains in the durable outbox');
 
-    await reporter.flush();
+    assert.equal(await reporter.flush(), true);
     await settle();
-    // Usage is not worth a retry queue that grows across an outage; the second
-    // batch carries presence forward and the first minute's events are gone.
-    assert.deepEqual(sent[1].events, []);
+    assert.equal(sent[1].batch_id, sent[0].batch_id, 'a retry keeps its idempotency key');
+    assert.deepEqual(sent[1].events, sent[0].events);
+    assert.equal(reporter.pending(), 0);
+  });
+
+  it('retains a batch when a 200 response does not acknowledge every event', async () => {
+    const sent = [];
+    const { context, reporter } = loadTelemetry({
+      fetchImpl: async (url, options = {}) => {
+        if (String(url) !== TELEMETRY_URL) return jsonResponse({ ok: true });
+        const batch = JSON.parse(options.body);
+        sent.push(batch);
+        return jsonResponse({ ok: true, batch_id: batch.batch_id, accepted: 0 });
+      },
+    });
+
+    reporter.record({ kind: 'surface_open', surface: 'Task List', surface_kind: 'modal' });
+    assert.equal(await reporter.flush(), false);
+    assert.equal(reporter.pending(), 1);
+    await settle();
+
+    const restarted = context.GBUsageTelemetry.createReporter();
+    await restarted.ready();
+    assert.equal(restarted.pending(), 1, 'the unacknowledged batch survives worker eviction');
+    assert.equal(await restarted.flush(), false);
+    assert.equal(sent[1].batch_id, sent[0].batch_id);
   });
 
   it('times real backend calls, but never its own flush', async () => {

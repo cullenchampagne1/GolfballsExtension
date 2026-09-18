@@ -631,6 +631,13 @@
       ]
     },
     {
+      "name": "usage \u00b7 retryable idempotent batch ingestion",
+      "command": [
+        "../.venv/bin/python",
+        "tests/test_usage_batch_idempotency.py"
+      ]
+    },
+    {
       "name": "usage · extension analytics block payloads",
       "command": [
         "../.venv/bin/python",
