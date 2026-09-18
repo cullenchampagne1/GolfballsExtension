@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import {
   buildEmailTemplateTrackerCatalog,
   emailTemplateTrackingIssue,
-  emailTemplateClusterId,
   matchEmailTemplateSubject,
   normalizeEmailSubject,
 } from '../../src/lib/emailSubjectTracking.js';
@@ -119,19 +118,17 @@ describe('automatic email-template subject clusters', () => {
     assert.equal(matchEmailTemplateSubject('Approve artwork · Order #987', catalog)?.templateId, 'proof');
   });
 
-  it('keeps identical structural shapes in distinct stable template clusters', () => {
+  it('uses the same server-queryable cluster regex for identical subject shapes', () => {
     const catalog = buildEmailTemplateTrackerCatalog([
       orderTemplate('dynamic-oos', 'Out of Stock Item | Golfballs.com Order #{{order_number}}', { name: 'Dynamic OOS' }),
       orderTemplate('oos', 'Out of Stock Item | Golfballs.com Order #{{order_number}}', { name: 'OOS' }),
     ]);
     assert.deepEqual(catalog.trackers.map((tracker) => tracker.status), ['ready', 'ready']);
-    assert.deepEqual(
-      catalog.trackers.map((tracker) => tracker.clusterId),
-      ['email-template:dynamic-oos', 'email-template:oos'],
-    );
+    assert.equal(catalog.trackers[0].clusterId, catalog.trackers[0].regex);
+    assert.equal(catalog.trackers[1].clusterId, catalog.trackers[0].clusterId);
     assert.deepEqual(catalog.trackers.map((tracker) => tracker.conflictsWith), [[], []]);
-    // Structural lookup correctly remains ambiguous. Delivery attribution does
-    // not use it; it compares a reply with actual recorded sends instead.
+    // A local lookup cannot choose a template when shapes overlap; the server
+    // deliberately groups both templates under their shared subject shape.
     assert.equal(matchEmailTemplateSubject('Out of Stock Item | Golfballs.com Order #42', catalog), null);
   });
 
@@ -161,7 +158,7 @@ describe('automatic email-template subject clusters', () => {
     ]);
   });
 
-  it('assigns cluster IDs independently of subject edits, catalog order, and rebuilds', () => {
+  it('assigns deterministic cluster regexes that change when the subject shape changes', () => {
     const original = orderTemplate('campaign-17', 'Welcome {{name}}');
     const first = buildEmailTemplateTrackerCatalog([
       original,
@@ -173,8 +170,9 @@ describe('automatic email-template subject clusters', () => {
     ]);
     const firstTracker = first.trackers.find((tracker) => tracker.templateId === 'campaign-17');
     const editedTracker = edited.trackers.find((tracker) => tracker.templateId === 'campaign-17');
-    assert.equal(firstTracker.clusterId, emailTemplateClusterId('campaign-17'));
-    assert.equal(editedTracker.clusterId, firstTracker.clusterId);
+    assert.equal(firstTracker.clusterId, firstTracker.regex);
+    assert.equal(editedTracker.clusterId, editedTracker.regex);
+    assert.notEqual(editedTracker.clusterId, firstTracker.clusterId);
     assert.notEqual(editedTracker.clusterRevision, firstTracker.clusterRevision);
     assert.equal(
       buildEmailTemplateTrackerCatalog([structuredClone(original)]).trackers[0].clusterId,
@@ -204,7 +202,7 @@ describe('automatic email-template subject clusters', () => {
     assert.equal(matchEmailTemplateSubject('Segment Standard · Account review', catalog)?.templateId, 'standard');
   });
 
-  it('clusters dynamic-only subjects but skips disabled, case, and empty templates', () => {
+  it('rejects unsafe dynamic-only subjects and skips disabled, case, and empty templates', () => {
     const catalog = buildEmailTemplateTrackerCatalog([
       orderTemplate('off', 'Disabled message', { enabled: false }),
       { ...orderTemplate('case', 'Ignored'), type: 'case' },
@@ -213,9 +211,10 @@ describe('automatic email-template subject clusters', () => {
     ]);
     assert.deepEqual(
       catalog.trackers.map((tracker) => tracker.status),
-      ['disabled', 'not_applicable', 'incomplete', 'ready'],
+      ['disabled', 'not_applicable', 'incomplete', 'incomplete'],
     );
     assert.deepEqual(catalog.trackers[3].patterns, ['<*>']);
+    assert.equal(catalog.trackers[3].clusterId, null);
   });
 
   it('leaves reply-in-thread templates in the original email cluster', () => {
@@ -228,7 +227,7 @@ describe('automatic email-template subject clusters', () => {
       catalog.trackers.map((tracker) => tracker.status),
       ['ready', 'not_applicable'],
     );
-    assert.equal(catalog.trackers[0].clusterId, 'email-template:initial');
+    assert.equal(catalog.trackers[0].clusterId, catalog.trackers[0].regex);
     assert.equal(catalog.trackers[1].trackerId, null);
     assert.equal(catalog.trackers[1].regex, null);
     assert.equal(
@@ -250,7 +249,7 @@ describe('template send counts', () => {
     });
     await store.install();
     assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[0].status, 'ready');
-    assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].version, 2);
+    assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].version, 3);
     const stableClusterId = memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[0].clusterId;
 
     await memory.local.set({
@@ -264,8 +263,11 @@ describe('template send counts', () => {
       memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers.map((tracker) => tracker.status),
       ['ready', 'ready'],
     );
-    assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[0].clusterId, stableClusterId);
-    assert.equal(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[1].clusterId, 'email-template:two');
+    assert.notEqual(memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[0].clusterId, stableClusterId);
+    assert.equal(
+      memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[1].clusterId,
+      memory.data[EMAIL_TEMPLATE_TRACKERS_KEY].trackers[0].clusterId,
+    );
   });
 
   it('records a successful send without reply or order outcomes', async () => {
@@ -285,7 +287,9 @@ describe('template send counts', () => {
 
     const [send] = memory.data[EMAIL_TEMPLATE_SENDS_KEY];
     assert.equal(send.trackingStatus, 'ready');
-    assert.equal(send.clusterId, 'email-template:update');
+    assert.equal(send.clusterId, buildEmailTemplateTrackerCatalog([
+      orderTemplate('update', 'Order #{{order_number}} update'),
+    ]).trackers[0].regex);
     assert.equal(send.trackerId, send.clusterId);
     assert.equal(send.recipient, 'buyer@example.com');
     assert.equal(send.normalizedSubject, 'order #5512 update');
@@ -351,7 +355,10 @@ describe('template send counts', () => {
       storage: memory.local, storageEvents: memory.events, now: () => now,
     });
     await store.install();
-    assert.equal(memory.data[EMAIL_TEMPLATE_SENDS_KEY][0].trackerId, 'email-template:legacy');
+    const expectedRegex = buildEmailTemplateTrackerCatalog([
+      orderTemplate('legacy', 'Callaway Promos for {{name}}'),
+    ]).trackers[0].regex;
+    assert.equal(memory.data[EMAIL_TEMPLATE_SENDS_KEY][0].trackerId, expectedRegex);
     assert.equal(memory.data[EMAIL_TEMPLATE_SENDS_KEY][0].trackingStatus, 'ready');
     assert.equal('respondedAt' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
     assert.equal('replyNotificationId' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
@@ -359,7 +366,7 @@ describe('template send counts', () => {
     assert.equal('orderId' in memory.data[EMAIL_TEMPLATE_SENDS_KEY][0], false);
 
     const [send] = memory.data[EMAIL_TEMPLATE_SENDS_KEY];
-    assert.equal(send.clusterId, 'email-template:legacy');
+    assert.equal(send.clusterId, expectedRegex);
     assert.equal(send.trackingStatus, 'ready');
   });
 });

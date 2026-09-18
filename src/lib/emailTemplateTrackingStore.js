@@ -4,7 +4,6 @@
 
 import {
   buildEmailTemplateTrackerCatalog,
-  emailTemplateClusterId,
   normalizeEmailSubject,
   trackerForTemplate,
 } from './emailSubjectTracking.js';
@@ -80,14 +79,13 @@ function sendClusterId(send, catalog) {
   const current = trackerForTemplate(catalog, send?.templateId);
   return clean(
     current?.clusterId
-      || emailTemplateClusterId(send?.templateId)
       || send?.clusterId
       || send?.trackerId,
-    260,
+    8192,
   ) || null;
 }
 
-function migrateSendRecord(row) {
+function migrateSendRecord(row, catalog) {
   // Outcome attribution was retired. Strip its historical fields while
   // normalizing so this store retains successful sends only.
   const next = { ...(row || {}) };
@@ -95,7 +93,7 @@ function migrateSendRecord(row) {
   delete next.replyNotificationId;
   delete next.orderedAt;
   delete next.orderId;
-  const clusterId = sendClusterId(row);
+  const clusterId = sendClusterId(row, catalog);
   const normalizedSubject = clean(row?.normalizedSubject, 998) || normalizeEmailSubject(row?.subject);
   const priorStatus = clean(row?.trackingStatus, 40) || 'unknown';
   const trackingStatus = priorStatus === 'not_applicable' || !normalizedSubject
@@ -110,12 +108,12 @@ function migrateSendRecord(row) {
   };
 }
 
-function cappedSends(value, now) {
+function cappedSends(value, now, catalog) {
   return records(value)
     .filter((row) => row && Number(row.sentAt) >= now - MAX_SEND_AGE_MS)
     .sort((a, b) => Number(b.sentAt) - Number(a.sentAt))
     .slice(0, MAX_SENDS)
-    .map(migrateSendRecord);
+    .map((row) => migrateSendRecord(row, catalog));
 }
 
 function sendId(email, sentAt, index) {
@@ -242,11 +240,12 @@ export function createEmailTemplateTrackingStore(options = {}) {
   function mutateSends(mutator) {
     const run = async () => {
       const now = Number(clock()) || Date.now();
+      const currentCatalog = await catalog();
       const bag = await readStorage(storage, EMAIL_TEMPLATE_SENDS_KEY);
       const stored = records(bag[EMAIL_TEMPLATE_SENDS_KEY]);
-      const current = cappedSends(stored, now);
+      const current = cappedSends(stored, now, currentCatalog);
       const result = await mutator(current, now);
-      const next = cappedSends(result?.sends || current, now);
+      const next = cappedSends(result?.sends || current, now, currentCatalog);
       if (!same(stored, next)) await writeStorage(storage, { [EMAIL_TEMPLATE_SENDS_KEY]: next });
       return result?.value;
     };
@@ -256,9 +255,10 @@ export function createEmailTemplateTrackingStore(options = {}) {
 
   async function migrateStoredSends() {
     const now = Number(clock()) || Date.now();
+    const currentCatalog = await catalog();
     const bag = await readStorage(storage, EMAIL_TEMPLATE_SENDS_KEY);
     const stored = records(bag[EMAIL_TEMPLATE_SENDS_KEY]);
-    const migrated = cappedSends(stored, now);
+    const migrated = cappedSends(stored, now, currentCatalog);
     if (!same(stored, migrated)) {
       await writeStorage(storage, { [EMAIL_TEMPLATE_SENDS_KEY]: migrated });
     }
@@ -279,8 +279,8 @@ export function createEmailTemplateTrackingStore(options = {}) {
           templateId: clean(email.templateId, 200),
           templateName: clean(email.templateName, 200),
           variationId: clean(email.templateVariationId || '__original', 200),
-          clusterId: clean(email.templateClusterId || email.templateTrackerId, 260) || null,
-          trackerId: clean(email.templateClusterId || email.templateTrackerId, 260) || null,
+          clusterId: clean(email.templateClusterId || email.templateTrackerId, 8192) || null,
+          trackerId: clean(email.templateClusterId || email.templateTrackerId, 8192) || null,
           trackingStatus: clean(email.templateTrackingStatus, 40) || 'unknown',
           recipient: lower(email.to),
           contactId: clean(email.contactId, 120),
@@ -304,8 +304,11 @@ export function createEmailTemplateTrackingStore(options = {}) {
   }
 
   async function listSends() {
+    const currentCatalog = await catalog();
     const bag = await readStorage(storage, EMAIL_TEMPLATE_SENDS_KEY);
-    return cappedSends(bag[EMAIL_TEMPLATE_SENDS_KEY], Number(clock()) || Date.now());
+    return cappedSends(
+      bag[EMAIL_TEMPLATE_SENDS_KEY], Number(clock()) || Date.now(), currentCatalog,
+    );
   }
 
   return Object.freeze({

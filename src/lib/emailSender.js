@@ -14,7 +14,7 @@ import {
 import { getPageContext } from './pageContext.js';
 import { parseCcList } from './emailCc.js';
 import { templateMatchConditionCount } from './emailRunnerMatch.js';
-import { emailTemplateClusterId } from './emailSubjectTracking.js';
+import { buildEmailTemplateTrackerCatalog } from './emailSubjectTracking.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -167,8 +167,9 @@ function templateUsageContext(message, config) {
     ? Math.max(0, Math.min(100, Math.round(Number(message.conditionCount))))
     : templateMatchConditionCount(template);
   const hasTemplate = Boolean(message.templateId || message.templateName || template);
-  const subjectClusterId = message.replyMode === 'reply'
-    ? null : emailTemplateClusterId(message.templateId || template?.id);
+  const subjectClusterId = message.replyMode === 'reply' || !template
+    ? null
+    : buildEmailTemplateTrackerCatalog([template]).trackers[0]?.clusterId;
   return {
     subject_cluster_id: subjectClusterId || '',
     template_id: message.templateId || template?.id || '',

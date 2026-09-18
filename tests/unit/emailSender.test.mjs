@@ -358,7 +358,11 @@ describe('sendEmail', () => {
       templateId: 'renewal', templateName: 'Annual renewal', variationId: 'warm',
       templateVariationName: 'Warm opening', conditionCount: 2,
       conditionsMatched: true, conditionsEnforced: true,
-      config: { paReady: true, templates: [{ id: 'renewal', name: 'Annual renewal' }] },
+      config: { paReady: true, templates: [{
+        id: 'renewal', name: 'Annual renewal', subject: 'Annual renewal for {{name}}',
+        vars: { name: { type: 'schema', path: 'contact.firstName' } },
+        variations: [{ id: 'warm', label: 'Warm opening', subject: 'Warm renewal for {{name}}' }],
+      }] },
     }, { dispatch: async () => ({ ok: true }) });
 
     assert.equal(result.state, 'sent');
@@ -368,7 +372,7 @@ describe('sendEmail', () => {
       event: {
         kind: 'feature', feature: 'email_send', source: 'task_list', transport: 'pa',
         count: 1, word_count: 4, attachment_count: 1, inline_image_count: 1, ok: true,
-        subject_cluster_id: 'email-template:renewal',
+        subject_cluster_id: '^(?:(?:re|fw|fwd)\\s*:\\s*|\\[external(?:\\s+email)?\\]\\s*)*(?:annual\\s+renewal\\s+for\\s+[^\\r\\n]+|warm\\s+renewal\\s+for\\s+[^\\r\\n]+)$',
         template_id: 'renewal', template_name: 'Annual renewal',
         template_variation_id: 'warm', template_variation_name: 'Warm opening',
         condition_count: 2, conditions_matched: true, conditions_enforced: true,
@@ -385,8 +389,10 @@ describe('sendEmail', () => {
         paReady: true,
         templates: [{
           id: 'renewal', name: 'Annual renewal', type: 'account',
+          subject: 'Annual renewal for {{name}}',
+          vars: { name: { type: 'schema', path: 'contact.firstName' } },
           accountConditions: [{ field: 'tier', op: 'equals', val: 'gold' }],
-          variations: [{ id: 'warm', label: 'Warm opening' }],
+          variations: [{ id: 'warm', label: 'Warm opening', subject: 'Warm renewal for {{name}}' }],
         }],
       },
     }, { dispatch: async () => ({ ok: true }) });
@@ -394,7 +400,7 @@ describe('sendEmail', () => {
     const event = usageMessages.at(-1).event;
     assert.equal(event.template_name, 'Annual renewal');
     assert.equal(event.template_variation_name, 'Warm opening');
-    assert.equal(event.subject_cluster_id, 'email-template:renewal');
+    assert.equal(event.subject_cluster_id, '^(?:(?:re|fw|fwd)\\s*:\\s*|\\[external(?:\\s+email)?\\]\\s*)*(?:annual\\s+renewal\\s+for\\s+[^\\r\\n]+|warm\\s+renewal\\s+for\\s+[^\\r\\n]+)$');
     assert.equal('subject' in event, false);
     assert.equal(event.condition_count, 1);
     assert.equal(event.conditions_matched, null);

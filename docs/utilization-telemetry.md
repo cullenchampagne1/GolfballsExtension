@@ -37,6 +37,7 @@ Every qualifying email delivery contributes the following aggregate-only values:
 - `source`: the extension entry point that initiated the message.
 - `transport`: `pa` for a confirmed Power Automate send or `mailto` for a successful Outlook compose handoff.
 - `template_id` / `template_name`: the selected template's bounded identity, when a template was used.
+- `subject_cluster_id`: the template compiler's anchored subject regex, including standalone reply prefixes and variable wildcards. The backend applies this expression case-insensitively to stored email subjects for reply attribution. It contains fixed wording authored in the template, but never the rendered recipient-specific subject.
 - `template_variation_id` / `template_variation_name`: the selected variation's bounded identity, when applicable.
 - `condition_count`: number of authored account conditions on the template.
 - `conditions_enforced`: whether **Require a rule match** was enabled for the send.
@@ -93,12 +94,12 @@ The Response Time block displays p50, p95, and p99, a 20-bucket p95 trend, sampl
 
 ## How events reach the backend
 
-1. Workflow code emits a fixed, content-free event to the extension service worker.
+1. Workflow code emits a bounded event to the extension service worker. Email sends may include the selected template's compiled subject regex.
 2. The worker validates it against closed feature, source, transport, event-kind, and surface-kind vocabularies.
 3. Ordinary surface and latency events enter a bounded 240-event buffer. Feature events are coalesced by `feature + source + transport + success` into at most 96 buckets, summing their numeric aggregates.
 4. Pending state is persisted in `chrome.storage.session`, so Chrome service-worker eviction does not erase the current batch.
 5. One authenticated POST is made every minute. Important, low-frequency success events can request the same batch about 1.5 seconds later instead.
-6. The backend validates the same strict shape, updates the session heartbeat, stores content-free event rows, and removes rows older than 365 days.
+6. The backend validates the same strict shape, updates the session heartbeat, stores the event rows, and removes rows older than 365 days.
 
 If the local buffers overflow, the worker retains the newest ordinary events and records how many were dropped. A failed telemetry POST is intentionally best-effort: it never blocks the user's workflow and does not grow an unbounded retry queue. This means utilization is operational telemetry, not an auditable billing ledger.
 
@@ -130,7 +131,7 @@ are derived by the dashboard from its active primary theme color.
 The telemetry contract has no field for and does not store:
 
 - Recipient or sender addresses
-- Email subjects or body content
+- Rendered email subjects or body content. Template-based sends retain the compiled subject regex, which includes fixed template wording and wildcards in place of rendered variables.
 - Account-condition fields, operators, comparison values, or CRM values used to evaluate them
 - Contact, account, opportunity, order, or case identifiers
 - Search queries
@@ -155,7 +156,7 @@ Rows collected before individual preservation may represent a coalesced batch;
 their explicit message count remains visible rather than inventing per-message
 details the historical event does not contain. Recorded timestamps render in
 America/Chicago time. The compact grid shows the template/variation and the
-content-free condition outcome alongside authored-word and attachment counts;
+bounded condition outcome alongside authored-word and attachment counts;
 entry-point, IDs, and inline-image details remain available in the row drawer.
 Server-side search can match a rep, template, variation, source, or transport.
 

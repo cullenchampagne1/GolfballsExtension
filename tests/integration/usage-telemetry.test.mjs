@@ -116,7 +116,7 @@ describe('usage telemetry', () => {
     reporter.record({
       kind: 'feature', feature: 'email_send', source: 'popup', transport: 'pa',
       count: 1, word_count: 84, attachment_count: 1, inline_image_count: 0,
-      subject_cluster_id: 'email-template:renewal',
+      subject_cluster_id: '^(?:(?:re|fw|fwd)\\s*:\\s*)*annual\\s+renewal\\s+for\\s+[^\\r\\n]+$',
       template_id: 'renewal', template_name: 'Annual renewal',
       template_variation_id: 'warm', template_variation_name: 'Warm opening',
       condition_count: 2, conditions_matched: false, conditions_enforced: false,
@@ -166,7 +166,7 @@ describe('usage telemetry', () => {
       territoryName: featureRows[0].account_territory_name,
       lastEmailedAt: featureRows[0].last_emailed_at,
     }, {
-      templateId: 'renewal', subjectClusterId: 'email-template:renewal',
+      templateId: 'renewal', subjectClusterId: '^(?:(?:re|fw|fwd)\\s*:\\s*)*annual\\s+renewal\\s+for\\s+[^\\r\\n]+$',
       templateName: 'Annual renewal', variation: 'Warm opening',
       conditionCount: 2, matched: false, enforced: false,
       territoryId: '17', territoryName: 'Upper Midwest',

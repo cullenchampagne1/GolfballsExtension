@@ -2,20 +2,14 @@
  *
  * The template definition tells us which text is fixed and which text is
  * dynamic, so it is a stronger training signal than trying to rediscover the
- * shape from sent subjects. Each template owns one stable cluster ID; its
- * subject variations become structural patterns inside that cluster.
- *
- * Structural regexes remain in the catalog for diagnostics and backwards
- * compatibility. They are deliberately not the attribution key. The tracking
- * store records the fully rendered outbound subject and matches a reply to
- * that exact normalized value, which naturally includes the result of code
- * variables without executing arbitrary code while compiling the catalog.
+ * shape from sent subjects. The server-facing cluster identity is the compiled
+ * regex itself: the backend can apply it case-insensitively to email subjects
+ * without receiving recipient-specific rendered subjects.
  */
 
 const PLACEHOLDER = /\{\{\s*([^}]+?)\s*\}\}/g;
 const REPLY_PREFIX = '^(?:(?:re|fw|fwd)\\s*:\\s*|\\[external(?:\\s+email)?\\]\\s*)*';
 const MAX_ALTERNATIVES = 32;
-const CLUSTER_PREFIX = 'email-template:';
 
 const object = (value) => (
   value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -67,16 +61,6 @@ export function normalizeEmailSubject(value) {
       .trim();
   }
   return out;
-}
-
-/**
- * Cluster identity is owned by the saved template, not its mutable subject.
- * Including the complete template ID makes the mapping deterministic and
- * collision-free without persistence, training order, or a hash registry.
- */
-export function emailTemplateClusterId(templateId) {
-  const id = String(templateId || '').trim();
-  return id ? `${CLUSTER_PREFIX}${id}` : null;
 }
 
 const exact = (char) => ({ kind: 'exact', char });
@@ -249,12 +233,17 @@ function compileSubject(subject, definitions) {
   alternatives = appendAlternatives(alternatives, [literalAtoms(raw.slice(cursor))])
     .map(compactAtoms)
     .filter((atoms) => atoms.length > 0);
-  return { alternatives };
+  const fixedCharacters = Math.max(0, ...alternatives.map((atoms) => (
+    atoms.filter((atom) => atom.kind === 'exact' && /[\p{L}\p{N}]/u.test(atom.char)).length
+  )));
+  return { alternatives, fixedCharacters };
 }
 
 function escapeRegexChar(char, raw = false) {
   if (char === ' ') return raw ? '\\s+' : ' ';
-  if (char === '-' && raw) return '[-\\u2010-\\u2015\\u2212]';
+  if (char === '-' && raw) return '[-‐-―−]';
+  if (char === "'" && raw) return "['‘’‛]";
+  if (char === '"' && raw) return '["“”]';
   return char.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 }
 
@@ -317,7 +306,7 @@ function unavailableTracker(templateId, templateName, status, reason) {
     clusterId: null,
     trackerId: null,
     clusterRevision: null,
-    matchMode: 'recorded_subject',
+    matchMode: 'subject_regex',
     patterns: [],
     regex: null,
     canonicalRegex: null,
@@ -354,15 +343,18 @@ function initialTracker(template, index) {
       patterns,
       canonicalRegex: compiled.alternatives.length ? unionRegex(compiled.alternatives) : null,
       regex: compiled.alternatives.length ? unionRegex(compiled.alternatives, true) : null,
+      _fixedCharacters: compiled.fixedCharacters,
       _alternatives: compiled.alternatives,
     };
   });
   const alternatives = variants.flatMap((variant) => variant._alternatives);
   const patterns = [...new Set(variants.flatMap((variant) => variant.patterns))];
-  const incomplete = variants.some((variant) => !variant._alternatives.length);
-  const clusterId = incomplete ? null : emailTemplateClusterId(templateId);
+  const missingSubject = variants.some((variant) => !variant._alternatives.length);
+  const unsafeWildcard = variants.some((variant) => variant._fixedCharacters < 3);
+  const incomplete = missingSubject || unsafeWildcard;
   const canonicalRegex = alternatives.length ? unionRegex(alternatives) : null;
   const regex = alternatives.length ? unionRegex(alternatives, true) : null;
+  const clusterId = incomplete ? null : regex;
   const revisionSeed = variants
     .flatMap((variant) => variant.patterns.map((pattern) => `${variant.variationId}:${pattern}`))
     .sort()
@@ -377,14 +369,16 @@ function initialTracker(template, index) {
     // UI use clusterId; older delivery contracts still understand trackerId.
     trackerId: clusterId,
     clusterRevision: incomplete ? null : `subject-shape:${shortHash(revisionSeed)}`,
-    matchMode: 'recorded_subject',
+    matchMode: 'subject_regex',
     patterns,
     regex: incomplete ? null : regex,
     canonicalRegex: incomplete ? null : canonicalRegex,
     flags: 'iu',
     variants,
     conflictsWith: [],
-    reason: incomplete ? 'Every subject variation needs a subject line.' : '',
+    reason: missingSubject
+      ? 'Every subject variation needs a subject line.'
+      : unsafeWildcard ? 'Add at least three fixed letters or numbers to every subject variation.' : '',
     _alternatives: alternatives,
   };
 }
@@ -394,7 +388,7 @@ function publicTracker(tracker) {
   return {
     ...rest,
     variants: (rest.variants || []).map((variant) => {
-      const { _alternatives: ignored, ...visible } = variant;
+      const { _alternatives: ignored, _fixedCharacters: ignoredFixed, ...visible } = variant;
       return visible;
     }),
   };
@@ -403,9 +397,9 @@ function publicTracker(tracker) {
 /** Build the same subject-cluster catalog for the same saved templates. */
 export function buildEmailTemplateTrackerCatalog(templates) {
   return {
-    version: 2,
-    identityStrategy: 'template-id-v1',
-    matchMode: 'recorded-subject-v1',
+    version: 3,
+    identityStrategy: 'subject-regex-v1',
+    matchMode: 'subject-regex-v1',
     trackers: (Array.isArray(templates) ? templates : [])
       .map(initialTracker)
       .map(publicTracker),
@@ -414,8 +408,8 @@ export function buildEmailTemplateTrackerCatalog(templates) {
 
 /**
  * Best-effort structural lookup retained for diagnostics and older callers.
- * Attribution uses exact recorded send subjects instead; overlapping shapes
- * therefore never disable either cluster.
+ * The server applies the emitted regex itself; this helper returns null when
+ * multiple local templates intentionally share the same subject shape.
  */
 export function matchEmailTemplateSubject(subject, catalogOrTemplates) {
   const catalog = Array.isArray(catalogOrTemplates)

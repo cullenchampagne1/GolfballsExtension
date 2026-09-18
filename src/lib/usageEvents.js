@@ -115,7 +115,7 @@ export function sendUsageEvent(event, { flush = 'periodic' } = {}) {
 
 /** Record one fixed feature action. Numeric fields may already be aggregates. */
 export function reportFeatureUsage(feature, dimensions = {}, options = {}) {
-  const subjectClusterId = compactLabel(dimensions.subject_cluster_id, 260);
+  const subjectClusterId = compactLabel(dimensions.subject_cluster_id, 8192);
   const templateId = compactLabel(dimensions.template_id, 200);
   const templateName = compactLabel(dimensions.template_name, 160);
   const variationId = compactLabel(dimensions.template_variation_id, 200);
