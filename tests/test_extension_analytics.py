@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, delete, func, inspect, literal, select
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, create_engine, delete, func, inspect, literal, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Session
 
@@ -131,6 +131,7 @@ class ExtensionUsageEvent(Base):
     word_count = Column(Integer, nullable=False, default=0)
     attachment_count = Column(Integer, nullable=False, default=0)
     inline_image_count = Column(Integer, nullable=False, default=0)
+    subject_cluster_id = Column(Text, nullable=True)
     template_id = Column(String(200), nullable=True)
     template_name = Column(String(160), nullable=True)
     template_variation_id = Column(String(200), nullable=True)
@@ -516,6 +517,10 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         self.assertIn("date(timezone('America/Chicago', timezone('UTC'", sql)
 
     def test_email_send_log_projects_typed_rows_without_message_content(self):
+        subject_cluster_id = (
+            r"^(?:(?:re|fw|fwd)\s*:\s*|"
+            r"\[external(?:\s+email)?\]\s*)*annual\s+renewal\s+for\s+[^\r\n]+$"
+        )
         with Session(self.engine) as session:
             event = ExtensionUsageEvent(
                 owner_credential_id="cred-a",
@@ -528,6 +533,7 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
                 word_count=184,
                 attachment_count=1,
                 inline_image_count=2,
+                subject_cluster_id=subject_cluster_id,
                 template_id="renewal",
                 template_name="Annual renewal",
                 template_variation_id="warm",
@@ -586,12 +592,43 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(row["status"], {"tone": "success", "text": "Delivered"})
             self.assertIn("Privacy-bounded delivery telemetry", row["_detail"]["description"])
+            cluster_field = next(
+                field for field in row["_detail"]["fields"]
+                if field["label"] == "Subject cluster regex"
+            )
+            self.assertEqual(cluster_field["value"], subject_cluster_id)
+            self.assertTrue(cluster_field["mono"])
+            self.assertTrue(cluster_field["wrap"])
+            self.assertTrue(cluster_field["copyable"])
             serialized = json.dumps(payload)
             for forbidden in ("recipient", "subject", "body", "filename", "credential_id"):
                 self.assertNotIn(f'"{forbidden}"', serialized.casefold())
         finally:
             with Session(self.engine) as session:
                 session.execute(delete(ExtensionUsageEvent).where(ExtensionUsageEvent.id == event_id))
+                session.commit()
+
+    def test_email_send_log_omits_subject_cluster_stat_when_unavailable(self):
+        with Session(self.engine) as session:
+            event = ExtensionUsageEvent(
+                owner_credential_id="cred-a", session_id="no-cluster-email",
+                kind="feature", feature="email_send", source="contact",
+                transport="pa", count=1, ok=True, occurred_at=self.now,
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+            session.commit()
+        try:
+            payload = self.routes["_console_email_send_log"](30)
+            row = next(item for item in payload["rows"] if item["id"] == f"email-event-{event_id}")
+            labels = [field["label"] for field in row["_detail"]["fields"]]
+            self.assertNotIn("Subject cluster regex", labels)
+        finally:
+            with Session(self.engine) as session:
+                session.execute(delete(ExtensionUsageEvent).where(
+                    ExtensionUsageEvent.id == event_id
+                ))
                 session.commit()
 
     def test_email_spacing_day_count_uses_requested_attention_thresholds(self):
