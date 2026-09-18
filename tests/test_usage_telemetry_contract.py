@@ -95,6 +95,18 @@ class UsageTelemetryContractTests(unittest.TestCase):
         })
         self.assertIsNone(legacy.batch_id)
 
+    def test_accepts_legacy_template_cluster_without_discarding_the_send(self):
+        event = self.UsageEvent.model_validate({
+            "kind": "feature", "feature": "email_send", "source": "task_list",
+            "transport": "pa", "template_id": "renewal-2026",
+            "template_name": "Annual renewal", "word_count": 42,
+            "subject_cluster_id": "email-template:renewal-2026",
+        })
+
+        self.assertIsNone(event.subject_cluster_id)
+        self.assertEqual(event.template_id, "renewal-2026")
+        self.assertEqual(event.word_count, 42)
+
     def test_server_batch_ceiling_covers_every_bounded_client_queue(self):
         self.assertGreaterEqual(self.MAX_USAGE_EVENTS, 960 + 96)
 
@@ -146,6 +158,9 @@ class UsageTelemetryContractTests(unittest.TestCase):
             {"kind": "feature", "feature": "email_send", "source": "popup",
              "transport": "pa", "template_id": "renewal",
              "subject_cluster_id": r"^private subject$"},
+            {"kind": "feature", "feature": "email_send", "source": "popup",
+             "transport": "pa", "template_id": "renewal",
+             "subject_cluster_id": "email-template:another-template"},
             {"kind": "feature", "feature": "email_send", "source": "popup",
              "transport": "pa", "condition_count": 0, "conditions_matched": True},
             {"kind": "feature", "feature": "email_send", "source": "popup",
