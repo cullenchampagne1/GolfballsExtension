@@ -92,6 +92,7 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
   });
 
   it('declares BDR, SA, and SR pod activity as shared horizontal Cartesian charts', () => {
+    const analytics = readFileSync(resolve(root, '.revstack/analytics.py'), 'utf8');
     for (const [role, block] of [
       ['BDR', bdrEmailActivityBlock],
       ['SA', saEmailActivityBlock],
@@ -110,9 +111,13 @@ describe('Golfballs dashboard control surfaces', { skip: !localRuntimeAvailable 
       assert.match(block, /^\s+yFormat: decimal$/m);
       assert.match(block, /^\s+yCollision: none$/m);
     }
-    assert.match(bdrEmailActivityBlock, /aggregate: \{ id: email\.bdr-activity, version: 1 \}/);
-    assert.match(saEmailActivityBlock, /aggregate: \{ id: email\.sa-activity, version: 1 \}/);
-    assert.match(srEmailActivityBlock, /aggregate: \{ id: email\.sr-activity, version: 1 \}/);
+    assert.match(bdrEmailActivityBlock, /aggregate: \{ id: email\.bdr-activity, version: 2 \}/);
+    assert.match(saEmailActivityBlock, /aggregate: \{ id: email\.sa-activity, version: 2 \}/);
+    assert.match(srEmailActivityBlock, /aggregate: \{ id: email\.sr-activity, version: 2 \}/);
+    assert.match(analytics, /"email\.bdr-activity"/);
+    assert.match(analytics, /"email\.sa-activity"/);
+    assert.match(analytics, /"email\.sr-activity"/);
+    assert.match(analytics, /register\(aggregate_id, version=2, mode="snapshot"/);
     assert.match(routes, /\("today", "Today".*\("pd", "PD".*\("pw", "PW".*\("7d", "7D AVG"/s);
     assert.match(routes, /\("pw", "PW", 7, 7, 13, 1, 14, 20, 1, "Prior-PW total avg"\)/);
     assert.match(routes, /"reference_lines": reference_line\(rows, line_label\)/);
