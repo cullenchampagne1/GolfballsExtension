@@ -895,6 +895,34 @@ class ExtensionAnalyticsIntegrationTests(unittest.TestCase):
         finally:
             manager.read = original_read
 
+    def test_managed_lineup_expands_email_and_call_analytics_beyond_ten_pods(self):
+        lineup = json.loads(json.dumps(_TEST_POD_LINEUP))
+        lineup["members"].extend({
+            "first_name": f"{position}11",
+            "last_name": "Test",
+            "pod": 11,
+            "position": position,
+        } for position in ("BDR", "SA", "SR"))
+        manager = self.routes["_pod_lineup_members"].__globals__["config_access_manager"]
+        original_read = manager.read
+        manager.read = lambda _name: (None, "", lineup)
+        try:
+            members = self.routes["_pod_lineup_members"]("BDR")
+            self.assertEqual([member["pod"] for member in members], list(range(1, 12)))
+
+            email_payload = self.routes["_console_email_activity"]("BDR")
+            self.assertEqual(len(email_payload["ranges"][0]["rows"]), 11)
+            self.assertEqual(email_payload["ranges"][0]["rows"][-1]["pod_label"], "POD 11")
+
+            call_payload = self.routes["_console_call_activity"]()
+            self.assertEqual(len(call_payload["ranges"][0]["rows"]), 11)
+            self.assertEqual(call_payload["ranges"][0]["rows"][-1]["pod_label"], "POD 11")
+
+            send_log = self.routes["_console_email_send_log"](days=30, page=1, page_size=1)
+            self.assertEqual(send_log["primary_key"], "id")
+        finally:
+            manager.read = original_read
+
     def test_sales_fantasy_cache_remains_readable_without_a_running_script(self):
         expected = {"season_id": "season-01", "daily_scores": [{"week": 1}]}
         cache = type("Cache", (), {
