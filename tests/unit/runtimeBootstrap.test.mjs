@@ -31,8 +31,8 @@ const HEALTHY = {
   ok: true, session_valid: true, extension_enabled: true, assistant_enabled: true,
 };
 const GRACE_MS = 48 * 60 * 60 * 1000;
-const fault = (message, status) =>
-  Object.assign(new Error(message), status ? { status } : {});
+const fault = (message, status, code) =>
+  Object.assign(new Error(message), status ? { status } : {}, code ? { code } : {});
 
 function harness() {
   const stored = {};
@@ -198,7 +198,7 @@ describe('project runtime lifecycle · only an explicit 403 revokes', () => {
   it('persists a revoked decision when the server returns 403', async () => {
     const test = harness();
     await test.controller.start();
-    test.fail(fault('extension_disabled', 403));
+    test.fail(fault('Extension access is disabled', 403, 'extension_disabled'));
 
     assert.equal(await test.controller.sync(), false);
     assert.equal(test.state().o, 0);
@@ -218,6 +218,7 @@ describe('project runtime lifecycle · only an explicit 403 revokes', () => {
     ['a 503 outage', fault('backend unavailable', 503)],
     ['a 429 enrollment rate-limit', fault('too many requests', 429)],
     ['a 401 not-yet-enrolled', fault('unauthorized', 401)],
+    ['an unrelated 403', fault('insufficient scope', 403, 'insufficient_scope')],
     ['an offline network error', fault('failed to fetch')],
   ]) {
     it(`leaves an accepted decision untouched through ${label}`, async () => {
@@ -249,7 +250,7 @@ describe('project runtime lifecycle · only an explicit 403 revokes', () => {
 
   it('recovers automatically after an administrator reverses a 403', async () => {
     const test = harness();
-    test.fail(fault('disabled', 403));
+    test.fail(fault('Extension access is disabled', 403, 'extension_disabled'));
     assert.equal(await test.controller.start(), false);
     assert.equal(test.state().o, 0);
 

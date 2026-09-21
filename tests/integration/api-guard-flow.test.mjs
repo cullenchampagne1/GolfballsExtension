@@ -97,10 +97,11 @@ describe('extension API guard', () => {
         });
       } catch (error) {
         assert.equal(error.status, 429);
+        assert.equal(error.code, 'assistant_rate_limited');
         assert.equal(error.retryAfterSeconds, 17);
         throw error;
       }
-    }, /HTTP 429/);
+    }, /Message quota reached/);
   });
 
   it('honors Retry-After per lane without letting notification transport block interactive work', async () => {
@@ -133,7 +134,7 @@ describe('extension API guard', () => {
     assert.equal(requests.length, 2, 'the repeated poll is rejected before fetch');
   });
 
-  it('closes the product runtime on rejected installation credentials', async () => {
+  it('leaves health 401/403 decisions to the runtime bootstrap response classifier', async () => {
     for (const status of [401, 403]) {
       const { fetchMock } = createFetchMock(() => jsonResponse({ detail: 'Denied' }, status));
       const loaded = loadInstallationAuth({
@@ -150,9 +151,25 @@ describe('extension API guard', () => {
 
       await loaded.client.apiFetch(`${CLIENT_BASE}/health`);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      assert.equal(closed.length, 1);
-      assert.equal(closed[0][0]?.reload, true);
+      assert.deepEqual(closed, []);
     }
+  });
+
+  it('preserves the structured health denial code for the decision classifier', async () => {
+    const { fetchMock } = createFetchMock(() => jsonResponse({
+      detail: { code: 'extension_disabled', message: 'Extension access is disabled' },
+    }, 403));
+    const loaded = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation() },
+      fetchImpl: fetchMock,
+    });
+
+    await assert.rejects(
+      loaded.client.apiJson(`${CLIENT_BASE}/health`),
+      (error) => error.status === 403
+        && error.code === 'extension_disabled'
+        && error.message === 'Extension access is disabled',
+    );
   });
 
   it('does not brick product access when only Help Companion is disabled', async () => {
