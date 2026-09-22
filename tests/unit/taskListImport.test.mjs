@@ -36,6 +36,18 @@ describe('Task List import · recipient rows', () => {
     assert.equal(matchImportedSalesRep('alex s', reps).rep.id, '10');
   });
 
+  it('matches a full CSV name to a shortened or last-name-first CRM option', () => {
+    assert.equal(matchImportedSalesRep('Aaron Hunter', [
+      { id: '20', name: 'Aaron' },
+    ]).rep.id, '20');
+    assert.equal(matchImportedSalesRep('Aaron Hunter', [
+      { id: '21', name: 'Hunter, Aaron' },
+    ]).rep.id, '21');
+    assert.equal(matchImportedSalesRep('AaronH', [
+      { id: '21', name: 'Hunter, Aaron' },
+    ]).rep.id, '21');
+  });
+
   it('rejects ambiguous or unknown sales-rep shorthand instead of guessing', () => {
     const reps = [
       { id: '10', name: 'Alex Sylvester' },
@@ -153,7 +165,7 @@ describe('Task List import · recipient rows', () => {
     });
   });
 
-  it('reports an ambiguous spreadsheet rep on its source row', async () => {
+  it('keeps a row with an ambiguous spreadsheet rep and reports the Quick Task fallback', async () => {
     const result = await resolveTaskImportRecords([{
       ...contact,
       importVariables_o: { sales_rep: 'Alex' },
@@ -164,11 +176,13 @@ describe('Task List import · recipient rows', () => {
       ],
     });
 
-    assert.equal(result.rows.length, 0);
-    assert.deepEqual(result.errors, [{
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].importedAssigneeId, '');
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.warnings, [{
       row: 2,
       accountId: '900',
-      message: 'sales_rep "Alex" matches multiple active reps',
+      message: 'sales_rep "Alex" matches multiple active reps; using the Quick Task assignee',
     }]);
   });
 

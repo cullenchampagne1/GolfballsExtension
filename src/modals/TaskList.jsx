@@ -454,7 +454,15 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       const needsSalesReps = parsed.records.some((record) => (
         String(record?.importVariables_o?.sales_rep || '').trim()
       ));
-      const salesReps = needsSalesReps ? await loadActiveSalesReps() : [];
+      let salesReps = [];
+      if (needsSalesReps) {
+        try {
+          salesReps = await loadActiveSalesReps();
+        } catch {
+          // sales_rep is optional. Resolver warnings explain that these rows
+          // will use the assignee selected in Quick Task instead.
+        }
+      }
       const resolved = await resolveTaskImportRecords(parsed.records, { salesReps });
       if (!resolved.rows.length) {
         const first = resolved.errors[0];
@@ -467,6 +475,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         accepted: resolved.rows.length,
         skipped,
         errors: [...parsed.errors, ...resolved.errors].sort((a, b) => a.row - b.row).slice(0, 5),
+        warnings: resolved.warnings,
       });
       setStatus('ready');
       setQuery('');
@@ -478,7 +487,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
       setBulkCompose(false);
       reportContactImportUsage(resolved.rows.length, { flush: 'soon' });
       toast?.success?.(
-        `Prepared ${resolved.rows.length} task recipient${resolved.rows.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`,
+        `Prepared ${resolved.rows.length} task recipient${resolved.rows.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}${resolved.warnings.length ? ` · ${resolved.warnings.length} rep fallback${resolved.warnings.length === 1 ? '' : 's'}` : ''}`,
         { duration: 3600 },
       );
     } catch (error) {
@@ -1101,6 +1110,12 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
                   {importBatch.errors[0] ? ` (row ${importBatch.errors[0].row}: ${importBatch.errors[0].message})` : ''}
                 </span>
               )}
+              {importBatch.warnings?.length > 0 && (
+                <span style={{ color: 'var(--gb-warning-fg)' }}>
+                  · {importBatch.warnings.length} rep assignment{importBatch.warnings.length === 1 ? '' : 's'} using Quick Task fallback
+                  {importBatch.warnings[0] ? ` (row ${importBatch.warnings[0].row}: ${importBatch.warnings[0].message})` : ''}
+                </span>
+              )}
             </div>
           </motion.div>
         )}
@@ -1304,7 +1319,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           autoCompose
           allowBlankSubject={everySelectedImportHasSubject}
           composeNotice={importBatch
-            ? 'Spreadsheet task_subject, task_description, and sales_rep values override these defaults row by row.'
+            ? 'Spreadsheet task_subject, task_description, and matched sales_rep values override these defaults row by row. Unmatched reps use this assignee.'
             : ''}
           onComposed={(data) => runQuickAction('bulk-create-task', { template: data })}
           onClosed={() => setBulkCompose(false)}

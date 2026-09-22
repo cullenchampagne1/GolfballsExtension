@@ -38,18 +38,23 @@ export function matchImportedSalesRep(value, reps) {
   if (!requested) return { matched: false, optional: true, rep: null, error: '' };
   const inputWords = normalizedContactName(requested).split(/\s+/).filter(Boolean);
   const inputCompact = compactName(requested);
+  const inputTokenKey = [...inputWords].sort().join(' ');
   const directory = (Array.isArray(reps) ? reps : []).flatMap((rep) => {
     const id = positiveId(rep?.id);
     const name = text(rep?.name);
     const words = normalizedContactName(name).split(/\s+/).filter(Boolean);
     if (!id || !name || !words.length) return [];
+    const commaReversed = /^[^,]+,\s*[^,]+/.test(name);
+    const first = commaReversed ? words[words.length - 1] : words[0];
+    const last = commaReversed ? words[0] : words[words.length - 1];
     return [{
       id,
       name,
       normalized: words.join(' '),
       compact: words.join(''),
-      first: words[0],
-      firstLastInitial: `${words[0]}${words.length > 1 ? words[words.length - 1][0] : ''}`,
+      tokenKey: [...words].sort().join(' '),
+      first,
+      firstLastInitial: `${first}${words.length > 1 ? last[0] : ''}`,
     }];
   });
 
@@ -70,7 +75,9 @@ export function matchImportedSalesRep(value, reps) {
   };
 
   const exact = choose(directory.filter((rep) => (
-    rep.normalized === inputWords.join(' ') || rep.compact === inputCompact
+    rep.normalized === inputWords.join(' ')
+      || rep.compact === inputCompact
+      || (inputWords.length > 1 && rep.tokenKey === inputTokenKey)
   )), 'full-name');
   if (exact) return exact;
 
@@ -81,7 +88,7 @@ export function matchImportedSalesRep(value, reps) {
   if (shorthand) return shorthand;
 
   const firstName = choose(
-    directory.filter((rep) => rep.first === inputWords.join(' ')),
+    directory.filter((rep) => rep.first === inputWords[0]),
     'unique-first-name',
   );
   if (firstName) return firstName;
@@ -256,6 +263,7 @@ export async function resolveTaskImportRecords(records, options = {}) {
   const concurrency = Math.max(1, Math.min(8, Number(options.concurrency) || 4));
   const rows = new Array(source.length);
   const errors = [];
+  const warnings = [];
   let cursor = 0;
 
   async function worker() {
@@ -268,7 +276,13 @@ export async function resolveTaskImportRecords(records, options = {}) {
         if (taskFields.subject.length > 500) throw new Error('task_subject exceeds 500 characters');
         if (taskFields.description.length > 4_000) throw new Error('task_description exceeds 4,000 characters');
         const salesRep = matchImportedSalesRep(taskFields.salesRep, options.salesReps);
-        if (taskFields.salesRep && !salesRep.matched) throw new Error(salesRep.error);
+        if (taskFields.salesRep && !salesRep.matched) {
+          warnings.push({
+            row: Number(record?.importRow_i) || index + 2,
+            accountId: ids.accountId,
+            message: `${salesRep.error}; using the Quick Task assignee`,
+          });
+        }
         let resolved = { contactId: ids.contactId, contactName: record?.contactName_t };
         if (!ids.contactId) {
           if (!positiveId(ids.accountId)) throw new Error('row has no usable contact or account id');
@@ -294,5 +308,9 @@ export async function resolveTaskImportRecords(records, options = {}) {
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, source.length) }, () => worker()));
-  return { rows: rows.filter(Boolean), errors: errors.sort((a, b) => a.row - b.row) };
+  return {
+    rows: rows.filter(Boolean),
+    errors: errors.sort((a, b) => a.row - b.row),
+    warnings: warnings.sort((a, b) => a.row - b.row),
+  };
 }
