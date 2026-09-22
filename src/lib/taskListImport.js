@@ -19,6 +19,97 @@ const normalizedContactName = (value) => text(value)
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
+const compactName = (value) => normalizedContactName(value).replace(/\s+/g, '');
+
+function importedTaskFields(record) {
+  const values = record?.importVariables_o && typeof record.importVariables_o === 'object'
+    ? record.importVariables_o
+    : {};
+  return {
+    salesRep: text(values.sales_rep),
+    subject: text(values.task_subject),
+    description: text(values.task_description),
+  };
+}
+
+/** Resolve an imported rep name without ever guessing between active reps. */
+export function matchImportedSalesRep(value, reps) {
+  const requested = text(value);
+  if (!requested) return { matched: false, optional: true, rep: null, error: '' };
+  const inputWords = normalizedContactName(requested).split(/\s+/).filter(Boolean);
+  const inputCompact = compactName(requested);
+  const directory = (Array.isArray(reps) ? reps : []).flatMap((rep) => {
+    const id = positiveId(rep?.id);
+    const name = text(rep?.name);
+    const words = normalizedContactName(name).split(/\s+/).filter(Boolean);
+    if (!id || !name || !words.length) return [];
+    return [{
+      id,
+      name,
+      normalized: words.join(' '),
+      compact: words.join(''),
+      first: words[0],
+      firstLastInitial: `${words[0]}${words.length > 1 ? words[words.length - 1][0] : ''}`,
+    }];
+  });
+
+  const choose = (candidates, kind) => {
+    if (candidates.length === 1) {
+      const [{ id, name }] = candidates;
+      return { matched: true, optional: false, rep: { id, name }, match: kind, error: '' };
+    }
+    if (candidates.length > 1) {
+      return {
+        matched: false,
+        optional: false,
+        rep: null,
+        error: `sales_rep "${requested}" matches multiple active reps`,
+      };
+    }
+    return null;
+  };
+
+  const exact = choose(directory.filter((rep) => (
+    rep.normalized === inputWords.join(' ') || rep.compact === inputCompact
+  )), 'full-name');
+  if (exact) return exact;
+
+  const shorthand = choose(
+    directory.filter((rep) => rep.firstLastInitial === inputCompact),
+    'first-last-initial',
+  );
+  if (shorthand) return shorthand;
+
+  const firstName = choose(
+    directory.filter((rep) => rep.first === inputWords.join(' ')),
+    'unique-first-name',
+  );
+  if (firstName) return firstName;
+
+  return {
+    matched: false,
+    optional: false,
+    rep: null,
+    error: `sales_rep "${requested}" did not match an active rep`,
+  };
+}
+
+/** Apply row-specific spreadsheet fields over the bulk Quick Task defaults. */
+export function importedTaskCreation(row, baseTemplate = {}, fallbackAssigneeId = '') {
+  const subject = text(row?.importedTaskSubject);
+  const description = text(row?.importedTaskDescription);
+  const template = {
+    ...(baseTemplate || {}),
+    ...(subject ? { name: subject, subject } : {}),
+    ...(description ? { body: description } : {}),
+  };
+  return {
+    template,
+    assigneeId: positiveId(row?.importedAssigneeId)
+      || positiveId(fallbackAssigneeId)
+      || positiveId(template.assigneeId),
+  };
+}
 
 function contactIdFromElement(element) {
   const href = element?.querySelector?.('a[href]')?.getAttribute('href') || '';
@@ -130,6 +221,7 @@ export function importedTaskTargetRow(record, resolved = {}, index = 0) {
   const accountId = positiveId(ids.accountId);
   const contactName = text(resolved.contactName || record?.contactName_t) || `Contact ${contactId}`;
   const accountName = text(record?.accountName_t) || (accountId ? `Account ${accountId}` : 'Imported contact');
+  const taskFields = importedTaskFields(record);
   return {
     id: `import-target-${index + 1}-${contactId}`,
     sourceRecordId: text(record?.id),
@@ -147,7 +239,11 @@ export function importedTaskTargetRow(record, resolved = {}, index = 0) {
         : 'Account · first-contact fallback',
     priority: 2,
     priorityLabel: 'Medium',
-    subject: 'Ready for Quick Task',
+    subject: taskFields.subject || 'Ready for Quick Task',
+    importedTaskSubject: taskFields.subject,
+    importedTaskDescription: taskFields.description,
+    importedAssigneeId: positiveId(resolved.salesRepId),
+    importedAssigneeName: text(resolved.salesRepName),
     status: 'New',
     importedTarget: true,
   };
@@ -168,11 +264,23 @@ export async function resolveTaskImportRecords(records, options = {}) {
       const record = source[index];
       const ids = contactIdsFromRow(record);
       try {
+        const taskFields = importedTaskFields(record);
+        if (taskFields.subject.length > 500) throw new Error('task_subject exceeds 500 characters');
+        if (taskFields.description.length > 4_000) throw new Error('task_description exceeds 4,000 characters');
+        const salesRep = matchImportedSalesRep(taskFields.salesRep, options.salesReps);
+        if (taskFields.salesRep && !salesRep.matched) throw new Error(salesRep.error);
         let resolved = { contactId: ids.contactId, contactName: record?.contactName_t };
         if (!ids.contactId) {
           if (!positiveId(ids.accountId)) throw new Error('row has no usable contact or account id');
           resolved = await resolveAccount(ids.accountId, record);
           if (!positiveId(resolved?.contactId)) throw new Error('account has no contact to receive a task');
+        }
+        if (salesRep.rep) {
+          resolved = {
+            ...resolved,
+            salesRepId: salesRep.rep.id,
+            salesRepName: salesRep.rep.name,
+          };
         }
         rows[index] = importedTaskTargetRow(record, resolved, index);
       } catch (error) {

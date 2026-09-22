@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.5.6",
-  "generatedAt": "2026-09-21",
+  "generatedAt": "2026-09-22",
   "tree": [
     {
       "title": "Getting Started",
@@ -1100,7 +1100,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Choose Import list and open the same CSV or XLSX contact/account format accepted by CRM Search. Contact rows use their contact ID directly; account rows use the contact attached to the order nearest the same calendar date one year ago. If no order contact can be resolved, the first account contact is used as a fallback. Valid recipients are selected automatically. Choose Create Tasks, enter the label, date, category, priority, and assignee in Quick Task, then the extension creates that task once for every selected recipient. Rows without a usable contact are skipped and reported without creating orphan tasks."
+            "text": "Choose Import list and open the same CSV or XLSX contact/account format accepted by CRM Search. Contact rows use their contact ID directly; account rows use the contact attached to the order nearest the same calendar date one year ago. If no order contact can be resolved, the first account contact is used as a fallback. Optional task_subject and task_description columns override the Quick Task defaults for that row. An optional sales_rep column assigns the row through the active CRM sales-rep directory: use a full name, a unique first name such as Alex, or a unique first-name plus last-initial shorthand such as AlexS. Ambiguous or unknown rep names are skipped and reported rather than guessed. Valid recipients are selected automatically. Choose Create Tasks to set shared fallback values such as date, category, priority, and assignee, then the extension creates one task for every selected recipient. Rows without a usable contact are skipped and reported without creating orphan tasks."
           },
           {
             "type": "heading",

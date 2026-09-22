@@ -105,6 +105,8 @@ export function QuickTask({
   autoCompose = false,
   draft = null,
   defaultAssigneeId = '',
+  allowBlankSubject = false,
+  composeNotice = '',
   onClosed,
   bindClose,
 }) {
@@ -205,7 +207,7 @@ export function QuickTask({
   /* Fire a composed (custom) entry — tokens → template + the inline due. */
   const logComposed = async ({ tokens, subject, body }) => {
     if (busy) return;
-    if (!subject) { toast?.warning?.('Add a subject before adding the task'); return; }
+    if (!subject && !allowBlankSubject) { toast?.warning?.('Add a subject before adding the task'); return; }
     const resolved = qtResolveDue(due);
     const daysOut = resolved.daysOut > 0 ? resolved.daysOut : 0;
     if (onComposed) {
@@ -321,6 +323,19 @@ export function QuickTask({
           disabled={busy || salesReps == null}
         />
       </div>
+
+      {composeNotice && (
+        <div role="note" style={{
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--gb-brand-tint-border)',
+          background: 'var(--gb-brand-tint-soft)',
+          color: 'var(--gb-brand-label)',
+          fontSize: 10.5,
+          lineHeight: 1.45,
+        }}>
+          {composeNotice}
+        </div>
+      )}
 
       <div
         style={{ display: 'flex', flexDirection: 'column', height: 'min(72vh, 600px)' }}

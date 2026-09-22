@@ -108,7 +108,9 @@ describe('Task List presentation · named views', () => {
   it('offers an admin-only import workspace that creates tasks for resolved targets', () => {
     assert.match(taskListSource, /__ADMIN__ && \([\s\S]*?Import list/);
     assert.match(taskListSource, /parseContactFile\(file\)/);
-    assert.match(taskListSource, /resolveTaskImportRecords\(parsed\.records\)/);
+    assert.match(taskListSource, /loadActiveSalesReps\(\)/);
+    assert.match(taskListSource, /resolveTaskImportRecords\(parsed\.records, \{ salesReps \}\)/);
+    assert.match(taskListSource, /importedTaskCreation\(target, template, payload\.assigneeId\)/);
     assert.match(taskListSource, /target\?\.targetContactId \|\| await apiGetTaskContactId/);
     assert.match(taskListSource, /importBatch \? 'Create Tasks' : 'Quick Task'/);
   });

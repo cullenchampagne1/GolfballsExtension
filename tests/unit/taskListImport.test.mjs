@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 
 import {
+  importedTaskCreation,
   importedTaskTargetRow,
+  matchImportedSalesRep,
   priorYearDate,
   resolveTaskImportRecords,
   taskContactFromAccountHtml,
@@ -22,6 +24,29 @@ const account = {
 };
 
 describe('Task List import · recipient rows', () => {
+  it('matches a full name, unique first name, and unique first-plus-last-initial shorthand', () => {
+    const reps = [
+      { id: '10', name: 'Alex Sylvester' },
+      { id: '11', name: 'Jordan Lee' },
+    ];
+
+    assert.equal(matchImportedSalesRep('Alex Sylvester', reps).rep.id, '10');
+    assert.equal(matchImportedSalesRep('alex', reps).rep.id, '10');
+    assert.equal(matchImportedSalesRep('AlexS', reps).rep.id, '10');
+    assert.equal(matchImportedSalesRep('alex s', reps).rep.id, '10');
+  });
+
+  it('rejects ambiguous or unknown sales-rep shorthand instead of guessing', () => {
+    const reps = [
+      { id: '10', name: 'Alex Sylvester' },
+      { id: '12', name: 'Alex Smith' },
+    ];
+
+    assert.match(matchImportedSalesRep('Alex', reps).error, /multiple active reps/);
+    assert.match(matchImportedSalesRep('AlexS', reps).error, /multiple active reps/);
+    assert.match(matchImportedSalesRep('Taylor', reps).error, /did not match/);
+  });
+
   it('uses the order contact nearest the same date one year earlier instead of the first contact', () => {
     globalThis.DOMParser = new JSDOM('').window.DOMParser;
     const html = `<!doctype html><div class="portlet box green">
@@ -84,6 +109,67 @@ describe('Task List import · recipient rows', () => {
     }, 0));
     assert.equal(result.rows[0].targetContactId, '42');
     assert.match(result.rows[0].contactUrl, /Page=240&customerID=42$/);
+  });
+
+  it('carries per-row subject, description, and matched assignee into task creation', async () => {
+    const enriched = {
+      ...contact,
+      importVariables_o: {
+        task_subject: 'Review dormant account',
+        task_description: 'No order since last fall; confirm the purchasing contact.',
+        sales_rep: 'AlexS',
+      },
+    };
+    const result = await resolveTaskImportRecords([enriched], {
+      salesReps: [{ id: '314', name: 'Alex Sylvester' }],
+    });
+
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.rows[0].subject, 'Review dormant account');
+    assert.equal(result.rows[0].importedTaskDescription, 'No order since last fall; confirm the purchasing contact.');
+    assert.equal(result.rows[0].importedAssigneeId, '314');
+    assert.equal(result.rows[0].importedAssigneeName, 'Alex Sylvester');
+
+    assert.deepEqual(importedTaskCreation(result.rows[0], {
+      subject: 'Shared fallback', body: 'Shared note', daysOut: 7, assigneeId: '22',
+    }), {
+      template: {
+        name: 'Review dormant account',
+        subject: 'Review dormant account',
+        body: 'No order since last fall; confirm the purchasing contact.',
+        daysOut: 7,
+        assigneeId: '22',
+      },
+      assigneeId: '314',
+    });
+  });
+
+  it('uses Quick Task values when optional spreadsheet task fields are blank', () => {
+    assert.deepEqual(importedTaskCreation({}, {
+      subject: 'Call next week', body: 'Discuss the renewal.', assigneeId: '22',
+    }), {
+      template: { subject: 'Call next week', body: 'Discuss the renewal.', assigneeId: '22' },
+      assigneeId: '22',
+    });
+  });
+
+  it('reports an ambiguous spreadsheet rep on its source row', async () => {
+    const result = await resolveTaskImportRecords([{
+      ...contact,
+      importVariables_o: { sales_rep: 'Alex' },
+    }], {
+      salesReps: [
+        { id: '10', name: 'Alex Sylvester' },
+        { id: '12', name: 'Alex Smith' },
+      ],
+    });
+
+    assert.equal(result.rows.length, 0);
+    assert.deepEqual(result.errors, [{
+      row: 2,
+      accountId: '900',
+      message: 'sales_rep "Alex" matches multiple active reps',
+    }]);
   });
 
   it('uses the prior-year order contact resolved for an account as the task recipient', async () => {

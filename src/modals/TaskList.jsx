@@ -20,7 +20,8 @@ import { customActionEntryPoints } from '../lib/customActionEntryPoints.js';
 import { buildTaskListActionContext } from '../lib/taskListActionContext.js';
 import { liveDateOnPush, updateTaskById } from '../lib/crmTasks.js';
 import { parseContactFile } from '../lib/contactImport.js';
-import { resolveTaskImportRecords } from '../lib/taskListImport.js';
+import { loadActiveSalesReps } from '../lib/crmSalesReps.js';
+import { importedTaskCreation, resolveTaskImportRecords } from '../lib/taskListImport.js';
 import { reportContactImportUsage } from '../lib/usageEvents.js';
 import { STATUS_OPTS, filterTasks } from '../lib/taskListModel.js';
 import {
@@ -450,7 +451,11 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
     setImporting(true);
     try {
       const parsed = await parseContactFile(file);
-      const resolved = await resolveTaskImportRecords(parsed.records);
+      const needsSalesReps = parsed.records.some((record) => (
+        String(record?.importVariables_o?.sales_rep || '').trim()
+      ));
+      const salesReps = needsSalesReps ? await loadActiveSalesReps() : [];
+      const resolved = await resolveTaskImportRecords(parsed.records, { salesReps });
       if (!resolved.rows.length) {
         const first = resolved.errors[0];
         throw new Error(first ? `No task recipients resolved. Row ${first.row}: ${first.message}` : 'No task recipients resolved.');
@@ -837,10 +842,11 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
           const template = payload.template || (payload.custom
             ? { name: payload.custom.title, subject: payload.custom.title, body: '', daysOut: payload.custom.days }
             : null);
+          const creation = importedTaskCreation(target, template, payload.assigneeId);
           const res = await submitQuickTask({
-            template,
+            template: creation.template,
             context:  { contactId, employeeId },
-            assigneeId: payload.assigneeId,
+            assigneeId: creation.assigneeId,
           });
           if (!res?.ok) throw new Error(res?.error || 'Create task failed');
           const followUpError = templateFollowUpActionError(res);
@@ -958,6 +964,11 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
 
   const selCount = selected.size;
   const hasSelection = selCount > 0;
+  const selectedImportRows = useMemo(() => (
+    importBatch?.rows.filter((row) => selected.has(row.id)) || []
+  ), [importBatch, selected]);
+  const everySelectedImportHasSubject = selectedImportRows.length > 0
+    && selectedImportRows.every((row) => row.importedTaskSubject);
 
   /* Selected-task → contact tuples for the Email Runner side panel.
      Tasks built from a real CRM scrape carry contactUrl
@@ -1081,6 +1092,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
               <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{importBatch.fileName}</span>
               <span>{importBatch.accepted} task-ready</span>
               <span>· account rows use the order contact nearest this date last year</span>
+              {importBatch.rows.some((row) => row.importedAssigneeId) && (
+                <span>· spreadsheet rep assignments ready</span>
+              )}
               {importBatch.skipped > 0 && (
                 <span style={{ color: 'var(--gb-warning-fg)' }}>
                   · {importBatch.skipped} skipped
@@ -1288,6 +1302,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
             ? `${selCount} imported recipient${selCount === 1 ? '' : 's'}`
             : `${selCount} selected task${selCount === 1 ? '' : 's'}`}
           autoCompose
+          allowBlankSubject={everySelectedImportHasSubject}
+          composeNotice={importBatch
+            ? 'Spreadsheet task_subject, task_description, and sales_rep values override these defaults row by row.'
+            : ''}
           onComposed={(data) => runQuickAction('bulk-create-task', { template: data })}
           onClosed={() => setBulkCompose(false)}
         />
