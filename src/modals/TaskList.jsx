@@ -322,6 +322,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
   const [priorityFilter, setPriorityFilter] = useState('');
   const [selected, setSelected]   = useState(() => new Set());
   const [importBatch, setImportBatch] = useState(null);
+  const [importIssuesOpen, setImportIssuesOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef(null);
   const [replacementContactsOpen, setReplacementContactsOpen] = useState(false);
@@ -471,14 +472,24 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         throw new Error(first ? `No task recipients resolved. Row ${first.row}: ${first.message}` : 'No task recipients resolved.');
       }
       const skipped = parsed.errors.length + parsed.warnings.length + resolved.errors.length;
+      const errors = [...parsed.errors, ...resolved.errors]
+        .sort((a, b) => a.row - b.row);
+      const warnings = [...parsed.warnings, ...resolved.warnings]
+        .sort((a, b) => a.row - b.row);
       setImportBatch({
         fileName: file.name,
         rows: resolved.rows,
         accepted: resolved.rows.length,
         skipped,
-        errors: [...parsed.errors, ...resolved.errors].sort((a, b) => a.row - b.row).slice(0, 5),
-        warnings: resolved.warnings,
+        repFallbacks: resolved.warnings.length,
+        errors,
+        warnings,
+        issues: [
+          ...errors.map((issue) => ({ ...issue, tone: 'error' })),
+          ...warnings.map((issue) => ({ ...issue, tone: 'warning' })),
+        ].sort((a, b) => a.row - b.row),
       });
+      setImportIssuesOpen(false);
       setStatus('ready');
       setQuery('');
       setStatusFilter('1');
@@ -501,6 +512,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
 
   const closeImportBatch = useCallback(() => {
     setImportBatch(null);
+    setImportIssuesOpen(false);
     setSelected(new Set());
     setQuery('');
     setActionStateByRow({});
@@ -1097,28 +1109,66 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
               borderBottom: '1px solid var(--gb-brand-tint-border)',
               background: 'var(--gb-brand-tint-soft)',
               display: 'flex', alignItems: 'center', gap: 10,
+              minWidth: 0, whiteSpace: 'nowrap',
               fontSize: 11, color: 'var(--gb-text-secondary)',
             }}>
-              <I.upload size={12} style={{ color: 'var(--gb-brand-label)' }} />
-              <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{importBatch.fileName}</span>
-              <span>{importBatch.accepted} task-ready</span>
-              <span>· account rows use the order contact nearest this date last year</span>
-              {importBatch.rows.some((row) => row.importedAssigneeId) && (
-                <span>· spreadsheet rep assignments ready</span>
-              )}
+              <I.upload size={12} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+              <span title={importBatch.fileName} style={{
+                color: 'var(--gb-brand-label)', fontWeight: 700,
+                overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+              }}>{importBatch.fileName}</span>
+              <span style={{ flexShrink: 0 }}>{importBatch.accepted} ready</span>
               {importBatch.skipped > 0 && (
-                <span style={{ color: 'var(--gb-warning-fg)' }}>
-                  · {importBatch.skipped} skipped
-                  {importBatch.errors[0] ? ` (row ${importBatch.errors[0].row}: ${importBatch.errors[0].message})` : ''}
+                <span style={{ color: 'var(--gb-error-fg)', flexShrink: 0 }}>{importBatch.skipped} skipped</span>
+              )}
+              {importBatch.repFallbacks > 0 && (
+                <span style={{ color: 'var(--gb-warning-fg)', flexShrink: 0 }}>
+                  {importBatch.repFallbacks} rep fallback{importBatch.repFallbacks === 1 ? '' : 's'}
                 </span>
               )}
-              {importBatch.warnings?.length > 0 && (
-                <span style={{ color: 'var(--gb-warning-fg)' }}>
-                  · {importBatch.warnings.length} rep assignment{importBatch.warnings.length === 1 ? '' : 's'} using Quick Task fallback
-                  {importBatch.warnings[0] ? ` (row ${importBatch.warnings[0].row}: ${importBatch.warnings[0].message})` : ''}
-                </span>
+              <span style={{ flex: 1 }} />
+              {importBatch.issues?.length > 0 && (
+                <button
+                  type="button"
+                  aria-expanded={importIssuesOpen}
+                  onClick={() => setImportIssuesOpen((open) => !open)}
+                  style={{
+                    flexShrink: 0, border: '1px solid var(--gb-brand-tint-border)',
+                    borderRadius: 'var(--gb-r-sm)', padding: '4px 8px',
+                    background: 'var(--gb-surface-1)', color: 'var(--gb-brand-label)',
+                    font: 'inherit', fontWeight: 700, cursor: 'pointer',
+                  }}
+                >{importIssuesOpen ? 'Hide' : 'View'} {importBatch.issues.length} issue{importBatch.issues.length === 1 ? '' : 's'}</button>
               )}
             </div>
+            <AnimatePresence initial={false}>
+              {importIssuesOpen && importBatch.issues?.length > 0 && (
+                <motion.div
+                  key="task-import-issues"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.16 }}
+                  style={{ overflow: 'hidden', borderBottom: '1px solid var(--gb-border-subtle)' }}
+                >
+                  <div style={{ maxHeight: 150, overflowY: 'auto', background: 'var(--gb-surface-1)' }}>
+                    {importBatch.issues.map((issue, index) => (
+                      <div key={`${issue.row}-${index}`} style={{
+                        display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', gap: 10,
+                        padding: '6px 14px', borderBottom: '1px solid var(--gb-border-subtle)',
+                        fontSize: 10.5, lineHeight: 1.4,
+                      }}>
+                        <span style={{
+                          color: issue.tone === 'error' ? 'var(--gb-error-fg)' : 'var(--gb-warning-fg)',
+                          fontWeight: 700,
+                        }}>Row {issue.row}</span>
+                        <span style={{ color: 'var(--gb-text-secondary)', overflowWrap: 'anywhere' }}>{issue.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

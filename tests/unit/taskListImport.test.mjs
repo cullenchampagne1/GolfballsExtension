@@ -36,6 +36,24 @@ describe('Task List import · recipient rows', () => {
     assert.equal(matchImportedSalesRep('alex s', reps).rep.id, '10');
   });
 
+  it('matches full and first-name CSV values to a unique short CRM handle', () => {
+    const reps = [
+      { id: '10', name: 'AlexS' },
+      { id: '11', name: 'JordanL' },
+    ];
+
+    assert.equal(matchImportedSalesRep('Alex Sylvester', reps).rep.id, '10');
+    assert.equal(matchImportedSalesRep('Alex', reps).rep.id, '10');
+  });
+
+  it('does not guess a first name shared by multiple short CRM handles', () => {
+    const result = matchImportedSalesRep('Alex', [
+      { id: '10', name: 'AlexS' },
+      { id: '12', name: 'AlexM' },
+    ]);
+    assert.match(result.error, /multiple active reps/);
+  });
+
   it('matches a full CSV name to a shortened or last-name-first CRM option', () => {
     assert.equal(matchImportedSalesRep('Aaron Hunter', [
       { id: '20', name: 'Aaron' },

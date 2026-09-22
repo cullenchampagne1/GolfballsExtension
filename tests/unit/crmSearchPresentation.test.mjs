@@ -111,6 +111,8 @@ describe('Task List presentation · named views', () => {
     assert.match(taskListSource, /loadActiveSalesReps\(\)/);
     assert.match(taskListSource, /resolveTaskImportRecords\(parsed\.records, \{ salesReps, salesRepLookupError \}\)/);
     assert.match(taskListSource, /importedTaskCreation\(target, template, payload\.assigneeId\)/);
+    assert.match(taskListSource, /View'\} \{importBatch\.issues\.length\} issue/);
+    assert.match(taskListSource, /Row \{issue\.row\}/);
     assert.match(taskListSource, /target\?\.targetContactId \|\| await apiGetTaskContactId/);
     assert.match(taskListSource, /importBatch \? 'Create Tasks' : 'Quick Task'/);
   });

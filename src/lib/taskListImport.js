@@ -39,6 +39,9 @@ export function matchImportedSalesRep(value, reps) {
   const inputWords = normalizedContactName(requested).split(/\s+/).filter(Boolean);
   const inputCompact = compactName(requested);
   const inputTokenKey = [...inputWords].sort().join(' ');
+  const inputShorthand = inputWords.length > 1
+    ? `${inputWords[0]}${inputWords[inputWords.length - 1][0]}`
+    : '';
   const directory = (Array.isArray(reps) ? reps : []).flatMap((rep) => {
     const id = positiveId(rep?.id);
     const name = text(rep?.name);
@@ -93,13 +96,24 @@ export function matchImportedSalesRep(value, reps) {
   if (exact) return exact;
 
   const shorthand = choose(
-    directory.filter((rep) => rep.shorthandAliases.has(inputCompact)),
+    directory.filter((rep) => (
+      rep.shorthandAliases.has(inputCompact)
+        || (inputShorthand && rep.compact === inputShorthand)
+    )),
     'first-last-initial',
   );
   if (shorthand) return shorthand;
 
   const firstName = choose(
-    directory.filter((rep) => rep.first === inputWords[0]),
+    directory.filter((rep) => (
+      rep.first === inputWords[0]
+        || (
+          inputWords.length === 1
+          && rep.words.length === 1
+          && rep.compact.startsWith(inputWords[0])
+          && rep.compact.length === inputWords[0].length + 1
+        )
+    )),
     'unique-first-name',
   );
   if (firstName) return firstName;
