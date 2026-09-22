@@ -45,16 +45,26 @@ export function matchImportedSalesRep(value, reps) {
     const words = normalizedContactName(name).split(/\s+/).filter(Boolean);
     if (!id || !name || !words.length) return [];
     const commaReversed = /^[^,]+,\s*[^,]+/.test(name);
-    const first = commaReversed ? words[words.length - 1] : words[0];
-    const last = commaReversed ? words[0] : words[words.length - 1];
+    const commaParts = name.split(',');
+    const reversedFirst = normalizedContactName(commaParts.slice(1).join(' ')).split(/\s+/)[0];
+    const reversedLast = normalizedContactName(commaParts[0]).split(/\s+/)[0];
+    const first = commaReversed ? reversedFirst : words[0];
+    const last = commaReversed ? reversedLast : words[words.length - 1];
+    const shorthandAliases = new Set([`${first}${words.length > 1 ? last[0] : ''}`]);
+    for (const given of words) {
+      for (const surname of words) {
+        if (given !== surname) shorthandAliases.add(`${given}${surname[0]}`);
+      }
+    }
     return [{
       id,
       name,
+      words,
       normalized: words.join(' '),
       compact: words.join(''),
       tokenKey: [...words].sort().join(' '),
       first,
-      firstLastInitial: `${first}${words.length > 1 ? last[0] : ''}`,
+      shorthandAliases,
     }];
   });
 
@@ -78,11 +88,12 @@ export function matchImportedSalesRep(value, reps) {
     rep.normalized === inputWords.join(' ')
       || rep.compact === inputCompact
       || (inputWords.length > 1 && rep.tokenKey === inputTokenKey)
+      || (inputWords.length > 1 && inputWords.every((word) => rep.words.includes(word)))
   )), 'full-name');
   if (exact) return exact;
 
   const shorthand = choose(
-    directory.filter((rep) => rep.firstLastInitial === inputCompact),
+    directory.filter((rep) => rep.shorthandAliases.has(inputCompact)),
     'first-last-initial',
   );
   if (shorthand) return shorthand;
@@ -277,10 +288,13 @@ export async function resolveTaskImportRecords(records, options = {}) {
         if (taskFields.description.length > 4_000) throw new Error('task_description exceeds 4,000 characters');
         const salesRep = matchImportedSalesRep(taskFields.salesRep, options.salesReps);
         if (taskFields.salesRep && !salesRep.matched) {
+          const lookupError = text(options.salesRepLookupError);
           warnings.push({
             row: Number(record?.importRow_i) || index + 2,
             accountId: ids.accountId,
-            message: `${salesRep.error}; using the Quick Task assignee`,
+            message: lookupError
+              ? `sales rep directory unavailable (${lookupError}); using the Quick Task assignee`
+              : `${salesRep.error}; using the Quick Task assignee`,
           });
         }
         let resolved = { contactId: ids.contactId, contactName: record?.contactName_t };

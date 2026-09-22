@@ -4,7 +4,9 @@ export const SALES_REP_DIRECTORY_URL = `/golfballs/adminnew/Default.aspx?Page=${
 
 /** Parse the same active Sales Rep dropdown used by Submit Proof. */
 export function parseActiveSalesReps(doc) {
-  const select = doc?.getElementById?.('ctl00_DropDownSalesRep');
+  const select = doc?.getElementById?.('ctl00_DropDownSalesRep')
+    || doc?.getElementById?.('ctl00_customSalesReps')
+    || doc?.querySelector?.('select[id$="DropDownSalesRep"], select[id$="customSalesReps"]');
   if (!select) return [];
   const seen = new Set();
   return Array.from(select.options || []).flatMap((option) => {

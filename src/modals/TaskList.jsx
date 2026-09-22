@@ -455,15 +455,17 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp, initial })
         String(record?.importVariables_o?.sales_rep || '').trim()
       ));
       let salesReps = [];
+      let salesRepLookupError = '';
       if (needsSalesReps) {
         try {
           salesReps = await loadActiveSalesReps();
-        } catch {
+        } catch (error) {
+          salesRepLookupError = error?.message || String(error);
           // sales_rep is optional. Resolver warnings explain that these rows
           // will use the assignee selected in Quick Task instead.
         }
       }
-      const resolved = await resolveTaskImportRecords(parsed.records, { salesReps });
+      const resolved = await resolveTaskImportRecords(parsed.records, { salesReps, salesRepLookupError });
       if (!resolved.rows.length) {
         const first = resolved.errors[0];
         throw new Error(first ? `No task recipients resolved. Row ${first.row}: ${first.message}` : 'No task recipients resolved.');

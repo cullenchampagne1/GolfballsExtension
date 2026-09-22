@@ -46,6 +46,9 @@ describe('Task List import · recipient rows', () => {
     assert.equal(matchImportedSalesRep('AaronH', [
       { id: '21', name: 'Hunter, Aaron' },
     ]).rep.id, '21');
+    assert.equal(matchImportedSalesRep('AlexS', [
+      { id: '22', name: 'Sylvester, Alex (SA)' },
+    ]).rep.id, '22');
   });
 
   it('rejects ambiguous or unknown sales-rep shorthand instead of guessing', () => {
@@ -184,6 +187,20 @@ describe('Task List import · recipient rows', () => {
       accountId: '900',
       message: 'sales_rep "Alex" matches multiple active reps; using the Quick Task assignee',
     }]);
+  });
+
+  it('distinguishes an unavailable rep directory from an unmatched name', async () => {
+    const result = await resolveTaskImportRecords([{
+      ...contact,
+      importVariables_o: { sales_rep: 'AlexS' },
+    }], {
+      salesReps: [],
+      salesRepLookupError: 'Sales rep lookup returned no active reps',
+    });
+
+    assert.equal(result.rows.length, 1);
+    assert.match(result.warnings[0].message, /directory unavailable/);
+    assert.match(result.warnings[0].message, /Quick Task assignee/);
   });
 
   it('uses the prior-year order contact resolved for an account as the task recipient', async () => {

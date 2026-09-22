@@ -109,7 +109,7 @@ describe('Task List presentation · named views', () => {
     assert.match(taskListSource, /__ADMIN__ && \([\s\S]*?Import list/);
     assert.match(taskListSource, /parseContactFile\(file\)/);
     assert.match(taskListSource, /loadActiveSalesReps\(\)/);
-    assert.match(taskListSource, /resolveTaskImportRecords\(parsed\.records, \{ salesReps \}\)/);
+    assert.match(taskListSource, /resolveTaskImportRecords\(parsed\.records, \{ salesReps, salesRepLookupError \}\)/);
     assert.match(taskListSource, /importedTaskCreation\(target, template, payload\.assigneeId\)/);
     assert.match(taskListSource, /target\?\.targetContactId \|\| await apiGetTaskContactId/);
     assert.match(taskListSource, /importBatch \? 'Create Tasks' : 'Quick Task'/);

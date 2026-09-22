@@ -24,6 +24,13 @@ describe('CRM active sales reps', () => {
     ]);
   });
 
+  it('accepts the alternate sales-rep dropdown ids used by CRM pages', () => {
+    const doc = new JSDOM(`<!doctype html><select id="ctl00_customSalesReps">
+      <option value="314">Alex Sylvester</option>
+    </select>`).window.document;
+    assert.deepEqual(parseActiveSalesReps(doc), [{ id: '314', name: 'Alex Sylvester' }]);
+  });
+
   it('loads the authenticated CRM directory used by Submit Proof', async () => {
     const calls = [];
     const reps = await loadActiveSalesReps({
