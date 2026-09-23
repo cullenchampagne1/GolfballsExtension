@@ -164,8 +164,20 @@ export function restoreProposalPriceOverrides(lines) {
     return changed ? { ...line, splits } : line;
   });
 }
-// Largest break ≤ q from a [{q,p}] ladder (the verified engine's output shape).
-export const priceAtBreaks = (breaks, q) => { let p = null; for (const b of (breaks || [])) if (b.q <= q) p = b.p; return p; };
+// Largest break ≤ q; below the minimum, use the smallest available tier.
+export const priceAtBreaks = (breaks, q) => {
+  const rows = (Array.isArray(breaks) ? breaks : [])
+    .filter((b) => Number.isFinite(Number(b?.q)) && Number.isFinite(Number(b?.p)));
+  if (!rows.length) return null;
+  const units = Number(q);
+  const smallest = rows.reduce((best, row) => (Number(row.q) < Number(best.q) ? row : best));
+  let selected = null;
+  for (const row of rows) {
+    if (Number.isFinite(units) && Number(row.q) <= units
+      && (!selected || Number(row.q) > Number(selected.q))) selected = row;
+  }
+  return Number((selected || smallest).p);
+};
 
 /* Highest custom-logo per-unit price (the smallest-qty tier) — shown
    on the card by default ("from" pricing), before volume discounts. */

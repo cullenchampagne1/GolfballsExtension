@@ -174,8 +174,8 @@ describe('priceAtBreaks', () => {
     assert.equal(priceAtBreaks(bks, 96), 13.95);
   });
 
-  it('returns null below the smallest break or for an empty ladder', () => {
-    assert.equal(priceAtBreaks([{ q: 12, p: 14.95 }], 6), null);
+  it('uses the smallest tier below the minimum and null only for no ladder', () => {
+    assert.equal(priceAtBreaks([{ q: 12, p: 14.95 }], 6), 14.95);
     assert.equal(priceAtBreaks([], 12), null);
     assert.equal(priceAtBreaks(null, 12), null);
   });

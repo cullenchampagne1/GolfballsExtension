@@ -405,8 +405,12 @@ describe('priceAtQ', () => {
     assert.equal(priceAtQ(breaks, 100), 3.99);
   });
 
-  it('returns 0 below the smallest break or with no ladder', () => {
-    assert.equal(priceAtQ(breaks, 0), 0);
+  it('uses the smallest available tier below the ladder minimum', () => {
+    assert.equal(priceAtQ(breaks, 0), 5.99);
+    assert.equal(priceAtQ([{ Quantity: 12, Price: 23.99 }, { Quantity: 24, Price: 22.99 }], 6), 23.99);
+  });
+
+  it('returns 0 only when there is no usable ladder', () => {
     assert.equal(priceAtQ([], 12), 0);
     assert.equal(priceAtQ(null, 12), 0);
   });
@@ -790,6 +794,13 @@ describe('assembleLine · setup fee', () => {
     assert.deepEqual(line.SetupPriceBreak.PriceBreak, [{ Quantity: 1, Price: 50, Cost: 0 }]);
     // The row the site's proposal email prints: $287.88 goods + $50 setup.
     assert.equal(lineTotal(line), 337.88);
+  });
+
+  it('uses the minimum price tier instead of $0 below the first quantity break', () => {
+    const line = towelLine(6);
+    assert.equal(line.ItemPrice, 23.99, '6 units use the next larger 12-unit tier');
+    assert.equal(line.SetupPrice, 50);
+    assert.equal(lineTotal(line), 193.94);
   });
 
   it('sends a rep-edited setup fee verbatim, flat at every quantity', () => {

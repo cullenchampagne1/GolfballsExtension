@@ -47,10 +47,10 @@ describe('setupFeeAt', () => {
     assert.equal(setupFeeAt(ladder, 240), 0);
   });
 
-  it('is 0 with no ladder — a product with no decoration setup charges nothing', () => {
+  it('uses the smallest tier below the minimum and 0 only with no ladder', () => {
     assert.equal(setupFeeAt(null, 12), 0);
     assert.equal(setupFeeAt([], 12), 0);
-    assert.equal(setupFeeAt([{ q: 24, p: 50 }], 12), 0, 'the first break is above the qty');
+    assert.equal(setupFeeAt([{ q: 24, p: 50 }], 12), 50, 'the first break is above the qty');
   });
 });
 

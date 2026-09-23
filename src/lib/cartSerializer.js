@@ -416,10 +416,26 @@ const canonicalUrl = (product) => {
      SetupPrice[q]     = the chosen modification's setupFee ladder (+ option setups)
 
    Service Level and Express Logo option fees are NOT part of the line ladder.
-   `priceAtQ` takes the largest break ≤ q. Verified byte-exact against real carts
+   `priceAtQ` takes the largest break ≤ q, or the smallest available break when
+   q is below the ladder minimum. Verified byte-exact against real carts
    (tee, divot, towel, Wilson / Pro V1 / Pro V1x). */
 const _pb = (h) => (h && h.PriceBreak) || null;
-export const priceAtQ = (breaks, q) => { let p = 0; for (const b of (breaks || [])) if (b.Quantity <= q) p = b.Price; return p; };
+function ladderPriceAt(breaks, q, quantityOf, priceOf) {
+  const rows = (Array.isArray(breaks) ? breaks : [])
+    .map((row) => ({ quantity: Number(quantityOf(row)), price: Number(priceOf(row)) }))
+    .filter((row) => Number.isFinite(row.quantity) && Number.isFinite(row.price));
+  if (!rows.length) return 0;
+  const units = Number(q);
+  const smallest = rows.reduce((best, row) => (row.quantity < best.quantity ? row : best));
+  let selected = null;
+  for (const row of rows) {
+    if (Number.isFinite(units) && row.quantity <= units
+      && (!selected || row.quantity > selected.quantity)) selected = row;
+  }
+  return (selected || smallest).price;
+}
+export const priceAtQ = (breaks, q) => ladderPriceAt(breaks, q, (b) => b?.Quantity, (b) => b?.Price);
+const compactPriceAtQ = (breaks, q) => ladderPriceAt(breaks, q, (b) => b?.q, (b) => b?.p);
 function modFeeLadders(pm) {
   const item = [], setup = [];
   if (!pm) return { item, setup };
@@ -1051,7 +1067,6 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // live fee ladders + the chosen modification (ParentItemFee + the mod's itemFee
   // + selected PriceTier/Second Pole). This is what stops the "price has changed"
   // prompt. Falls back to the catalog ladder only when the page has no fee data.
-  const atQ = (bks, q) => { let p = 0; for (const b of (bks || [])) if (b.q <= q) p = b.p; return p; };
   const computed = decoBlock ? computeDecoratedPricing(product, decoBlock.ProductModification, child) : null;
   // Gift set wraps the ball line: a per-set price ladder (ball custom-logo ladder
   // ×OriginalItemQty + the kit ladder) plus a `bundle` + a kit child in childList.
@@ -1083,12 +1098,12 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     : computed ? computed.breaks
     : ((pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }]);
   const unit = overridePrice != null ? overridePrice
-    : (computed || giftBreaks) ? atQ(breaks, qty)
+    : (computed || giftBreaks) ? compactPriceAtQ(breaks, qty)
     : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
   const setupBreaks = overrideSetup != null ? [{ q: 1, p: overrideSetup }]
     : giftSet ? null
     : ((computed && computed.setupBreaks) || null);
-  const setupUnit = overrideSetup != null ? overrideSetup : (setupBreaks ? atQ(setupBreaks, qty) : 0);
+  const setupUnit = overrideSetup != null ? overrideSetup : (setupBreaks ? compactPriceAtQ(setupBreaks, qty) : 0);
   const childList = bundleBlock ? [child, bundleBlock.kitChild] : [child];
 
   // Resolve the cart name the way the site does: substitute the decoration's

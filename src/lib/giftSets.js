@@ -35,7 +35,13 @@ export const PACKAGE_UPSELL_URL = `${API.MASTER_USER}/getPackageUpsellData`;
 /* Round a price so its cents end in 95 — the site's `u(t,95)`:
    r = 95/100 = .95 ; i = (100-95)/100 + .01 = .06 ; floor(t - i) + r. */
 const round95 = (t) => Math.floor(t - 0.06) + 0.95;
-const priceAtQ = (lad, q) => { let p = 0; for (const b of (lad || [])) if (b.q <= q) p = b.p; return p; };
+const priceAtQ = (lad, q) => {
+  if (!Array.isArray(lad) || !lad.length) return 0;
+  const smallest = lad.reduce((best, row) => (row.q < best.q ? row : best));
+  let selected = null;
+  for (const row of lad) if (row.q <= q && (!selected || row.q > selected.q)) selected = row;
+  return (selected || smallest).p;
+};
 
 /* A bundleOption is a "custom logo gift set" iff the product page would offer it on
    a custom-logo ball: upsellOptions.showCustom AND it bundles a kit with a fractional

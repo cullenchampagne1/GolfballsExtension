@@ -43,15 +43,19 @@ function money(value) {
 }
 
 /** Largest break ≤ qty from a `[{ q, p }]` setup ladder (the shape
- *  `computeDecoratedPricing().setupBreaks` returns). 0 when there is no
- *  ladder — a product with no decoration setup charges nothing. */
+ *  `computeDecoratedPricing().setupBreaks` returns). Below its minimum use the
+ *  smallest tier; 0 is reserved for no ladder or a real zero-dollar tier. */
 export function setupFeeAt(setupBreaks, qty) {
   const units = Number(qty) || 0;
-  let fee = 0;
-  for (const b of (setupBreaks || [])) {
-    if (b && Number(b.q) <= units) fee = Number(b.p) || 0;
+  const rows = (Array.isArray(setupBreaks) ? setupBreaks : [])
+    .filter((b) => b && Number.isFinite(Number(b.q)) && Number.isFinite(Number(b.p)));
+  if (!rows.length) return 0;
+  const smallest = rows.reduce((best, row) => (Number(row.q) < Number(best.q) ? row : best));
+  let selected = null;
+  for (const row of rows) {
+    if (Number(row.q) <= units && (!selected || Number(row.q) > Number(selected.q))) selected = row;
   }
-  return round2(fee);
+  return round2(Number((selected || smallest).p));
 }
 
 /** Units across every split — the quantity the setup ladder is read at,
