@@ -94,6 +94,7 @@
         "src/vanilla/modals/order-edit-modal.js",
         "src/vanilla/page-utils.js",
         "react-dist/content/email-preview.js",
+        "react-dist/content/contact-do-not-email.js",
         "react-dist/content/text-preview.js",
         "react-dist/content/watch-list.js",
         "react-dist/content/notifications.js",

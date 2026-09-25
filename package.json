@@ -59,6 +59,10 @@
       "file": "tests/unit/contactEmailSuppression.test.mjs"
     },
     {
+      "name": "email \u00b7 contact do-not-email toggle",
+      "file": "tests/unit/contactDoNotEmail.test.mjs"
+    },
+    {
       "name": "email \u00b7 template follow-up tasks & custom actions",
       "file": "tests/unit/emailTemplateFollowUps.test.mjs"
     },
