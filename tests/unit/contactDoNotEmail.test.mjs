@@ -39,6 +39,7 @@ describe('contact do-not-email control', () => {
       doc: dom.window.document,
       href: dom.window.location.href,
       updateContact: async () => {},
+      updateSuppression: async () => {},
       MutationObserverImpl: dom.window.MutationObserver,
     });
     const button = mounted.button;
@@ -53,10 +54,12 @@ describe('contact do-not-email control', () => {
   it('persists the context marker and updates the page immediately', async () => {
     const dom = contactPage('Prefers calls after 2 PM');
     const writes = [];
+    const suppressionWrites = [];
     const mounted = mountContactDoNotEmail({
       doc: dom.window.document,
       href: dom.window.location.href,
       updateContact: async (id, edits) => writes.push({ id, edits }),
+      updateSuppression: async (entry) => suppressionWrites.push(entry),
       MutationObserverImpl: dom.window.MutationObserver,
     });
     mounted.button.click();
@@ -68,6 +71,9 @@ describe('contact do-not-email control', () => {
     assert.equal(dom.window.document.getElementById('lblContactCustomDataContext').textContent,
       'DO NOT CONTACT\nPrefers calls after 2 PM');
     assert.equal(dom.window.document.getElementById('lblContactEmail').classList.contains('gb-do-not-email'), true);
+    assert.deepEqual(suppressionWrites.at(-1), {
+      email: 'buyer@example.test', contactId: '6510673', suppressed: true,
+    });
     mounted.disconnect();
   });
 });

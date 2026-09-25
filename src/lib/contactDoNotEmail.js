@@ -1,3 +1,5 @@
+import { setContactEmailSuppression } from './contactEmailSuppressionCache.js';
+
 export const DO_NOT_CONTACT_MARKER = 'DO NOT CONTACT';
 
 const MARKER_RE = /\bDO\s+NOT\s+CONTACT\b/i;
@@ -84,6 +86,7 @@ export function mountContactDoNotEmail({
   doc = document,
   href = location.href,
   updateContact,
+  updateSuppression = setContactEmailSuppression,
   toast = globalThis.window?.__gbToast,
   MutationObserverImpl = doc.defaultView?.MutationObserver,
 } = {}) {
@@ -107,7 +110,11 @@ export function mountContactDoNotEmail({
   }
 
   const sync = () => syncContactDoNotEmail(doc);
-  sync();
+  const initialSuppressed = sync();
+  const contactEmail = () => emailCell.textContent?.trim() || '';
+  Promise.resolve(updateSuppression?.({
+    email: contactEmail(), contactId: customerId, suppressed: initialSuppressed,
+  })).catch(() => {});
 
   button.addEventListener('click', async (event) => {
     event.preventDefault();
@@ -118,17 +125,26 @@ export function mountContactDoNotEmail({
     button.dataset.loading = '1';
     button.setAttribute('aria-disabled', 'true');
     button.textContent = 'Updating…';
+    let contactUpdated = false;
     try {
       await updateContact(customerId, { Context: nextContext });
+      contactUpdated = true;
       contextCell.textContent = nextContext;
       globalThis.window?.__gbPageEngine?.clearCache?.(doc);
       sync();
+      await updateSuppression?.({
+        email: contactEmail(), contactId: customerId, suppressed: enabling,
+      });
       const toastHost = toast || globalThis.window?.__gbToast;
       toastHost?.success?.(enabling ? 'Contact marked do not email' : 'Contact can receive email');
     } catch {
       sync();
       const toastHost = toast || globalThis.window?.__gbToast;
-      toastHost?.error?.('Could not update email contact preference');
+      if (contactUpdated) {
+        toastHost?.warning?.('CRM preference saved, but local email protection could not sync');
+      } else {
+        toastHost?.error?.('Could not update email contact preference');
+      }
     } finally {
       delete button.dataset.loading;
       button.removeAttribute('aria-disabled');

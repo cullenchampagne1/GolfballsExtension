@@ -20,6 +20,7 @@ import {
 } from '../lib/emailRunnerMatch.js';
 import { createPauseGate, waitForPausableDelay } from '../lib/emailRunControl.js';
 import { contactEmailSuppressionReason } from '../lib/contactEmailSuppression.js';
+import { isContactEmailSuppressed } from '../lib/contactEmailSuppressionCache.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -706,11 +707,19 @@ export function EmailRunner({
            page engine) and our own local send log. Drives the "recently emailed"
            skip rule. */
         const lastEmailedMs = Math.max(Number(resolved?.lastEmailMs) || 0, (toEmail && emailLog[toEmail.toLowerCase()]) || 0);
-        const suppressionReason = skipDnc ? contactEmailSuppressionReason({
-          name: pageName,
-          email: toEmail,
-          context: resolved?.contactContext || c.contactContext || c.context || '',
-        }) : null;
+        /* The durable email ledger is a hard safety boundary: unlike the
+           optional broad context/status filter, a rep cannot turn off an
+           explicit Do Not Email choice made on the contact page. */
+        const locallySuppressed = toEmail
+          ? await isContactEmailSuppressed(toEmail).catch(() => true)
+          : false;
+        const suppressionReason = locallySuppressed
+          ? 'Do not contact'
+          : (skipDnc ? contactEmailSuppressionReason({
+              name: pageName,
+              email: toEmail,
+              context: resolved?.contactContext || c.contactContext || c.context || '',
+            }) : null);
         /* Enrich the "Now sending" card with the resolved name + recipient
            as soon as they're known (the row started with just the task-row
            text). */
