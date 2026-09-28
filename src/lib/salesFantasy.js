@@ -71,8 +71,8 @@ export const SALES_FANTASY_SCORING = Object.freeze({
   sales: Object.freeze([
     Object.freeze({ id: 'proposalsSent', label: 'Proposals sent', pointsByRole: roleRates(2.5, 2.5, 2.5) }),
     Object.freeze({ id: 'orders', label: 'Owned orders', pointsByRole: roleRates(6, 6, 6) }),
-    Object.freeze({ id: 'totalSales', label: 'Owned sales', pointsByRole: roleRates(0.001, 0.001, 0.001), format: 'money' }),
-    Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(0.008, 0.008, 0.008), format: 'money' }),
+    Object.freeze({ id: 'totalSales', label: 'Owned sales', pointsByRole: roleRates(1, 1, 1), format: 'money' }),
+    Object.freeze({ id: 'totalProfit', label: 'Owned profit', pointsByRole: roleRates(8, 8, 8), format: 'money' }),
   ]),
   marginTiers: Object.freeze([
     Object.freeze({ id: 'healthy', label: '30%+', minMargin: 30, orderBonusPoints: 2 }),
@@ -81,7 +81,7 @@ export const SALES_FANTASY_SCORING = Object.freeze({
   ]),
   referral: Object.freeze([
     Object.freeze({ id: 'referredOrders', label: 'Referred orders', pointsPerUnit: 4, format: 'orders' }),
-    Object.freeze({ id: 'referredSales', label: 'Referred dollars', pointsPerUnit: 0.004, format: 'money' }),
+    Object.freeze({ id: 'referredSales', label: 'Referred dollars', pointsPerUnit: 4, format: 'money' }),
   ]),
 });
 
@@ -342,12 +342,15 @@ function pointsPerUnitForRole(metric, roleId) {
 
 function scoreMetric(metric, value, roleId) {
   const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+  const scoringUnits = metric.format === 'money'
+    ? Math.floor(Math.max(0, safeValue) / 1000 + 0.5)
+    : safeValue;
   return {
     id: metric.id,
     label: metric.label,
     value: safeValue,
     format: metric.format || 'number',
-    points: oneDecimal(safeValue * pointsPerUnitForRole(metric, roleId)),
+    points: oneDecimal(scoringUnits * pointsPerUnitForRole(metric, roleId)),
   };
 }
 

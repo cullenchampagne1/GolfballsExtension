@@ -182,9 +182,9 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /animate=\{centerActive \? \{ y: -3, scale: 1\.035 \} : \{ y: 0, scale: 1 \}\}/);
     assert.match(salesFantasySource, /\.sf-bottom-center\.active \{[\s\S]*?background: linear-gradient\(180deg, var\(--gb-brand\) 0%, var\(--gb-brand-dark\) 100%\)/);
     assert.doesNotMatch(salesFantasySource, /0 9px 22px var\(--gb-brand-tint-strong\)|0 11px 26px var\(--gb-brand-tint-strong\)/);
-    assert.match(salesFantasySource, /Open POD 1 current Week \$\{SALES_FANTASY_CURRENT_WEEK\} standing/);
-    assert.match(salesFantasySource, /className="sf-bottom-center-week">POD 1/);
-    assert.match(salesFantasySource, /className="sf-bottom-center-rank">W\{SALES_FANTASY_CURRENT_WEEK\} · Rank #\{rank\}/);
+    assert.match(salesFantasySource, /Open \$\{myPodName\(\)\} current Week \$\{salesFantasyCurrentWeek\(\)\} standing/);
+    assert.match(salesFantasySource, /className="sf-bottom-center-week">\{myPodName\(\)\}/);
+    assert.match(salesFantasySource, /className="sf-bottom-center-rank">W\{salesFantasyCurrentWeek\(\)\} · Rank #\{rank\}/);
     assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(candidateName\)\}/);
     assert.match(salesFantasySource, /className="sf-avatar" aria-hidden="true">\{memberInitials\(points\.memberName\)\}/);
     assert.doesNotMatch(salesFantasySource, /className="sf-avatar">\{(?:candidate|member)\.name\}/);
@@ -228,8 +228,8 @@ describe('developer settings · Sales Fantasy event', () => {
   });
 
   it('adds individual weekly Performance and detailed Rules pages', () => {
-    const performanceSource = salesFantasySource.match(/function Performance[\s\S]*?\n}\n\nfunction ruleRate/)?.[0] || '';
-    const roleScoringSource = salesFantasySource.match(/function RoleScoringDetails[\s\S]*?\n}\n\nfunction Rules/)?.[0] || '';
+    const performanceSource = salesFantasySource.match(/function Performance[\s\S]*?\n}\n\n\/\/ Trim floating-point noise/)?.[0] || '';
+    const roleScoringSource = salesFantasySource.match(/function RoleScoringDetails[\s\S]*?\n}\n\nfunction SeasonSchedule/)?.[0] || '';
     const scheduleSource = salesFantasySource.match(/function SeasonSchedule[\s\S]*?\n}\n\nfunction Rules/)?.[0] || '';
     const rulesSource = salesFantasySource.match(/function Rules[\s\S]*?\n}\n\nfunction PodDashboard/)?.[0] || '';
 
@@ -245,9 +245,9 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(salesFantasySource, /\.sf-member-tab \{ position: relative; isolation: isolate; min-width: 0; min-height: 64px; padding: var\(--sf-3\) var\(--sf-4\);/);
     assert.match(salesFantasySource, /\.sf-member-active \{ position: absolute; z-index: 0; inset: 0;/);
     assert.match(rulesSource, /Scoring overview/);
-    assert.match(rulesSource, /SR, SA, and BDR use the same point values/);
+    assert.match(rulesSource, /A POD score is the combined total of its SR, SA, and BDR/);
     assert.match(rulesSource, /Scoring details by position/);
-    assert.match(rulesSource, /Every position receives the same statistic-by-statistic breakdown/);
+    assert.match(rulesSource, /Exact rates and bonuses applied to each position/);
     assert.match(rulesSource, /SALES_FANTASY_ROLES\.map\(\(role\) => <RoleScoringDetails role=\{role\}/);
     assert.match(rulesSource, /<SeasonSchedule \/>/);
     assert.match(scheduleSource, /5 · Season schedule/);
@@ -263,7 +263,7 @@ describe('developer settings · Sales Fantasy event', () => {
     assert.match(roleScoringSource, /scoring\.referral/);
     assert.match(roleScoringSource, /role\.id === 'bdr' \? ruleRate\(rule, role\.id\) : 'Not scored'/);
     assert.match(salesFantasySource, /rule\.pointsByRole\?\.\[roleId\] \?\? rule\.pointsPerUnit \?\? 0/);
-    assert.match(salesFantasySource, /Orders placed while the account is assigned to the BDR/);
+    assert.match(salesFantasySource, /Orders on a BDR-created opportunity placed by an SR or SA/);
     assert.doesNotMatch(rulesSource, /Work routing and attribution|primary economic driver|natural advantage|scoring contract/);
     assert.doesNotMatch(rulesSource, /BDR scoring details|highOutput|minimumOutput/);
     assert.match(salesFantasySource, /\.sf-performance-card \.sf-stat-grid \{ padding: var\(--sf-4\); \}/);

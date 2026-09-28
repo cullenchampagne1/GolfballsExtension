@@ -908,13 +908,13 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
   );
 }
 
-// Trim floating-point noise (e.g. 0.008 * 1000 = 8.000000000000002).
+// Trim floating-point noise in editable scoring rates.
 const tidy = (value) => Number(Number(value).toFixed(3));
 
 function ruleRate(rule, roleId) {
   const rate = rule.pointsByRole?.[roleId] ?? rule.pointsPerUnit ?? 0;
   if (!rate) return 'No points';
-  if (rule.format === 'money') return `${tidy(rate * 1000)} / $1k`;
+  if (rule.format === 'money') return `${tidy(rate)} / $1k`;
   return `${tidy(rate)} each`;
 }
 
