@@ -16,13 +16,19 @@ import {
   memberWeekPointSplit,
   matchupForPod,
   podForId,
+  podIdForLocalPart,
   podWeekPointSplit,
+  salesFantasyCurrentWeek,
+  seatForLocalPart,
   setSalesFantasySnapshot,
   weekState,
 } from '../lib/salesFantasy.js';
 import { fetchSalesFantasySnapshot } from '../lib/salesFantasyClient.js';
+import { resolveCurrentUserContext } from '../lib/employeeIdentity.js';
 
-const MY_POD_ID = 'pod-1';
+// Resolved from the signed-in user's email after the snapshot loads; pod-1 default.
+let myPodId = 'pod-1';
+const myPodName = () => podForId(myPodId)?.name || 'POD 1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
 setSalesFantasySnapshot({ daily_scores: [], weeks: [] });
 const EASE = [0.22, 1, 0.36, 1];
@@ -679,7 +685,7 @@ function formatMetricValue(row) {
 }
 
 function pageSubtitle(view, week) {
-  if (view === 'performance') return `POD 1 individual contribution · Week ${week}`;
+  if (view === 'performance') return `${myPodName()} individual contribution · Week ${week}`;
   if (view === 'matchups') return `Week ${week} · audit every role contribution`;
   if (view === 'standings') return '10 pods · wins rank first; completed-week points break ties';
   if (view === 'rules') return 'Attribution, role rates, margin tiers, and worked scoring examples';
@@ -738,7 +744,7 @@ function BottomNav({ view, rank, onView, onCurrentWeek }) {
           type="button"
           className={`sf-bottom-center ${centerActive ? 'active' : ''}`}
           aria-current={centerActive ? 'page' : undefined}
-          aria-label={`Open POD 1 current Week ${SALES_FANTASY_CURRENT_WEEK} standing; league rank ${rank}`}
+          aria-label={`Open ${myPodName()} current Week ${salesFantasyCurrentWeek()} standing; league rank ${rank}`}
           onClick={onCurrentWeek}
           animate={centerActive ? { y: -3, scale: 1.035 } : { y: 0, scale: 1 }}
           whileTap={{ scale: centerActive ? 1 : 0.96 }}
@@ -746,8 +752,8 @@ function BottomNav({ view, rank, onView, onCurrentWeek }) {
         >
           <AnimatePresence initial={false}>{centerActive && <motion.span className="sf-bottom-center-selected" initial={{ opacity: 0, scale: 0.88 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }} transition={NAV_TRANSITION} />}</AnimatePresence>
           <span className="sf-bottom-center-icon"><FantasyIcon.trophy size={14} /></span>
-          <span className="sf-bottom-center-week">POD 1</span>
-          <span className="sf-bottom-center-rank">W{SALES_FANTASY_CURRENT_WEEK} · Rank #{rank}</span>
+          <span className="sf-bottom-center-week">{myPodName()}</span>
+          <span className="sf-bottom-center-rank">W{salesFantasyCurrentWeek()} · Rank #{rank}</span>
         </motion.button>
       </div>
       {NAV_ITEMS.slice(2).map(renderItem)}
@@ -770,7 +776,7 @@ function SplitPanel({ pod, week }) {
 }
 
 function MatchupBreakdown({ game, week, standings, title = 'Current matchup' }) {
-  if (!game) return <article className="sf-card sf-empty">POD 1 has a bye in Week {week}.</article>;
+  if (!game) return <article className="sf-card sf-empty">{myPodName()} has a bye in Week {week}.</article>;
   const home = podForId(game.home);
   const away = podForId(game.away);
   const homeRecord = standings.find((row) => row.podId === home.id);
@@ -823,7 +829,7 @@ function MatchupTab({ game, week, index, selected, onSelect }) {
 
 function CompactMatchup({ game, week, selected, onSelect }) {
   const pods = [podForId(game.home), podForId(game.away)];
-  const mine = pods.some((pod) => pod.id === MY_POD_ID);
+  const mine = pods.some((pod) => pod.id === myPodId);
   return (
     <motion.button type="button" layout className={`sf-compact-matchup ${selected ? 'selected' : ''}`} onClick={onSelect} aria-pressed={selected}>
       <div className="sf-compact-top"><span>{mine ? 'Your matchup' : 'League matchup'}</span><span>{statusLabel(weekState(week))}</span></div>
@@ -839,7 +845,7 @@ function ByeCard({ byes }) {
 }
 
 function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
-  const pod = podForId(MY_POD_ID);
+  const pod = podForId(myPodId);
   const split = podWeekPointSplit(pod.id, week);
   const memberIndex = Math.max(0, pod.members.findIndex((member) => member.id === selectedMemberId));
   const member = pod.members[memberIndex];
@@ -865,7 +871,7 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
         <AnimatePresence initial={false} mode="popLayout">
           <motion.div className="sf-performance-detail sf-detail-transition" key={`${member.id}-${week}`} initial={DETAIL_INITIAL} animate={DETAIL_ANIMATE} exit={DETAIL_EXIT} transition={DETAIL_TRANSITION}>
           <article className="sf-card sf-performance-card">
-            <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(points.memberName)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{points.memberName}</div><div className="sf-performance-meta">{member.role} · POD 1 · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
+            <div className="sf-performance-hero"><span className="sf-avatar" aria-hidden="true">{memberInitials(points.memberName)}</span><div className="sf-performance-copy"><div className="sf-performance-name">{points.memberName}</div><div className="sf-performance-meta">{member.role} · {pod.name} · Week {week}</div></div><div className="sf-performance-score"><div className="sf-performance-score-value">{points.total.toFixed(1)}</div><div className="sf-performance-score-label">Individual points</div></div></div>
             <div className="sf-stat-grid">
               <div className="sf-stat"><div className="sf-stat-label">Activity</div><div className="sf-stat-value">{points.activity.total.toFixed(1)}</div><div className="sf-stat-detail">Verified weekly actions</div></div>
               <div className="sf-stat"><div className="sf-stat-label">{member.roleId === 'bdr' ? 'Sales + referred' : 'Sales'}</div><div className="sf-stat-value">{resultPoints.toFixed(1)}</div><div className="sf-stat-detail">{member.roleId === 'bdr' ? 'Owned results plus account referrals' : 'Owned proposals and completed results'}</div></div>
@@ -995,18 +1001,18 @@ function Rules() {
 
 function PodDashboard({ week, standings, onView }) {
   const weekData = SCHEDULE[week - 1];
-  const myStanding = standings.find((row) => row.podId === MY_POD_ID);
-  const game = matchupForPod(weekData, MY_POD_ID);
-  const currentPoints = fantasyScore(MY_POD_ID, week);
+  const myStanding = standings.find((row) => row.podId === myPodId);
+  const game = matchupForPod(weekData, myPodId);
+  const currentPoints = fantasyScore(myPodId, week);
   return (
     <div className="sf-stack">
       <div className="sf-stat-grid">
-        <div className="sf-stat"><div className="sf-stat-label">League rank</div><div className="sf-stat-value">#{myStanding.rank}</div><div className="sf-stat-detail sf-positive">POD 1 standing</div></div>
+        <div className="sf-stat"><div className="sf-stat-label">League rank</div><div className="sf-stat-value">#{myStanding.rank}</div><div className="sf-stat-detail sf-positive">{myPodName()} standing</div></div>
         <div className="sf-stat"><div className="sf-stat-label">Pod record</div><div className="sf-stat-value">{recordLabel(myStanding)}</div><div className="sf-stat-detail">{myStanding.byes ? `${myStanding.byes} bye used` : 'Bye ahead'}</div></div>
         <div className="sf-stat"><div className="sf-stat-label">Season points</div><div className="sf-stat-value">{myStanding.pointsFor.toFixed(1)}</div><div className="sf-stat-detail">Completed weeks</div></div>
         <div className="sf-stat"><div className="sf-stat-label">Week {week} points</div><div className="sf-stat-value">{currentPoints.toFixed(1)}</div><div className="sf-stat-detail">SR + SA + BDR</div></div>
       </div>
-      <MatchupBreakdown game={game} week={week} standings={standings} title="POD 1 matchup" />
+      <MatchupBreakdown game={game} week={week} standings={standings} title={`${myPodName()} matchup`} />
       <div className="sf-section-label"><h2 className="sf-section-title">Week {week} around the league</h2><button type="button" className="sf-link-button" onClick={() => onView('matchups')}>Open scoreboard</button></div>
       <div className="sf-scoreboard-grid">{weekData.games.filter((item) => item !== game).map((item) => <CompactMatchup game={item} week={week} key={item.id} selected={false} onSelect={() => onView('matchups')} />)}<ByeCard byes={weekData.byes} /></div>
       <div className="sf-data-note">Preview scoring is deterministic until the production metrics feed is connected.</div>
@@ -1016,7 +1022,7 @@ function PodDashboard({ week, standings, onView }) {
 
 function Matchups({ week, standings, selectedGameId, onSelectGame }) {
   const weekData = SCHEDULE[week - 1];
-  const myGame = matchupForPod(weekData, MY_POD_ID);
+  const myGame = matchupForPod(weekData, myPodId);
   const selectedGame = weekData.games.find((game) => game.id === selectedGameId) || myGame || weekData.games[0];
   const byeNames = weekData.byes.map((podId) => podForId(podId).name).join(' + ');
   return (
@@ -1041,7 +1047,7 @@ function Matchups({ week, standings, selectedGameId, onSelectGame }) {
 function Standings({ standings }) {
   return (
     <div className="sf-stack">
-      <div className="sf-card sf-table-wrap"><table className="sf-league-table"><thead><tr><th>Rank</th><th>Pod</th><th>W</th><th>L</th><th>Bye</th><th>Points for</th></tr></thead><tbody>{standings.map((row) => { const pod = podForId(row.podId); return <tr className={pod.id === MY_POD_ID ? 'mine' : ''} key={pod.id}><td><span className={`sf-rank-badge ${row.rank <= 3 ? 'top' : ''}`}>{row.rank}</span></td><td><div className="sf-standing-team"><PodMark pod={pod} size="small" /><span className="sf-team-name">{pod.name}</span></div></td><td>{row.wins}</td><td>{row.losses}</td><td>{row.byes}</td><td className="sf-metric-primary">{row.pointsFor.toFixed(1)}</td></tr>; })}</tbody></table></div>
+      <div className="sf-card sf-table-wrap"><table className="sf-league-table"><thead><tr><th>Rank</th><th>Pod</th><th>W</th><th>L</th><th>Bye</th><th>Points for</th></tr></thead><tbody>{standings.map((row) => { const pod = podForId(row.podId); return <tr className={pod.id === myPodId ? 'mine' : ''} key={pod.id}><td><span className={`sf-rank-badge ${row.rank <= 3 ? 'top' : ''}`}>{row.rank}</span></td><td><div className="sf-standing-team"><PodMark pod={pod} size="small" /><span className="sf-team-name">{pod.name}</span></div></td><td>{row.wins}</td><td>{row.losses}</td><td>{row.byes}</td><td className="sf-metric-primary">{row.pointsFor.toFixed(1)}</td></tr>; })}</tbody></table></div>
       <div className="sf-data-note">Standings include completed matchups only.</div>
       <Brackets standings={standings} />
     </div>
@@ -1052,7 +1058,7 @@ function BracketSlot({ slot }) {
   if (slot.kind === 'pending') {
     return <div className="sf-bracket-slot pending"><span className="sf-bracket-seed">—</span><span className="sf-bracket-slot-name">{slot.label}</span></div>;
   }
-  return <div className={`sf-bracket-slot ${slot.podId === MY_POD_ID ? 'mine' : ''}`}><span className="sf-bracket-seed">{slot.seed}</span><span className="sf-bracket-slot-name">{slot.name}</span></div>;
+  return <div className={`sf-bracket-slot ${slot.podId === myPodId ? 'mine' : ''}`}><span className="sf-bracket-seed">{slot.seed}</span><span className="sf-bracket-slot-name">{slot.name}</span></div>;
 }
 
 function BracketLane({ bracket }) {
@@ -1088,7 +1094,7 @@ function Brackets({ standings }) {
   return (
     <article className="sf-card sf-bracket-shell">
       <div className="sf-card-head">
-        <div><div className="sf-card-title">Current playoff projection</div><div className="sf-card-caption">Based on completed standings through Week {SALES_FANTASY_CURRENT_WEEK - 1}</div></div>
+        <div><div className="sf-card-title">Current playoff projection</div><div className="sf-card-caption">Based on completed standings through Week {salesFantasyCurrentWeek() - 1}</div></div>
       </div>
       <div className="sf-bracket-viewport" aria-label="Vertically stacked winner and loser brackets">
         <div className="sf-bracket-canvas">
@@ -1156,15 +1162,28 @@ function SalesFantasyApp() {
   const [week, setWeek] = useState(SALES_FANTASY_CURRENT_WEEK);
   const [direction, setDirection] = useState(1);
   const [selectedMemberId, setSelectedMemberId] = useState(SALES_FANTASY_PODS[0].members[0].id);
-  const [selectedGameId, setSelectedGameId] = useState(matchupForPod(SCHEDULE[SALES_FANTASY_CURRENT_WEEK - 1], MY_POD_ID)?.id || '');
+  const [selectedGameId, setSelectedGameId] = useState(matchupForPod(SCHEDULE[SALES_FANTASY_CURRENT_WEEK - 1], myPodId)?.id || '');
   const [snapshotRevision, setSnapshotRevision] = useState('loading');
   const [dataError, setDataError] = useState('');
   useEffect(() => {
     let active = true;
     fetchSalesFantasySnapshot()
-      .then((snapshot) => {
+      .then(async (snapshot) => {
         if (!active) return;
         setSalesFantasySnapshot(snapshot);
+        // Resolve the signed-in user's own seat (pod + member) by email local part.
+        let seat;
+        try {
+          const ctx = await resolveCurrentUserContext();
+          seat = seatForLocalPart(ctx?.email?.localPart || ctx?.installation?.localPart || '');
+        } catch { seat = seatForLocalPart(''); }
+        if (!active) return;
+        myPodId = seat.podId;
+        const wk = salesFantasyCurrentWeek();
+        const scheduleWeek = SCHEDULE[Math.min(wk, SCHEDULE.length) - 1];
+        setWeek(wk);
+        setSelectedMemberId(seat.memberId);              // default to ME, not the group's first rep
+        setSelectedGameId(matchupForPod(scheduleWeek, seat.podId)?.id || '');
         setSnapshotRevision(String(snapshot.scoring_fingerprint || snapshot.generated_at || Date.now()));
       })
       .catch((error) => {
@@ -1175,11 +1194,11 @@ function SalesFantasyApp() {
     return () => { active = false; };
   }, []);
   const standings = useMemo(
-    () => buildStandings(SALES_FANTASY_PODS, SCHEDULE, SALES_FANTASY_CURRENT_WEEK),
+    () => buildStandings(SALES_FANTASY_PODS, SCHEDULE, salesFantasyCurrentWeek()),
     [snapshotRevision],
   );
-  const myPod = podForId(MY_POD_ID);
-  const myStanding = standings.find((row) => row.podId === MY_POD_ID);
+  const myPod = podForId(myPodId);
+  const myStanding = standings.find((row) => row.podId === myPodId);
   const page = PAGES.find((item) => item.id === view) || POD_PAGE;
   const showWeekControl = view !== 'standings' && view !== 'rules';
 
@@ -1194,8 +1213,9 @@ function SalesFantasyApp() {
     setView(nextView);
   };
   const returnToCurrentWeek = () => {
-    setDirection(SALES_FANTASY_CURRENT_WEEK >= week ? 1 : -1);
-    setWeek(SALES_FANTASY_CURRENT_WEEK);
+    const current = salesFantasyCurrentWeek();
+    setDirection(current >= week ? 1 : -1);
+    setWeek(current);
     setView('pods');
   };
   const animateWeekChange = showWeekControl && view !== 'performance';
@@ -1206,7 +1226,7 @@ function SalesFantasyApp() {
     <><style>{CSS}</style><style>{ARENA_CSS}</style><div className="sf-app" data-gb-ui-root>
       <header className="sf-appbar">
         <div className="sf-appbar-inner">
-          <div className="sf-appbar-brand"><span className="sf-brand-mark"><FantasyIcon.trophy size={17} /></span><div className="sf-brand-copy"><div className="sf-brand-name">Sales Fantasy</div><div className="sf-appbar-meta"><span className="sf-live-dot" />Season 01 · Week {SALES_FANTASY_CURRENT_WEEK} of {SCHEDULE.length}</div></div></div>
+          <div className="sf-appbar-brand"><span className="sf-brand-mark"><FantasyIcon.trophy size={17} /></span><div className="sf-brand-copy"><div className="sf-brand-name">Sales Fantasy</div><div className="sf-appbar-meta"><span className="sf-live-dot" />Season 01 · Week {salesFantasyCurrentWeek()} of {SCHEDULE.length}</div></div></div>
           <div className="sf-appbar-actions">
             <AnimatePresence initial={false} mode="wait">
               {showWeekControl

@@ -73,7 +73,10 @@ describe('salesFantasy · league model', () => {
         ['inboundCalls', 1, 0.1],
       ]);
       assert.equal(firstWeek.total, 0.9);
-      assert.equal(firstWeek.sales, null);
+      // Sales are now scored from the snapshot too (zeroed here — this fixture
+      // supplies only activity points); referral stays SR-null.
+      assert.ok(firstWeek.sales, 'sales split is populated from the snapshot');
+      assert.equal(firstWeek.sales.total, 0);
       assert.equal(firstWeek.referred, null);
       assert.equal(fifthWeek.total, 0);
       assert.equal(fifthWeek.memberName, 'Current SR');

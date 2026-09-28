@@ -85,26 +85,76 @@ export const SALES_FANTASY_SCORING = Object.freeze({
   ]),
 });
 
+/** Current week comes from the server snapshot when installed. */
+export function salesFantasyCurrentWeek() {
+  const week = Number(installedActivitySnapshot?.current_week);
+  return Number.isInteger(week) && week > 0 ? week : SALES_FANTASY_CURRENT_WEEK;
+}
+
+const ACTIVITY_SOURCE_IDS = Object.freeze({
+  emailsSent: 'emails_sent',
+  emailsReplied: 'emails_replied',
+  outboundCalls: 'outbound_calls',
+  inboundCalls: 'inbound_calls',
+});
+const SALES_SOURCE_IDS = Object.freeze({
+  proposalsSent: 'proposals_sent',
+  orders: 'owned_orders',
+  totalSales: 'owned_sales',
+  totalProfit: 'owned_profit',
+});
+
+/**
+ * Overlay the server's live point values onto the static contract so the rules
+ * view and any client-side scoring always reflect what the aggregator used.
+ * Understands the v2 nested shape { activity, sales, margin_tiers, referral }
+ * and the legacy flat activity-only shape.
+ */
 export function getSalesFantasyScoring() {
   const values = installedActivitySnapshot?.point_values;
   if (!values || typeof values !== 'object') return SALES_FANTASY_SCORING;
-  const sourceIds = {
-    emailsSent: 'emails_sent',
-    emailsReplied: 'emails_replied',
-    outboundCalls: 'outbound_calls',
-    inboundCalls: 'inbound_calls',
-  };
-  return {
+  const activitySrc = values.activity || values; // v2 nested, else legacy flat
+  const overlayRoles = (rule, table, key) => ({
+    ...rule,
+    pointsByRole: { ...rule.pointsByRole, ...((table && table[key]) || {}) },
+  });
+  const scoring = {
     ...SALES_FANTASY_SCORING,
-    activity: SALES_FANTASY_SCORING.activity.map((rule) => ({
-      ...rule,
-      pointsByRole: {
-        ...rule.pointsByRole,
-        ...(values[sourceIds[rule.id]] || {}),
-      },
-    })),
+    activity: SALES_FANTASY_SCORING.activity.map(
+      (rule) => overlayRoles(rule, activitySrc, ACTIVITY_SOURCE_IDS[rule.id]),
+    ),
   };
+  if (values.sales) {
+    scoring.sales = SALES_FANTASY_SCORING.sales.map(
+      (rule) => overlayRoles(rule, values.sales, SALES_SOURCE_IDS[rule.id]),
+    );
+  }
+  if (Array.isArray(values.margin_tiers) && values.margin_tiers.length) {
+    const byId = new Map(values.margin_tiers.map((tier) => [tier.id, tier]));
+    scoring.marginTiers = SALES_FANTASY_SCORING.marginTiers.map((tier) => {
+      const live = byId.get(tier.id);
+      if (!live) return tier;
+      const minMargin = Number(live.min_margin ?? tier.minMargin);
+      return {
+        ...tier,
+        minMargin,
+        orderBonusPoints: Number(live.order_bonus_points ?? tier.orderBonusPoints),
+        // Label must track the server threshold so the rules page never drifts.
+        label: `${minMargin}%+`,
+      };
+    });
+  }
+  if (values.referral) {
+    scoring.referral = SALES_FANTASY_SCORING.referral.map((rule) => ({
+      ...rule,
+      pointsPerUnit: Number(values.referral[rule.id === 'referredOrders' ? 'referred_orders' : 'referred_sales'] ?? rule.pointsPerUnit),
+    }));
+  }
+  return scoring;
 }
+
+/** Map a margin tier id to the aggregated per-order band count in daily_scores. */
+const MARGIN_TIER_METRIC = Object.freeze({ healthy: 'margin_30', strong: 'margin_40', premium: 'margin_50' });
 
 export const SALES_FANTASY_PODS = Array.from({ length: POD_COUNT }, (_, podIndex) => {
   const number = podIndex + 1;
@@ -404,30 +454,65 @@ export function memberWeekPointSplit(podId, memberId, weekNumber, pods = SALES_F
       && String(row?.role || '').toLowerCase() === member.roleId
       && Number(row?.week) === weekNumber
     ));
-    const metricIds = {
-      emails_sent: 'emailsSent',
-      emails_replied: 'emailsReplied',
-      outbound_calls: 'outboundCalls',
-      inbound_calls: 'inboundCalls',
-    };
-    const activityRows = Object.entries(metricIds).map(([sourceId, id]) => {
-      const rule = SALES_FANTASY_SCORING.activity.find((candidate) => candidate.id === id);
-      return {
-        id,
-        label: rule?.label || id,
-        value: rows.reduce((sum, row) => sum + (Number(row?.metrics?.[sourceId]) || 0), 0),
-        format: 'number',
-        points: oneDecimal(rows.reduce((sum, row) => sum + (Number(row?.points?.[sourceId]) || 0), 0)),
-      };
-    });
+    const rules = getSalesFantasyScoring();
+    const metricSum = (sourceId) => rows.reduce((sum, row) => sum + (Number(row?.metrics?.[sourceId]) || 0), 0);
+    const pointSum = (sourceId) => oneDecimal(rows.reduce((sum, row) => sum + (Number(row?.points?.[sourceId]) || 0), 0));
     if (!lineupMember?.name && rows[0]?.person) memberName = String(rows[0].person);
+
+    const activityRows = rules.activity.map((rule) => ({
+      id: rule.id,
+      label: rule.label,
+      value: metricSum(ACTIVITY_SOURCE_IDS[rule.id]),
+      format: 'number',
+      points: pointSum(ACTIVITY_SOURCE_IDS[rule.id]),
+    }));
     const activityTotal = oneDecimal(activityRows.reduce((sum, row) => sum + row.points, 0));
+
+    // Sales: per-metric rows + a single margin-bonus row, from the server points.
+    const salesRows = rules.sales.map((rule) => ({
+      id: rule.id,
+      label: rule.label,
+      value: metricSum(SALES_SOURCE_IDS[rule.id]),
+      format: rule.format || 'number',
+      points: pointSum(SALES_SOURCE_IDS[rule.id]),
+    }));
+    salesRows.push({
+      id: 'orderMarginBonus',
+      label: 'Order margin bonus',
+      value: metricSum('owned_orders'),
+      format: 'orders',
+      points: pointSum('margin_bonus'),
+    });
+    const marginTiers = rules.marginTiers.map((tier) => {
+      const orders = metricSum(MARGIN_TIER_METRIC[tier.id]);
+      return { ...tier, orders, orderPoints: oneDecimal(orders * tier.orderBonusPoints) };
+    });
+    const salesTotal = oneDecimal(salesRows.reduce((sum, row) => sum + row.points, 0));
+
+    // Referral (BDR only).
+    const referredRows = member.roleId === 'bdr'
+      ? rules.referral.map((rule) => ({
+        id: rule.id,
+        label: rule.label,
+        value: metricSum(rule.id === 'referredOrders' ? 'referred_orders' : 'referred_sales'),
+        format: rule.format || 'number',
+        points: pointSum(rule.id === 'referredOrders' ? 'referred_orders' : 'referred_sales'),
+      }))
+      : [];
+    const referredTotal = oneDecimal(referredRows.reduce((sum, row) => sum + row.points, 0));
+
+    // Reconciled member total = the category subtotals we just built (equals the
+    // server's total_points when present, and stays correct for activity-only snapshots).
+    const memberTotal = oneDecimal(activityTotal + salesTotal + referredTotal);
     scored = {
-      raw: { activity: Object.fromEntries(activityRows.map((row) => [row.id, row.value])) },
+      raw: {
+        activity: Object.fromEntries(activityRows.map((row) => [row.id, row.value])),
+        sales: Object.fromEntries(salesRows.map((row) => [row.id, row.value])),
+      },
       activity: { rows: activityRows, total: activityTotal },
-      sales: null,
-      referred: null,
-      total: activityTotal,
+      sales: { rows: salesRows, marginTiers, total: salesTotal },
+      referred: member.roleId === 'bdr' ? { rows: referredRows, total: referredTotal } : null,
+      total: memberTotal,
     };
   } else {
     scored = scoreRoleMetrics(roleWeekMetrics(podIndex + 1, memberIndex, weekNumber), member.roleId);
@@ -460,7 +545,7 @@ export function fantasyScore(podId, weekNumber, pods = SALES_FANTASY_PODS) {
   return podWeekPointSplit(podId, weekNumber, pods)?.total || 0;
 }
 
-export function weekState(weekNumber, currentWeek = SALES_FANTASY_CURRENT_WEEK) {
+export function weekState(weekNumber, currentWeek = salesFantasyCurrentWeek()) {
   if (weekNumber < currentWeek) return 'final';
   if (weekNumber === currentWeek) return 'live';
   return 'scheduled';
@@ -469,7 +554,7 @@ export function weekState(weekNumber, currentWeek = SALES_FANTASY_CURRENT_WEEK) 
 export function buildStandings(
   pods = SALES_FANTASY_PODS,
   schedule = buildFantasySchedule(pods),
-  currentWeek = SALES_FANTASY_CURRENT_WEEK,
+  currentWeek = salesFantasyCurrentWeek(),
 ) {
   const records = new Map(pods.map((pod) => [pod.id, {
     podId: pod.id, wins: 0, losses: 0, ties: 0, byes: 0, pointsFor: 0,
@@ -567,6 +652,56 @@ export function buildPlayoffBracket(standings, pods = SALES_FANTASY_PODS) {
 
 export function podForId(podId, pods = SALES_FANTASY_PODS) {
   return pods.find((pod) => pod.id === podId) || null;
+}
+
+/**
+ * Resolve the pod a person belongs to from their email local part, using the
+ * server snapshot lineups (which carry each member's email local part). Falls
+ * back to matching the display name, then to pod-1 when unknown.
+ */
+export function podIdForLocalPart(localPart, { pods = SALES_FANTASY_PODS, fallback = 'pod-1' } = {}) {
+  const wanted = String(localPart || '').trim().toLowerCase();
+  const known = new Set(pods.map((pod) => pod.id));
+  if (wanted && installedActivitySnapshot?.lineups) {
+    for (const members of Object.values(installedActivitySnapshot.lineups)) {
+      const hit = (Array.isArray(members) ? members : []).find(
+        (member) => String(member?.email || '').trim().toLowerCase() === wanted,
+      );
+      if (hit) {
+        const id = `pod-${Number(hit.pod)}`;
+        if (known.has(id)) return id;
+      }
+    }
+  }
+  return known.has(fallback) ? fallback : (pods[0]?.id || fallback);
+}
+
+/**
+ * Resolve the signed-in user's exact seat from their email local part:
+ * { podId, roleId, memberId }. Falls back to pod-1's first member when unknown,
+ * so "my" selections default to the real person, not another rep in the group.
+ */
+export function seatForLocalPart(localPart, { pods = SALES_FANTASY_PODS, fallback = 'pod-1' } = {}) {
+  const wanted = String(localPart || '').trim().toLowerCase();
+  const byId = new Map(pods.map((pod) => [pod.id, pod]));
+  if (wanted && installedActivitySnapshot?.lineups) {
+    for (const members of Object.values(installedActivitySnapshot.lineups)) {
+      const hit = (Array.isArray(members) ? members : []).find(
+        (member) => String(member?.email || '').trim().toLowerCase() === wanted,
+      );
+      if (hit) {
+        const pod = byId.get(`pod-${Number(hit.pod)}`);
+        if (pod) {
+          const roleId = String(hit.role || '').toLowerCase();
+          const member = pod.members.find((m) => m.roleId === roleId) || pod.members[0];
+          return { podId: pod.id, roleId: member.roleId, memberId: member.id };
+        }
+      }
+    }
+  }
+  const pod = byId.get(fallback) || pods[0];
+  const member = pod?.members?.[0];
+  return { podId: pod?.id || fallback, roleId: member?.roleId || 'sr', memberId: member?.id || '' };
 }
 
 export function matchupForPod(week, podId) {
