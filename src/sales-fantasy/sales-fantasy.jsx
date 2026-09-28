@@ -30,6 +30,10 @@ import { resolveCurrentUserContext } from '../lib/employeeIdentity.js';
 let myPodId = 'pod-1';
 const myPodName = () => podForId(myPodId)?.name || 'POD 1';
 const SCHEDULE = buildFantasySchedule(SALES_FANTASY_PODS);
+const REGULAR_SEASON_WEEKS = SCHEDULE.length; // 10; weeks past this are playoff/bracket weeks
+// -1 during the regular season; otherwise the 0-based playoff round now live
+// (week 11 -> Opening, 12 -> Semifinals, 13 -> Final).
+const bracketRoundForWeek = (week) => (week > REGULAR_SEASON_WEEKS ? week - REGULAR_SEASON_WEEKS - 1 : -1);
 setSalesFantasySnapshot({ daily_scores: [], weeks: [] });
 const EASE = [0.22, 1, 0.36, 1];
 const PAGE_TRANSITION = { duration: 0.2, ease: EASE };
@@ -318,8 +322,14 @@ const CSS = `
   .sf-bracket-round.opening .sf-bracket-game, .sf-bracket-round.final .sf-bracket-game { width: min(72%, 360px); justify-self: center; }
   .sf-bracket-game-label { min-height: 22px; padding: 4px 8px; display: grid; place-items: center; color: var(--gb-text-muted); border-bottom: 1px solid var(--gb-border-subtle); background: var(--gb-fill-faint); font-size: 8px; font-weight: 850; letter-spacing: .55px; text-transform: uppercase; text-align: center; }
   .sf-bracket-slot { min-height: 35px; padding: 6px 8px; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 7px; color: var(--gb-text-secondary); }
+  .sf-bracket-slot.live { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .sf-bracket-slot + .sf-bracket-slot { border-top: 1px solid var(--gb-border-subtle); }
   .sf-bracket-slot.mine { color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
+  .sf-bracket-slot-score { justify-self: end; padding: 1px 7px; border-radius: 999px; background: var(--gb-brand-tint-soft); color: var(--gb-brand-label); font-size: 10px; font-weight: 850; font-variant-numeric: tabular-nums; }
+  /* Live playoff round: highlight the active bracket round + games. */
+  .sf-bracket-round.live .sf-bracket-game { border-color: var(--gb-brand-tint-border); box-shadow: 0 0 0 1.5px var(--gb-brand-tint-border), 0 4px 12px rgba(0, 0, 0, .12); }
+  .sf-bracket-round.live .sf-bracket-game-label { color: var(--gb-brand-label); background: var(--gb-brand-tint-soft); }
+  .sf-bracket-shell.in-bracket { box-shadow: 0 0 0 1.5px var(--gb-brand-tint-border); }
   .sf-bracket-seed { width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid var(--gb-border-default); border-radius: 50%; color: var(--gb-text-muted); background: var(--gb-fill-faint); font-size: 8px; font-weight: 850; }
   .sf-bracket-slot-name { min-width: 0; overflow: hidden; color: var(--gb-text-primary); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
   .sf-bracket-slot.pending .sf-bracket-slot-name { color: var(--gb-text-muted); font-size: 9px; font-weight: 700; }
@@ -898,11 +908,14 @@ function Performance({ week, selectedMemberId, onSelectMember, onSelectWeek }) {
   );
 }
 
+// Trim floating-point noise (e.g. 0.008 * 1000 = 8.000000000000002).
+const tidy = (value) => Number(Number(value).toFixed(3));
+
 function ruleRate(rule, roleId) {
   const rate = rule.pointsByRole?.[roleId] ?? rule.pointsPerUnit ?? 0;
   if (!rate) return 'No points';
-  if (rule.format === 'money') return `${rate * 1000} / $1k`;
-  return `${rate} each`;
+  if (rule.format === 'money') return `${tidy(rate * 1000)} / $1k`;
+  return `${tidy(rate)} each`;
 }
 
 const SCORING_DETAIL_COPY = Object.freeze({
@@ -910,11 +923,11 @@ const SCORING_DETAIL_COPY = Object.freeze({
   emailsReplied: 'Verified customer replies',
   outboundCalls: 'Completed outbound calls',
   inboundCalls: 'Completed inbound calls',
-  proposalsSent: 'Proposals credited to the position',
-  orders: 'Completed orders credited to the position',
-  totalSales: 'Revenue from credited completed orders',
-  totalProfit: 'Profit from credited completed orders',
-  referredOrders: 'Orders placed while the account is assigned to the BDR',
+  proposalsSent: 'Opportunities with a proposal (one per opportunity)',
+  orders: 'Completed orders placed by the position',
+  totalSales: 'Revenue from orders placed by the position',
+  totalProfit: 'Profit from orders placed by the position',
+  referredOrders: 'Orders on a BDR-created opportunity placed by an SR or SA',
   referredSales: 'Revenue from those qualifying referred orders',
 });
 
@@ -978,7 +991,7 @@ function Rules() {
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">2 · Sales rates</div><div className="sf-card-caption">SR, SA, and BDR use the same point values</div></div></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">2 · Sales rates</div><div className="sf-card-caption">Points per credited sale, set per position</div></div></div>
         <div className="sf-rule-table-wrap"><table className="sf-rule-table"><thead><tr><th>Sales metric</th>{SALES_FANTASY_ROLES.map((role) => <th key={role.id}>{role.label}</th>)}</tr></thead><tbody>{scoring.sales.map((rule) => <tr key={rule.id}><td>{rule.label}</td>{SALES_FANTASY_ROLES.map((role) => <td key={role.id}>{ruleRate(rule, role.id)}</td>)}</tr>)}</tbody></table></div>
       </article>
 
@@ -988,7 +1001,7 @@ function Rules() {
       </article>
 
       <article className="sf-card sf-rule-section">
-        <div className="sf-card-head"><div><div className="sf-card-title">4 · Scoring details by position</div><div className="sf-card-caption">Every position receives the same statistic-by-statistic breakdown</div></div></div>
+        <div className="sf-card-head"><div><div className="sf-card-title">4 · Scoring details by position</div><div className="sf-card-caption">Exact rates and bonuses applied to each position</div></div></div>
         <div className="sf-role-rule-grid">{SALES_FANTASY_ROLES.map((role) => <RoleScoringDetails role={role} key={role.id} />)}</div>
       </article>
 
@@ -1000,7 +1013,7 @@ function Rules() {
 }
 
 function PodDashboard({ week, standings, onView }) {
-  const weekData = SCHEDULE[week - 1];
+  const weekData = SCHEDULE[Math.min(Math.max(week, 1), SCHEDULE.length) - 1];
   const myStanding = standings.find((row) => row.podId === myPodId);
   const game = matchupForPod(weekData, myPodId);
   const currentPoints = fantasyScore(myPodId, week);
@@ -1021,7 +1034,7 @@ function PodDashboard({ week, standings, onView }) {
 }
 
 function Matchups({ week, standings, selectedGameId, onSelectGame }) {
-  const weekData = SCHEDULE[week - 1];
+  const weekData = SCHEDULE[Math.min(Math.max(week, 1), SCHEDULE.length) - 1];
   const myGame = matchupForPod(weekData, myPodId);
   const selectedGame = weekData.games.find((game) => game.id === selectedGameId) || myGame || weekData.games[0];
   const byeNames = weekData.byes.map((podId) => podForId(podId).name).join(' + ');
@@ -1054,22 +1067,31 @@ function Standings({ standings }) {
   );
 }
 
-function BracketSlot({ slot }) {
+function BracketSlot({ slot, live = false, liveWeek = 0 }) {
   if (slot.kind === 'pending') {
     return <div className="sf-bracket-slot pending"><span className="sf-bracket-seed">—</span><span className="sf-bracket-slot-name">{slot.label}</span></div>;
   }
-  return <div className={`sf-bracket-slot ${slot.podId === myPodId ? 'mine' : ''}`}><span className="sf-bracket-seed">{slot.seed}</span><span className="sf-bracket-slot-name">{slot.name}</span></div>;
+  const score = live ? fantasyScore(slot.podId, liveWeek) : null;
+  return (
+    <div className={`sf-bracket-slot ${slot.podId === myPodId ? 'mine' : ''} ${live ? 'live' : ''}`}>
+      <span className="sf-bracket-seed">{slot.seed}</span>
+      <span className="sf-bracket-slot-name">{slot.name}</span>
+      {live && <span className="sf-bracket-slot-score">{score.toFixed(1)}</span>}
+    </div>
+  );
 }
 
-function BracketLane({ bracket }) {
+function BracketLane({ bracket, activeRound = -1, liveWeek = 0 }) {
   return (
     <section className={`sf-bracket-lane ${bracket.id}`} aria-label={bracket.label}>
       <div className="sf-bracket-lane-label"><span className="sf-bracket-lane-title">{bracket.label}</span><span className="sf-bracket-lane-seeds">Seeds {bracket.entrants[0].seed}–{bracket.entrants[bracket.entrants.length - 1].seed}</span></div>
       <div className="sf-bracket-rounds">
-        {bracket.rounds.map((round, roundIndex) => (
+        {bracket.rounds.map((round, roundIndex) => {
+          const roundLive = roundIndex === activeRound;
+          return (
           <React.Fragment key={round.id}>
-            <section className={`sf-bracket-round ${round.label.toLowerCase()}`} aria-label={`${bracket.label} ${round.label}`}>
-              {round.games.map((game, gameIndex) => <div className={`sf-bracket-game sf-bracket-game-${gameIndex}`} key={game.id}><div className="sf-bracket-game-label">{round.games.length > 1 ? `${round.label.slice(0, -1)} ${gameIndex + 1}` : round.label}</div>{game.slots.map((slot, index) => <BracketSlot slot={slot} key={`${game.id}-${index}`} />)}</div>)}
+            <section className={`sf-bracket-round ${round.label.toLowerCase()} ${roundLive ? 'live' : ''}`} aria-label={`${bracket.label} ${round.label}${roundLive ? ' (live)' : ''}`}>
+              {round.games.map((game, gameIndex) => <div className={`sf-bracket-game sf-bracket-game-${gameIndex} ${roundLive ? 'live' : ''}`} key={game.id}><div className="sf-bracket-game-label">{roundLive ? 'Live · ' : ''}{round.games.length > 1 ? `${round.label.slice(0, -1)} ${gameIndex + 1}` : round.label}</div>{game.slots.map((slot, index) => <BracketSlot slot={slot} live={roundLive} liveWeek={liveWeek} key={`${game.id}-${index}`} />)}</div>)}
             </section>
             {roundIndex === 0 && (
               <svg className="sf-bracket-connectors" viewBox="0 0 1000 52" preserveAspectRatio="none" aria-hidden="true">
@@ -1083,7 +1105,8 @@ function BracketLane({ bracket }) {
               </svg>
             )}
           </React.Fragment>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -1091,18 +1114,28 @@ function BracketLane({ bracket }) {
 
 function Brackets({ standings }) {
   const bracket = buildPlayoffBracket(standings);
+  const liveWeek = salesFantasyCurrentWeek();
+  const activeRound = bracketRoundForWeek(liveWeek);   // -1 during regular season
+  const inBracket = activeRound >= 0;
+  const roundName = ['Opening', 'Semifinals', 'Final'][activeRound] || '';
   return (
-    <article className="sf-card sf-bracket-shell">
+    <article className={`sf-card sf-bracket-shell ${inBracket ? 'in-bracket' : ''}`}>
       <div className="sf-card-head">
-        <div><div className="sf-card-title">Current playoff projection</div><div className="sf-card-caption">Based on completed standings through Week {salesFantasyCurrentWeek() - 1}</div></div>
+        <div>
+          <div className="sf-card-title">{inBracket ? `Playoffs · Week ${liveWeek}` : 'Current playoff projection'}</div>
+          <div className="sf-card-caption">{inBracket ? `${roundName} round — live bracket scores` : `Based on completed standings through Week ${liveWeek - 1}`}</div>
+        </div>
+        {inBracket && <span className="sf-status-pill live">Live</span>}
       </div>
       <div className="sf-bracket-viewport" aria-label="Vertically stacked winner and loser brackets">
         <div className="sf-bracket-canvas">
-          <BracketLane bracket={bracket.winnerBracket} />
-          <BracketLane bracket={bracket.loserBracket} />
+          <BracketLane bracket={bracket.winnerBracket} activeRound={activeRound} liveWeek={liveWeek} />
+          <BracketLane bracket={bracket.loserBracket} activeRound={activeRound} liveWeek={liveWeek} />
         </div>
       </div>
-      <div className="sf-bracket-note">Seeds 1–5 currently qualify for the Winner Bracket. Seeds 6–10 enter the Loser Bracket. The projection updates as completed-week standings change.</div>
+      <div className="sf-bracket-note">{inBracket
+        ? 'Live scores show each qualifying pod’s points for the current playoff week. Seeds 1–5 play the Winner Bracket; seeds 6–10 the Loser Bracket.'
+        : 'Seeds 1–5 currently qualify for the Winner Bracket. Seeds 6–10 enter the Loser Bracket. The projection updates as completed-week standings change.'}</div>
     </article>
   );
 }
@@ -1179,8 +1212,8 @@ function SalesFantasyApp() {
         } catch { seat = seatForLocalPart(''); }
         if (!active) return;
         myPodId = seat.podId;
-        const wk = salesFantasyCurrentWeek();
-        const scheduleWeek = SCHEDULE[Math.min(wk, SCHEDULE.length) - 1];
+        const wk = Math.min(salesFantasyCurrentWeek(), SCHEDULE.length);
+        const scheduleWeek = SCHEDULE[wk - 1];
         setWeek(wk);
         setSelectedMemberId(seat.memberId);              // default to ME, not the group's first rep
         setSelectedGameId(matchupForPod(scheduleWeek, seat.podId)?.id || '');
