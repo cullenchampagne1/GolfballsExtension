@@ -1564,16 +1564,17 @@ export function buildSaveCartBody(itemsInCart, { customerID = 0, salesRepID = 0,
 
 /* The PUT /user/saveProposal request body — saves a cart AND links it to a CRM
    opportunity (the proposal then shows under that opportunity's
-   MetaData.Proposals[]). Built on the verified saveCart shape (`cartData` MUST be
-   a JSON string) plus the proposal metadata the cart page sends in proposal mode.
-   NOTE: the exact wrapper field names are reverse-engineered (the real 205KB body
-   was dropped from the capture) — verify live and adjust here if the backend 500s. */
+   MetaData.Proposals[]). The storefront sends its cart state directly (minus its
+   unrelated paypalData field), not the saveCart/localStorage envelope containing
+   shoppingCart + asCartContents + updated. Reusing that envelope duplicates every
+   line and gives custom SERVICEITEM lines a bogus `productundefined` analytics URL.
+   `cartData` must still be a JSON string. */
 export function buildSaveProposalBody(itemsInCart, {
   opportunityID, proposalName, proposalExpiration,
   customerID = 0, salesRepID = 0, proposalID = null, promotion = null,
 } = {}) {
   return {
-    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID, promotion, adminOverride: true })),
+    cartData: JSON.stringify(buildCartData(itemsInCart, { proposalID, promotion, adminOverride: true })),
     customerID,
     salesRepID,
     opportunityID,

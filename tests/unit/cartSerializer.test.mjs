@@ -617,6 +617,26 @@ describe('save bodies + parseGetCart', () => {
     const parsed = JSON.parse(body.cartData);
     assert.equal(parsed.adminOverride, true);
     assert.equal(parsed.proposalID, 7);
+    assert.equal(parsed.shoppingCart, undefined, 'proposal saves send cart state, not the saveCart mirror');
+    assert.equal(parsed.asCartContents, undefined, 'proposal saves omit the abandoned-cart analytics mirror');
+    assert.equal(parsed.updated, undefined);
+  });
+
+  it('buildSaveProposalBody serializes a custom item exactly once without a malformed product URL', () => {
+    const custom = buildCustomItemLine({
+      ci: { name: 'Custom Event Kit', price: 12.5, setup: 20, qty: 250, itemID: 'IT-9' },
+    });
+    const body = buildSaveProposalBody([custom], {
+      opportunityID: '269500',
+      proposalName: 'Event kits',
+      proposalExpiration: '2026-11-14',
+    });
+    const parsed = JSON.parse(body.cartData);
+
+    assert.equal(parsed.itemsInCart.length, 1);
+    assert.equal(parsed.itemsInCart[0].ShortCode, 'SERVICEITEM');
+    assert.equal(parsed.itemsInCart[0].totalQty, 250);
+    assert.equal(JSON.stringify(parsed).includes('productundefined'), false);
   });
 
   it('parseGetCart parses a string d, passes an object d through, and accepts a bare payload', () => {
