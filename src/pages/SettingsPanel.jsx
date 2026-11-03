@@ -28,8 +28,7 @@ import { FEATURE_REGISTRY, featureByKey } from '../lib/features/featureRegistry.
 import { loadFeatureConfig, saveFeatureConfig, normalizeFeatureConfig, togglePage } from '../lib/features/featureConfig.js';
 import { loadCustomActions, saveCustomActions, normalizeCustomAction } from '../lib/customActions.js';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
-import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
-import { isPowerAutomateUrl } from '../lib/security.js';
+import { EMPTY_CREDENTIALS, loadCredentials } from '../lib/credentials.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import {
   buildSupportTicketRequest,
@@ -1735,7 +1734,6 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
   const [devSettings, setDevSettings] = useState(defaultDevSettings);
   const [devSearch, setDevSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [paStatus, setPaStatus] = useState(null);
   const [scales, setScales] = useState(DEFAULT_SCALES);
   // Visibility is server-owned after a complete, validated policy sync.
   // Dashboard administrators bypass the policy and retain their local setup.
@@ -1866,53 +1864,10 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
     setFlags(next);
     saveFlags(next);
   };
-  const setCredentialValue = (key, value) => {
-    const next = { ...credentials, [key]: value };
-    setCredentials(next);
-    saveCredentials(next);
-  };
   const setShortcut = (key, value) => { const next = { ...shortcuts, [key]: value.toLowerCase() }; setShortcuts(next); saveKeyboardShortcuts(next); };
 
   const regularFeatures = FEATURE_FLAGS.filter(f => !f.experimental && !f.dev && visible(f.key));
 
-  // Non-destructive check of the Power Automate flow URL format.
-  // Accepts both Logic Apps (logic.azure.com) and Power Platform direct
-  // automation (*.environment.api.powerplatform.com) URL formats.
-  const testConnection = () => {
-    const ok = isPowerAutomateUrl(credentials.powerAutomateUrl);
-    setPaStatus(ok ? 'ok' : 'fail');
-    return ok ? Promise.resolve() : Promise.reject(new Error('invalid flow url'));
-  };
-
-  // The consumer Power Automate flow download is gated on the email account
-  // host (email.localPart) — the server personalizes the flow to that address.
-  const [emailLocalPart, setEmailLocalPart] = useState('');
-  const [flowBusy, setFlowBusy] = useState(false);
-  useEffect(() => {
-    const read = () => { try { chrome.storage.local.get('devSettings', (d) => setEmailLocalPart(String((d.devSettings || {})['email.localPart'] || '').trim())); } catch { /* */ } };
-    read();
-    const onChange = (ch, area) => { if (area === 'local' && ch.devSettings) read(); };
-    try { chrome.storage.onChanged.addListener(onChange); } catch { /* */ }
-    return () => { try { chrome.storage.onChanged.removeListener(onChange); } catch { /* */ } };
-  }, []);
-  const downloadFlow = async () => {
-    if (!emailLocalPart || flowBusy) return;
-    setFlowBusy(true);
-    try {
-      const r = await sendBackgroundMessage('getConsumerFlow', { localPart: emailLocalPart });
-      const binary = atob(r.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
-      const link = document.createElement('a');
-      link.href = url; link.download = r.filename || 'EmailExchangeService.zip';
-      document.body.appendChild(link); link.click(); link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-      window.__gbToast?.success?.('Power Automate flow downloaded');
-    } catch {
-      window.__gbToast?.error?.('Could not download the flow');
-    } finally { setFlowBusy(false); }
-  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'var(--gb-font-sans)' }}>
@@ -2011,69 +1966,19 @@ export function SettingsPanel({ remotePolicy = EMPTY_REMOTE_POLICY }) {
         </div>
       </section>
 
-      {/* Bearer-style integration settings are stored outside featureFlags so
-          presets and feature broadcasts cannot copy them. */}
-      {visible('powerAutomateEnabled') && (
       <section>
-        <SectionLabel>Experimental</SectionLabel>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <ExpandableFeature
-            on={!!flags.powerAutomateEnabled}
-            managed={managedFeature('powerAutomateEnabled')}
-            disabled={managedFeature('powerAutomateEnabled')}
-            onChange={(next) => setFlagValue('powerAutomateEnabled', next)}
-            icon={<I.send />}
-            tone="warning"
-            name="Direct Send via Power Automate"
-            desc="When enabled and a flow URL is set, templates that opt in send directly through Power Automate instead of opening Outlook."
-          >
-            <Field label="Flow URL" required>
-              <Input
-                value={credentials.powerAutomateUrl}
-                onChange={(v) => setCredentialValue('powerAutomateUrl', v)}
-                mono
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="https://…environment.api.powerplatform.com/powerautomate/…"
-                leading={<I.bolt />}
-              />
-            </Field>
-
-            <div style={{ marginTop: 12 }}>
-              <Callout tone="warning" title="Set up in Power Automate">
-                <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                  <li>Create <b style={{ color: 'var(--gb-text-secondary)' }}>New flow</b> → <b style={{ color: 'var(--gb-text-secondary)' }}>When an HTTP request is received</b></li>
-                  <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
-                  <li>Save and paste the generated URL above</li>
-                </ol>
-              </Callout>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-              <Btn variant="tinted" status="warning" size="sm" icon={<I.bolt />} onClick={testConnection}>
-                Test connection
-              </Btn>
-              <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <Dot tone={paStatus === 'ok' ? 'brand' : paStatus === 'fail' ? 'error' : 'muted'} glow={paStatus === 'ok'} size={5} />
-                {paStatus === 'ok' ? 'URL valid — saved automatically' : paStatus === 'fail' ? 'Paste the full URL from Power Automate' : 'Not tested'}
-              </span>
-            </div>
-
-            <div style={{ marginTop: 12, borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 12 }}>
-              <Btn variant="secondary" size="sm" icon={<I.send />} disabled={!emailLocalPart || flowBusy} onClick={downloadFlow}>
-                {flowBusy ? 'Preparing…' : 'Download my Power Automate flow'}
-              </Btn>
-              <div style={{ fontSize: 10.5, color: emailLocalPart ? 'var(--gb-text-muted)' : 'var(--gb-warning-fg)', marginTop: 6, lineHeight: 1.5 }}>
-                {emailLocalPart
-                  ? 'Import the downloaded zip in Power Automate, then paste its flow URL above.'
-                  : 'Set your Email account host in Developer Settings first to enable the download.'}
-              </div>
-            </div>
-          </ExpandableFeature>
-        </div>
+        <SectionLabel>Email accounts</SectionLabel>
+        <Callout title="Manage accounts in RevStack Control Center">
+          Add and authorize mailboxes in Control Center. Power Automate setup and flow downloads have been retired.
+          The extension's account-reference connection is still being migrated; adding a Control Center mailbox does not yet connect this extension to it.
+        </Callout>
+        {credentials.powerAutomateUrl && <Callout tone="warning" title="Existing legacy configuration">
+          <p>A saved legacy configuration is retained for migration. Its URL is not displayed or editable.</p>
+          <p>{flags.powerAutomateEnabled ? 'Legacy direct sending is currently enabled.' : 'Legacy direct sending is disabled.'}</p>
+          {flags.powerAutomateEnabled && <Btn variant="secondary" size="sm" disabled={managedFeature('powerAutomateEnabled')} onClick={() => setFlagValue('powerAutomateEnabled', false)}>Disable legacy direct sending</Btn>}
+          {managedFeature('powerAutomateEnabled') && <p>This setting is managed by your administrator.</p>}
+        </Callout>}
       </section>
-      )}
 
       <EmailLinksSection />
 

@@ -60,9 +60,10 @@ export function loadCredentials() {
   });
 }
 
-/** Replace the isolated credential record with normalized string values. */
+/** Enrollment is retired. Existing values can only be read for compatibility, or cleared. */
 export async function saveCredentials(value) {
   const credentials = normalize(value);
+  if (credentials.powerAutomateUrl) throw new Error('Power Automate enrollment is retired. Manage email accounts in RevStack Control Center.');
   await chrome.storage.local.set({ [CREDENTIALS_KEY]: credentials });
   return credentials;
 }

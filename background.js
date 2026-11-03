@@ -1735,22 +1735,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.action === 'getConsumerFlow') {
-    // Fetch the personalized Power Automate flow zip through the extension's
-    // authenticated channel (the key never leaves the worker) and hand the page
-    // base64 bytes so it can trigger a plain <a download> (no downloads perm).
-    (async () => {
-      try {
-        const part = String(msg.localPart || '').trim();
-        const resp = await GBInstallationAuth.apiFetch(`${GBInstallationAuth.CLIENT_BASE}/email-exchange-flow?localPart=${encodeURIComponent(part)}`);
-        if (!resp.ok) { sendResponse({ ok: false, error: `HTTP ${resp.status}` }); return; }
-        const bytes = new Uint8Array(await resp.arrayBuffer());
-        let binary = '';
-        const CHUNK = 0x8000;
-        for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-        sendResponse({ ok: true, base64: btoa(binary), filename: 'EmailExchangeService.zip' });
-      } catch (error) { sendResponse({ ok: false, error: error?.message || 'Could not download the flow' }); }
-    })();
-    return true;
+    // Old UI/runtime callers must not bypass removal of the flow enrollment controls.
+    sendResponse({ ok: false, error: 'Power Automate enrollment is retired. Manage email accounts in RevStack Control Center.' });
+    return false;
   }
   if (msg.action === 'emailTemplateShareCreate') {
     let body = '';
