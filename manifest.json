@@ -71,6 +71,12 @@
   },
   "content_scripts": [
     {
+      "matches": ["https://www.golfballs.com/*"],
+      "js": ["src/vanilla/checkout-instructions-guard.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
       "matches": [
         "https://www.golfballs.com/*",
         "https://api.golfballs.com/*"
