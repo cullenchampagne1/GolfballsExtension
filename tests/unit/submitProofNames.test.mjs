@@ -9,9 +9,9 @@ import {
 } from '../../src/lib/submitProofNames.js';
 
 describe('submit proof · generated names', () => {
-  it('sends the server GiftSet enum while keeping the friendly spaced label', () => {
-    assert.equal(proofLogoTypeValue('Gift Set'), 'GiftSet');
-    assert.equal(proofLogoTypeValue(' giftset '), 'GiftSet');
+  it('submits gift-set logo types as Other', () => {
+    assert.equal(proofLogoTypeValue('Gift Set'), 'Other');
+    assert.equal(proofLogoTypeValue(' giftset '), 'Other');
     assert.equal(proofLogoTypeValue('Ball'), 'Ball');
   });
 

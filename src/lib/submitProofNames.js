@@ -7,12 +7,11 @@ export function proofItemLabel(item) {
   return GIFT_SET_PREFIX.test(label) ? 'Gift Set' : label;
 }
 
-/** The proof form uses friendly labels, while the legacy ASP.NET endpoint
- * expects its enum token without a space. Keep that conversion at the wire
- * boundary so the UI can continue displaying "Gift Set". */
+/** Gift-set proofs report as Other at the submission boundary while their
+ * product names can continue displaying "Gift Set". */
 export function proofLogoTypeValue(value) {
   const label = String(value ?? '').trim();
-  return /^gift\s*set$/i.test(label) ? 'GiftSet' : label;
+  return /^gift\s*set$/i.test(label) ? 'Other' : label;
 }
 
 /** Build the names sent to the proof-link service and shown in its results.
